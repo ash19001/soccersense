@@ -1,0 +1,2283 @@
+/*
+ * soccersense interface skin (docs/ART_BIBLE.md sections 7 and 8).
+ *
+ * Everything is sized from the units that PixelRoot keeps in step with the window and with
+ * the device pixel ratio:
+ *   --px  CSS pixels per logical (scene) pixel. Borders, shadows, gaps and plates.
+ *   --fp  CSS pixels per font pixel: a third of --px. Type sizes and line heights, and the
+ *         lamps of the dot-matrix displays.
+ *   --cp  CSS pixels per caption pixel: half of --px, never less than --fp. The font pixel
+ *         of type set straight on the picture of a wide screen (section 15).
+ * (--tx, the older text unit, is still set for canvas code. Nothing here reads it.)
+ * Square corners, hard borders and shadows in whole --px units, no gradients, no blur,
+ * no fades. Motion is stepped.
+ *
+ * Whole DEVICE pixels. Each unit is a whole number of device pixels, so in CSS pixels it
+ * is a fraction when the device pixel ratio is one (Windows at 125%: --px is 3.2px, which
+ * is exactly 4 device pixels). Nothing here may be a bare CSS length, because 1px is then
+ * not a pixel:
+ *   --snap   the step to round to: the whole number of device pixels nearest 1 CSS px.
+ *   --nudge  a 64th of that, added before rounding down (taken off before rounding up), so
+ *            that a length already on the grid is not knocked off it by the arithmetic.
+ * At device pixel ratios 1, 2 and 3 --snap is 1px and --nudge is 0px.
+ *
+ * A --px thing and an --fp thing are never centred against each other by a flex box,
+ * because the half pixel that can leave is a blurred edge. Either the two sizes differ by
+ * an even amount at every scale (see the badge and --tap), or the offset is rounded with
+ * round() where the browser has it.
+ *
+ * Loaded from app/app.css into the "components" cascade layer, so Tailwind utilities can
+ * still override it.
+ */
+
+/* ---------- 1. Variables ---------------------------------------------------------------- */
+
+:root {
+  /* Defaults for anything outside a PixelRoot, and for the first paint. */
+  --px: 3px;
+  --fp: 1px;
+  --cp: 2px;
+  --tx: 2px;
+  /* CSS cannot ask for the device pixel ratio: outside a PixelRoot it is taken to be 1. */
+  --snap: 1px;
+  --nudge: 0px;
+}
+
+@supports (width: round(1.5px, 1px)) {
+  /*
+   * The same rule as pixelScale() in scale.ts (art bible section 2), for pages that never
+   * mount a PixelRoot. Change the two together.
+   */
+  :root {
+    --px: clamp(
+      2px,
+      min(round(100vw / 135, 1px), round(down, 100vh / 220, 1px)),
+      8px
+    );
+    --fp: max(1px, round(var(--px) / 3, 1px));
+    --cp: max(var(--fp), round(up, var(--px) / 2, 1px));
+    --tx: max(2px, var(--px) - 1px);
+  }
+
+  @media (orientation: landscape) {
+    :root {
+      --px: clamp(2px, round(100vh / 290, 1px), 8px);
+    }
+  }
+}
+
+/*
+ * Derived units. They are declared on the element that owns --px (the document root and
+ * every PixelRoot) because a custom property is resolved where it is declared.
+ */
+:root,
+.ss-root {
+  --u: var(--px);
+  --u2: calc(var(--px) * 2);
+  --u3: calc(var(--px) * 3);
+  --u4: calc(var(--px) * 4);
+  --u5: calc(var(--px) * 5);
+  --u6: calc(var(--px) * 6);
+  --u8: calc(var(--px) * 8);
+
+  --font-10: "Jersey 10", ui-monospace, monospace;
+  --font-15: "Jersey 15", ui-monospace, monospace;
+  --font-20: "Jersey 20", ui-monospace, monospace;
+  --font-25: "Jersey 25", ui-monospace, monospace;
+
+  /*
+   * Smallest touch target: 44 CSS px, or 14 logical px when that is bigger. Both leave a
+   * whole number of pixels above and below a button label, at every scale.
+   */
+  --tap: max(44px, calc(var(--px) * 14));
+  /* Focus ring: one logical pixel, never thinner than 2 CSS px. */
+  --ring: max(2px, var(--px));
+  /* The dark ring under a focus outline, so it shows on grass as well as on a panel. */
+  --halo-off: 0 0 0 0 var(--c-ink);
+  --halo-on: 0 0 0 calc(var(--px) * 2 + var(--ring)) var(--c-ink);
+}
+
+/*
+ * The units that follow the font pixel. The menu captions are in this list because on a
+ * wide screen they swap --fp for the caption pixel (section 15), and everything below has
+ * to be worked out again from it.
+ */
+:root,
+.ss-root,
+.ss-menu {
+  /*
+   * Type. The Jersey faces are drawn on 56/3, 27, 34 and 41 pixels per em (their capitals
+   * are 10, 15, 20 and 25 pixels tall), so these sizes put one font pixel on exactly --fp
+   * CSS pixels and nothing is resampled. Line heights are whole font pixels.
+   */
+  --fs-10: calc(var(--fp) * 56 / 3);
+  --lh-10: calc(var(--fp) * 18);
+  --fs-15: calc(var(--fp) * 27);
+  --lh-15: calc(var(--fp) * 24);
+  --fs-20: calc(var(--fp) * 34);
+  --lh-20: calc(var(--fp) * 30);
+  --fs-25: calc(var(--fp) * 41);
+  --lh-25: calc(var(--fp) * 36);
+
+  /* One line of body text set tight, for plates and table rows. */
+  --lh-tight: calc(var(--fp) * 15);
+
+  /* A one-line plate of body text: the lamps, the career bar. */
+  --plate: max(calc(var(--px) * 5), calc(var(--fp) * 14));
+}
+
+@supports (width: round(up, 1.5px, 1px)) {
+  :root,
+  .ss-root {
+    /*
+     * The same two, in whole device pixels: 44 CSS px becomes the next even number of
+     * snaps (an even number, so a label still has whole pixels above and below it).
+     */
+    --tap: max(
+      round(up, calc(44px - var(--nudge)), calc(var(--snap) * 2)),
+      calc(var(--px) * 14)
+    );
+    --ring: max(round(up, calc(2px - var(--nudge)), var(--snap)), var(--px));
+  }
+
+  :root,
+  .ss-root,
+  .ss-menu {
+    --plate: max(
+      calc(var(--px) * 5),
+      round(up, calc(var(--fp) * 14), var(--px))
+    );
+  }
+}
+
+/* HOME is always warm, AWAY always teal. Set data-mode on any element. */
+[data-mode="home"] {
+  --mode: var(--c-home);
+  --mode-dark: var(--c-home-dark);
+  --mode-light: var(--c-home-light);
+}
+
+[data-mode="away"] {
+  --mode: var(--c-away);
+  --mode-dark: var(--c-away-dark);
+  --mode-light: var(--c-away-light);
+}
+
+/* Grade colours. Set data-grade on any element. */
+[data-grade="worldie"] {
+  --grade: var(--c-grade-worldie);
+}
+
+[data-grade="topbins"] {
+  --grade: var(--c-grade-topbins);
+}
+
+[data-grade="goal"] {
+  --grade: var(--c-grade-goal);
+}
+
+[data-grade="ontarget"] {
+  --grade: var(--c-grade-ontarget);
+}
+
+[data-grade="wide"] {
+  --grade: var(--c-grade-wide);
+}
+
+[data-grade="timeup"] {
+  --grade: var(--c-grade-timeup);
+}
+
+/* A pass has no palette colour of its own: it borrows a cool neutral. */
+[data-grade="skipped"] {
+  --grade: var(--c-mist);
+}
+
+/* ---------- 2. Base and type ------------------------------------------------------------ */
+
+.ss-root,
+.ss-page {
+  font-family: var(--font-10);
+  font-size: var(--fs-10);
+  line-height: var(--lh-10);
+  font-weight: 400;
+  font-synthesis: none;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  color: var(--c-chalk);
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: unset;
+  font-smooth: never;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ss-root *,
+.ss-root *::before,
+.ss-root *::after {
+  border-radius: 0;
+}
+
+/* Body text. */
+.ss-t10 {
+  font-family: var(--font-10);
+  font-size: var(--fs-10);
+  line-height: var(--lh-10);
+  font-weight: 400;
+}
+
+/* Questions and buttons. */
+.ss-t15 {
+  font-family: var(--font-15);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: 400;
+}
+
+/* Headings. */
+.ss-t20 {
+  font-family: var(--font-20);
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: 400;
+}
+
+/* Big numbers. */
+.ss-t25 {
+  font-family: var(--font-25);
+  font-size: var(--fs-25);
+  line-height: var(--lh-25);
+  font-weight: 400;
+}
+
+/* Visible only to screen readers. */
+.ss-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * A page's heading takes the focus when the page is arrived at (useArrivalFocus), so that a
+ * screen reader reads it. It is not a control: no ring.
+ */
+.ss-root [tabindex="-1"]:focus,
+.ss-page [tabindex="-1"]:focus {
+  outline: none;
+}
+
+.ss-glyph {
+  display: block;
+  flex: none;
+  fill: currentColor;
+}
+
+/* ---------- 3. Panel -------------------------------------------------------------------- */
+
+/*
+ * From the outside in: an ink outline and a hard shadow to the bottom right (the light
+ * comes from the top left), a steel frame with a lit top-left edge, an ink seam, then the
+ * night plate. The frame is 3 logical pixels thick, so the padding starts at 3.
+ */
+.ss-panel {
+  position: relative;
+  padding: var(--u5);
+  background: var(--c-night);
+  color: var(--c-chalk);
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-concrete),
+    inset calc(var(--u) * -1) calc(var(--u) * -1) 0 0 var(--c-concrete-dark),
+    inset 0 0 0 var(--u2) var(--c-steel),
+    inset 0 0 0 var(--u3) var(--c-ink),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) var(--u) 0 var(--u) var(--c-ink);
+}
+
+/* Four bolts, one in each corner of the frame. */
+.ss-panel--bolted::before,
+.ss-panel--bolted::after {
+  content: "";
+  position: absolute;
+  left: var(--u);
+  right: var(--u);
+  height: var(--u);
+  border-inline: var(--u) solid var(--c-steel-hi);
+  pointer-events: none;
+}
+
+.ss-panel--bolted::before {
+  top: var(--u);
+}
+
+.ss-panel--bolted::after {
+  bottom: var(--u);
+}
+
+/* A flat dark plate: outline and shadow only. */
+.ss-panel--plain {
+  padding: var(--u3);
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-slate),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) var(--u) 0 var(--u) var(--c-ink);
+}
+
+/* ---------- 4. Buttons ------------------------------------------------------------------ */
+
+.ss-btn {
+  --face: var(--c-steel);
+  --face-hi: var(--c-concrete-light);
+  --lip: var(--c-slate);
+  --ink-on-face: var(--c-chalk);
+  --halo: var(--halo-off);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: var(--tap);
+  min-height: var(--tap);
+  margin: 0;
+  padding: 0 var(--u4);
+  border: var(--u) solid var(--c-ink);
+  background: var(--face);
+  color: var(--ink-on-face);
+  font-family: var(--font-15);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  appearance: none;
+  /* The lip is the darker bottom edge. It is listed first so it sits over the highlight. */
+  box-shadow:
+    inset 0 calc(var(--u2) * -1) 0 0 var(--lip),
+    inset var(--u) var(--u) 0 0 var(--face-hi),
+    var(--u) var(--u) 0 0 var(--c-ink),
+    var(--halo);
+}
+
+/* The label rides on the face, which is one pixel above the centre while the lip shows. */
+.ss-btn__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--u2);
+  transform: translateY(calc(var(--u) * -1));
+}
+
+.ss-btn--full {
+  display: flex;
+  width: 100%;
+}
+
+.ss-btn--icon {
+  width: var(--tap);
+  padding: 0;
+}
+
+/*
+ * The 9 x 9 icon sits in the top left of a 10 x 10 box: an even size centres on whole
+ * pixels in a button of any scale, which a 9 x 9 box does not.
+ */
+.ss-btn--icon .ss-btn__label {
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: calc(var(--px) * 10);
+  height: calc(var(--px) * 10);
+}
+
+.ss-btn--primary {
+  --face: var(--c-gold);
+  --face-hi: var(--c-gold-light);
+  --lip: var(--c-gold-dark);
+  --ink-on-face: var(--c-ink);
+}
+
+.ss-btn--mode {
+  --face: var(--mode, var(--c-steel));
+  --face-hi: var(--mode-light, var(--c-concrete-light));
+  --lip: var(--mode-dark, var(--c-slate));
+  --ink-on-face: var(--c-ink);
+}
+
+.ss-btn--ghost {
+  --face: var(--c-ink);
+  --ink-on-face: var(--c-chalk);
+
+  box-shadow:
+    inset 0 0 0 var(--u) var(--c-mist),
+    var(--u) var(--u) 0 0 var(--c-ink),
+    var(--halo);
+}
+
+.ss-btn--ghost .ss-btn__label {
+  transform: none;
+}
+
+/*
+ * Pressed: the button drops onto its own shadow. The lip and the shadow are gone, the top
+ * edge falls into shade and the label lands two pixels lower.
+ */
+.ss-btn:active:not(:disabled),
+.ss-btn.is-pressed {
+  box-shadow:
+    inset 0 var(--u2) 0 0 var(--lip),
+    inset 0 var(--u) 0 0 var(--c-ink),
+    var(--halo);
+  transform: translate(var(--u), var(--u));
+}
+
+.ss-btn:active:not(:disabled) .ss-btn__label,
+.ss-btn.is-pressed .ss-btn__label {
+  transform: translateY(var(--u));
+}
+
+.ss-btn--ghost:active:not(:disabled),
+.ss-btn--ghost.is-pressed {
+  background: var(--c-slate);
+  box-shadow:
+    inset 0 0 0 var(--u) var(--c-chalk),
+    var(--halo);
+}
+
+.ss-btn--ghost:active:not(:disabled) .ss-btn__label,
+.ss-btn--ghost.is-pressed .ss-btn__label {
+  transform: none;
+}
+
+.ss-btn:disabled {
+  --face: var(--c-concrete-dark);
+  --lip: var(--c-slate);
+  --ink-on-face: var(--c-mist);
+
+  cursor: default;
+  box-shadow:
+    inset 0 calc(var(--u2) * -1) 0 0 var(--lip),
+    var(--u) var(--u) 0 0 var(--c-ink),
+    var(--halo);
+}
+
+.ss-btn:focus {
+  outline: none;
+}
+
+.ss-btn:focus-visible,
+.ss-btn.is-focus,
+.ss-menu__card:focus-visible {
+  --halo: var(--halo-on);
+
+  outline: var(--ring) solid var(--c-amber);
+  outline-offset: var(--u);
+  z-index: 2;
+}
+
+@media (hover: hover) {
+  .ss-btn:hover:not(:disabled):not(:active) {
+    --face-hi: var(--c-white);
+  }
+}
+
+/* ---------- 5. Mode badge ---------------------------------------------------------------- */
+
+.ss-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  box-sizing: border-box;
+  /*
+   * 14 font pixels less than a small number display, less two logical pixels: an even
+   * difference, so the badge centres beside one on whole pixels.
+   */
+  height: calc(var(--fp) * 13 + var(--px) * 4);
+  padding: 0 var(--u2);
+  border: var(--u) solid var(--c-ink);
+  background: var(--mode, var(--c-steel));
+  color: var(--c-ink);
+  font-family: var(--font-10);
+  font-size: var(--fs-10);
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+  box-shadow:
+    inset 0 calc(var(--u) * -1) 0 0 var(--mode-dark, var(--c-slate)),
+    inset var(--u) var(--u) 0 0 var(--mode-light, var(--c-concrete-light));
+}
+
+/* ---------- 6. Dot-matrix numbers --------------------------------------------------------- */
+
+.ss-led {
+  --led: var(--c-amber);
+  /*
+   * Unlit lamps are one quiet step above the glass, whatever colour they would burn:
+   * there if you look for them, never competing with the lit ones.
+   */
+  --led-ghost: var(--c-led-off);
+
+  display: inline-flex;
+  flex: none;
+  /*
+   * A recessed window of black glass, one pixel of it around the lamps. The lit edge of
+   * the recess (bottom right) is drawn outside the box, so the window is no taller than
+   * it has to be.
+   */
+  padding: var(--u);
+  background: var(--c-ink);
+  box-shadow: var(--u) var(--u) 0 0 var(--c-slate);
+}
+
+.ss-led--lg {
+  padding: var(--u2);
+}
+
+/* No window: the lamps sit straight on the panel, the unlit ones as dark holes in it. */
+.ss-led--bare {
+  --led-ghost: var(--c-ink);
+
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.ss-led--red {
+  --led: var(--c-led-red);
+}
+
+.ss-led--green {
+  --led: var(--c-led-green);
+}
+
+.ss-led--gold {
+  --led: var(--c-gold);
+}
+
+.ss-led--chalk {
+  --led: var(--c-chalk);
+}
+
+.ss-led__lit {
+  fill: var(--led);
+}
+
+.ss-led__ghost {
+  fill: var(--led-ghost);
+}
+
+/* ---------- 7. Result lamps -------------------------------------------------------------- */
+
+.ss-pips {
+  display: inline-flex;
+  flex: none;
+  gap: var(--u);
+}
+
+.ss-pip {
+  display: inline-flex;
+  flex: none;
+}
+
+.ss-pip__rim {
+  fill: var(--c-ink);
+}
+
+.ss-pip__lamp {
+  fill: var(--grade, var(--c-concrete-dark));
+}
+
+.ss-pip__glint {
+  fill: var(--c-white);
+}
+
+.ss-pip[data-state="todo"] .ss-pip__lamp {
+  fill: var(--c-concrete-dark);
+}
+
+.ss-pip[data-state="todo"] .ss-pip__glint {
+  fill: var(--c-steel);
+}
+
+.ss-pip[data-state="current"] .ss-pip__lamp {
+  fill: var(--c-chalk);
+  animation: ss-lamp 1s steps(1, end) infinite;
+}
+
+.ss-pip[data-state="current"] .ss-pip__glint {
+  fill: var(--c-white);
+  animation: ss-glint 1s steps(1, end) infinite;
+}
+
+@keyframes ss-lamp {
+  0% {
+    fill: var(--c-chalk);
+  }
+
+  50% {
+    fill: var(--c-steel);
+  }
+}
+
+@keyframes ss-glint {
+  0% {
+    fill: var(--c-white);
+  }
+
+  50% {
+    fill: var(--c-mist);
+  }
+}
+
+/* ---------- 8. Career bar ---------------------------------------------------------------- */
+
+/*
+ * One labelled bar: the tier name in gold on the dark track, and the same name in ink on
+ * the gold that fills over it.
+ */
+.ss-tier {
+  position: relative;
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  height: var(--plate);
+  overflow: hidden;
+  background: var(--c-led-off);
+  color: var(--c-gold);
+  box-shadow: inset var(--u) var(--u) 0 0 var(--c-night-top);
+}
+
+.ss-tier__name {
+  display: block;
+  padding: 0 var(--u2);
+  font-family: var(--font-10);
+  font-size: var(--fs-10);
+  line-height: var(--plate);
+  white-space: nowrap;
+}
+
+.ss-tier__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  display: block;
+  width: calc(var(--p, 0) * 100%);
+  /* Whole logical pixels where the browser can round. */
+  width: round(down, calc(var(--p, 0) * 100%), var(--px));
+  overflow: hidden;
+  background: var(--c-gold);
+  color: var(--c-ink);
+}
+
+.ss-tier__fill.is-started {
+  min-width: var(--u);
+}
+
+/* ---------- 9. Clock strip --------------------------------------------------------------- */
+
+.ss-timer {
+  /* What the seconds take: two dot-matrix digits (11 lamps, 4 font pixels apart) and a gap. */
+  --digits: calc(var(--fp) * 43 + var(--px) * 3);
+
+  display: flex;
+  align-items: center;
+  gap: var(--u3);
+}
+
+.ss-timer--bare {
+  --digits: 0px;
+}
+
+/*
+ * The slot the segments sit in: black glass like the number displays, and as tall as the
+ * digits beside it. The segments are all the same whole number of CSS pixels wide, so the
+ * slot usually has a little empty glass left at its right end.
+ */
+.ss-timer__strip {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1 1 0;
+  gap: var(--u);
+  min-width: 0;
+  height: calc(var(--fp) * 27);
+  padding: var(--u);
+  background: var(--c-ink);
+}
+
+.ss-timer__seg {
+  display: block;
+  /* Equal shares of the width where the browser cannot round (see below). */
+  flex: 1 1 0;
+  min-width: var(--snap);
+  height: 100%;
+  background: var(--c-amber-dim);
+  box-shadow: inset 0 calc(var(--u) * -1) 0 0 var(--c-led-off);
+}
+
+.ss-timer__seg.is-on {
+  background: var(--c-amber);
+  box-shadow:
+    inset 0 var(--u) 0 0 var(--c-gold-light),
+    inset 0 calc(var(--u) * -1) 0 0 var(--c-gold-dark);
+}
+
+/* Every segment the same whole number of device pixels: no uneven widths at any zoom. */
+@supports (width: round(down, 1cqw, 1px)) {
+  .ss-timer {
+    container-type: inline-size;
+  }
+
+  /* What is left of the width after the digits, the gaps and the two ends of the slot. */
+  .ss-timer__seg {
+    flex: none;
+    width: round(
+      down,
+      calc(
+        (100cqw - var(--digits) - var(--px) * (var(--n, 30) + 1)) /
+          var(--n, 30) + var(--nudge)
+      ),
+      var(--snap)
+    );
+  }
+}
+
+/* In the last seconds the spent segments go dark, so the few that are left stand out. */
+.ss-timer--danger .ss-timer__seg {
+  background: var(--c-led-off);
+  box-shadow: none;
+}
+
+.ss-timer--danger .ss-timer__seg.is-on {
+  background: var(--c-led-red);
+  box-shadow:
+    inset 0 var(--u) 0 0 var(--c-home-light),
+    inset 0 calc(var(--u) * -1) 0 0 var(--c-home-dark);
+  animation: ss-danger 0.5s steps(1, end) infinite;
+}
+
+.ss-timer--danger .ss-timer__seconds .ss-led__lit {
+  animation: ss-danger-fill 0.5s steps(1, end) infinite;
+}
+
+@keyframes ss-danger {
+  50% {
+    background: var(--c-home-dark);
+    box-shadow: none;
+  }
+}
+
+@keyframes ss-danger-fill {
+  50% {
+    fill: var(--c-home-dark);
+  }
+}
+
+/* ---------- 10. The board ---------------------------------------------------------------- */
+
+.ss-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--u2);
+  padding: var(--u4) var(--u5);
+}
+
+/* Row one: who is playing where, and the score. */
+.ss-board__head {
+  display: flex;
+  align-items: center;
+  gap: var(--u2);
+  min-width: 0;
+}
+
+.ss-board__stadium {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--c-amber);
+  line-height: var(--lh-tight);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ss-board__total {
+  display: flex;
+  flex: none;
+  align-items: flex-end;
+  /* Clear of the lit edge of the display window. */
+  gap: var(--u2);
+}
+
+.ss-board__pts {
+  color: var(--c-mist);
+  line-height: var(--lh-tight);
+}
+
+/* Row two: the seven lamps and the career bar. */
+.ss-board__run {
+  display: flex;
+  align-items: center;
+  gap: var(--u2);
+  min-width: 0;
+}
+
+/*
+ * Two brackets hang the board from the top of the screen. They are as tall as the gap
+ * GameLayout leaves above it, and vanish when the board is used anywhere else.
+ */
+.ss-board__hanger {
+  position: absolute;
+  bottom: 100%;
+  left: calc(var(--px) * 10);
+  width: var(--u4);
+  height: var(--ss-pad-t, 0px);
+  background: var(--c-steel);
+  box-shadow:
+    inset var(--u) 0 0 0 var(--c-concrete),
+    inset calc(var(--u) * -1) 0 0 0 var(--c-concrete-dark),
+    0 0 0 var(--u) var(--c-ink);
+  pointer-events: none;
+}
+
+.ss-board__hanger + .ss-board__hanger {
+  right: calc(var(--px) * 10);
+  left: auto;
+}
+
+/* The screen: the darkest part of the board, where the question is shown. */
+.ss-board__screen {
+  padding: var(--u2) var(--u3);
+  background: var(--c-ink);
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-night-top),
+    inset calc(var(--u) * -1) calc(var(--u) * -1) 0 0 var(--c-slate);
+}
+
+.ss-board__question {
+  margin: 0;
+  font-weight: 400;
+  color: var(--c-chalk);
+  font-family: var(--font-15);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.ss-board__instruction,
+.ss-board__measure {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.ss-board__instruction {
+  margin-top: var(--u);
+  color: var(--mode-light, var(--c-amber));
+}
+
+.ss-board__measure {
+  color: var(--c-mist);
+}
+
+/* Once the answer is in: the question steps back to a small recap, the clock is gone. */
+.ss-board--compact .ss-board__question {
+  font-family: var(--font-10);
+  font-size: var(--fs-10);
+  line-height: var(--lh-10);
+  text-wrap: wrap;
+}
+
+.ss-board--compact .ss-board__instruction {
+  margin-top: 0;
+}
+
+/* ---------- 11. Answer bar ---------------------------------------------------------------- */
+
+.ss-answer {
+  position: relative;
+  display: block;
+  margin: 0;
+}
+
+/* Floats over the scene, above the bar, so nothing moves when it appears. */
+.ss-answer__above {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--u3));
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--u3);
+  pointer-events: none;
+}
+
+.ss-answer__above > * {
+  pointer-events: auto;
+}
+
+/* The referee's verdict: a dark plate with a red card on it. */
+.ss-answer__reject {
+  display: flex;
+  /* It takes the width PASS leaves, so its edges sit on whole pixels whatever it says. */
+  flex: 1 1 0;
+  align-items: center;
+  gap: var(--u3);
+  min-width: 0;
+  min-height: calc(var(--px) * 12);
+  margin: 0;
+  padding: var(--u2) var(--u3);
+  background: var(--c-ink);
+  color: var(--c-chalk);
+  overflow-wrap: anywhere;
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-slate),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) var(--u) 0 var(--u) var(--c-ink);
+}
+
+/* One line of text tall, so it centres on whole pixels beside one line or two. */
+.ss-answer__card {
+  flex: none;
+  width: calc(var(--px) * 4);
+  height: var(--lh-10);
+  background: var(--c-led-red);
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-home-light),
+    inset calc(var(--u) * -1) calc(var(--u) * -1) 0 0 var(--c-home-dark);
+}
+
+/* Empty: out of sight, but still there for screen readers to watch. */
+.ss-answer__reject.is-empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  box-shadow: none;
+}
+
+.ss-answer__pass {
+  flex: none;
+  margin-left: auto;
+}
+
+/* The field and the button sit in the frame with one pixel of plate around them. */
+.ss-answer__bar {
+  display: flex;
+  align-items: stretch;
+  gap: var(--u2);
+  padding: var(--u4);
+}
+
+.ss-input {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  height: var(--tap);
+  margin: 0;
+  padding: 0 var(--u3);
+  border: var(--u) solid var(--c-ink);
+  background: var(--c-chalk);
+  color: var(--c-ink);
+  caret-color: var(--mode-dark, var(--c-ink));
+  font-family: var(--font-15);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  font-weight: 400;
+  letter-spacing: 0;
+  appearance: none;
+  /* Pressed into the panel: shaded along the top and left, lit along the bottom. */
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-concrete-light),
+    inset 0 calc(var(--u) * -1) 0 0 var(--c-white);
+}
+
+.ss-input::placeholder {
+  color: var(--c-steel);
+  opacity: 1;
+}
+
+.ss-input:focus {
+  outline: none;
+}
+
+.ss-input:focus-visible {
+  outline: var(--ring) solid var(--c-amber);
+  outline-offset: 0;
+}
+
+.ss-input[readonly] {
+  background: var(--c-concrete-light);
+  box-shadow: inset var(--u) var(--u) 0 0 var(--c-concrete);
+}
+
+.ss-shake-a {
+  animation: ss-shake-a 0.32s steps(1, end) 1;
+}
+
+.ss-shake-b {
+  animation: ss-shake-b 0.32s steps(1, end) 1;
+}
+
+/* Two identical animations: swapping the name replays the shake. */
+@keyframes ss-shake-a {
+  0%,
+  50% {
+    transform: translateX(calc(var(--px) * -2));
+  }
+
+  25%,
+  75% {
+    transform: translateX(calc(var(--px) * 2));
+  }
+
+  100% {
+    transform: none;
+  }
+}
+
+@keyframes ss-shake-b {
+  0%,
+  50% {
+    transform: translateX(calc(var(--px) * -2));
+  }
+
+  25%,
+  75% {
+    transform: translateX(calc(var(--px) * 2));
+  }
+
+  100% {
+    transform: none;
+  }
+}
+
+/* ---------- 12. League table --------------------------------------------------------------- */
+
+.ss-table-wrap {
+  /* The height of the headings. LeagueTable measures it and sets the real figure. */
+  --thead: calc(var(--px) + var(--lh-tight));
+
+  position: relative;
+  flex: 1 1 auto;
+  /* Never smaller than the headings and two rows: the best answer and the player's. */
+  min-height: calc(var(--lh-tight) * 5 + var(--px) * 7);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Rows always come to rest whole under the header, never cut in half by it. */
+  scroll-snap-type: y mandatory;
+  scroll-padding-top: var(--thead);
+  background: var(--c-ink);
+  box-shadow: 0 0 0 var(--u) var(--c-ink);
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-steel) var(--c-ink);
+}
+
+.ss-table-wrap:focus {
+  outline: none;
+}
+
+.ss-table-wrap:focus-visible {
+  outline: var(--ring) solid var(--c-amber);
+  outline-offset: calc(var(--ring) * -1);
+}
+
+.ss-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--font-10);
+  font-size: var(--fs-10);
+  line-height: var(--lh-tight);
+}
+
+.ss-table th,
+.ss-table td {
+  padding: var(--u2) var(--u) var(--u);
+  font-weight: 400;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.ss-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-block: 0 var(--u);
+  background: var(--c-slate);
+  color: var(--c-mist);
+  white-space: nowrap;
+  box-shadow: inset 0 calc(var(--u) * -1) 0 0 var(--c-ink);
+}
+
+.ss-table tbody tr {
+  background: var(--c-night);
+  scroll-snap-align: start;
+}
+
+/* One ink pixel between rows, drawn inside the top of each. */
+.ss-table tbody td,
+.ss-table tbody th {
+  box-shadow: inset 0 var(--u) 0 0 var(--c-ink);
+}
+
+.ss-table tbody tr:first-child td,
+.ss-table tbody tr:first-child th {
+  padding-top: var(--u);
+  box-shadow: none;
+}
+
+/*
+ * The best answer stays put under the headings while the other rows slide beneath it. A
+ * gold line under it marks where the rest of the table starts.
+ */
+.ss-table tbody tr.is-pinned td,
+.ss-table tbody tr.is-pinned th {
+  position: sticky;
+  top: var(--thead);
+  z-index: 1;
+  padding-bottom: var(--u2);
+  background: var(--c-night);
+  box-shadow: inset 0 calc(var(--u) * -1) 0 0 var(--c-gold-dark);
+}
+
+/* The row after it needs no ink line of its own. */
+.ss-table tbody tr.is-pinned + tr td,
+.ss-table tbody tr.is-pinned + tr th {
+  padding-top: var(--u);
+  box-shadow: none;
+}
+
+.ss-table .ss-table__rank {
+  width: 1%;
+  min-width: calc(var(--px) * 9);
+  padding-inline: var(--u2);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ss-table tbody .ss-table__rank {
+  color: var(--c-mist);
+}
+
+/*
+ * The answer column takes what the others leave. The zero max-width stops a long place
+ * from widening it: the place is cut with an ellipsis instead.
+ */
+.ss-table .ss-table__who {
+  width: auto;
+  max-width: 0;
+  padding-left: var(--u2);
+}
+
+.ss-table__name,
+.ss-table__place {
+  display: block;
+}
+
+.ss-table__name {
+  color: var(--c-chalk);
+  overflow-wrap: anywhere;
+}
+
+/* Always one line, so every row is two lines tall and the table keeps its rhythm. */
+.ss-table__place {
+  overflow: hidden;
+  color: var(--c-mist);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ss-table__pos,
+.ss-table__you,
+.ss-table__num,
+.ss-table__unit {
+  display: block;
+}
+
+/* On its own the position is two lines tall, like the cells beside it. */
+.ss-table__pos {
+  line-height: calc(var(--lh-tight) * 2);
+}
+
+.ss-table tbody tr.is-you .ss-table__pos {
+  line-height: var(--lh-tight);
+}
+
+/* The distance stacks as number over unit, so even "11,589 miles" stays narrow. */
+.ss-table .ss-table__dist {
+  width: 1%;
+  padding-inline: var(--u2);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ss-table tbody .ss-table__dist {
+  color: var(--c-chalk);
+}
+
+.ss-table__unit {
+  color: var(--c-mist);
+}
+
+.ss-table .ss-table__pts {
+  width: 1%;
+  padding-right: var(--u2);
+  text-align: right;
+}
+
+.ss-table__ptsbox {
+  display: block;
+  box-sizing: border-box;
+  min-width: calc(var(--px) * 13);
+  padding: 0 var(--u);
+  background: var(--c-led-off);
+  color: var(--c-amber);
+  font-family: var(--font-15);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  text-align: right;
+  white-space: nowrap;
+  box-shadow: inset var(--u) var(--u) 0 0 var(--c-night-top);
+}
+
+/* The 100-point row is gold. */
+.ss-table tbody tr.is-best .ss-table__name,
+.ss-table tbody tr.is-best .ss-table__rank {
+  color: var(--c-gold);
+}
+
+.ss-table tbody tr.is-best .ss-table__ptsbox {
+  background: var(--c-gold);
+  color: var(--c-ink);
+  box-shadow: inset var(--u) var(--u) 0 0 var(--c-gold-light);
+}
+
+/* The player's row is a chalk plate with ink text. */
+.ss-table tbody tr.is-you,
+.ss-table tbody tr.is-you td,
+.ss-table tbody tr.is-you th {
+  background: var(--c-chalk);
+}
+
+.ss-table tbody tr.is-you .ss-table__name,
+.ss-table tbody tr.is-you .ss-table__dist {
+  color: var(--c-ink);
+}
+
+.ss-table tbody tr.is-you .ss-table__place,
+.ss-table tbody tr.is-you .ss-table__unit {
+  color: var(--c-slate);
+}
+
+/* The rank cell of the player's row is a flag in the mode's colour. */
+.ss-table tbody tr.is-you .ss-table__rank {
+  background: var(--mode, var(--c-amber));
+  color: var(--c-ink);
+}
+
+.ss-table tbody tr.is-you .ss-table__ptsbox {
+  background: var(--c-ink);
+  color: var(--c-amber);
+  box-shadow: none;
+}
+
+.ss-table tbody tr.is-you.is-best,
+.ss-table tbody tr.is-you.is-best td,
+.ss-table tbody tr.is-you.is-best th {
+  background: var(--c-gold);
+}
+
+.ss-table tbody tr.is-you.is-best .ss-table__name,
+.ss-table tbody tr.is-you.is-best .ss-table__place,
+.ss-table tbody tr.is-you.is-best .ss-table__unit {
+  color: var(--c-ink);
+}
+
+.ss-table tbody tr.is-you.is-best .ss-table__ptsbox {
+  background: var(--c-ink);
+  color: var(--c-gold);
+  box-shadow: none;
+}
+
+.ss-table .ss-table__gap td {
+  padding: var(--u3) 0 var(--u2);
+  background: var(--c-ink);
+  color: var(--c-steel);
+  line-height: 0;
+}
+
+.ss-table__gap .ss-glyph {
+  margin-inline: auto;
+}
+
+/* Padding after the last row. LeagueTable sizes it (see the effect there). */
+.ss-table__tail {
+  height: 0;
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  /* Centred on a whole pixel. The dots are 9 logical pixels wide. */
+  .ss-table__gap .ss-glyph {
+    margin-right: 0;
+    margin-left: round(
+      down,
+      calc((100% - var(--px) * 9) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+/* ---------- 13. Reveal sheet ---------------------------------------------------------------- */
+
+/*
+ * How much of the screen the reveal sheet and the full-time card may cover: the lower 46%,
+ * outline included, so the scene stays in view. A very short screen (a phone on its side)
+ * gets 256 font pixels instead, or there would be no room for the table.
+ */
+.ss-sheet,
+.ss-full {
+  --cover: calc(var(--ss-h, 100dvh) * 0.46 - var(--px));
+  --cover-least: min(
+    calc(var(--ss-h, 100dvh) - var(--px) * 4),
+    calc(var(--fp) * 256)
+  );
+
+  max-height: max(var(--cover), var(--cover-least));
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  /* A whole number of pixels, so nothing inside lands on a half pixel. */
+  .ss-sheet,
+  .ss-full {
+    max-height: max(
+      round(down, calc(var(--cover) + var(--nudge)), var(--snap)),
+      round(down, calc(var(--cover-least) + var(--nudge)), var(--snap))
+    );
+  }
+}
+
+.ss-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  /* Flush with the bottom of the screen: undo the column padding and keep it inside. */
+  margin-bottom: calc(var(--ss-pad-b, 0px) * -1);
+  /* The same steel frame as the board, on three sides: the fourth is below the screen. */
+  padding: var(--u3) var(--u3) 0;
+  background: var(--c-night);
+  color: var(--c-chalk);
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-concrete),
+    inset calc(var(--u) * -1) 0 0 0 var(--c-concrete-dark),
+    inset 0 0 0 var(--u2) var(--c-steel),
+    inset 0 0 0 var(--u3) var(--c-ink),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) 0 0 var(--u) var(--c-ink);
+  /*
+   * Not `both` or `forwards`: an animation that goes on filling after it has ended keeps
+   * the sheet in a compositing layer of its own for as long as it is up (Chrome calls it
+   * an active transform animation), and in such a layer text with no background of its
+   * own, the sentence, loses its sub-pixel anti-aliasing. The last keyframe is the sheet's
+   * own place, so there is nothing to hold.
+   */
+  animation: ss-rise 0.36s steps(6, end) 1 backwards;
+}
+
+/* Two bolts in the top corners of the frame. */
+.ss-sheet::before {
+  content: "";
+  position: absolute;
+  top: var(--u);
+  right: var(--u);
+  left: var(--u);
+  height: var(--u);
+  border-inline: var(--u) solid var(--c-steel-hi);
+  pointer-events: none;
+}
+
+@keyframes ss-rise {
+  from {
+    transform: translateY(100%);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+/* The header band in the grade's colour: what happened, and what it was worth. */
+.ss-sheet__band {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0 var(--u3);
+  padding: var(--u) var(--u4) var(--u2);
+  background: var(--grade, var(--c-mist));
+  color: var(--c-ink);
+  box-shadow:
+    inset 0 calc(var(--u) * -1) 0 0 var(--c-ink),
+    inset 0 var(--u) 0 0 var(--c-white);
+}
+
+.ss-sheet__grade {
+  margin: 0;
+  font-family: var(--font-20);
+  font-size: var(--fs-20);
+  line-height: var(--lh-25);
+  font-weight: 400;
+}
+
+.ss-sheet__points {
+  margin: 0 0 0 auto;
+  font-family: var(--font-25);
+  font-size: var(--fs-25);
+  line-height: var(--lh-25);
+}
+
+.ss-sheet__body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 0 max(var(--u3), var(--ss-pad-b, 0px));
+}
+
+/*
+ * Three lines at most (it scrolls past that), so even the longest sentence on the
+ * narrowest phone leaves room for the table and never pushes the button off the screen.
+ */
+.ss-sheet__sentence {
+  flex: none;
+  box-sizing: border-box;
+  max-height: calc(var(--lh-10) * 3 + var(--px) * 4);
+  margin: 0;
+  padding: var(--u2) var(--u3);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-steel) var(--c-night);
+}
+
+.ss-sheet__body > .ss-btn {
+  flex: none;
+  width: auto;
+  /* Room for the focus ring between the table and the button. */
+  margin: var(--u3) var(--u3) 0 var(--u2);
+}
+
+/* ---------- 14. Full time ------------------------------------------------------------------- */
+
+.ss-full {
+  /* The card stands on the column padding, so that counts towards what it covers. */
+  --cover: calc(var(--ss-h, 100dvh) * 0.46 - var(--px) - var(--ss-pad-b, 0px));
+
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--u2);
+  padding: var(--u4) var(--u5);
+}
+
+/* FULL TIME on the left, the career title it earned on the right. */
+.ss-full__top {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0 var(--u2);
+}
+
+.ss-full__heading {
+  margin: 0;
+  color: var(--c-chalk);
+  font-family: var(--font-20);
+  font-size: var(--fs-20);
+  line-height: var(--lh-20);
+  font-weight: 400;
+}
+
+.ss-full__career {
+  margin: 0;
+  color: var(--c-gold);
+  font-family: var(--font-15);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  overflow-wrap: anywhere;
+}
+
+/* The score: one wide dot-matrix display. */
+.ss-full__score {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.ss-full__score .ss-led {
+  justify-content: center;
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  /* Centred on a whole pixel. LedNumber gives the width of its lamps in --led-w. */
+  .ss-full__score .ss-led {
+    justify-content: flex-start;
+    padding-left: round(
+      down,
+      calc((100% - var(--fp) * var(--led-w)) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+.ss-full__perfect {
+  margin: 0;
+  background: var(--c-gold);
+  color: var(--c-ink);
+  line-height: var(--plate);
+  text-align: center;
+  box-shadow: inset 0 calc(var(--u) * -1) 0 0 var(--c-gold-dark);
+}
+
+.ss-full__list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--u);
+  /* Never fewer than three answers in view. */
+  min-height: calc(var(--lh-tight) * 3 + var(--px) * 2);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+  text-align: left;
+  scrollbar-width: thin;
+  scrollbar-color: var(--c-steel) var(--c-night);
+}
+
+/*
+ * A row is as tall as a line of text or the lamp, whichever is more. The shorter of the
+ * two is centred by a margin (rounded where the browser can), not by the flex box, so it
+ * never lands on a half pixel.
+ */
+.ss-full__row {
+  --row: max(var(--lh-tight), calc(var(--px) * 5));
+  --lamp-drop: calc((var(--row) - var(--px) * 5) / 2);
+  --text-drop: calc((var(--row) - var(--lh-tight)) / 2);
+
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: var(--u2);
+  padding: 0 var(--u2) 0 var(--u);
+  background: var(--c-ink);
+  line-height: var(--lh-tight);
+  /* Letters that reach past their line must not make the list scroll by a pixel or two. */
+  contain: layout;
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-full__row {
+    --lamp-drop: round(
+      down,
+      calc((var(--row) - var(--px) * 5) / 2 + var(--nudge)),
+      var(--snap)
+    );
+    --text-drop: round(
+      down,
+      calc((var(--row) - var(--lh-tight)) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+.ss-full__row .ss-pip {
+  margin-top: var(--lamp-drop);
+}
+
+.ss-full__answer,
+.ss-full__points {
+  margin-block: var(--text-drop);
+}
+
+.ss-full__answer {
+  flex: 1 1 0;
+  min-width: 0;
+  color: var(--c-chalk);
+  overflow-wrap: anywhere;
+}
+
+.ss-full__row[data-grade="timeup"] .ss-full__answer,
+.ss-full__row[data-grade="skipped"] .ss-full__answer {
+  color: var(--c-mist);
+}
+
+.ss-full__points {
+  flex: none;
+  min-width: calc(var(--px) * 9);
+  color: var(--c-amber);
+  text-align: right;
+}
+
+.ss-full__row[data-grade="worldie"] .ss-full__points,
+.ss-full__row[data-grade="worldie"] .ss-full__answer {
+  color: var(--c-gold);
+}
+
+.ss-full__actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--u3) var(--u2);
+  /* Room for the drop shadows of the buttons. */
+  padding: 0 var(--u) var(--u) 0;
+}
+
+.ss-full__actions > .ss-btn {
+  flex: 0 0 auto;
+  padding-inline: var(--u3);
+}
+
+.ss-full__actions > .ss-btn--primary {
+  flex: 1 1 auto;
+}
+
+/* ---------- 15. Menu captions ----------------------------------------------------------------- */
+
+/*
+ * HOME on the left and AWAY on the right, like the two patches on the ball above them.
+ * This is the layout for a phone: two cards side by side in the column, the day and the
+ * "?" button stacked at their right. A wide screen has its own (15b).
+ */
+.ss-menu {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: var(--u3);
+}
+
+/*
+ * Stowed (the kick-off is on): the captions drop off the bottom of the screen in four
+ * steps and are gone. Coming back is instant.
+ */
+.ss-menu.is-stowed {
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(calc(100% + var(--ss-pad-b, 0px) + var(--u2)));
+  transition:
+    transform 0.2s steps(4, end),
+    visibility 0s linear 0.2s;
+}
+
+/*
+ * A notice (a locked patch was pressed): a dark plate with a yellow card on it. It floats
+ * over the scene above the cards, so nothing moves when it appears, and it lets the pointer
+ * through to the ball behind it.
+ */
+.ss-menu__notice {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--u3));
+  left: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--u3);
+  margin: 0;
+  padding: var(--u2) var(--u3);
+  background: var(--c-ink);
+  color: var(--c-chalk);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-slate),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) var(--u) 0 var(--u) var(--c-ink);
+}
+
+/* One line of text tall, so it centres on whole pixels beside one line or two. */
+.ss-menu__lamp {
+  flex: none;
+  width: calc(var(--px) * 4);
+  height: var(--lh-10);
+  background: var(--c-gold);
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--c-gold-light),
+    inset calc(var(--u) * -1) calc(var(--u) * -1) 0 0 var(--c-gold-dark);
+}
+
+/* Empty: out of sight, but still there for screen readers to watch. */
+.ss-menu__notice.is-empty {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  box-shadow: none;
+}
+
+.ss-menu__modes {
+  display: flex;
+  flex: 1 1 0;
+  gap: var(--u3);
+  min-width: 0;
+}
+
+.ss-menu__card {
+  --halo: var(--halo-off);
+
+  position: relative;
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: var(--u);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: var(--tap);
+  margin: 0;
+  padding: var(--u2) var(--u2) var(--u2) var(--u3);
+  border: 0;
+  background: var(--c-night);
+  color: var(--c-chalk);
+  font: inherit;
+  line-height: var(--lh-tight);
+  text-align: left;
+  appearance: none;
+  /*
+   * A stripe of the mode's colour down the left edge (--stripe: one logical pixel from the
+   * left; the wide layout turns AWAY's round to the right).
+   */
+  box-shadow:
+    inset var(--stripe, var(--u)) 0 0 0 var(--mode, var(--c-steel)),
+    inset 0 var(--u) 0 0 var(--c-slate),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) var(--u) 0 var(--u) var(--c-ink),
+    var(--halo);
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  /* Two cards of the same whole number of pixels. */
+  .ss-menu__card {
+    flex: none;
+    width: round(
+      down,
+      calc((100% - var(--px) * 3) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+button.ss-menu__card {
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/*
+ * Lit: the mouse is over the card, or over its patch on the ball. The stripe widens and
+ * brightens and the card is ringed in the mode's light colour, like the patch above it.
+ */
+.ss-menu__card.is-lit {
+  box-shadow:
+    inset var(--stripe-lit, var(--u2)) 0 0 0 var(--mode-light, var(--c-mist)),
+    inset 0 var(--u) 0 0 var(--c-steel),
+    0 0 0 var(--u) var(--mode-light, var(--c-mist)),
+    var(--u) var(--u) 0 var(--u) var(--c-ink),
+    var(--halo);
+}
+
+@media (hover: hover) {
+  button.ss-menu__card:hover {
+    box-shadow:
+      inset var(--stripe-lit, var(--u2)) 0 0 0 var(--mode-light, var(--c-mist)),
+      inset 0 var(--u) 0 0 var(--c-steel),
+      0 0 0 var(--u) var(--mode-light, var(--c-mist)),
+      var(--u) var(--u) 0 var(--u) var(--c-ink),
+      var(--halo);
+  }
+}
+
+button.ss-menu__card:active {
+  background: var(--c-slate);
+  box-shadow:
+    inset var(--stripe, var(--u)) 0 0 0 var(--mode, var(--c-steel)),
+    0 0 0 var(--u) var(--c-ink),
+    var(--halo);
+  transform: translate(var(--u), var(--u));
+}
+
+/*
+ * No ring for a focus the mouse gave. The keyboard's ring is with the buttons' (section 4):
+ * this rule comes after it, so it must not match a focus that shows.
+ */
+.ss-menu__card:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* The badge, and the score once the mode has been played. */
+.ss-menu__top {
+  display: flex;
+  align-items: flex-start;
+  align-self: stretch;
+  justify-content: space-between;
+  gap: var(--u2);
+}
+
+.ss-menu__line {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A points box like the ones in the league table, exactly as tall as the badge. */
+.ss-menu__score {
+  flex: none;
+  box-sizing: border-box;
+  min-width: calc(var(--px) * 13);
+  padding: 0 var(--u);
+  background: var(--c-ink);
+  color: var(--c-amber);
+  font-family: var(--font-15);
+  font-size: var(--fs-15);
+  line-height: calc(var(--fp) * 13 + var(--px) * 4);
+  text-align: right;
+  white-space: nowrap;
+  box-shadow: var(--u) var(--u) 0 0 var(--c-slate);
+}
+
+/* The day at the top, the "?" button at the bottom, level with the cards. */
+.ss-menu__side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--u2);
+  min-width: var(--tap);
+}
+
+.ss-menu__side > .ss-btn {
+  flex: none;
+}
+
+.ss-menu__day {
+  align-self: stretch;
+  padding: 0 var(--u);
+  background: var(--c-ink);
+  color: var(--c-amber);
+  line-height: var(--plate);
+  text-align: center;
+  white-space: nowrap;
+  box-shadow: 0 0 0 var(--u) var(--c-ink);
+}
+
+/*
+ * ---- 15b. The captions on a wide screen ---------------------------------------------------
+ *
+ * A monitor, not a phone: GameLayout marks itself data-wide (landscape, and room for this
+ * row). The captions leave the column and lie in one row across the foot of the picture,
+ * like the line at the bottom of a scoreboard:
+ *
+ *     [DAY 12]  [ Closest to the stadium wins  HOME 478 ][ AWAY  Furthest from it wins ]  [?]
+ *
+ * - The type is in caption pixels (--cp: half a logical pixel, twice the font pixel on most
+ *   monitors). --fp is swapped for it here, and every size inside follows.
+ * - The two cards are the same width and the gap between them is on the centre line of the
+ *   screen, so HOME is under the HOME patch of the ball and AWAY under the AWAY patch. The
+ *   badges meet in the middle, each card's line runs outwards from its badge, and a score
+ *   sits beside its badge like the score in a result.
+ * - The day and the "?" button hang off the two ends. They are not part of the row's width,
+ *   so they cannot push the cards off centre.
+ * - Nothing is centred by a flex box or by text-align: text that starts on half a pixel is
+ *   drawn soft. Every offset is a whole number of pixels by arithmetic or by round().
+ * - The row is 13 caption pixels and 8 logical pixels tall, or a touch target if that is
+ *   more: about two thirds of the height of the phone's captions, to leave the picture and
+ *   the ball more room. That is rounded up to a whole number of logical pixels, so the
+ *   row's top edge lies on the picture's own pixel grid as its bottom edge does (the
+ *   plates lie straight on the picture, and an edge half way down a pixel of it shows).
+ */
+.ss-game[data-wide] .ss-menu {
+  --fp: var(--cp);
+  /* The height of the row, and what that leaves above a badge and above a line of text. */
+  --ss-row: max(var(--tap), calc(var(--fp) * 13 + var(--px) * 8));
+  --ss-row-pad: calc((var(--ss-row) - var(--fp) * 13 - var(--px) * 4) / 2);
+  --ss-row-text: calc((var(--ss-row) - var(--lh-tight)) / 2);
+  /* What is left and above the "?" glyph (10 logical pixels) inside the button's border. */
+  --ss-row-glyph: calc((var(--ss-row) - var(--px) * 12) / 2);
+  /*
+   * How far the ball reaches either side of the centre line: its radius is 16.5% of the
+   * height (menuLayout in app/art/layout.ts), rounded to a logical pixel.
+   */
+  --ss-ball: calc(var(--ss-h, 100dvh) * 0.165 + var(--px) * 2);
+
+  position: fixed;
+  right: 0;
+  bottom: var(--ss-pad-b, var(--u2));
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--u2);
+  width: max-content;
+  /* Room for what hangs off the ends, on any screen that is wide. */
+  max-width: calc(100% - var(--fp) * 92 - var(--px) * 20);
+  margin-inline: auto;
+  font-size: var(--fs-10);
+  line-height: var(--lh-10);
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-game[data-wide] .ss-menu {
+    --ss-row: round(
+      up,
+      calc(
+        max(var(--tap), calc(var(--fp) * 13 + var(--px) * 8)) - var(--nudge)
+      ),
+      var(--px)
+    );
+    --ss-row-pad: round(
+      down,
+      calc((var(--ss-row) - var(--fp) * 13 - var(--px) * 4) / 2 + var(--nudge)),
+      var(--snap)
+    );
+    --ss-row-text: round(
+      down,
+      calc((var(--ss-row) - var(--lh-tight)) / 2 + var(--nudge)),
+      var(--snap)
+    );
+    --ss-row-glyph: round(
+      down,
+      calc((var(--ss-row) - var(--px) * 12) / 2 + var(--nudge)),
+      var(--snap)
+    );
+    /* A whole number of logical pixels, so the notice beside the ball is on the grid. */
+    --ss-ball: round(
+      up,
+      calc(var(--ss-h, 100dvh) * 0.165 + var(--px) - var(--nudge)),
+      var(--px)
+    );
+
+    /*
+     * Centred on the same whole pixel as the canvas (section 19). The row is two equal
+     * cards and an even gap, so half of it is a whole number of pixels too.
+     */
+    right: calc(100% - round(down, calc(50% + var(--nudge)), var(--snap)) * 2);
+  }
+}
+
+/* The four parts are laid out by the row itself. */
+.ss-game[data-wide] .ss-menu__modes,
+.ss-game[data-wide] .ss-menu__side,
+.ss-game[data-wide] .ss-menu__top {
+  display: contents;
+}
+
+.ss-game[data-wide] .ss-menu__card {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--u3);
+  width: auto;
+  min-height: var(--ss-row);
+  padding: var(--ss-row-pad) var(--u2) var(--ss-row-pad) var(--u3);
+}
+
+/* HOME: the line, then the badge and the score against the centre line. */
+.ss-game[data-wide] .ss-menu__card:first-child {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.ss-game[data-wide] .ss-menu__card:first-child .ss-menu__line {
+  order: -1;
+}
+
+/* AWAY is its mirror image: the stripe is on the outer edge, the score comes first. */
+.ss-game[data-wide] .ss-menu__card:last-child {
+  --stripe: calc(var(--u) * -1);
+  --stripe-lit: calc(var(--u2) * -1);
+
+  padding-inline: var(--u2) var(--u3);
+}
+
+.ss-game[data-wide] .ss-menu__card:last-child .ss-menu__score {
+  order: -1;
+}
+
+/* A line of text is 15 font pixels tall and a badge 13 and 4 logical pixels. */
+.ss-game[data-wide] .ss-menu__line {
+  margin-top: calc(var(--px) * 2 - var(--fp));
+}
+
+/* The day: a plate as tall as the row, off its left end. */
+.ss-game[data-wide] .ss-menu__day {
+  position: absolute;
+  top: 0;
+  right: calc(100% + var(--u2));
+  bottom: 0;
+  padding: var(--ss-row-text) var(--u2) 0;
+  line-height: var(--lh-tight);
+  text-align: left;
+}
+
+/* The "?" button: a square as tall as the row, off its right end. */
+.ss-game[data-wide] .ss-menu__side > .ss-btn {
+  position: absolute;
+  top: 0;
+  left: calc(100% + var(--u2));
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: var(--ss-row);
+  min-width: 0;
+  height: var(--ss-row);
+  min-height: 0;
+  padding: var(--ss-row-glyph) 0 0 var(--ss-row-glyph);
+}
+
+/*
+ * The notice sits beside the ball, not under it: its right edge is the ball's radius and 6
+ * logical pixels left of the centre line, so it is clear of the ball's whole width however
+ * high the ball floats or bobs. Its left edge is the left end of the cards (50% of the row
+ * is the centre line), so it stands on the HOME card like a plate on the row and never
+ * hangs out past the row's end into the picture; the words wrap, evenly, to fit. Only on a
+ * wide screen too short of room for 96 caption pixels does it reach further left.
+ */
+.ss-game[data-wide] .ss-menu__notice {
+  right: calc(50% + var(--ss-ball) + var(--px) * 6);
+  left: auto;
+  width: max(calc(50% - var(--ss-ball) - var(--px) * 6), calc(var(--fp) * 96));
+  text-wrap: balance;
+}
+
+.ss-game[data-wide] .ss-menu__notice.is-empty {
+  width: 1px;
+}
+
+/*
+ * Before the page's script has measured the screen, the build-time HTML is laid out for a
+ * phone. On a landscape screen that would show the captions in the phone's layout for a
+ * moment and then move them: they are held back until GameLayout is live instead.
+ */
+@media (orientation: landscape) {
+  .ss-game:not([data-live]) .ss-menu {
+    visibility: hidden;
+  }
+}
+
+/* ---------- 16. Game layout -------------------------------------------------------------------- */
+
+.ss-game {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--c-ink);
+}
+
+.ss-game:not(.ss-game--contained) {
+  /* The full height the sheet and cards measure themselves against. */
+  --ss-h: 100dvh;
+}
+
+.ss-game--contained {
+  position: relative;
+  height: 100%;
+}
+
+.ss-game__canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.ss-game__canvas > * {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ss-game__canvas canvas {
+  image-rendering: pixelated;
+}
+
+.ss-game__col {
+  --ss-pad-t: max(var(--u2), env(safe-area-inset-top, 0px));
+  --ss-pad-b: max(var(--u2), env(safe-area-inset-bottom, 0px));
+
+  /*
+   * 135 logical pixels wide. Where that is less than 405 font pixels (the column of the
+   * reference phone) it takes those instead, so the text never has a narrower measure
+   * than it was designed for. Never wider than the screen.
+   */
+  --ss-col: max(calc(var(--px) * 135), calc(var(--fp) * 405));
+
+  position: absolute;
+  top: var(--ss-vv-top, 0px);
+  right: 0;
+  left: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, var(--ss-col));
+  height: var(--ss-vv-h, 100%);
+  margin-inline: auto;
+  padding: var(--ss-pad-t) max(var(--u3), env(safe-area-inset-right, 0px))
+    var(--ss-pad-b) max(var(--u3), env(safe-area-inset-left, 0px));
+  pointer-events: none;
+}
+
+@supports (width: round(1.5px, 1px)) {
+  /* Centre on a whole pixel so nothing lands on a half pixel. */
+  .ss-game__col {
+    right: auto;
+    left: max(
+      0px,
+      round(down, calc((100% - var(--ss-col)) / 2 + var(--nudge)), var(--snap))
+    );
+    margin-inline: 0;
+  }
+}
+
+/* With the keyboard up there is no home indicator to avoid. */
+.ss-game[data-keyboard="open"] .ss-game__col {
+  --ss-pad-b: var(--u2);
+}
+
+.ss-game__top,
+.ss-game__bottom {
+  flex: none;
+  min-width: 0;
+}
+
+/*
+ * When the two do not fit (a long question on a small phone with the keyboard up), the
+ * top slot is the one that gives: the board keeps its size and slides under whatever is
+ * in the bottom slot, which is later in the page and so drawn over it. The answer bar is
+ * never pushed off the screen.
+ */
+.ss-game__top {
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.ss-game__mid {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.ss-game__top > *,
+.ss-game__mid > *,
+.ss-game__bottom > * {
+  pointer-events: auto;
+}
+
+/* ---------- 17. Plain pages (rules, errors) ------------------------------------------------------ */
+
+.ss-page {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding: var(--u8) var(--u5);
+  background: var(--c-ink);
+}
+
+/* ---------- 18. Reduced motion --------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-root *,
+  .ss-root *::before,
+  .ss-root *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .ss-table-wrap {
+    scroll-behavior: auto;
+  }
+}
+
+/* ---------- 19. The canvas stage (PixelStage) ------------------------------------------------------ */
+
+/*
+ * The stage fills the canvas slot. The canvas inside it is exactly --ss-stage-w by
+ * --ss-stage-h (the logical size times --px, set by PixelStage: a whole number of device
+ * pixels per logical pixel), which is up to one logical pixel larger than the slot each
+ * way because the logical size is rounded up.
+ */
+.ss-stage {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--c-ink);
+}
+
+.ss-stage__canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  max-width: none;
+  max-height: none;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@supports (width: round(1.5px, 1px)) {
+  /*
+   * Centre the canvas on the slot to a whole pixel (--snap: a whole CSS pixel, or whole
+   * device pixels where those are not the same thing), so the extra is cropped evenly
+   * and the middle of the scene is the middle of the screen. An odd pixel left over goes
+   * to the left and the top: the same rounding as the interface column (section 16), so
+   * the two stay on one grid wherever their widths allow it.
+   *
+   * Sideways the canvas is always centred, also in a slot much narrower than it (the
+   * gallery's phone frames). Downwards it never rises more than the rounding slack: if
+   * the slot loses height while the scale is held (a keyboard that shrinks the layout),
+   * the scene keeps its place and is cropped at the bottom.
+   */
+  .ss-stage__canvas {
+    left: round(
+      down,
+      calc((100% - var(--ss-stage-w)) / 2 + var(--nudge)),
+      var(--snap)
+    );
+    top: max(
+      calc(var(--snap) - var(--px)),
+      round(
+        down,
+        calc((100% - var(--ss-stage-h)) / 2 + var(--nudge)),
+        var(--snap)
+      )
+    );
+  }
+}

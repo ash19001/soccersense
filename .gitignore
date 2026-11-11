@@ -1,0 +1,24 @@
+.DS_Store
+Thumbs.db
+desktop.ini
+node_modules/
+coverage/
+*.local
+.env
+.env.*
+!.env.example
+
+# Logs and tool caches
+*.log
+*.tsbuildinfo
+.eslintcache
+
+# Claude Code: personal settings stay local (the shared skills in .claude/skills are tracked)
+.claude/settings.local.json
+
+# React Router
+/.react-router/
+/build/
+
+# Rendered art snapshots (scratch)
+/.snaps/

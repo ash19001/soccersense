@@ -1,0 +1,178 @@
+/*
+ * Styles for the interface gallery at /dev/ui only. The stand-in backdrop is deliberately
+ * flat: the real scenes are drawn on the canvas by other code.
+ */
+
+.dev-blank {
+  min-height: 100dvh;
+  background: var(--c-ink);
+}
+
+.dev-gallery {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding: var(--u4) var(--u3) var(--u8);
+  background: var(--c-night-top);
+}
+
+.dev-header {
+  display: grid;
+  gap: var(--u2);
+  max-width: calc(var(--px) * 260);
+  margin-bottom: var(--u6);
+}
+
+.dev-header code {
+  color: var(--c-amber);
+  font: inherit;
+}
+
+.dev-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--u) var(--u4);
+}
+
+.dev-header a,
+.dev-frame figcaption a {
+  color: var(--c-away-light);
+  text-decoration: underline;
+}
+
+.dev-warning {
+  color: var(--c-led-red);
+}
+
+.dev-heading {
+  margin: var(--u6) 0 var(--u3);
+  color: var(--c-gold);
+}
+
+.dev-frames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--u8) var(--u6);
+}
+
+.dev-frame {
+  width: min(100%, calc(var(--px) * 135));
+  margin: 0;
+}
+
+.dev-frame figcaption {
+  margin-bottom: var(--u2);
+  color: var(--c-mist);
+}
+
+.dev-frame__screen {
+  --ss-h: min(100dvh, 844px);
+
+  position: relative;
+  height: var(--ss-h);
+  overflow: hidden;
+  box-shadow: 0 0 0 var(--u) var(--c-slate);
+}
+
+/* --- stand-in backdrop --- */
+
+.dev-backdrop {
+  position: relative;
+  background: var(--c-sky-mid);
+}
+
+.dev-backdrop__sky {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 30%;
+  background: var(--c-sky-top);
+}
+
+.dev-backdrop__stand {
+  position: absolute;
+  inset: 40% 0 auto;
+  height: 14%;
+  background: var(--c-concrete);
+  box-shadow: inset 0 calc(var(--px) * 4) 0 0 var(--c-concrete-light);
+}
+
+.dev-backdrop__grass {
+  position: absolute;
+  inset: 54% 0 0;
+  background: var(--c-grass);
+  box-shadow:
+    inset 0 var(--px) 0 0 var(--c-chalk),
+    inset 0 calc(var(--px) * 30) 0 0 var(--c-grass-light);
+}
+
+.dev-backdrop[data-kind="menu"] .dev-backdrop__stand {
+  inset: 22% 0 auto;
+  height: 22%;
+}
+
+.dev-backdrop[data-kind="menu"] .dev-backdrop__grass {
+  inset: 44% 0 0;
+}
+
+/* Where the menu ball will be (art bible section 5): centre at 70% of the height. */
+.dev-backdrop__ball {
+  position: absolute;
+  top: 70%;
+  left: 50%;
+  width: min(68vw, 33vh, calc(var(--px) * 92));
+  aspect-ratio: 1;
+  background: var(--c-chalk);
+  box-shadow:
+    inset 0 0 0 var(--px) var(--c-ink),
+    inset calc(var(--px) * -6) calc(var(--px) * -6) 0 0 var(--c-steel-hi);
+  transform: translate(-50%, -50%);
+}
+
+/* --- the parts on their own --- */
+
+.dev-parts {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, calc(var(--px) * 118)), 1fr)
+  );
+  gap: var(--u6);
+  align-items: start;
+}
+
+.dev-block {
+  min-width: 0;
+}
+
+.dev-block__title {
+  margin: 0 0 var(--u2);
+  color: var(--c-mist);
+}
+
+.dev-block__body {
+  display: grid;
+  gap: var(--u4);
+  padding: var(--u4);
+  background: var(--c-grass-dark);
+  box-shadow: 0 0 0 var(--u) var(--c-ink);
+}
+
+.dev-block__body p {
+  margin: 0;
+}
+
+.dev-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--u4) var(--u3);
+}
+
+.dev-answer--tall {
+  /* Room for the message and PASS, which float above the bar. */
+  padding-top: calc(var(--px) * 20);
+}
+
+.dev-table {
+  display: flex;
+  max-height: calc(var(--px) * 90);
+}

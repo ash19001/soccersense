@@ -1,0 +1,101 @@
+/*
+ * Palette tokens: one custom property per colour in docs/ART_BIBLE.md section 3.1.
+ * Names are mechanical: --c-<kebab-case palette name>. Values must stay identical to
+ * app/art/palette.ts (a test compares them). Do not add ad-hoc colours here.
+ */
+:root {
+  /* neutrals */
+  --c-ink: #0f1220;
+  --c-night: #1a2036;
+  --c-slate: #2c3654;
+  --c-steel: #56668a;
+  --c-mist: #9fb0cc;
+  --c-chalk: #f3eedd;
+  --c-white: #ffffff;
+
+  /* grass */
+  --c-grass-deep: #1b5e3f;
+  --c-grass-dark: #23824a;
+  --c-grass: #33a653;
+  --c-grass-light: #5cc45a;
+  --c-grass-hi: #9be06a;
+
+  /* day sky */
+  --c-sky-top: #2f6fd0;
+  --c-sky-mid: #5aa6f0;
+  --c-sky-low: #a5dcf7;
+  --c-haze: #e3f4f7;
+
+  /* dusk sky */
+  --c-dusk-top: #2b2a66;
+  --c-dusk-mid: #8c3f7d;
+  --c-dusk-low: #f0774a;
+  --c-dusk-glow: #ffcf6b;
+
+  /* dawn sky */
+  --c-dawn-top: #2a3f86;
+  --c-dawn-mid: #b877a8;
+  --c-dawn-low: #ffc58a;
+  --c-dawn-glow: #fff0c2;
+
+  /* night sky */
+  --c-night-top: #070a1c;
+  --c-night-mid: #101a3c;
+  --c-night-low: #1f2f5e;
+
+  /* structure */
+  --c-concrete-dark: #3b4159;
+  --c-concrete: #6b7390;
+  --c-concrete-light: #a2abc2;
+  --c-steel-hi: #d6dceb;
+
+  /* warm build */
+  --c-brick-dark: #6e2c2a;
+  --c-brick: #a8483a;
+  --c-brick-light: #d0714f;
+  --c-wood: #8a5a34;
+  --c-wood-dark: #5c3a22;
+
+  /* skin */
+  --c-skin-a: #f2c6a0;
+  --c-skin-a-shade: #c98d6b;
+  --c-skin-b: #c98a5e;
+  --c-skin-b-shade: #9a6040;
+  --c-skin-c: #7a4a32;
+  --c-skin-c-shade: #55301f;
+
+  /* hair */
+  --c-hair-dark: #2a1c16;
+  --c-hair-brown: #7a4b20;
+  --c-hair-blond: #e0b040;
+
+  /* HOME (warm) */
+  --c-home-dark: #a3271f;
+  --c-home: #e8452c;
+  --c-home-light: #ff8552;
+
+  /* AWAY (cool) */
+  --c-away-dark: #116a80;
+  --c-away: #19a9bf;
+  --c-away-light: #6fe0dc;
+
+  /* gold */
+  --c-gold-dark: #b9770e;
+  --c-gold: #ffc928;
+  --c-gold-light: #fff2a0;
+
+  /* scoreboard */
+  --c-led-off: #1c1f2b;
+  --c-amber-dim: #6b3f0e;
+  --c-amber: #ffb21f;
+  --c-led-green: #6dff7a;
+  --c-led-red: #ff5a4d;
+
+  /* grades */
+  --c-grade-worldie: #ffc928;
+  --c-grade-topbins: #8fe35c;
+  --c-grade-goal: #2fb36b;
+  --c-grade-ontarget: #4aa6e8;
+  --c-grade-wide: #e9584a;
+  --c-grade-timeup: #7b86a3;
+}

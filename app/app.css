@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+/* The palette (art bible section 3.1) and the interface skin (sections 7 and 8). */
+@import "./ui/tokens.css";
+@import "./ui/ui.css" layer(components);
+
+@layer base {
+  html {
+    background: var(--c-ink);
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* Every page is a night-sky page in the body pixel font, even outside the game. */
+  body {
+    margin: 0;
+    background: var(--c-ink);
+    color: var(--c-chalk);
+    font-family: "Jersey 10", ui-monospace, monospace;
+    font-size: var(--fs-10);
+    line-height: var(--lh-10);
+    font-weight: 400;
+    font-synthesis: none;
+    -webkit-font-smoothing: none;
+    font-smooth: never;
+  }
+
+  /*
+   * --ring is one logical pixel, never thinner than 2 CSS px, in whole device pixels
+   * (ui.css section 1): a bare 2px is two and a half device pixels at 125%.
+   */
+  :focus-visible {
+    outline: var(--ring, max(2px, var(--px))) solid var(--c-amber);
+    outline-offset: var(--px);
+  }
+}

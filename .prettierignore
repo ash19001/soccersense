@@ -1,0 +1,5 @@
+build
+.react-router
+.claude
+pnpm-lock.yaml
+.snaps
