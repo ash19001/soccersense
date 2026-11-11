@@ -1,7 +1,8 @@
 /**
  * The menu scene: the home screen's moving picture.
  *
- * A football hangs in the air in front of today's stadium, under the player's own sky.
+ * A football hangs in the air in front of a stadium in its town, under the player's own
+ * sky, and an airship over the town carries the fact of the day.
  * It is the menu, not a ball on a pitch: it floats, and nothing in this scene knows of
  * any ground. Its black patches are the buttons: HOME on the left patch, AWAY on the
  * right, and two locked patches above and below. Choosing a mode strikes the ball where
@@ -17,7 +18,7 @@
  * crosses the roofs of the city into the sky. A last twinkle, and it is gone: no roar. The
  * iris closes on where it went.
  *
- *   const menu = new MenuScene({ seed, stadium, labels });
+ *   const menu = new MenuScene({ seed, fact, labels });
  *   menu.onKickoff = (mode) => hideTheCaptions();
  *   menu.onChoose = (mode) => startTheGame(mode);
  *   // the host then drives resize, setLighting, update, draw and pointer
@@ -27,7 +28,8 @@
  * own.
  *
  * The backdrop. The scene knows the stadium only through `MenuBackdrop`'s contract
- * (resize, setLighting, setStadium, setHeader, setMoonPhase, target, setRoar, draw) and
+ * (resize, setLighting, setSign, setMoonPhase, target, setRoar, draw, and
+ * airshipAt and pokeAirship, which hand the airship the pointer) and
  * takes from `menuLayout` only `cx`, `ballR`, `ballCy` and `logo`. The kick-offs are
  * placed by the ball's own spot, the backdrop's `target()` (the centre spot of the pitch),
  * the logo zone (always clear sky) with the wordmark in it, which neither flight crosses,
@@ -46,10 +48,19 @@
  * taken at once but struck only when the ball has settled. And a pointer that keeps still
  * keeps the patch it is on while the ball breathes and rocks under it: the hover is only
  * looked at afresh when the pointer moves.
+ *
+ * The ball can be spun by hand: a press that moves more than a few pixels is a drag, which
+ * turns it under the pointer, and a flick leaves it spinning until friction slows it and it
+ * springs back into its pose. Meanwhile it is no menu: nothing hovers or chooses from the
+ * pointer, and a mode chosen from the captions brings it round quickly before the strike.
+ * The constants under "Spinning the ball by hand" give the feel.
  */
 
 import {
+  BALL_SLOTS,
+  ballShowPose,
   ballSlotAt,
+  ballSlotCenter,
   drawBall,
   type BallPatch,
   type BallSlot,
@@ -59,7 +70,7 @@ import { menuLayout } from "~/art/layout";
 import { lightingFor, type Lighting } from "~/art/lighting";
 import { drawLogo, logoSize, type LogoOptions } from "~/art/logo";
 import { MODE_COLORS, P } from "~/art/palette";
-import { MenuBackdrop, type MenuStadiumInfo } from "~/art/stadium";
+import { MenuBackdrop } from "~/art/stadium";
 import type { Mode } from "~/game";
 import {
   Surface,
@@ -70,20 +81,48 @@ import {
   smoothstep,
   type Color,
 } from "~/pixel";
-import type { PointerInfo, Scene } from "./scene";
+import type { PointerInfo, Scene, SceneCursor } from "./scene";
 
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
+
+/**
+ * The modes that are not open yet. Each has a patch of its own on the ball: NEXT-GEN on
+ * the top patch and RETRO on the bottom one, CLOSEST and FURTHEST on the back, directly
+ * behind AWAY and HOME, so that half a turn of the ball brings CLOSEST round to where HOME
+ * was and FURTHEST to where AWAY was.
+ */
+export type LockedMode = "nextgen" | "retro" | "closest" | "furthest";
+
+export const LOCKED_MODES: readonly LockedMode[] = [
+  "nextgen",
+  "retro",
+  "closest",
+  "furthest",
+];
+
+/** Which patch each mode is on. */
+export const MODE_SLOTS: Readonly<Record<Mode | LockedMode, BallSlot>> = {
+  home: "left",
+  away: "right",
+  nextgen: "top",
+  retro: "bottom",
+  closest: "backRight",
+  furthest: "backLeft",
+};
 
 export interface MenuLabels {
   /** The word on the left patch, for example "HOME". */
   home: string;
   /** The word on the right patch, for example "AWAY". */
   away: string;
-  /** The word for a locked patch, for example "SOON". */
-  locked: string;
-  /** The sign's first line, for example "TODAY'S STADIUM". */
+  /** The words on the locked patches, for example "NEXT-GEN". */
+  nextgen: string;
+  retro: string;
+  closest: string;
+  furthest: string;
+  /** The first line of the airship's sign, over the fact, for example "DID YOU KNOW?". */
   header: string;
   /** Under the logo when there is room, for example "DAILY FOOTBALL TRIVIA". */
   tagline?: string;
@@ -91,7 +130,8 @@ export interface MenuLabels {
 
 export interface MenuSceneOptions {
   seed: number;
-  stadium: MenuStadiumInfo;
+  /** The fact of the day, on the airship's sign. Any case: the sign shows capitals. */
+  fact: string;
   labels: MenuLabels;
   /** Play the entrance. Default true. */
   intro?: boolean;
@@ -166,6 +206,15 @@ const IN_STAR_FPS = 20;
 const NO_LEN = 0.35;
 
 /**
+ * A spun ball that comes to rest with a locked patch facing the viewer turns to show it
+ * (NEXT-GEN or RETRO straight on, or CLOSEST and FURTHEST where HOME and AWAY were) and
+ * holds that pose for REST_HOLD seconds from when it stopped, long enough to read the
+ * patch and press it, before it goes home. A press on a locked patch starts the wait
+ * afresh, and it stands still while the pointer is on a patch or pressing the ball.
+ */
+const REST_HOLD = 4.5;
+
+/**
  * A pointer that has moved no more than this (logical pixels: a hand's tremble, less than
  * one step of a sweep) since it was last on a patch is keeping still, and keeps that
  * patch: the ball breathes and rocks a few pixels under it, and neither the highlight nor
@@ -212,6 +261,57 @@ const ROAR_STEPS = 6;
  * flash is white on even eighths of a second, the colour on odd ones) and no shine runs.
  */
 const BALL_T_LIT = 0.125;
+
+// ---------------------------------------------------------------------------
+// Spinning the ball by hand
+// ---------------------------------------------------------------------------
+
+/**
+ * A press on the ball that moves more than DRAG pixels (logical: 12 CSS pixels on the
+ * reference monitor) is a drag and never a click, wherever it is let go.
+ */
+const DRAG = 3;
+/**
+ * While the pointer is within GRIP of the ball's radius from its middle, the point that
+ * was grabbed stays under it: the ball turns about the axis that carries the one onto the
+ * other. Nearer the rim, and off the ball, a drag of one radius turns it one radian, about
+ * the axis across the drag.
+ */
+const GRIP = 0.92;
+/** The hand's speed is measured over about this long (seconds), and is what a flick keeps. */
+const SPIN_TAU = 0.05;
+/** The fastest a flick spins it, in radians a second (a little over two turns). */
+const SPIN_MAX = 14;
+/**
+ * Let go, it slows by FRICTION of its speed a second and by FRICTION_FLOOR radians a
+ * second besides, and below SPIN_SLOW it heads home: a full flick lasts about 1.8 s.
+ */
+const FRICTION = 0.8;
+const FRICTION_FLOOR = 1.5;
+const SPIN_SLOW = 1.5;
+/**
+ * Home is the menu pose (HOME left, AWAY right), by the shortest way, on a spring with a
+ * little overshoot: HOME_FREQ radians a second, HOME_DAMP of critical damping. With reduced
+ * motion it is critically damped and a little quicker, and there is no overshoot.
+ */
+const HOME_FREQ = 7;
+const HOME_DAMP = 0.6;
+const HOME_FREQ_REDUCED = 9;
+/** Home: within this many radians of the pose and turning slower than SETTLED_SPEED. */
+const SETTLED = 0.012;
+const SETTLED_SPEED = 0.15;
+/** A mode chosen from the captions while the ball is turned: it is brought round in this long. */
+const SNAP = 0.24;
+/** The spin is worked out in steps no longer than this, and a step longer than SPIN_GIVE_UP
+ * (a stalled tab) puts the ball straight home. */
+const SPIN_STEP = 1 / 120;
+const SPIN_GIVE_UP = 10;
+
+/**
+ * What the hand has done to the ball. "still": nothing, the ball is the menu. "rest": it
+ * has come to rest showing a locked patch, and is a menu there too.
+ */
+type Spin = "still" | "drag" | "coast" | "rest" | "home" | "snap";
 
 // ---------------------------------------------------------------------------
 // The kick-off: where things go
@@ -725,6 +825,11 @@ function modeOf(slot: BallSlot | null): Mode | null {
   return slot === "left" ? "home" : slot === "right" ? "away" : null;
 }
 
+function lockedOf(slot: BallSlot | null): LockedMode | null {
+  for (const mode of LOCKED_MODES) if (MODE_SLOTS[mode] === slot) return mode;
+  return null;
+}
+
 function isMode(v: unknown): v is Mode {
   return v === "home" || v === "away";
 }
@@ -751,11 +856,14 @@ export class MenuScene implements Scene {
   onKickoff: ((mode: Mode) => void) | null = null;
   /** The transition is over and the page moves on. Exactly once per kick-off. */
   onChoose: ((mode: Mode) => void) | null = null;
-  /** A locked patch was pressed and released. */
-  onLocked: ((slot: BallSlot) => void) | null = null;
+  /** A locked patch was pressed and released: which mode it is. */
+  onLocked: ((mode: LockedMode) => void) | null = null;
 
   private readonly seed: number;
   private readonly backdrop: MenuBackdrop;
+  /** The airship's sign: the header (from the labels) and the fact. */
+  private header: string;
+  private fact: string;
   private readonly patches: Record<BallSlot, BallPatch>;
   private readonly logo: LogoOptions = { maxWidth: 1, maxHeight: 1, t: 0 };
   private logoTop = 0;
@@ -818,6 +926,46 @@ export class MenuScene implements Scene {
   private pointerHover: Mode | null = null;
   private domHover: Mode | null = null;
   private pressed: BallSlot | null = null;
+  /** What the pointer went down on, while it is down: the ball, the airship or nothing. */
+  private press: "ball" | "ship" | null = null;
+  private downX = 0;
+  private downY = 0;
+  /** Where the pointer was when the drag last turned the ball. */
+  private handX = 0;
+  private handY = 0;
+  /** The pointer is over the ball's disc, or over the airship, as of the last look. */
+  private overBall = false;
+  private overShip = false;
+
+  // The hand's turn of the ball: a rotation in view space, applied on top of the hover's
+  // pose. `q*` is it as a unit quaternion, `w*` how fast it turns (radians a second),
+  // `h*` how far the hand has turned it since the last `update`.
+  private spin: Spin = "still";
+  private qw = 1;
+  private qx = 0;
+  private qy = 0;
+  private qz = 0;
+  private wx = 0;
+  private wy = 0;
+  private wz = 0;
+  private hx = 0;
+  private hy = 0;
+  private hz = 0;
+  /** Bringing it round for a chosen mode: how far round it was, and for how long now. */
+  private snapX = 0;
+  private snapY = 0;
+  private snapZ = 0;
+  private snapT = 0;
+  /**
+   * The pose the spring in "home" and "rest" pulls the hand's turn towards, as a unit
+   * quaternion: none for home, the pose that shows a locked patch for rest.
+   */
+  private pw = 1;
+  private px = 0;
+  private py = 0;
+  private pz = 0;
+  /** Seconds the ball has been at rest showing a locked patch. */
+  private restT = 0;
 
   // What `compose` works out for the frame.
   private readonly ball: BallState = freshBall();
@@ -841,16 +989,19 @@ export class MenuScene implements Scene {
 
   constructor(opts: MenuSceneOptions) {
     this.seed = opts.seed;
+    this.fact = opts.fact;
+    this.header = opts.labels.header;
     this.backdrop = new MenuBackdrop({
       seed: opts.seed,
-      stadium: opts.stadium,
-      header: opts.labels.header,
+      sign: { header: this.header, text: this.fact },
     });
     this.patches = {
       left: { label: "", icon: "home", accent: MODE_COLORS.home },
       right: { label: "", icon: "away", accent: MODE_COLORS.away },
-      top: { label: "", icon: "lock", locked: true },
-      bottom: { label: "", icon: "lock", locked: true },
+      top: { label: "", icon: "forward", locked: true },
+      bottom: { label: "", icon: "rewind", locked: true },
+      backRight: { label: "", icon: "pin", locked: true },
+      backLeft: { label: "", icon: "globe", locked: true },
     };
     this.state = opts.intro === false ? "idle" : "intro";
     this.setLabels(opts.labels);
@@ -893,6 +1044,8 @@ export class MenuScene implements Scene {
     this.aimStale = true;
     this.layoutLogo();
     // the pointer's last position was in the old size's pixels
+    if (this.spin === "drag") this.release();
+    this.press = null;
     this.pressed = null;
     this.dropPointer();
   }
@@ -924,6 +1077,9 @@ export class MenuScene implements Scene {
         if (this.onChoose) this.onChoose(mode);
         return;
       }
+    } else if (this.state === "idle" && this.spin !== "still") {
+      // the hand's turn of the ball runs in real time, reduced motion or not
+      this.stepSpin(d);
     }
     // the ball moves under a pointer that is keeping still
     if (this.pointerIn) this.refreshHover();
@@ -1068,6 +1224,9 @@ export class MenuScene implements Scene {
     if (this.state === "kickoff" || this.state === "done") return;
     if (this.queued !== null) return;
     if (p.type === "leave") {
+      // a ball let go of as the pointer went keeps the spin the hand gave it
+      if (this.spin === "drag") this.release();
+      this.press = null;
       this.pressed = null;
       this.dropPointer();
       return;
@@ -1076,31 +1235,62 @@ export class MenuScene implements Scene {
     this.pointerX = Number.isFinite(p.x) ? p.x : -1;
     this.pointerY = Number.isFinite(p.y) ? p.y : -1;
     if (p.type === "move") {
+      this.follow();
       this.refreshHover();
       return;
     }
     if (p.type === "down") {
-      // presses wait for the entrance to end
+      // presses on the ball wait for the entrance to end; the airship takes them at once
       this.refreshHover();
-      this.pressed = this.state === "idle" ? this.over : null;
+      this.pressed = null;
+      this.press = null;
+      this.downX = this.pointerX;
+      this.downY = this.pointerY;
+      this.handX = this.pointerX;
+      this.handY = this.pointerY;
+      if (this.state === "idle" && this.overBall) {
+        this.press = "ball";
+        // a turning ball is caught: it is held, and a press on it never chooses
+        if (this.isMenu()) this.pressed = this.over;
+        else this.grab();
+      } else if (this.overShip) {
+        this.press = "ship";
+      }
       return;
     }
     // up
+    this.follow();
     this.refreshHover();
+    const press = this.press;
+    this.press = null;
     const slot = this.over;
+    const onShip = this.overShip;
     const was = this.pressed;
     this.pressed = null;
     // a finger that has lifted is not hovering
     if (p.touch === true) this.dropPointer();
+    if (this.spin === "drag") {
+      this.release();
+      return;
+    }
+    if (press === "ship") {
+      // the same clock the backdrop is drawn with
+      if (onShip) this.backdrop.pokeAirship(this.clock);
+      return;
+    }
     if (was === null || slot !== was || this.state !== "idle") return;
     const mode = modeOf(was);
     if (mode !== null) {
-      this.kickOff(mode);
+      // from a pose that shows another patch, the ball is brought round first
+      this.choose(mode);
       return;
     }
+    const locked = lockedOf(was);
+    if (locked === null) return;
     this.noT = this.reduced ? -1 : 0;
     this.noSlot = was;
-    if (this.onLocked) this.onLocked(was);
+    this.restT = 0;
+    if (this.onLocked) this.onLocked(locked);
   }
 
   setReducedMotion(on: boolean): void {
@@ -1112,31 +1302,50 @@ export class MenuScene implements Scene {
         this.strikeQueued();
       }
       this.noT = -1;
+      // no momentum: a ball still turning comes to rest now
+      if (this.spin === "coast") this.comeToRest();
     }
   }
 
-  cursor(): "default" | "pointer" {
+  /**
+   * "grabbing" while the ball is dragged; "pointer" over HOME or AWAY, over a locked patch
+   * on a ball that is still or at rest, and over the airship; "grab" over the rest of the
+   * ball (and all of it while it turns).
+   */
+  cursor(): SceneCursor {
     const live =
       (this.state === "intro" || this.state === "idle") && this.queued === null;
-    return live && this.pointerHover !== null ? "pointer" : "default";
+    if (!live) return "default";
+    if (this.spin === "drag") return "grabbing";
+    if (!this.pointerIn) return "default";
+    if (this.pointerHover !== null) return "pointer";
+    if (this.over !== null && this.state === "idle") return "pointer";
+    if (this.overBall && this.state === "idle") return "grab";
+    if (this.overShip) return "pointer";
+    return "default";
   }
 
   // -------------------------------------------------------------------------
   // For the page
   // -------------------------------------------------------------------------
 
-  setStadium(stadium: MenuStadiumInfo): void {
-    this.backdrop.setStadium(stadium);
-    this.aim();
-    this.aimStale = true;
+  /** A new fact for the airship's sign. */
+  setFact(text: string): void {
+    if (text === this.fact) return;
+    this.fact = text;
+    this.backdrop.setSign({ header: this.header, text });
   }
 
   setLabels(labels: MenuLabels): void {
     this.patches.left.label = labels.home;
     this.patches.right.label = labels.away;
-    this.patches.top.label = labels.locked;
-    this.patches.bottom.label = labels.locked;
-    this.backdrop.setHeader(labels.header);
+    for (const mode of LOCKED_MODES) {
+      this.patches[MODE_SLOTS[mode]].label = labels[mode];
+    }
+    if (labels.header !== this.header) {
+      this.header = labels.header;
+      this.backdrop.setSign({ header: this.header, text: this.fact });
+    }
     if (labels.tagline === undefined || labels.tagline === "") {
       delete this.logo.tagline;
     } else {
@@ -1172,8 +1381,16 @@ export class MenuScene implements Scene {
     if (!isMode(mode)) return false;
     if (this.state === "kickoff" || this.state === "done") return false;
     if (this.queued !== null) return false;
-    if (this.state === "intro") {
+    const turned = this.state === "idle" && this.spin !== "still";
+    if (turned && this.reduced) {
+      // no tween with reduced motion: the ball is simply back in its pose
+      this.settle();
+      this.press = null;
+    } else if (this.state === "intro" || turned) {
+      // the ball is still arriving, or turned by the hand: it is brought round first
+      if (turned) this.startSnap();
       this.queued = mode;
+      this.press = null;
       this.pressed = null;
       this.pointerIn = false;
       this.over = null;
@@ -1193,7 +1410,9 @@ export class MenuScene implements Scene {
     this.phaseT = 0;
     this.noT = -1;
     this.queued = null;
+    this.press = null;
     this.pressed = null;
+    this.settle();
     this.roar = 0;
     this.backdrop.setRoar(0);
     this.dropPointer();
@@ -1209,10 +1428,19 @@ export class MenuScene implements Scene {
    */
   private refreshHover(): void {
     let slot: BallSlot | null = null;
+    let onBall = false;
+    let onShip = false;
     if (this.pointerIn && (this.state === "intro" || this.state === "idle")) {
       this.compose();
+      const b = this.ball;
       if (this.ballOn) {
-        slot = ballSlotAt(this.ball, this.pointerX, this.pointerY);
+        const dx = this.pointerX - b.cx;
+        const dy = this.pointerY - b.cy;
+        onBall = dx * dx + dy * dy <= (b.r + 0.5) * (b.r + 0.5);
+      }
+      // a turning ball is no menu: no patch hovers on it
+      if (this.ballOn && this.isMenu()) {
+        slot = ballSlotAt(b, this.pointerX, this.pointerY);
         if (slot !== null) {
           this.anchorX = this.pointerX;
           this.anchorY = this.pointerY;
@@ -1226,7 +1454,17 @@ export class MenuScene implements Scene {
           slot = this.over;
         }
       }
+      // the ball is in front of the airship, and takes what is meant for it
+      if (!onBall && slot === null) {
+        onShip = this.backdrop.airshipAt(
+          this.pointerX,
+          this.pointerY,
+          this.clock,
+        );
+      }
     }
+    this.overBall = onBall || slot !== null;
+    this.overShip = onShip;
     this.over = slot;
     const next = modeOf(slot);
     if (next === this.pointerHover) return;
@@ -1238,6 +1476,8 @@ export class MenuScene implements Scene {
   private dropPointer(): void {
     this.pointerIn = false;
     this.over = null;
+    this.overBall = false;
+    this.overShip = false;
     if (this.pointerHover === null) return;
     this.pointerHover = null;
     if (this.onHover) this.onHover(null);
@@ -1258,14 +1498,370 @@ export class MenuScene implements Scene {
     this.kickClock = this.clock;
     this.mode = mode;
     this.noT = -1;
+    this.press = null;
     this.pressed = null;
     this.pointerIn = false;
     this.over = null;
+    this.overBall = false;
+    this.overShip = false;
+    // the ball is struck in its pose (it is there already: this only makes sure)
+    this.spin = "still";
+    this.resetTurn();
     this.aim();
     const hovering = this.pointerHover !== null;
     this.pointerHover = null;
     if (!told && this.onKickoff) this.onKickoff(mode);
     if (hovering && this.onHover) this.onHover(null);
+  }
+
+  // -------------------------------------------------------------------------
+  // The hand's turn of the ball
+  // -------------------------------------------------------------------------
+
+  /** A pointer that is down has moved: a press becomes a drag, a drag turns the ball. */
+  private follow(): void {
+    const far =
+      Math.abs(this.pointerX - this.downX) > DRAG ||
+      Math.abs(this.pointerY - this.downY) > DRAG;
+    if (this.press === "ship") {
+      if (far) this.press = null;
+      return;
+    }
+    if (this.press !== "ball") return;
+    if (this.isMenu()) {
+      if (!far) return;
+      // a drag from now on: it turns the ball from where it was pressed
+      this.grab();
+    }
+    if (this.spin !== "drag") return;
+    this.compose();
+    this.handTurn(this.handX, this.handY, this.pointerX, this.pointerY);
+    this.handX = this.pointerX;
+    this.handY = this.pointerY;
+  }
+
+  /** The hand has the ball: it turns only as the pointer turns it. */
+  private grab(): void {
+    this.spin = "drag";
+    this.pressed = null;
+    this.noT = -1;
+    this.wx = this.wy = this.wz = 0;
+    this.hx = this.hy = this.hz = 0;
+  }
+
+  /** The hand lets go: the ball keeps the spin it had, or (no momentum) heads home. */
+  private release(): void {
+    this.hx = this.hy = this.hz = 0;
+    const speed = Math.hypot(this.wx, this.wy, this.wz);
+    if (this.reduced || !(speed >= SPIN_SLOW)) {
+      if (this.reduced || !Number.isFinite(speed))
+        this.wx = this.wy = this.wz = 0;
+      this.comeToRest();
+      return;
+    }
+    if (speed > SPIN_MAX) {
+      const k = SPIN_MAX / speed;
+      this.wx *= k;
+      this.wy *= k;
+      this.wz *= k;
+    }
+    this.spin = "coast";
+  }
+
+  /** The ball is the menu again, exactly in its pose. */
+  private settle(): void {
+    this.spin = "still";
+    this.resetTurn();
+  }
+
+  private resetTurn(): void {
+    this.qw = 1;
+    this.qx = this.qy = this.qz = 0;
+    this.wx = this.wy = this.wz = 0;
+    this.hx = this.hy = this.hz = 0;
+    this.poseHome();
+  }
+
+  /** The ball is the menu: still, or at rest showing a locked patch. */
+  private isMenu(): boolean {
+    return this.spin === "still" || this.spin === "rest";
+  }
+
+  /** The spring pulls towards the menu pose. */
+  private poseHome(): void {
+    this.pw = 1;
+    this.px = this.py = this.pz = 0;
+  }
+
+  /**
+   * The hand has let the ball go, or its spin has run down: it goes home, unless a locked
+   * patch faces the viewer more than HOME, AWAY and every other patch, in which case it
+   * turns to show that patch and rests there (see REST_HOLD).
+   */
+  private comeToRest(): void {
+    this.compose();
+    let best: BallSlot = "left";
+    let most = -Infinity;
+    for (const slot of BALL_SLOTS) {
+      const facing = ballSlotCenter(this.ball, slot).facing;
+      if (facing > most) {
+        most = facing;
+        best = slot;
+      }
+    }
+    if (lockedOf(best) === null) {
+      this.poseHome();
+      this.spin = "home";
+      return;
+    }
+    // the shown pose as a quaternion: pitch after yaw, like the hover
+    const pose = ballShowPose(best);
+    const cy = Math.cos(pose.yaw / 2);
+    const sy = Math.sin(pose.yaw / 2);
+    const cp = Math.cos(pose.pitch / 2);
+    const sp = Math.sin(pose.pitch / 2);
+    this.pw = cp * cy;
+    this.px = sp * cy;
+    this.py = cp * sy;
+    this.pz = sp * sy;
+    this.restT = 0;
+    this.spin = "rest";
+  }
+
+  /** A mode is chosen while the ball is turned: bring it round to its pose, quickly. */
+  private startSnap(): void {
+    this.poseHome();
+    this.turnAngle();
+    this.snapX = this.ex;
+    this.snapY = this.ey;
+    this.snapZ = this.ez;
+    this.snapT = 0;
+    this.wx = this.wy = this.wz = 0;
+    this.spin = "snap";
+  }
+
+  // What `turnAngle` works out: how far the ball is from its pose, as a rotation vector
+  // (radians, view space), and that angle.
+  private ex = 0;
+  private ey = 0;
+  private ez = 0;
+  private eAngle = 0;
+
+  /**
+   * How far the hand's turn is from the pose the spring pulls towards (no turn at all, but
+   * at rest the pose that shows a locked patch), as a rotation vector, the shortest way.
+   */
+  private turnAngle(): void {
+    const { qw, qx, qy, qz, pw, px, py, pz } = this;
+    // the turn times the pose's inverse: what carries the pose to where the ball is
+    const w = qw * pw + qx * px + qy * py + qz * pz;
+    const x = -qw * px + qx * pw - qy * pz + qz * py;
+    const y = -qw * py + qx * pz + qy * pw - qz * px;
+    const z = -qw * pz - qx * py + qy * px + qz * pw;
+    const s = Math.hypot(x, y, z);
+    const sign = w < 0 ? -1 : 1;
+    const angle = 2 * Math.atan2(s, Math.abs(w));
+    const k = s > 1e-12 ? (sign * angle) / s : 0;
+    this.ex = x * k;
+    this.ey = y * k;
+    this.ez = z * k;
+    this.eAngle = angle;
+  }
+
+  /** Move the hand's turn on by `d` seconds. Only "coast", "home" and "snap" move by time. */
+  private stepSpin(d: number): void {
+    if (this.spin === "drag") {
+      // the speed of the hand, smoothed: what a flick leaves the ball with
+      if (d > 0) {
+        const k = 1 - Math.exp(-d / SPIN_TAU);
+        this.wx += (this.hx / d - this.wx) * k;
+        this.wy += (this.hy / d - this.wy) * k;
+        this.wz += (this.hz / d - this.wz) * k;
+      }
+      this.hx = this.hy = this.hz = 0;
+      return;
+    }
+    if (!(d > 0)) return;
+    if (this.spin === "snap") {
+      this.snapT += d;
+      const u = clamp(this.snapT / SNAP);
+      if (u >= 1) {
+        this.settle();
+        this.strikeQueued();
+        return;
+      }
+      // fast at first and easing in: what is left of the way, as a turn
+      const left = (1 - u) * (1 - u) * (1 - u);
+      this.qw = 1;
+      this.qx = this.qy = this.qz = 0;
+      this.turn(this.snapX * left, this.snapY * left, this.snapZ * left);
+      return;
+    }
+    if (d > SPIN_GIVE_UP) {
+      this.settle();
+      return;
+    }
+    if (this.spin === "rest") {
+      // the wait stands still while the pointer is on a patch or pressing the ball
+      if (this.over === null && this.press !== "ball") this.restT += d;
+      if (this.restT >= REST_HOLD) {
+        this.poseHome();
+        this.spin = "home";
+      }
+    }
+    const freq = this.reduced ? HOME_FREQ_REDUCED : HOME_FREQ;
+    const stiff = freq * freq;
+    const damp = 2 * (this.reduced ? 1 : HOME_DAMP) * freq;
+    let left = d;
+    while (left > 0 && this.spin !== "still") {
+      const h = Math.min(SPIN_STEP, left);
+      left -= h;
+      if (this.spin === "coast") {
+        const speed = Math.hypot(this.wx, this.wy, this.wz);
+        const next = speed - (FRICTION_FLOOR + FRICTION * speed) * h;
+        if (!(next > SPIN_SLOW)) {
+          this.comeToRest();
+        } else {
+          const k = next / speed;
+          this.wx *= k;
+          this.wy *= k;
+          this.wz *= k;
+        }
+      } else {
+        // home or rest: a spring towards the pose, by the shortest way
+        this.turnAngle();
+        this.wx += (-stiff * this.ex - damp * this.wx) * h;
+        this.wy += (-stiff * this.ey - damp * this.wy) * h;
+        this.wz += (-stiff * this.ez - damp * this.wz) * h;
+        if (
+          this.eAngle < SETTLED &&
+          Math.hypot(this.wx, this.wy, this.wz) < SETTLED_SPEED
+        ) {
+          if (this.spin === "home") {
+            this.settle();
+            return;
+          }
+          // at rest: held exactly in the pose
+          this.qw = this.pw;
+          this.qx = this.px;
+          this.qy = this.py;
+          this.qz = this.pz;
+          this.wx = this.wy = this.wz = 0;
+          continue;
+        }
+      }
+      this.turn(this.wx * h, this.wy * h, this.wz * h);
+    }
+  }
+
+  /** Turn the ball further by the rotation vector (x, y, z): radians, view space. */
+  private turn(x: number, y: number, z: number): void {
+    const a = Math.hypot(x, y, z);
+    if (!(a > 1e-12) || !Number.isFinite(a)) return;
+    const s = Math.sin(a / 2) / a;
+    const dw = Math.cos(a / 2);
+    const dx = x * s;
+    const dy = y * s;
+    const dz = z * s;
+    const { qw, qx, qy, qz } = this;
+    // the new turn, then the old: q = d q
+    let w = dw * qw - dx * qx - dy * qy - dz * qz;
+    let i = dw * qx + dx * qw + dy * qz - dz * qy;
+    let j = dw * qy - dx * qz + dy * qw + dz * qx;
+    let k = dw * qz + dx * qy - dy * qx + dz * qw;
+    const n = Math.hypot(w, i, j, k);
+    w /= n;
+    i /= n;
+    j /= n;
+    k /= n;
+    this.qw = w;
+    this.qx = i;
+    this.qy = j;
+    this.qz = k;
+  }
+
+  /**
+   * The hand moved from (x0, y0) to (x1, y1) holding the ball: turn it so that the point
+   * that was under the pointer is under it still, and count the turn towards its speed.
+   */
+  private handTurn(x0: number, y0: number, x1: number, y1: number): void {
+    const b = this.ball;
+    const r = Math.max(1, b.r);
+    const ux = (x0 - b.cx) / r;
+    const uy = (y0 - b.cy) / r;
+    const vx = (x1 - b.cx) / r;
+    const vy = (y1 - b.cy) / r;
+    const d0 = ux * ux + uy * uy;
+    const d1 = vx * vx + vy * vy;
+    let rx: number;
+    let ry: number;
+    let rz: number;
+    if (d0 <= GRIP * GRIP && d1 <= GRIP * GRIP) {
+      // from the one point on the ball to the other
+      const uz = Math.sqrt(1 - d0);
+      const vz = Math.sqrt(1 - d1);
+      const cx = uy * vz - uz * vy;
+      const cy = uz * vx - ux * vz;
+      const cz = ux * vy - uy * vx;
+      const sin = Math.hypot(cx, cy, cz);
+      if (!(sin > 1e-12)) return;
+      const k = Math.atan2(sin, ux * vx + uy * vy + uz * vz) / sin;
+      rx = cx * k;
+      ry = cy * k;
+      rz = cz * k;
+    } else {
+      // a radian a radius, about the axis across the drag
+      rx = -(vy - uy);
+      ry = vx - ux;
+      rz = 0;
+    }
+    if (!Number.isFinite(rx + ry + rz)) return;
+    this.turn(rx, ry, rz);
+    this.hx += rx;
+    this.hy += ry;
+    this.hz += rz;
+  }
+
+  /**
+   * Put the hand's turn on the ball: its pose becomes the turn after the hover's (the rock
+   * and the nod), given back as yaw, pitch and roll in `drawBall`'s order (yaw, then pitch,
+   * then roll).
+   */
+  private applyTurn(b: BallState): void {
+    // the hover's pose: pitch after yaw, no roll
+    const cy = Math.cos(b.yaw / 2);
+    const sy = Math.sin(b.yaw / 2);
+    const cp = Math.cos(b.pitch / 2);
+    const sp = Math.sin(b.pitch / 2);
+    const aw = cp * cy;
+    const ax = sp * cy;
+    const ay = cp * sy;
+    const az = sp * sy;
+    const { qw, qx, qy, qz } = this;
+    const w = qw * aw - qx * ax - qy * ay - qz * az;
+    const x = qw * ax + qx * aw + qy * az - qz * ay;
+    const y = qw * ay - qx * az + qy * aw + qz * ax;
+    const z = qw * az + qx * ay - qy * ax + qz * aw;
+    // the rotation's matrix, the entries that are needed
+    const m00 = 1 - 2 * (y * y + z * z);
+    const m01 = 2 * (x * y - w * z);
+    const m02 = 2 * (x * z + w * y);
+    const m11 = 1 - 2 * (x * x + z * z);
+    const m20 = 2 * (x * z - w * y);
+    const m21 = 2 * (y * z + w * x);
+    const m22 = 1 - 2 * (x * x + y * y);
+    // it is roll(r) pitch(p) yaw(y): m21 = sin p, m20 = -cos p sin y, m22 = cos p cos y,
+    // m01 = -sin r cos p, m11 = cos r cos p
+    const sinP = clamp(m21, -1, 1);
+    b.pitch = Math.asin(sinP);
+    if (Math.abs(sinP) < 1 - 1e-12) {
+      b.yaw = Math.atan2(-m20, m22);
+      b.roll = Math.atan2(-m01, m11);
+    } else {
+      // straight up or down: yaw and roll are one turn, so give it all to yaw
+      b.yaw = Math.atan2(m02, m00);
+      b.roll = 0;
+    }
   }
 
   private setScore(patch: BallPatch, score: number | null | undefined): void {
@@ -1378,7 +1974,11 @@ export class MenuScene implements Scene {
     b.yaw = ROCK * Math.sin((TAU * this.clock) / ROCK_PERIOD);
     b.pitch = this.nod;
     b.roll = 0;
-    b.hovered = slotOf(this.pointerHover ?? this.domHover);
+    // a locked patch under the pointer lifts; HOME and AWAY light from the pointer or the DOM
+    b.hovered =
+      this.over !== null && modeOf(this.over) === null
+        ? this.over
+        : slotOf(this.pointerHover ?? this.domHover);
     // a press shows only while the pointer is still on its patch
     b.pressed =
       this.pressed !== null && this.over === this.pressed ? this.pressed : null;
@@ -1412,12 +2012,24 @@ export class MenuScene implements Scene {
         b.pressed = slotOf(this.queued);
       }
     } else if (this.state === "idle") {
-      if (this.noT >= 0) {
+      if (this.spin !== "still") {
+        // turned by the hand, on top of the hover's pose. While it turns no patch hovers
+        // or presses from the pointer, and a mode chosen meanwhile is held down while it
+        // comes round; at rest it is a menu again.
+        this.applyTurn(b);
+        if (this.spin !== "rest") {
+          b.hovered = this.queued !== null ? null : slotOf(this.domHover);
+          b.pressed = slotOf(this.queued);
+        }
+      }
+      if (this.isMenu() && this.noT >= 0) {
         // "no": the ball shakes its head, less each time
         const u = this.noT / NO_LEN;
         const swing = Math.sin(u * TAU * 3) * (1 - u);
         b.cx = cx + Math.round(swing * Math.max(2, R * 0.09));
-        b.yaw = clamp(b.yaw + swing * 0.1, -ROCK, ROCK);
+        if (this.spin === "still") {
+          b.yaw = clamp(b.yaw + swing * 0.1, -ROCK, ROCK);
+        }
         if (u < 0.6 && b.pressed === null) b.pressed = this.noSlot;
       }
     } else if (this.state === "kickoff") {

@@ -56,24 +56,25 @@ afterEach(() => {
 });
 
 describe("the mode pages", () => {
-  test("each address is its own mode, in the game's skin", () => {
+  test("each address is its own mode: the game, in the game's skin", () => {
     site("/play/away?day=1");
     expect(
       screen.getByRole("heading", {
         level: 1,
         name: strings.play.heading.away,
       }),
-    ).toHaveClass("ss-t20");
-    expect(screen.getByText(strings.play.rule.away)).toBeInTheDocument();
-    expect(screen.getByText("Anfield")).toBeInTheDocument();
-    expect(document.querySelector(".ss-root.ss-page")).toHaveAttribute(
+    ).toHaveClass("ss-sr");
+    expect(
+      screen.getByText(strings.play.stadium("Anfield", "Liverpool", "England")),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".ss-root.ss-game")).not.toBeNull();
+    expect(document.querySelector(".ss-board")).toHaveAttribute(
       "data-mode",
       "away",
     );
-    // The way back keeps the address's query.
     expect(
-      screen.getByRole("link", { name: strings.play.back }),
-    ).toHaveAttribute("href", "/?day=1");
+      screen.getByText(strings.play.board.instruction.away),
+    ).toBeInTheDocument();
   });
 
   test("render at build time with no browser to read, and have real titles", () => {
@@ -92,7 +93,6 @@ describe("the mode pages", () => {
     }
     expect(html).toContain(strings.play.heading.home);
     expect(html).not.toContain("Anfield");
-    expect(html).toContain('href="/"');
 
     const tags =
       playMeta({ location: { pathname: "/play/away" } } as Parameters<
@@ -197,11 +197,12 @@ describe("focus, from page to page", () => {
   }
 
   test("the page the browser loaded leaves the focus where the browser put it", () => {
-    site("/play/home", true);
+    // (The game page then puts it in its answer field: see play.test.tsx.)
+    site("/how-to-play", true);
     expect(document.activeElement).toBe(document.body);
   });
 
-  test("the kick-off ends on the mode page's heading, and the way back on the game's name", async () => {
+  test("the kick-off ends on the mode page: its heading, then the answer field", async () => {
     const scenes = made();
     site("/?day=1");
     expect(document.activeElement).toBe(document.body);
@@ -216,18 +217,12 @@ describe("focus, from page to page", () => {
       level: 1,
       name: strings.play.heading.away,
     });
-    expect(document.activeElement).toBe(heading);
     expect(heading).toHaveAttribute("tabindex", "-1");
-
-    fireEvent.click(screen.getByRole("link", { name: strings.play.back }));
-    const name = await screen.findByRole("heading", {
-      level: 1,
-      name: strings.siteName,
-    });
-    expect(document.activeElement).toBe(name);
-    // And the menu is as it was: at rest, to be chosen from.
-    expect(document.querySelector(".ss-menu")).not.toHaveClass("is-stowed");
-    expect((scenes.mock.contexts.at(-1) as MenuScene).phase).toBe("idle");
+    // The heading took the focus on arrival; the game then puts it in the answer field,
+    // which is the next thing after the heading for a screen reader too.
+    expect(document.activeElement).toBe(
+      screen.getByRole("textbox", { name: strings.play.answer.input }),
+    );
   });
 
   test("the rules page and back", async () => {

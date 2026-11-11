@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PASS_AFTER_MS, QUESTION_MS, createSession, reduce } from "./session";
 import type { Action, Session } from "./session";
 import { buildShareText } from "./share";
-import { ORIGIN, east, question } from "./test-fixtures";
+import { ORIGIN, east, popular, question } from "./test-fixtures";
 import {
   clockView,
   pips,
@@ -47,6 +47,7 @@ describe("questionView", () => {
       question: LONG,
       prompt: LONG.prompt,
       mode: "away",
+      rule: "niche",
       stadium: ORIGIN,
       measure: "birthplace",
       measureLabel: "where it was born",
@@ -203,7 +204,12 @@ describe("revealFor", () => {
     expect(reveal.question).toBe(LONG);
     expect(reveal.turn).toBe(s.turns[0]);
     expect(reveal.answer).toBe(LONG.answers[3]);
-    expect(reveal.row).toMatchObject({ points: 67, rank: 4, km: 445 });
+    expect(reveal.row).toMatchObject({
+      points: 67,
+      rank: 4,
+      km: 445,
+      share: 176,
+    });
     expect(reveal.best?.answer).toBe(LONG.answers[0]);
     expect(reveal.best?.points).toBe(100);
     expect(reveal.tableSize).toBe(10);
@@ -227,8 +233,52 @@ describe("revealFor", () => {
     expect(mine).toMatchObject({
       points: reveal.turn.points,
       km: reveal.turn.km,
+      share: reveal.turn.share,
       rank: reveal.turn.rank,
     });
+  });
+
+  it("ranks HOME by the most common answer and AWAY by the most niche", () => {
+    // Popularity runs against distance here: the nearest answer is the rarest.
+    const crowd = question("crowd", [
+      { ...popular("Rare", 0.4), lat: 0, lng: 1 },
+      { ...popular("Middling", 12.5), lat: 0, lng: 2 },
+      { ...popular("Everyone", 87.1), lat: 0, lng: 3 },
+    ]);
+    const game = (mode: "home" | "away") =>
+      createSession({
+        mode,
+        dayNumber: 12,
+        stadium: ORIGIN,
+        questions: [crowd],
+        now: T0,
+      });
+    const home = run(game("home"), {
+      type: "submit",
+      input: "Everyone",
+      now: T0 + 1,
+    });
+    expect(questionView(home).rule).toBe("common");
+    expect(revealFor(home)?.turn).toMatchObject({
+      grade: "worldie",
+      points: 100,
+      share: 87.1,
+      km: 334,
+    });
+    expect(revealFor(home)?.rows.map((r) => r.answer.name)).toEqual([
+      "Everyone",
+      "Middling",
+      "Rare",
+    ]);
+    const away = run(game("away"), {
+      type: "submit",
+      input: "Everyone",
+      now: T0 + 1,
+    });
+    expect(questionView(away).rule).toBe("niche");
+    expect(revealFor(away)?.turn).toMatchObject({ grade: "wide", points: 0 });
+    expect(revealFor(away)?.best?.answer.name).toBe("Rare");
+    expect(revealFor(away)?.best?.share).toBe(0.4);
   });
 
   it("trims a long table but keeps the best, the player's and the worst rows", () => {

@@ -97,7 +97,13 @@ describe("the barrel", () => {
         lng: -2.9608,
       },
     ];
-    const place = (id: string, name: string, lat: number, lng: number) => ({
+    const place = (
+      id: string,
+      name: string,
+      lat: number,
+      lng: number,
+      popularity: number,
+    ) => ({
       id,
       name,
       aliases: [],
@@ -105,6 +111,7 @@ describe("the barrel", () => {
       country: "",
       lat,
       lng,
+      popularity,
     });
     const questions: game.Question[] = [
       {
@@ -115,9 +122,15 @@ describe("the barrel", () => {
         measureLabel: "where the manager was born",
         asOf: "2026-11-10",
         answers: [
-          place("kenny-dalglish", "Kenny Dalglish", 55.8642, -4.2518),
-          place("manuel-pellegrini", "Manuel Pellegrini", -33.4489, -70.6693),
-          place("jose-mourinho", "José Mourinho", 38.5244, -8.8882),
+          place("kenny-dalglish", "Kenny Dalglish", 55.8642, -4.2518, 60),
+          place(
+            "manuel-pellegrini",
+            "Manuel Pellegrini",
+            -33.4489,
+            -70.6693,
+            10,
+          ),
+          place("jose-mourinho", "José Mourinho", 38.5244, -8.8882, 30),
         ],
       },
     ];
@@ -137,7 +150,13 @@ describe("the barrel", () => {
     });
     session = game.reduce(session, { type: "resolved" });
     const turn = game.currentTurn(session);
-    expect(turn).toMatchObject({ grade: "worldie", points: 100, km: 283 });
+    expect(turn).toMatchObject({
+      grade: "worldie",
+      points: 100,
+      share: 60,
+      km: 283,
+    });
+    expect(game.formatShare(turn?.share ?? 0)).toBe("60%");
     expect(game.formatDistance(turn?.km ?? 0, "en-GB")).toBe("176 miles");
     expect(game.formatDistance(turn?.km ?? 0, "fr-FR")).toBe("283 km");
     const rows = game.tableExcerpt(

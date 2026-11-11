@@ -102,7 +102,8 @@ rounded up to whole device pixels; `app.css` draws every focus ring with it), `-
 of a one-line plate),
 `--fs-10/15/20/25` and `--lh-10/15/20/25` (type), `--lh-tight` (15 fp: one tight line of body
 text), `--font-10/15/20/25`. The ones that follow the font pixel (`--fs-*`, `--lh-*`, `--plate`)
-are declared again on `.ss-menu`, which swaps `--fp` for `--cp` on a wide screen.
+are declared again on `.ss-menu` and on the game's four screens (`.ss-board`, `.ss-answer`,
+`.ss-sheet`, `.ss-full`), which swap `--fp` for `--cp` on a wide screen.
 
 **Whole device pixels, in CSS.** `1px` is not a pixel at 125%, so ui.css has no bare lengths:
 everything is a multiple of `--px`, `--fp` or `--cp`, and what has to be rounded is rounded to
@@ -153,7 +154,9 @@ Props marked `?` are optional. Every component also takes `className?`.
 
 The game shell and the only layout component. It is a `PixelRoot` fixed to the viewport, with
 the `canvas` slot filling it and one column over it: 135 logical px wide (405 fp where that is
-more, never wider than the screen), centred.
+more, never wider than the screen), centred. On a wide screen the column is 656 caption pixels
+(1312 CSS px at 1920 x 1080; at most the screen less 8 logical px a side), and the four screens
+lie down in it (see "On a wide screen" below).
 
 ```tsx
 // PixelStage is the canvas host: see "The canvas host" below.
@@ -184,8 +187,9 @@ more, never wider than the screen), centred.
 - On a wide screen the root carries `data-wide`: a monitor, not a phone. That is `isWide(scale)`:
   landscape, with a logical canvas at least 60 logical pixels and 480 caption pixels wide (300
   logical pixels at 1920 x 1080, 380 at 1366 x 768). Every size in the table above marked "wide"
-  has it; a phone, an upright tablet, a 1024 x 768 window and a contained layout do not. Today
-  only the menu captions read it (they leave the column there), but it is the hook for giving
+  has it; a phone, an upright tablet, a 1024 x 768 window and a contained layout do not. The
+  menu captions read it (they leave the column there), and so do the board, the answer bar,
+  the reveal sheet and the full-time card ("On a wide screen" below). It is the hook for giving
   any other part a monitor layout: `.ss-game[data-wide] .your-part { ... }`.
 - The root carries `data-live` once the page runs in a browser. The build-time HTML does not: it
   is laid out for a 390 x 844 phone at ratio 1, because the screen is not known yet. Anything
@@ -196,6 +200,49 @@ What it covers on a 390 x 844 phone (measured, outlines included): board while a
 three-line question (27% with two lines), compact board 19%, answer bar 9%, reveal sheet 46%,
 full-time card 36% (46% at most), menu captions 9%. On shorter phones the board and the bar
 keep their size in CSS px, so they take a larger share: 38% and 12% at 375 x 667.
+
+#### On a wide screen
+
+The board, the answer bar, the reveal sheet and the full-time card are set in caption pixels
+(`--fp` is swapped for `--cp` inside each, ui.css section 16b): twice the type of the phone
+layout on most monitors (capitals 20 CSS px for body text at 1920 x 1080, 30 for the question),
+the size of the home screen's row, every face still on its own grid. Doubled, the phone's stacks
+would not fit the heights the career scene is composed around (`COVER` in `app/art/layout.ts`),
+so each part lies down. No prop changed; phones and upright tablets are untouched (every gallery
+composition compared pixel for pixel at 390 x 844 @3, 360 x 740 @3, 375 x 667 @2, 320 x 568 @2
+and 768 x 1024 @2).
+
+- **Board**: the screen with the question on the left; on the right, one line each, the badge,
+  the stadium and the score, the lamps and the career bar, and the clock. The right side is
+  wide enough for WORLD CUP WINNER beside the lamps and a seven-letter stadium beside the score
+  (a longer name ends in an ellipsis, as on a phone). Compact, the recap and the rule are set
+  on tight lines (two lines of recap at most stay inside 18% at 1366 x 768).
+- **Answer bar**: the field and SHOOT are one line of their type tall inside their border (or
+  a touch target if that is more), with only the frame round them, and the bar stands on the
+  bottom edge of the screen like the sheet (its outline and shadow below the edge).
+- **Reveal sheet**: the grade band, the sentence (it takes the height there is and scrolls past
+  it) and the button on the left, the league table on the right, as tall as the sheet.
+- **Full-time card**: FULL TIME and the career title across the top, the score and the three
+  buttons on the left (the buttons at the foot), the seven answers on the right.
+
+What each part covers, measured over all sixteen game compositions in the gallery (the most of
+any; outline and shadow included; "asking" is the board while a question is asked, three lines
+of question at 1920 x 1080 and 125% for `ask-long`, two everywhere else):
+
+| screen             | column | board asking | board after | answer bar | with PASS or a rejection | reveal sheet | full-time card |
+| ------------------ | ------ | ------------ | ----------- | ---------- | ------------------------ | ------------ | -------------- |
+| 1920 x 1080        | 1312   | 26.3%        | 14.3%       | 7.8%       | 14.1%                    | 45.9%        | 32.4%          |
+| 1440 x 900         | 1311   | 24.3%        | 15.3%       | 8.3%       | 15.3%                    | 46.0%        | 36.7%          |
+| 1366 x 768         | 1311   | 28.5%        | 18.0%       | 9.8%       | 18.0%                    | 46.0%        | 43.0%          |
+| 2560 x 1440        | 1965   | 23.4%        | 14.9%       | 8.1%       | 14.9%                    | 46.0%        | 35.1%          |
+| 1536 x 864 at 125% | 1049.6 | 26.3%        | 14.3%       | 7.8%       | 14.1%                    | 45.9%        | 32.4%          |
+| limit (`COVER`)    |        | 30%          | 18%         | 10%        |                          | 46%          | 46%            |
+
+The board after an answer at 1366 x 768 (17.97%) has no room to spare, and neither has the
+board while asking where a question needs three lines on a screen that is three CSS px a
+logical pixel and two a caption pixel (1366 x 768, 1440 x 900): a question takes two lines there
+up to about 72 characters (the longest in `app/data` is 63). The rejection plate and PASS float
+above the bar and are counted separately.
 
 ### `PixelRoot`
 
@@ -715,7 +762,7 @@ and no `/` in it (on Windows a colon writes to a stream of another file).
 | address                    | file                         | what it is                                                                          |
 | -------------------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
 | `/`                        | `app/routes/home.tsx`        | the home screen: `GameLayout` with `PixelStage` (the menu scene) and `MenuCaptions` |
-| `/play/home`, `/play/away` | `app/routes/play.tsx`        | the two modes: a placeholder until the game is built                                |
+| `/play/home`, `/play/away` | `app/routes/play.tsx`        | the game, one page per mode (`app/routes/play/`)                                    |
 | `/how-to-play`             | `app/routes/how-to-play.tsx` | the rules, behind the "?" button                                                    |
 | any other                  | `app/root.tsx`               | the error page (`ErrorBoundary`), which is also the 404                             |
 | `/dev/ui`, `/dev/stage`    | `app/routes/dev-*.tsx`       | the gallery and the stage test card                                                 |
@@ -739,7 +786,7 @@ must and must not do with a scene is in `docs/API_SCENES.md`). Beyond that:
   coming back into view, even while a mode chosen during the entrance waits for the ball to
   settle (the phase is still `intro` then).
 - For screen readers: a visually hidden `h1` (the name, which takes the focus on coming back
-  from another page) and a line with today's stadium; the two cards are buttons; the notice is a
+  from another page) and a line with the fact of the day; the two cards are buttons; the notice is a
   polite live region. With no script, a `noscript` panel says what the site is.
 
 **A plain page** (the placeholder, the rules, the error page) is a `PixelRoot` with `ss-page`, its

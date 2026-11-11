@@ -175,6 +175,7 @@ describe("storage", () => {
     grade: "goal",
     points,
     km: 10,
+    share: 12.5,
     rank: 2,
     msLeft: 5000,
   });
@@ -314,7 +315,7 @@ describe("small guards", () => {
       "q",
       Array.from({ length: 12 }, (_, i) => east(`Answer ${i}`, i + 1)),
     );
-    const table = rankAnswers(q, ORIGIN, "home");
+    const table = rankAnswers(q, ORIGIN, "closest");
     const rows = tableExcerpt(table, "answer-4", Infinity);
     expect(rows).toHaveLength(12);
     for (const row of rows) expect(row.grade).toBe(gradeFor(row.points));

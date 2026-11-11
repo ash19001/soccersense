@@ -7,6 +7,7 @@
 
 import { Surface, mix, shade, type Color, type Point } from "~/pixel";
 import { P } from "~/art/palette";
+import { carSprite, headingAngle } from "~/art/stadium-cars";
 import { projectRaw, sizeClass, type View } from "~/art/stadium-view";
 
 // ---------------------------------------------------------------------------
@@ -383,63 +384,23 @@ export interface CarLook {
 }
 
 /**
- * A car from above, centred on (x, y) on the ground. `dir`: 0 pointing east, 1 west,
- * 2 north (away), 3 south (towards the camera).
+ * A car from above, its ground point at (x, y), pointing `heading` on screen (0 east,
+ * anticlockwise; the set and its sprites are in stadium-cars.ts).
  */
 export function car(
   s: Ink,
   x: number,
   y: number,
   cls: 0 | 1 | 2,
-  dir: number,
+  heading: number,
   k: CarLook,
 ): void {
-  const ew = dir < 2;
-  if (cls === 0) {
-    if (ew) {
-      s.rect(x - 1, y - 1, 3, 1, k.l);
-      s.rect(x - 1, y, 3, 1, k.d);
-    } else {
-      s.rect(x, y - 2, 2, 2, k.l);
-      s.rect(x, y, 2, 1, k.d);
-    }
-    return;
+  if (cls === 2 && groundShadow) {
+    if (Math.abs(Math.sin((headingAngle(heading) * Math.PI) / 180)) < 0.5) {
+      shadowBlob(groundShadow, x + 1, y + 2, 4, 1);
+    } else shadowBlob(groundShadow, x + 2, y + 3, 3, 1);
   }
-  if (cls === 1) {
-    if (ew) {
-      s.rect(x - 2, y - 2, 5, 2, k.b);
-      s.rect(x - 1, y - 2, 3, 1, k.l);
-      const front = dir === 0 ? x + 1 : x - 1;
-      s.px(front, y - 2, k.g);
-      s.rect(x - 2, y, 5, 1, k.d);
-    } else {
-      s.rect(x - 1, y - 3, 3, 4, k.b);
-      s.rect(x - 1, y - 2, 3, 1, k.g);
-      s.px(x, y - 1, k.l);
-      s.rect(x - 1, y + 1, 3, 1, k.d);
-    }
-    return;
-  }
-  if (ew) {
-    if (groundShadow) shadowBlob(groundShadow, x + 1, y + 2, 4, 1);
-    s.rect(x - 3, y - 2, 7, 2, k.b);
-    s.rect(x - 1, y - 2, 3, 2, k.l);
-    const front = dir === 0 ? x + 2 : x - 2;
-    const back = dir === 0 ? x - 2 : x + 2;
-    s.rect(front, y - 2, 1, 2, k.g);
-    s.px(back, y - 2, k.g);
-    s.rect(x - 3, y, 7, 1, k.d);
-    s.px(x - 2, y + 1, k.k);
-    s.px(x + 2, y + 1, k.k);
-    s.rect(x - 1, y + 1, 3, 1, k.d);
-    return;
-  }
-  if (groundShadow) shadowBlob(groundShadow, x + 2, y + 3, 3, 1);
-  s.rect(x - 1, y - 4, 4, 7, k.b);
-  s.rect(x - 1, y - (dir === 2 ? 3 : 0), 4, 1, k.g);
-  s.rect(x - 1, y - (dir === 2 ? 0 : 3), 4, 1, k.g);
-  s.rect(x, y - 2, 2, 2, k.l);
-  s.rect(x - 1, y + 3, 4, 1, k.d);
+  carSprite(s, x, y, cls, heading, k);
 }
 
 export interface CoachLook {

@@ -25,6 +25,8 @@
  */
 
 export const MATCH_PERIOD = 40;
+/** When in the loop the home side scores. */
+export const GOAL_AT = 26;
 export const PLAYERS = 23;
 export const REFEREE = 22;
 /** Half the pitch, in units. */
@@ -370,8 +372,8 @@ export function matchAt(state: MatchState, time: number): MatchState {
     ramp(t, 12.6, 14.6) * (t < 14.95 ? 0.14 : 0),
     ramp(t, 24.4, 26) * (t < 26 ? 0.16 : 0),
   );
-  const goal = t >= 26 ? 1 - ramp(t, 29.5, 34) : 0;
+  const goal = t >= GOAL_AT ? 1 - ramp(t, 29.5, 34) : 0;
   state.cheer = Math.max(gasp, buzz, goal);
-  state.sinceGoal = t >= 26 && t < 34 ? t - 26 : -1;
+  state.sinceGoal = t >= GOAL_AT && t < 34 ? t - GOAL_AT : -1;
   return state;
 }

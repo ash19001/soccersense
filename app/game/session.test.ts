@@ -174,6 +174,7 @@ describe("submit", () => {
         grade: "goal",
         points: 75,
         km: 222,
+        share: 178,
         rank: 2,
         msLeft: QUESTION_MS - 6500,
       },
@@ -235,10 +236,15 @@ describe("submit", () => {
     expect(near.turns[0]).toMatchObject({ points: 0, grade: "wide", rank: 5 });
   });
 
-  it("scores against the session's stadium", () => {
+  it("scores HOME by popularity, whatever the stadium, and keeps the distance", () => {
     const s = start({ stadium: { ...ORIGIN, id: "east", lng: 5 } });
     const r = reduce(s, { type: "submit", input: "Echo Far", now: T0 + 1 });
-    expect(r.turns[0]).toMatchObject({ points: 100, km: 0, rank: 1 });
+    expect(r.turns[0]).toMatchObject({
+      points: 0,
+      share: 175,
+      km: 0,
+      rank: 5,
+    });
   });
 
   it("counts as time up when it arrives at or after the deadline", () => {
@@ -298,6 +304,7 @@ describe("pass", () => {
         grade: "skipped",
         points: 0,
         km: null,
+        share: null,
         rank: null,
         msLeft: QUESTION_MS - PASS_AFTER_MS,
       },
@@ -359,6 +366,7 @@ describe("tick", () => {
         grade: "timeup",
         points: 0,
         km: null,
+        share: null,
         rank: null,
         msLeft: 0,
       },
@@ -658,7 +666,7 @@ describe("tableFor", () => {
     expect(tableFor(later, 0)).toBe(tableFor(s, 0));
   });
 
-  it("is kept apart by mode and by stadium", () => {
+  it("is kept apart by rule and by stadium", () => {
     const home = tableFor(start(), 0);
     const away = tableFor(start({ mode: "away" }), 0);
     expect(away).not.toBe(home);
@@ -668,7 +676,10 @@ describe("tableFor", () => {
       start({ stadium: { ...ORIGIN, id: "east", lng: 5 } }),
       0,
     );
-    expect(elsewhere[0].answer.id).toBe("echo-far");
+    expect(elsewhere).not.toBe(home);
+    // The stadium only moves the distances: HOME is ranked by popularity.
+    expect(elsewhere[0].answer.id).toBe("alpha-near");
+    expect(elsewhere.at(-1)?.km).toBe(0);
     expect(tableFor(start(), 0)).toBe(home);
   });
 

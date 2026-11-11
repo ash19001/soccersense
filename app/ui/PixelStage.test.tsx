@@ -1002,6 +1002,20 @@ describe("PixelStage: the pointer", () => {
     expect(canvas.style.cursor).toBe("default");
   });
 
+  test("the cursor follows scene.cursor() between pointer events too, frame by frame", () => {
+    // A spun ball comes to rest under a mouse that does not move: the cursor must change
+    // with it, not wait for the mouse.
+    const scene = new Recorder();
+    const canvas = mounted(scene);
+    fireEvent.pointerMove(canvas, { isPrimary: true, pointerType: "mouse" });
+    scene.cursorNow = "pointer";
+    frames.step(16);
+    expect(canvas.style.cursor).toBe("pointer");
+    scene.cursorNow = "default";
+    frames.step(32);
+    expect(canvas.style.cursor).toBe("default");
+  });
+
   test("a scene hears no pointer before its first frame", () => {
     const a = new Recorder("a");
     const b = new Recorder("b");

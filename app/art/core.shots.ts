@@ -717,7 +717,7 @@ function menuGuide(
   const b = m.scoreboard;
   s.rect(b.x, b.y, b.w, b.h, P.ledOff);
   s.frame(b.x, b.y, b.w, b.h, light.env(P.concrete));
-  drawText(s, "TODAY'S STADIUM", b.x + Math.floor(b.w / 2), b.y + 5, P.amber, {
+  drawText(s, "DID YOU KNOW?", b.x + Math.floor(b.w / 2), b.y + 5, P.amber, {
     font: FONT_3x5,
     align: "center",
   });

@@ -669,10 +669,38 @@ describe("ui.css", () => {
       "grid-template-columns: repeat(2, minmax(0, 1fr));",
     );
     // The units that follow the font pixel are worked out again inside the captions.
-    expect(rules).toMatch(/:root,\s*\.ss-root,\s*\.ss-menu \{[^}]*--fs-10:/);
+    expect(rules).toMatch(
+      /:root,\s*\.ss-root,\s*\.ss-menu,[^{]*\{[^}]*--fs-10:/,
+    );
     // The row is centred on the same whole pixel as the canvas.
     expect(wide).toContain(
       "right: calc(100% - round(down, calc(50% + var(--nudge)), var(--snap)) * 2);",
+    );
+  });
+
+  test("the game's four screens have a layout for a wide screen, in caption pixels", () => {
+    const parts =
+      ".ss-game[data-wide] :is(.ss-board, .ss-answer, .ss-sheet, .ss-full)";
+    const swap = skin.slice(skin.indexOf(`${parts} {\n  --fp: var(--cp);`));
+    expect(swap.length).toBeGreaterThan(100);
+    // Body type is set again in the new unit: what is inherited was worked out in the old.
+    expect(swap.slice(0, swap.indexOf("}"))).toContain(
+      "font-size: var(--fs-10);",
+    );
+    // Every unit that follows the font pixel is worked out again inside the four parts.
+    const derived = [...rules.matchAll(/([^{}]+)\{([^}]*)\}/g)].filter(
+      ([, , body]) => body?.includes("--fs-10:") || body?.includes("--plate:"),
+    );
+    expect(derived.length).toBe(2);
+    for (const [, selectors] of derived) expect(selectors).toContain(parts);
+    // Each part lies down: a grid with the pieces side by side.
+    for (const part of [".ss-board", ".ss-sheet", ".ss-full"]) {
+      const rule = skin.slice(skin.indexOf(`.ss-game[data-wide] ${part} {`));
+      expect(rule.slice(0, rule.indexOf("}"))).toContain("display: grid;");
+    }
+    // The column is a whole number of logical pixels wide.
+    expect(skin.replace(/\s+/g, " ")).toContain(
+      "--ss-col: round( down, min(calc(var(--cp) * 656), calc(100% - var(--px) * 16)), var(--px) );",
     );
   });
 

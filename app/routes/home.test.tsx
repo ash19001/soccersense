@@ -18,9 +18,14 @@ import {
   vi,
 } from "vitest";
 
+import { menuLayout } from "~/art/layout";
+import { lightingFor } from "~/art/lighting";
+import { factForDay } from "~/data/facts";
 import { dayKeyFor, storageKey } from "~/game";
+import { FONT_3x5, Surface } from "~/pixel";
 import { strings } from "~/i18n";
 import { MenuScene } from "~/scenes";
+import { LOCKED_MODES } from "~/scenes/menu";
 import Home, { meta } from "./home";
 
 // `useNavigate` can be swapped for a spy, to count what the page asks for. With no spy it
@@ -83,6 +88,32 @@ function run(scene: MenuScene, seconds: number): void {
   act(() => {
     for (let t = 0; t < seconds; t += 1 / 60) scene.update(1 / 60);
   });
+}
+
+/** The airship's sign at rest as a scene draws it at 480 x 270, before anything moves. */
+function signOf(scene: MenuScene): number[] {
+  const s = new Surface(480, 270);
+  scene.resize(480, 270);
+  scene.setLighting(lightingFor({ elevation: 45, morning: false }));
+  scene.draw(s);
+  const z = menuLayout(480, 270).scoreboard;
+  const out: number[] = [];
+  for (let y = z.y + 2; y < z.y + z.h - 2; y++) {
+    for (let x = z.x + 2; x < z.x + z.w - 2; x++) out.push(s.get(x, y));
+  }
+  return out;
+}
+
+/** The sign a scene of day `day` with that day's fact shows. */
+function signForDay(day: number): number[] {
+  return signOf(
+    new MenuScene({
+      seed: day,
+      fact: factForDay(day).text,
+      labels: strings.home.canvas,
+      intro: false,
+    }),
+  );
 }
 
 function card(name: RegExp): HTMLElement {
@@ -188,15 +219,16 @@ describe("home page: in the browser", () => {
     expect(theScene().phase).toBe("idle");
   });
 
-  test("after mounting it knows the day: the stadium for screen readers, the day number", () => {
+  test("after mounting it knows the day: the fact for screen readers, the day number", () => {
     mount();
     expect(
       screen.getByRole("heading", { level: 1, name: strings.siteName }),
     ).toHaveClass("ss-sr");
-    const line = screen.getByText(
-      strings.home.stadium("Anfield", "Liverpool", "England"),
-    );
+    const line = screen.getByText(strings.home.fact(factForDay(1).text));
     expect(line).toHaveClass("ss-sr");
+    expect(line.textContent).toBe(
+      "Fact of the day: The penalty kick was the idea of William McCrum, a goalkeeper from County Armagh, and arrived in 1891.",
+    );
     expect(screen.getByText(strings.home.day(1))).toBeInTheDocument();
     // The way to the rules, with the address's query carried along.
     expect(
@@ -207,15 +239,47 @@ describe("home page: in the browser", () => {
     expect(document.querySelector(".ss-game__canvas canvas")).not.toBeNull();
   });
 
-  test("?day and ?stadium choose the day and the ground", () => {
+  test.each([1, 2])(
+    "?day=%i puts that day's fact on the airship and in the hidden line",
+    (day) => {
+      setSearch(`?day=${day}`);
+      mount();
+      expect(screen.getByText(strings.home.day(day))).toBeInTheDocument();
+      expect(
+        screen.getByText(strings.home.fact(factForDay(day).text)),
+      ).toHaveClass("ss-sr");
+      const sign = signOf(theScene());
+      expect(sign).toEqual(signForDay(day));
+      expect(sign).not.toEqual(signForDay(day === 1 ? 2 : 1));
+    },
+  );
+
+  test("?day=2 and ?day=1 have different facts", () => {
+    expect(factForDay(2).text).not.toBe(factForDay(1).text);
+    expect(factForDay(2).text).toMatch(/^The first official international/);
+  });
+
+  test("?stadium is the game's: the home page's sign keeps the day's fact", () => {
     setSearch("?day=5&stadium=cairo-international-stadium");
     mount();
     expect(screen.getByText(strings.home.day(5))).toBeInTheDocument();
     expect(
-      screen.getByText(
-        strings.home.stadium("Cairo International Stadium", "Cairo", "Egypt"),
-      ),
+      screen.getByText(strings.home.fact(factForDay(5).text)),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Cairo/)).toBeNull();
+    // and it is carried on to the rules page (and the game)
+    expect(
+      screen.getByRole("link", { name: strings.howToPlay.title }),
+    ).toHaveAttribute(
+      "href",
+      "/how-to-play?day=5&stadium=cairo-international-stadium",
+    );
+  });
+
+  test("the sign's header is in the small font", () => {
+    for (const ch of strings.home.canvas.header.toUpperCase()) {
+      expect(FONT_3x5.glyphs[ch.charCodeAt(0)], ch).toBeDefined();
+    }
   });
 
   test("strict mode still makes one scene, and it is the one the page listens to", () => {
@@ -276,7 +340,7 @@ describe("home page: the captions and the ball", () => {
     expect(card(/HOME/)).not.toHaveClass("is-lit");
   });
 
-  test("a locked patch puts up a notice for two seconds, and it is announced", () => {
+  test("a locked patch puts up a notice naming its mode for 2.5 seconds, and it is announced", () => {
     vi.useFakeTimers();
     mount();
     const scene = theScene();
@@ -284,21 +348,30 @@ describe("home page: the captions and the ball", () => {
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveTextContent("");
 
-    act(() => scene.onLocked?.("top"));
-    expect(status).toHaveTextContent(strings.home.locked);
+    act(() => scene.onLocked?.("nextgen"));
+    // the words on screen are the words read out
+    expect(status.textContent).toBe(strings.home.soon.nextgen);
+    expect(status.textContent).toContain(strings.home.canvas.nextgen);
     act(() => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(2000);
     });
-    // A second press starts the two seconds again.
-    act(() => scene.onLocked?.("bottom"));
+    // A second press, on another patch, names that one and starts the wait again.
+    act(() => scene.onLocked?.("furthest"));
+    expect(status.textContent).toBe(strings.home.soon.furthest);
     act(() => {
-      vi.advanceTimersByTime(1500);
+      vi.advanceTimersByTime(2000);
     });
-    expect(status).toHaveTextContent(strings.home.locked);
+    expect(status.textContent).toBe(strings.home.soon.furthest);
     act(() => {
       vi.advanceTimersByTime(600);
     });
     expect(status).toHaveTextContent("");
+  });
+
+  test("every locked mode has a notice that names it", () => {
+    for (const mode of LOCKED_MODES) {
+      expect(strings.home.soon[mode]).toContain(strings.home.canvas[mode]);
+    }
   });
 });
 
@@ -520,7 +593,7 @@ describe("home page: choosing a mode", () => {
     expect(screen.getByText(strings.home.day(3))).toBeInTheDocument();
   });
 
-  test("a new day at midnight UTC brings its stadium, at rest", () => {
+  test("a new day at midnight UTC brings its fact, at rest", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(Date.UTC(2026, 10, 12, 23, 59, 30)));
     setSearch("");
@@ -533,11 +606,10 @@ describe("home page: choosing a mode", () => {
     });
     expect(screen.getByText(strings.home.day(4))).toBeInTheDocument();
     expect(
-      screen.getByText(
-        strings.home.stadium("Santiago Bernabéu", "Madrid", "Spain"),
-      ),
+      screen.getByText(strings.home.fact(factForDay(4).text)),
     ).toBeInTheDocument();
     expect(theScene()).not.toBe(before);
+    expect(signOf(theScene())).toEqual(signForDay(4));
     expect(theScene().phase).toBe("idle");
     // The page listens to the new scene.
     act(() => theScene().onHover?.("home"));

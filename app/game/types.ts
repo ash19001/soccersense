@@ -1,6 +1,16 @@
 /** Shared game types. Data files and rules both import from here. See docs/GAME_DESIGN.md. */
 
+/** The two modes on the ball that can be played today. */
 export type Mode = "home" | "away";
+
+/**
+ * How a question's answers are ranked, best first.
+ * - `common`: the most popular answer wins (HOME).
+ * - `niche`: the least popular answer wins (AWAY).
+ * - `closest`: the answer whose place is nearest today's stadium wins (locked mode CLOSEST).
+ * - `furthest`: the furthest from today's stadium wins (locked mode FURTHEST).
+ */
+export type Rule = "common" | "niche" | "closest" | "furthest";
 
 export interface LatLng {
   /** Degrees, north positive. */
@@ -35,6 +45,13 @@ export interface Answer extends LatLng {
   place: string;
   /** Country of that place: "England" */
   country: string;
+  /**
+   * The estimated share of players who give this answer, in percent: 0.1 to 100, at most one
+   * decimal place. The shares of a question add up to about 100. HOME and AWAY are scored by
+   * it. For now these are estimates built into the sample questions (docs/data-notes); a
+   * backend will count real answers later.
+   */
+  popularity: number;
 }
 
 export interface Question {
@@ -60,11 +77,13 @@ export interface Question {
 export type Grade =
   "worldie" | "topbins" | "goal" | "ontarget" | "wide" | "timeup" | "skipped";
 
-/** One answer placed in the table for a given stadium and mode. */
+/** One answer placed in the table for a given stadium and rule. */
 export interface RankedAnswer {
   answer: Answer;
-  /** Whole kilometres from the stadium. */
+  /** Whole kilometres from the stadium (shown by the distance rules). */
   km: number;
+  /** The answer's popularity: the share of players who give it, in percent. */
+  share: number;
   /** 0 to 100. */
   points: number;
   /** 1-based position in the table; tied answers share a rank. */

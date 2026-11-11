@@ -3,10 +3,16 @@
  *
  *   stadium/full       the backdrop alone
  *   stadium/composed   the home screen: backdrop, the real menu ball (floating) and the wordmark
- *   stadium/long-name  composed, with a name too long for the sign (it scrolls)
- *   stadium/sign       a close crop of the sign on the airship
+ *
+ * The sign carries the fact of the day whose number is --seed (day 1 by default).
+ *   stadium/sign       a close crop of the sign on the airship (--strip to watch it scroll)
  *   stadium/roar       composed, with the ground erupting and a marker at target()
  *   stadium/captions   composed, with what the DOM covers blocked out
+ *   stadium/airship    composed, eight frames left to right and down: a poke, a poke near
+ *                      bursting, the pop, the fall (two), the crash, the pilot down, and the
+ *                      new airship drifting in (the times are fixed; --t is ignored)
+ *   stadium/zebra      a close crop of the zebra in front of the ball, no ball: use --strip
+ *   stadium/cars       every car heading at each size, day and night lamps, and the coach
  *   led/panel          the shared dot-matrix panel on its own, with every kind of line
  *
  *   ./node_modules/.bin/tsx tools/snap.ts stadium/composed --size 480x270 --time all --scale 3
@@ -20,19 +26,18 @@ import { drawLedLine, drawLedPanel } from "~/art/led";
 import { lightingFor } from "~/art/lighting";
 import { drawLogo, logoSize } from "~/art/logo";
 import { MODE_COLORS, P } from "~/art/palette";
-import { MenuBackdrop, type MenuStadiumInfo } from "~/art/stadium";
-
-const ANFIELD: MenuStadiumInfo = {
-  name: "Anfield",
-  city: "Liverpool",
-  country: "England",
-};
-
-const BERNABEU: MenuStadiumInfo = {
-  name: "Estadio Santiago Bernabéu",
-  city: "Madrid",
-  country: "Spain",
-};
+import { MenuBackdrop } from "~/art/stadium";
+import { factForDay } from "~/data/facts";
+import {
+  HEADINGS,
+  carLamps,
+  carSprite,
+  coachLamps,
+  coachSprite,
+  headingAngle,
+} from "~/art/stadium-cars";
+import { ZEBRA } from "~/art/stadium-road";
+import { makeView, project } from "~/art/stadium-view";
 
 const PATCHES: BallPatches = {
   left: { label: "HOME", icon: "home", accent: MODE_COLORS.home },
@@ -41,8 +46,11 @@ const PATCHES: BallPatches = {
   bottom: { label: "SOON", icon: "lock", locked: true },
 };
 
-function scene(ctx: ShotContext, stadium: MenuStadiumInfo): MenuBackdrop {
-  const backdrop = new MenuBackdrop({ seed: ctx.seed, stadium });
+function scene(ctx: ShotContext): MenuBackdrop {
+  const backdrop = new MenuBackdrop({
+    seed: ctx.seed,
+    sign: { header: "DID YOU KNOW?", text: factForDay(ctx.seed).text },
+  });
   backdrop.resize(ctx.w, ctx.h);
   backdrop.setLighting(lightingFor(ctx.sun));
   return backdrop;
@@ -51,12 +59,12 @@ function scene(ctx: ShotContext, stadium: MenuStadiumInfo): MenuBackdrop {
 /** The home screen as the player sees it (docs/API_ART.md, "Putting the home screen together"). */
 function composed(
   ctx: ShotContext,
-  stadium: MenuStadiumInfo,
   roar = 0,
+  given?: MenuBackdrop,
 ): { s: Surface; backdrop: MenuBackdrop } {
   const s = new Surface(ctx.w, ctx.h);
   const light = lightingFor(ctx.sun);
-  const backdrop = scene(ctx, stadium);
+  const backdrop = given ?? scene(ctx);
   backdrop.setRoar(roar);
   backdrop.draw(s, ctx.t);
 
@@ -84,19 +92,23 @@ function composed(
   return { s, backdrop };
 }
 
+/** The pokes of the airship shot: one, a pause, then quick ones until it bursts. */
+const POKES = [1, 3.4, 3.6, 3.8, 4.0, 4.2, 4.4, 4.6];
+/** Its frames: seconds after the poke at 1, and after the pop. */
+const AFTER_POKE = [0.05, 0.05];
+const AFTER_POP = [0.06, 0.9, 1.9, 3.0, 6.8, 12.2];
+
 export const shots: ShotMap = {
   "stadium/full": (ctx) => {
     const s = new Surface(ctx.w, ctx.h);
-    scene(ctx, ANFIELD).draw(s, ctx.t);
+    scene(ctx).draw(s, ctx.t);
     return s;
   },
 
-  "stadium/composed": (ctx) => composed(ctx, ANFIELD).s,
-
-  "stadium/long-name": (ctx) => composed(ctx, BERNABEU).s,
+  "stadium/composed": (ctx) => composed(ctx).s,
 
   "stadium/sign": (ctx) => {
-    const { s } = composed(ctx, ANFIELD);
+    const { s } = composed(ctx);
     const b = menuLayout(s.w, s.h).scoreboard;
     const pad = 10;
     const out = new Surface(b.w + pad * 2, b.h + pad * 2);
@@ -105,7 +117,7 @@ export const shots: ShotMap = {
   },
 
   "stadium/roar": (ctx) => {
-    const { s, backdrop } = composed(ctx, ANFIELD, 1);
+    const { s, backdrop } = composed(ctx, 1);
     const at = backdrop.target();
     // a small cross where the ball drops out of sight
     s.hline(at.x - 3, at.y, 7, P.ink);
@@ -116,12 +128,103 @@ export const shots: ShotMap = {
   },
 
   "stadium/captions": (ctx) => {
-    const { s } = composed(ctx, ANFIELD);
+    const { s } = composed(ctx);
     const m = menuLayout(s.w, s.h);
     // the DOM captions: a column 135 px wide in the middle of the caption zone
     const cw = Math.min(UI_COLUMN_W, s.w);
     s.rect(m.cx - Math.floor(cw / 2), m.caption.y, cw, m.caption.h, P.ink);
     s.hline(0, m.logo.h - 1, s.w, P.ledRed);
+    return s;
+  },
+
+  "stadium/airship": (ctx) => {
+    const backdrop = scene(ctx);
+    const sign = menuLayout(ctx.w, ctx.h).scoreboard;
+    const frames: number[] = [];
+    let popAt = Number.NaN;
+    let previous = 0;
+    for (const t of POKES) {
+      // poked on the top of the envelope, above the sign's left end, as a player would
+      backdrop.airshipAt(sign.x + 12, sign.y - 4, t);
+      const r = backdrop.pokeAirship(t);
+      if (r === "pop") {
+        popAt = t;
+        break;
+      }
+      previous = t;
+    }
+    frames.push(POKES[0] + AFTER_POKE[0], previous + AFTER_POKE[1]);
+    for (const d of AFTER_POP) frames.push(popAt + d);
+    const cols = 4;
+    const out = new Surface(ctx.w * cols, ctx.h * 2);
+    for (let i = 0; i < frames.length; i++) {
+      const { s } = composed({ ...ctx, t: frames[i] }, 0, backdrop);
+      out.blit(s, (i % cols) * ctx.w, Math.floor(i / cols) * ctx.h);
+    }
+    return out;
+  },
+
+  "stadium/zebra": (ctx) => {
+    const s = new Surface(ctx.w, ctx.h);
+    scene(ctx).draw(s, ctx.t);
+    const v = makeView(ctx.w, ctx.h);
+    const a = project(v, ZEBRA.x0 - 14, ZEBRA.v1 + 6);
+    const b = project(v, ZEBRA.x1 + 14, ZEBRA.v0 - 6);
+    const x = Math.max(0, a.x);
+    const y = Math.max(0, a.y - 8);
+    const out = new Surface(
+      Math.max(1, Math.min(ctx.w, b.x) - x),
+      Math.max(1, Math.min(ctx.h, b.y + 4) - y),
+    );
+    out.blit(s, -x, -y);
+    return out;
+  },
+
+  "stadium/cars": () => {
+    // every heading, left to right from east anticlockwise; by day (nearest, middle, far)
+    // then at night with the lamps; a grey tick under each shows the true direction
+    const cell = 22;
+    const s = new Surface(cell * HEADINGS + 4, cell * 7 + 4);
+    s.clear(P.concrete);
+    s.rect(0, cell * 3 + 2, s.w, s.h, P.night);
+    const look = {
+      b: P.home,
+      l: P.homeLight,
+      d: P.homeDark,
+      g: P.night,
+      k: P.ink,
+    };
+    const bus = {
+      roof: P.steelHi,
+      roofHi: P.white,
+      side: P.mist,
+      stripe: P.home,
+      glass: P.slate,
+      tyre: P.ink,
+    };
+    for (let hd = 0; hd < HEADINGS; hd++) {
+      const x = 2 + hd * cell + cell / 2;
+      const a = (headingAngle(hd) * Math.PI) / 180;
+      for (let row = 0; row < 7; row++) {
+        const y = 2 + row * cell + cell / 2;
+        const tick = row < 3 ? P.concreteDark : P.slate;
+        for (let d = 7; d < 10; d++) {
+          s.px(
+            Math.round(x + Math.cos(a) * d),
+            Math.round(y - Math.sin(a) * d),
+            tick,
+          );
+        }
+        if (row === 6) {
+          coachSprite(s, x, y, 2, hd, bus);
+          coachLamps(s, x, y, 2, hd, 1);
+          continue;
+        }
+        const cls = (2 - (row % 3)) as 0 | 1 | 2;
+        carSprite(s, x, y, cls, hd, look);
+        if (row >= 3) carLamps(s, x, y, cls, hd, 1);
+      }
+    }
     return s;
   },
 
@@ -131,7 +234,7 @@ export const shots: ShotMap = {
     const f = drawLedPanel(s, 4, 4, 92, 37);
     const x = f.x + 2;
     const w = f.w - 4;
-    drawLedLine(s, "TODAY'S STADIUM", x, f.y + 4, w, {
+    drawLedLine(s, "DID YOU KNOW?", x, f.y + 4, w, {
       font: FONT_3x5,
       color: P.ledGreen,
     });

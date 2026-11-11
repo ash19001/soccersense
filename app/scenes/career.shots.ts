@@ -1,0 +1,179 @@
+/**
+ * Shots for the career scene. Each builds a scene, lets the arrival finish, feeds it the
+ * calls the game page would and returns the frame. `ctx.t` is the time since the call
+ * the shot is about (the shot, the promotion, full time); the scene is advanced there in
+ * sixtieths of a second, as a browser would.
+ *
+ *   ./node_modules/.bin/tsx tools/snap.ts career/idle --size 480x270 --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts career/idle-t4 --size 480x270 --time night --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/shot-worldie --size 480x270 --strip 8 --dt 0.15 --crop 150,70,200,90 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/shot-goal-t0 --size 480x270 --strip 8 --dt 0.15 --crop 150,90,200,70 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/promote --size 480x270 --strip 8 --dt 0.2 --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts career/fulltime --size 480x270 --t 1 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/after-goal --size 480x270 --strip 8 --dt 0.25 --crop 150,70,200,110 --scale 2
+ *
+ * Shots: `career/idle` (all eight tiers), `career/idle-t0` to `idle-t7`, `career/away`,
+ * `career/shot-<grade>` (tier 4) and `career/shot-<grade>-t0` (the park) for every grade,
+ * `career/after-<grade>` (the same, from the call back on: the new ball and back to
+ * juggling), `career/promote` (2 to 3), `promote-t0` (0 to 1), `promote-t1` (1 to 2), `promote-t3` (3 to 4),
+ * `career/fulltime` (tier 7), `fulltime-t3`, `fulltime-t0`, `career/reduced` (a goal with
+ * reduced motion).
+ */
+
+import type { Grade, Mode } from "~/game";
+import { lightingFor } from "~/art/lighting";
+import { P } from "~/art/palette";
+import {
+  FONT_3x5,
+  Surface,
+  drawText,
+  type ShotContext,
+  type ShotMap,
+} from "~/pixel";
+import { CareerScene } from "./career";
+
+const STEP = 1 / 60;
+/** A total inside each tier. */
+const TOTALS = [0, 100, 200, 300, 400, 500, 600, 680];
+const GRADES: Grade[] = [
+  "worldie",
+  "topbins",
+  "goal",
+  "ontarget",
+  "wide",
+  "timeup",
+  "skipped",
+];
+
+const LABELS = {
+  boards: ["SOCCERSENSE", "HOT PIES", "TEA BAR", "COME ON THEN"],
+  banners: ["HOMETOWN HERO", "ONE OF OUR OWN", "BRING IT HOME"],
+};
+
+function make(
+  ctx: ShotContext,
+  total: number,
+  mode: Mode = "home",
+  reduced = false,
+): CareerScene {
+  const scene = new CareerScene({
+    seed: ctx.seed,
+    mode,
+    total,
+    labels: LABELS,
+  });
+  scene.resize(ctx.w, ctx.h);
+  scene.setLighting(lightingFor(ctx.sun));
+  scene.setReducedMotion(reduced);
+  scene.update(0);
+  advance(scene, 1.2);
+  return scene;
+}
+
+function advance(scene: CareerScene, t: number): void {
+  const n = Math.max(0, Math.round(t / STEP));
+  for (let i = 0; i < n; i++) scene.update(STEP);
+}
+
+function frame(ctx: ShotContext, scene: CareerScene): Surface {
+  const s = new Surface(ctx.w, ctx.h);
+  scene.draw(s);
+  return s;
+}
+
+function idle(ctx: ShotContext, tier: number, mode: Mode = "home"): Surface {
+  const scene = make(ctx, TOTALS[tier], mode);
+  advance(scene, ctx.t);
+  return frame(ctx, scene);
+}
+
+function shot(
+  ctx: ShotContext,
+  grade: Grade,
+  total: number,
+  from = 0,
+): Surface {
+  const scene = make(ctx, total);
+  scene.playShot(grade);
+  advance(scene, from + ctx.t);
+  return frame(ctx, scene);
+}
+
+const shots: ShotMap = {
+  "career/idle": (ctx) => {
+    // all eight tiers, two across, labelled
+    const out = new Surface(ctx.w * 2 + 2, ctx.h * 4 + 6);
+    out.clear(P.ink);
+    for (let tier = 0; tier < 8; tier++) {
+      const s = idle(ctx, tier);
+      const x = (tier & 1) * (ctx.w + 2);
+      const y = (tier >> 1) * (ctx.h + 2);
+      out.copy(s, x, y);
+      drawText(out, `TIER ${tier}`, x + 3, y + 3, P.white, {
+        font: FONT_3x5,
+        outline: P.ink,
+      });
+    }
+    return out;
+  },
+  "career/away": (ctx) => idle(ctx, 4, "away"),
+  "career/promote": (ctx) => {
+    const scene = make(ctx, 200);
+    scene.promote(300);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+  "career/promote-t0": (ctx) => {
+    const scene = make(ctx, 0);
+    scene.promote(100);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+  "career/promote-t1": (ctx) => {
+    const scene = make(ctx, 100);
+    scene.promote(200);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+  "career/promote-t3": (ctx) => {
+    const scene = make(ctx, 300);
+    scene.promote(400);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+  "career/fulltime": (ctx) => {
+    const scene = make(ctx, 600);
+    scene.showFullTime(680);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+  "career/fulltime-t3": (ctx) => {
+    const scene = make(ctx, 300);
+    scene.showFullTime(300);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+  "career/fulltime-t0": (ctx) => {
+    const scene = make(ctx, 0);
+    scene.showFullTime(40);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+  "career/reduced": (ctx) => {
+    const scene = make(ctx, 400, "home", true);
+    scene.playShot("worldie");
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+};
+
+for (let tier = 0; tier < 8; tier++) {
+  shots[`career/idle-t${tier}`] = (ctx) => idle(ctx, tier);
+}
+for (const grade of GRADES) {
+  shots[`career/shot-${grade}`] = (ctx) => shot(ctx, grade, 400);
+  shots[`career/shot-${grade}-t0`] = (ctx) => shot(ctx, grade, 0);
+  shots[`career/after-${grade}`] = (ctx) => shot(ctx, grade, 400, 2.4);
+}
+
+export { shots };

@@ -22,6 +22,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Uruguay",
         lat: -34.906,
         lng: -56.184,
+        popularity: 2,
       },
       {
         id: "italy",
@@ -31,6 +32,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 41.893,
         lng: 12.483,
+        popularity: 5,
       },
       {
         id: "france",
@@ -40,6 +42,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "France",
         lat: 48.857,
         lng: 2.352,
+        popularity: 7,
       },
       {
         id: "brazil",
@@ -49,6 +52,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -15.794,
         lng: -47.883,
+        popularity: 13,
       },
       {
         id: "switzerland",
@@ -58,6 +62,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Switzerland",
         lat: 46.948,
         lng: 7.447,
+        popularity: 1.4,
       },
       {
         id: "sweden",
@@ -67,6 +72,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Sweden",
         lat: 59.329,
         lng: 18.069,
+        popularity: 1.2,
       },
       {
         id: "chile",
@@ -76,6 +82,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Chile",
         lat: -33.438,
         lng: -70.65,
+        popularity: 0.9,
       },
       {
         id: "england",
@@ -85,6 +92,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 51.507,
         lng: -0.128,
+        popularity: 7,
       },
       {
         id: "mexico",
@@ -94,6 +102,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Mexico",
         lat: 19.433,
         lng: -99.133,
+        popularity: 5.5,
       },
       {
         id: "germany",
@@ -103,6 +112,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 52.52,
         lng: 13.405,
+        popularity: 8,
       },
       {
         id: "argentina",
@@ -112,6 +122,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.604,
         lng: -58.381,
+        popularity: 3,
       },
       {
         id: "spain",
@@ -121,6 +132,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 40.417,
         lng: -3.703,
+        popularity: 4,
       },
       {
         id: "united-states",
@@ -130,6 +142,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "United States",
         lat: 38.905,
         lng: -77.016,
+        popularity: 10,
       },
       {
         id: "south-korea",
@@ -139,6 +152,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "South Korea",
         lat: 37.56,
         lng: 126.99,
+        popularity: 2.2,
       },
       {
         id: "japan",
@@ -148,6 +162,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Japan",
         lat: 35.69,
         lng: 139.692,
+        popularity: 2.5,
       },
       {
         id: "south-africa",
@@ -157,6 +172,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "South Africa",
         lat: -25.746,
         lng: 28.188,
+        popularity: 4.3,
       },
       {
         id: "russia",
@@ -166,6 +182,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Russia",
         lat: 55.756,
         lng: 37.618,
+        popularity: 8.5,
       },
       {
         id: "qatar",
@@ -175,6 +192,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Qatar",
         lat: 25.287,
         lng: 51.533,
+        popularity: 11,
       },
       {
         id: "canada",
@@ -184,6 +202,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Canada",
         lat: 45.425,
         lng: -75.695,
+        popularity: 3.5,
       },
     ],
   },
@@ -205,6 +224,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Uruguay",
         lat: -34.8944,
         lng: -56.1528,
+        popularity: 1.4,
       },
       {
         id: "stadio-nazionale-pnf",
@@ -220,6 +240,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 41.9272,
         lng: 12.4722,
+        popularity: 0.2,
       },
       {
         id: "stade-olympique-de-colombes",
@@ -234,6 +255,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "France",
         lat: 48.9294,
         lng: 2.2481,
+        popularity: 0.4,
       },
       {
         id: "maracana",
@@ -248,6 +270,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -22.9122,
         lng: -43.2303,
+        popularity: 17.6,
       },
       {
         id: "wankdorf-stadium",
@@ -262,6 +285,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Switzerland",
         lat: 46.9631,
         lng: 7.4647,
+        popularity: 0.5,
       },
       {
         id: "rasunda-stadium",
@@ -271,6 +295,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Sweden",
         lat: 59.3628,
         lng: 17.9964,
+        popularity: 0.6,
       },
       {
         id: "estadio-nacional-santiago",
@@ -285,6 +310,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Chile",
         lat: -33.4644,
         lng: -70.6106,
+        popularity: 0.6,
       },
       {
         id: "wembley-stadium",
@@ -294,6 +320,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 51.5556,
         lng: -0.2794,
+        popularity: 14,
       },
       {
         id: "estadio-azteca",
@@ -303,6 +330,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Mexico",
         lat: 19.303,
         lng: -99.1505,
+        popularity: 8.5,
       },
       {
         id: "olympiastadion-munich",
@@ -317,6 +345,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 48.1731,
         lng: 11.5467,
+        popularity: 2.3,
       },
       {
         id: "estadio-monumental",
@@ -333,6 +362,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.5453,
         lng: -58.4497,
+        popularity: 2.8,
       },
       {
         id: "santiago-bernabeu",
@@ -346,6 +376,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 40.4531,
         lng: -3.6883,
+        popularity: 4.5,
       },
       {
         id: "stadio-olimpico",
@@ -360,6 +391,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 41.9339,
         lng: 12.4547,
+        popularity: 2.4,
       },
       {
         id: "rose-bowl",
@@ -369,6 +401,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "United States",
         lat: 34.161,
         lng: -118.168,
+        popularity: 3.5,
       },
       {
         id: "stade-de-france",
@@ -378,6 +411,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "France",
         lat: 48.9244,
         lng: 2.36,
+        popularity: 5.2,
       },
       {
         id: "international-stadium-yokohama",
@@ -391,6 +425,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Japan",
         lat: 35.51,
         lng: 139.6062,
+        popularity: 2,
       },
       {
         id: "olympiastadion-berlin",
@@ -404,6 +439,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 52.5147,
         lng: 13.2394,
+        popularity: 5.5,
       },
       {
         id: "soccer-city",
@@ -419,6 +455,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "South Africa",
         lat: -26.2347,
         lng: 27.9826,
+        popularity: 5,
       },
       {
         id: "luzhniki-stadium",
@@ -428,6 +465,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Russia",
         lat: 55.7158,
         lng: 37.5536,
+        popularity: 6,
       },
       {
         id: "lusail-stadium",
@@ -437,6 +475,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Qatar",
         lat: 25.4209,
         lng: 51.4904,
+        popularity: 9,
       },
       {
         id: "metlife-stadium",
@@ -451,6 +490,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "United States",
         lat: 40.8136,
         lng: -74.0744,
+        popularity: 8,
       },
     ],
   },
@@ -471,6 +511,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Belgium",
         lat: 50.813,
         lng: 4.325,
+        popularity: 0.3,
       },
       {
         id: "fabio-capello",
@@ -480,6 +521,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 45.798,
         lng: 13.466,
+        popularity: 1,
       },
       {
         id: "louis-van-gaal",
@@ -489,6 +531,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Netherlands",
         lat: 52.373,
         lng: 4.894,
+        popularity: 1.8,
       },
       {
         id: "marcello-lippi",
@@ -498,6 +541,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 43.867,
         lng: 10.25,
+        popularity: 1.2,
       },
       {
         id: "ottmar-hitzfeld",
@@ -507,6 +551,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 47.616,
         lng: 7.661,
+        popularity: 0.8,
       },
       {
         id: "jupp-heynckes",
@@ -516,6 +561,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 51.196,
         lng: 6.441,
+        popularity: 2,
       },
       {
         id: "alex-ferguson",
@@ -525,6 +571,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Scotland",
         lat: 55.861,
         lng: -4.308,
+        popularity: 12,
       },
       {
         id: "vicente-del-bosque",
@@ -534,6 +581,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 40.965,
         lng: -5.664,
+        popularity: 1.3,
       },
       {
         id: "carlo-ancelotti",
@@ -543,6 +591,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 44.917,
         lng: 10.81,
+        popularity: 15,
       },
       {
         id: "jose-mourinho",
@@ -552,6 +601,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Portugal",
         lat: 38.524,
         lng: -8.893,
+        popularity: 10,
       },
       {
         id: "rafael-benitez",
@@ -561,6 +611,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 40.417,
         lng: -3.703,
+        popularity: 3.4,
       },
       {
         id: "frank-rijkaard",
@@ -570,6 +621,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Netherlands",
         lat: 52.373,
         lng: 4.894,
+        popularity: 2.2,
       },
       {
         id: "pep-guardiola",
@@ -579,6 +631,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 41.784,
         lng: 1.839,
+        popularity: 15.5,
       },
       {
         id: "roberto-di-matteo",
@@ -588,6 +641,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Switzerland",
         lat: 47.697,
         lng: 8.635,
+        popularity: 3.5,
       },
       {
         id: "luis-enrique",
@@ -597,6 +651,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 43.545,
         lng: -5.662,
+        popularity: 6,
       },
       {
         id: "zinedine-zidane",
@@ -606,6 +661,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "France",
         lat: 43.367,
         lng: 5.342,
+        popularity: 9,
       },
       {
         id: "jurgen-klopp",
@@ -615,6 +671,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 48.778,
         lng: 9.18,
+        popularity: 8,
       },
       {
         id: "hansi-flick",
@@ -624,6 +681,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 49.409,
         lng: 8.694,
+        popularity: 3,
       },
       {
         id: "thomas-tuchel",
@@ -633,6 +691,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 48.243,
         lng: 10.363,
+        popularity: 4,
       },
     ],
   },
@@ -654,6 +713,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Uruguay",
         lat: -34.7969,
         lng: -56.0672,
+        popularity: 4,
       },
       {
         id: "santos",
@@ -663,6 +723,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -23.9511,
         lng: -46.3389,
+        popularity: 6,
       },
       {
         id: "independiente",
@@ -677,6 +738,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.6703,
         lng: -58.371,
+        popularity: 4.5,
       },
       {
         id: "racing-club",
@@ -691,6 +753,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.6675,
         lng: -58.3686,
+        popularity: 1.5,
       },
       {
         id: "estudiantes",
@@ -700,6 +763,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.9119,
         lng: -57.9389,
+        popularity: 2.4,
       },
       {
         id: "nacional",
@@ -715,6 +779,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Uruguay",
         lat: -34.8844,
         lng: -56.1588,
+        popularity: 2.6,
       },
       {
         id: "cruzeiro",
@@ -724,6 +789,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -19.8658,
         lng: -43.9708,
+        popularity: 1.8,
       },
       {
         id: "boca-juniors",
@@ -733,6 +799,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.6357,
         lng: -58.3647,
+        popularity: 15.5,
       },
       {
         id: "olimpia",
@@ -742,6 +809,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Paraguay",
         lat: -25.2921,
         lng: -57.6574,
+        popularity: 1.3,
       },
       {
         id: "flamengo",
@@ -756,6 +824,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -22.9122,
         lng: -43.2303,
+        popularity: 10,
       },
       {
         id: "gremio",
@@ -765,6 +834,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -29.9733,
         lng: -51.1944,
+        popularity: 3.5,
       },
       {
         id: "argentinos-juniors",
@@ -774,6 +844,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.6061,
         lng: -58.4725,
+        popularity: 0.6,
       },
       {
         id: "river-plate",
@@ -788,6 +859,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.5453,
         lng: -58.4497,
+        popularity: 14,
       },
       {
         id: "atletico-nacional",
@@ -802,6 +874,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Colombia",
         lat: 6.2568,
         lng: -75.5902,
+        popularity: 1.1,
       },
       {
         id: "colo-colo",
@@ -811,6 +884,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Chile",
         lat: -33.5067,
         lng: -70.6058,
+        popularity: 1.7,
       },
       {
         id: "sao-paulo",
@@ -820,6 +894,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -23.6001,
         lng: -46.7202,
+        popularity: 4.2,
       },
       {
         id: "velez-sarsfield",
@@ -829,6 +904,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.6354,
         lng: -58.5207,
+        popularity: 1.2,
       },
       {
         id: "vasco-da-gama",
@@ -838,6 +914,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -22.8909,
         lng: -43.2283,
+        popularity: 1.6,
       },
       {
         id: "palmeiras",
@@ -847,6 +924,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -23.5275,
         lng: -46.6785,
+        popularity: 7,
       },
       {
         id: "once-caldas",
@@ -856,6 +934,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Colombia",
         lat: 5.0562,
         lng: -75.4898,
+        popularity: 0.4,
       },
       {
         id: "internacional",
@@ -872,6 +951,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -30.0656,
         lng: -51.2361,
+        popularity: 2.5,
       },
       {
         id: "ldu-quito",
@@ -886,6 +966,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Ecuador",
         lat: -0.1078,
         lng: -78.4892,
+        popularity: 0.9,
       },
       {
         id: "corinthians",
@@ -900,6 +981,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -23.5453,
         lng: -46.4742,
+        popularity: 3.8,
       },
       {
         id: "atletico-mineiro",
@@ -909,6 +991,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -19.93,
         lng: -44.0144,
+        popularity: 2,
       },
       {
         id: "san-lorenzo",
@@ -918,6 +1001,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.6519,
         lng: -58.44,
+        popularity: 1.4,
       },
       {
         id: "fluminense",
@@ -927,6 +1011,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -22.9122,
         lng: -43.2303,
+        popularity: 2.2,
       },
       {
         id: "botafogo",
@@ -936,6 +1021,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -22.8931,
         lng: -43.2922,
+        popularity: 2.3,
       },
     ],
   },
@@ -959,6 +1045,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -34.636,
         lng: -58.401,
+        popularity: 0.5,
       },
       {
         id: "oldrich-nejedly",
@@ -968,6 +1055,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Czech Republic",
         lat: 49.876,
         lng: 13.898,
+        popularity: 0.3,
       },
       {
         id: "leonidas",
@@ -977,6 +1065,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -22.907,
         lng: -43.173,
+        popularity: 1,
       },
       {
         id: "ademir",
@@ -986,6 +1075,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -8.054,
         lng: -34.881,
+        popularity: 0.7,
       },
       {
         id: "sandor-kocsis",
@@ -995,6 +1085,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Hungary",
         lat: 47.492,
         lng: 19.051,
+        popularity: 0.8,
       },
       {
         id: "just-fontaine",
@@ -1004,6 +1095,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Morocco",
         lat: 31.63,
         lng: -8.009,
+        popularity: 2.6,
       },
       {
         id: "garrincha",
@@ -1013,6 +1105,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -22.584,
         lng: -43.17,
+        popularity: 2,
       },
       {
         id: "vava",
@@ -1022,6 +1115,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -8.054,
         lng: -34.881,
+        popularity: 1.2,
       },
       {
         id: "leonel-sanchez",
@@ -1031,6 +1125,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Chile",
         lat: -33.438,
         lng: -70.65,
+        popularity: 0.4,
       },
       {
         id: "florian-albert",
@@ -1040,6 +1135,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Hungary",
         lat: 45.947,
         lng: 18.937,
+        popularity: 0.3,
       },
       {
         id: "valentin-ivanov",
@@ -1049,6 +1145,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Russia",
         lat: 55.756,
         lng: 37.618,
+        popularity: 0.4,
       },
       {
         id: "drazan-jerkovic",
@@ -1058,6 +1155,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Croatia",
         lat: 43.734,
         lng: 15.894,
+        popularity: 0.2,
       },
       {
         id: "eusebio",
@@ -1071,6 +1169,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Mozambique",
         lat: -25.969,
         lng: 32.573,
+        popularity: 4,
       },
       {
         id: "gerd-muller",
@@ -1080,6 +1179,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 48.851,
         lng: 10.488,
+        popularity: 4.5,
       },
       {
         id: "grzegorz-lato",
@@ -1089,6 +1189,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Poland",
         lat: 54.036,
         lng: 19.028,
+        popularity: 0.9,
       },
       {
         id: "mario-kempes",
@@ -1098,6 +1199,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Argentina",
         lat: -32.626,
         lng: -62.689,
+        popularity: 3,
       },
       {
         id: "paolo-rossi",
@@ -1107,6 +1209,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 43.88,
         lng: 11.098,
+        popularity: 3.5,
       },
       {
         id: "gary-lineker",
@@ -1116,6 +1219,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 52.636,
         lng: -1.133,
+        popularity: 6.5,
       },
       {
         id: "salvatore-schillaci",
@@ -1125,6 +1229,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 38.111,
         lng: 13.352,
+        popularity: 2.1,
       },
       {
         id: "hristo-stoichkov",
@@ -1134,6 +1239,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Bulgaria",
         lat: 42.144,
         lng: 24.75,
+        popularity: 2.3,
       },
       {
         id: "oleg-salenko",
@@ -1143,6 +1249,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Russia",
         lat: 59.938,
         lng: 30.309,
+        popularity: 1.4,
       },
       {
         id: "davor-suker",
@@ -1152,6 +1259,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Croatia",
         lat: 45.556,
         lng: 18.694,
+        popularity: 2.4,
       },
       {
         id: "ronaldo",
@@ -1170,6 +1278,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Brazil",
         lat: -22.907,
         lng: -43.173,
+        popularity: 12,
       },
       {
         id: "miroslav-klose",
@@ -1179,6 +1288,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Poland",
         lat: 50.667,
         lng: 17.924,
+        popularity: 8,
       },
       {
         id: "thomas-muller",
@@ -1188,6 +1298,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 47.84,
         lng: 11.142,
+        popularity: 6,
       },
       // 2010 joint top scorer on goals (Silver Boot)
       {
@@ -1198,6 +1309,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 43.329,
         lng: -5.643,
+        popularity: 2.5,
       },
       // 2010 joint top scorer on goals (Bronze Boot)
       {
@@ -1208,6 +1320,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Netherlands",
         lat: 52.091,
         lng: 5.122,
+        popularity: 2.2,
       },
       // 2010 joint top scorer on goals (no boot award)
       {
@@ -1218,6 +1331,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Uruguay",
         lat: -34.906,
         lng: -56.184,
+        popularity: 3.3,
       },
       {
         id: "james-rodriguez",
@@ -1227,6 +1341,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Colombia",
         lat: 7.894,
         lng: -72.504,
+        popularity: 4.2,
       },
       {
         id: "harry-kane",
@@ -1236,6 +1351,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 51.584,
         lng: -0.021,
+        popularity: 9.8,
       },
       {
         id: "kylian-mbappe",
@@ -1245,6 +1361,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "France",
         lat: 48.857,
         lng: 2.352,
+        popularity: 11,
       },
     ],
   },
@@ -1268,6 +1385,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Egypt",
         lat: 30.044,
         lng: 31.236,
+        popularity: 17,
       },
       {
         id: "cameroon",
@@ -1277,6 +1395,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Cameroon",
         lat: 3.867,
         lng: 11.517,
+        popularity: 13,
       },
       {
         id: "ghana",
@@ -1286,6 +1405,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Ghana",
         lat: 5.556,
         lng: -0.197,
+        popularity: 9,
       },
       {
         id: "nigeria",
@@ -1295,6 +1415,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Nigeria",
         lat: 9.058,
         lng: 7.489,
+        popularity: 12.5,
       },
       {
         id: "ivory-coast",
@@ -1304,6 +1425,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Ivory Coast",
         lat: 6.816,
         lng: -5.274,
+        popularity: 11,
       },
       {
         id: "algeria",
@@ -1313,6 +1435,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Algeria",
         lat: 36.733,
         lng: 3.087,
+        popularity: 6,
       },
       {
         id: "dr-congo",
@@ -1331,6 +1454,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "DR Congo",
         lat: -4.322,
         lng: 15.312,
+        popularity: 2,
       },
       {
         id: "congo",
@@ -1346,6 +1470,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Republic of the Congo",
         lat: -4.269,
         lng: 15.271,
+        popularity: 1.2,
       },
       {
         id: "zambia",
@@ -1355,6 +1480,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Zambia",
         lat: -15.417,
         lng: 28.283,
+        popularity: 3,
       },
       {
         id: "tunisia",
@@ -1364,6 +1490,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Tunisia",
         lat: 36.806,
         lng: 10.182,
+        popularity: 2.5,
       },
       {
         id: "sudan",
@@ -1373,6 +1500,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Sudan",
         lat: 15.603,
         lng: 32.527,
+        popularity: 0.8,
       },
       {
         id: "senegal",
@@ -1382,6 +1510,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Senegal",
         lat: 14.693,
         lng: -17.447,
+        popularity: 12,
       },
       {
         id: "ethiopia",
@@ -1391,6 +1520,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Ethiopia",
         lat: 9.036,
         lng: 38.752,
+        popularity: 1,
       },
       {
         id: "morocco",
@@ -1400,6 +1530,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Morocco",
         lat: 34.021,
         lng: -6.841,
+        popularity: 5,
       },
       {
         id: "south-africa",
@@ -1409,6 +1540,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "South Africa",
         lat: -25.746,
         lng: 28.188,
+        popularity: 4,
       },
     ],
   },
@@ -1430,6 +1562,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 51.6044,
         lng: -0.0664,
+        popularity: 7.5,
       },
       {
         id: "liverpool",
@@ -1439,6 +1572,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 53.4308,
         lng: -2.9608,
+        popularity: 8.4,
       },
       {
         id: "feyenoord",
@@ -1448,6 +1582,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Netherlands",
         lat: 51.8939,
         lng: 4.5231,
+        popularity: 1.2,
       },
       {
         id: "borussia-monchengladbach",
@@ -1464,6 +1599,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 51.1747,
         lng: 6.3856,
+        popularity: 0.6,
       },
       {
         id: "juventus",
@@ -1473,6 +1609,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 45.1094,
         lng: 7.6411,
+        popularity: 3.1,
       },
       {
         id: "psv-eindhoven",
@@ -1482,6 +1619,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Netherlands",
         lat: 51.4417,
         lng: 5.4675,
+        popularity: 0.8,
       },
       {
         id: "eintracht-frankfurt",
@@ -1491,6 +1629,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 50.0681,
         lng: 8.6458,
+        popularity: 3.8,
       },
       {
         id: "ipswich-town",
@@ -1500,6 +1639,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 52.055,
         lng: 1.1453,
+        popularity: 1.5,
       },
       {
         id: "ifk-goteborg",
@@ -1509,6 +1649,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Sweden",
         lat: 57.7062,
         lng: 11.9801,
+        popularity: 0.5,
       },
       {
         id: "anderlecht",
@@ -1518,6 +1659,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Belgium",
         lat: 50.8342,
         lng: 4.2983,
+        popularity: 0.7,
       },
       {
         id: "real-madrid",
@@ -1527,6 +1669,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 40.4531,
         lng: -3.6883,
+        popularity: 2.1,
       },
       {
         id: "bayer-leverkusen",
@@ -1536,6 +1679,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 51.0383,
         lng: 7.0022,
+        popularity: 2,
       },
       {
         id: "napoli",
@@ -1545,6 +1689,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 40.828,
         lng: 14.193,
+        popularity: 1.6,
       },
       {
         id: "inter",
@@ -1561,6 +1706,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 45.4781,
         lng: 9.1239,
+        popularity: 3,
       },
       {
         id: "ajax",
@@ -1570,6 +1716,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Netherlands",
         lat: 52.3142,
         lng: 4.9419,
+        popularity: 2.4,
       },
       {
         id: "parma",
@@ -1585,6 +1732,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 44.795,
         lng: 10.3383,
+        popularity: 1.3,
       },
       {
         id: "bayern-munich",
@@ -1601,6 +1749,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 48.2188,
         lng: 11.6248,
+        popularity: 0.9,
       },
       {
         id: "schalke-04",
@@ -1610,6 +1759,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Germany",
         lat: 51.5544,
         lng: 7.0675,
+        popularity: 1.4,
       },
       {
         id: "galatasaray",
@@ -1619,6 +1769,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Turkey",
         lat: 41.1028,
         lng: 28.9906,
+        popularity: 1.8,
       },
       {
         id: "porto",
@@ -1628,6 +1779,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Portugal",
         lat: 41.1618,
         lng: -8.5839,
+        popularity: 4.5,
       },
       {
         id: "valencia",
@@ -1637,6 +1789,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 39.4747,
         lng: -0.3583,
+        popularity: 2.4,
       },
       {
         id: "cska-moscow",
@@ -1646,6 +1799,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Russia",
         lat: 55.7914,
         lng: 37.5161,
+        popularity: 0.9,
       },
       {
         id: "sevilla",
@@ -1655,6 +1809,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 37.384,
         lng: -5.9705,
+        popularity: 16,
       },
       {
         id: "zenit-saint-petersburg",
@@ -1669,6 +1824,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Russia",
         lat: 59.973,
         lng: 30.2205,
+        popularity: 1.1,
       },
       {
         id: "shakhtar-donetsk",
@@ -1683,6 +1839,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Ukraine",
         lat: 49.7753,
         lng: 24.0278,
+        popularity: 1,
       },
       {
         id: "atletico-madrid",
@@ -1699,6 +1856,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 40.4361,
         lng: -3.5994,
+        popularity: 6,
       },
       {
         id: "chelsea",
@@ -1708,6 +1866,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 51.4817,
         lng: -0.1911,
+        popularity: 7,
       },
       {
         id: "manchester-united",
@@ -1724,6 +1883,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 53.4631,
         lng: -2.2914,
+        popularity: 8,
       },
       {
         id: "villarreal",
@@ -1733,6 +1893,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Spain",
         lat: 39.9442,
         lng: -0.1036,
+        popularity: 3,
       },
       {
         id: "atalanta",
@@ -1742,6 +1903,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "Italy",
         lat: 45.7089,
         lng: 9.6808,
+        popularity: 1.9,
       },
       {
         id: "aston-villa",
@@ -1751,6 +1913,7 @@ export const AWAY_QUESTIONS: Question[] = [
         country: "England",
         lat: 52.5092,
         lng: -1.8847,
+        popularity: 3.6,
       },
     ],
   },

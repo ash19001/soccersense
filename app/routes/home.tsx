@@ -1,17 +1,20 @@
-// The home screen: the menu scene on the canvas (a football in front of today's stadium,
-// under the player's own sky) with the DOM captions under the ball.
+// The home screen: the menu scene on the canvas (a football in front of a stadium, under the
+// player's own sky, and an airship carrying the fact of the day) with the DOM captions under
+// the ball.
 //
 // The page is rendered to HTML at build time, when there is no clock, no address and no
 // storage to read. So the first render shows only what never changes (the captions and
 // the name), and everything that depends on the day arrives after mounting.
 //
-// Debug: ?day=<n>, ?stadium=<id> (see app/data/stadiums.ts), ?time=HH:MM, and ?speed=<n>,
+// Debug: ?day=<n> (the day's fact and the day's stadium), ?stadium=<id> (see
+// app/data/stadiums.ts: it is the game's, not this page's), ?time=HH:MM, and ?speed=<n>,
 // which multiplies the scene's time (0.1 is slow motion, for looking at the kick-off).
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PrefetchPageLinks, useNavigate } from "react-router";
 
 import { STADIUMS } from "~/data";
+import { factForDay, type Fact } from "~/data/facts";
 import {
   type Mode,
   type Today,
@@ -21,6 +24,7 @@ import {
 } from "~/game";
 import { strings } from "~/i18n";
 import { MenuScene } from "~/scenes";
+import type { LockedMode } from "~/scenes/menu";
 import {
   GameLayout,
   MenuCaptions,
@@ -37,8 +41,8 @@ export const meta: Route.MetaFunction = () => [
   { name: "description", content: strings.home.description },
 ];
 
-/** How long the "more modes are coming" plate stays up. */
-const NOTICE_MS = 2000;
+/** How long the "coming soon" plate for a locked mode stays up. */
+const NOTICE_MS = 2500;
 /**
  * The scene says when its kick-off is over. If it never does (no canvas to run it on),
  * the page moves on by itself after this long.
@@ -67,6 +71,8 @@ let entranceShown = false;
 /** What the page knows once it is in a browser. */
 interface Matchday {
   today: Today;
+  /** The fact of the day, on the airship's sign. */
+  fact: Fact;
   /** The address's query, debug overrides and all: carried on to the mode's page. */
   search: string;
   /** Today's saved result per mode, or null if it has not been played. */
@@ -91,8 +97,8 @@ interface MenuEvents {
   onKickoff(mode: Mode): void;
   /** The kick-off is over. */
   onChoose(mode: Mode): void;
-  /** A locked patch was pressed. */
-  onLocked(): void;
+  /** A locked patch was pressed: which mode it is. */
+  onLocked(mode: LockedMode): void;
 }
 
 interface MatchdayStore {
@@ -106,7 +112,7 @@ interface MatchdayStore {
 
 /**
  * One per page. Nothing is read and no scene is made until React subscribes, which is
- * after mounting. From then on it looks again at midnight UTC (a new day, a new stadium)
+ * after mounting. From then on it looks again at midnight UTC (a new day, a new fact)
  * and whenever the tab comes back into view (a game may have been played in another).
  */
 function createMatchdayStore(): MatchdayStore {
@@ -127,6 +133,7 @@ function createMatchdayStore(): MatchdayStore {
 
     const search = window.location.search;
     const today = resolveToday(new Date(), search, STADIUMS);
+    const fact = factForDay(today.dayNumber);
     const saved = loadDay(today.dayKey);
     const scores = {
       home: saved.home?.total ?? null,
@@ -135,7 +142,7 @@ function createMatchdayStore(): MatchdayStore {
     if (
       current &&
       current.today.dayNumber === today.dayNumber &&
-      current.today.stadium.id === today.stadium.id &&
+      current.fact.id === fact.id &&
       current.search === search &&
       current.scores.home === scores.home &&
       current.scores.away === scores.away
@@ -148,7 +155,7 @@ function createMatchdayStore(): MatchdayStore {
     if (!scene || current?.today.dayNumber !== today.dayNumber) {
       scene = new MenuScene({
         seed: today.dayNumber,
-        stadium: today.stadium,
+        fact: fact.text,
         labels: strings.home.canvas,
         intro: !entranceShown,
       });
@@ -159,12 +166,12 @@ function createMatchdayStore(): MatchdayStore {
         listener?.onKickoff(mode);
       };
       scene.onChoose = (mode) => listener?.onChoose(mode);
-      scene.onLocked = () => listener?.onLocked();
-    } else if (current?.today.stadium.id !== today.stadium.id) {
-      scene.setStadium(today.stadium);
+      scene.onLocked = (mode) => listener?.onLocked(mode);
+    } else {
+      scene.setFact(fact.text);
     }
     scene.setScores(scores);
-    current = { today, search, scores, scene, speed: speedFrom(search) };
+    current = { today, fact, search, scores, scene, speed: speedFrom(search) };
     return true;
   };
 
@@ -230,7 +237,11 @@ export default function Home() {
   const [lit, setLit] = useState<Mode | null>(null);
   /** The kick-off is on: the captions are out of the way. */
   const [stowed, setStowed] = useState(false);
-  const [notice, setNotice] = useState({ count: 0, shown: false });
+  const [notice, setNotice] = useState<{
+    count: number;
+    shown: boolean;
+    mode: LockedMode;
+  }>({ count: 0, shown: false, mode: "nextgen" });
   /**
    * The mode whose page is worth fetching already: the last one pointed at or chosen. Its
    * code is then there when the kick-off ends, and the ink it ends on is one frame long.
@@ -303,8 +314,8 @@ export default function Home() {
         );
       },
       onChoose: leave,
-      onLocked() {
-        setNotice((n) => ({ count: n.count + 1, shown: true }));
+      onLocked(mode) {
+        setNotice((n) => ({ count: n.count + 1, shown: true, mode }));
       },
     });
     return () => {
@@ -324,13 +335,14 @@ export default function Home() {
   }, [notice.count, notice.shown]);
 
   const text = strings.home;
-  const stadium = matchday?.today.stadium ?? null;
+  const fact = matchday?.fact ?? null;
 
   return (
     <main>
       <GameLayout
         canvas={
           <PixelStage
+            className="touch-none"
             scene={scene}
             light={sky?.light ?? null}
             timeScale={matchday?.speed ?? 1}
@@ -354,7 +366,7 @@ export default function Home() {
               if (mode) setWarm(mode);
             }}
             lit={lit}
-            notice={notice.shown ? text.locked : null}
+            notice={notice.shown ? text.soon[notice.mode] : null}
             noticeKey={notice.count}
             stowed={stowed}
             howToPlay={{
@@ -368,15 +380,11 @@ export default function Home() {
           />
         }
       >
-        {/* The logo and the stadium sign are only pixels: these are for screen readers. */}
+        {/* The logo and the airship's sign are only pixels: these are for screen readers. */}
         <h1 ref={heading} tabIndex={-1} className="ss-sr">
           {strings.siteName}
         </h1>
-        {stadium && (
-          <p className="ss-sr">
-            {text.stadium(stadium.name, stadium.city, stadium.country)}
-          </p>
-        )}
+        {fact && <p className="ss-sr">{text.fact(fact.text)}</p>}
         {/* With no script there is no picture and no game: the page says what it is. */}
         <noscript>
           <Panel>

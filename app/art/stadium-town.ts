@@ -39,6 +39,7 @@ import {
   rowV,
   staticCar,
 } from "~/art/stadium-parking";
+import { EAST, mapHeading } from "~/art/stadium-cars";
 import { paintSkyline } from "~/art/stadium-skyline";
 import {
   box,
@@ -427,11 +428,13 @@ export function carLook(
   };
 }
 
+/** A parked car at (X, V) on the map, pointing `dir` (0 east, 1 west, 2 north, 3 south). */
 function addCar(c: Ctx, X: number, V: number, dir: number, key: number): void {
   const p = at(c, X, V);
   if (!seen(c, p, 10)) return;
   const look = carLook(c.tone, V, c.h(key, 31));
-  add(c, V, () => car(c.s, p.x, p.y, sizeClass(p.s), dir, look));
+  const heading = mapHeading(c.view, X, V, dir);
+  add(c, V, () => car(c.s, p.x, p.y, sizeClass(p.s), heading, look));
 }
 
 const COACH_PAINTS: readonly (readonly [Color, Color, Color, Color])[] = [
@@ -972,7 +975,7 @@ function southWest(c: Ctx, town: Town): void {
 /** South-east: the big car park, its hedge and gate, the pie van. */
 function southEast(c: Ctx): void {
   const { s, view, tone } = c;
-  // The cars that stay all day. The live bays (stadium-parking.ts) are drawn by stadium-life.ts.
+  // The cars that stay all day: every car in the car park (none drives in or out).
   for (let band = 0; band < 7; band++) {
     for (let row = 0; row < 2; row++) {
       const V = rowV(band, row);
@@ -1243,8 +1246,16 @@ function westSide(c: Ctx): void {
     add(c, V, () => coach(c.s, q.x, q.y, sizeClass(q.s), look));
     if (r < 0.3 && X < -190) {
       const q2 = at(c, -187, V);
+      const heading = mapHeading(c.view, -187, V, 2);
       add(c, V, () =>
-        car(c.s, q2.x, q2.y, sizeClass(q2.s), 2, carLook(c.tone, V, r * 3)),
+        car(
+          c.s,
+          q2.x,
+          q2.y,
+          sizeClass(q2.s),
+          heading,
+          carLook(c.tone, V, r * 3),
+        ),
       );
     }
   }
@@ -1511,7 +1522,7 @@ function northStrip(c: Ctx): void {
   for (let i = 0; i < 6; i++) {
     const p = at(c, 192 + i * 9, 148);
     const look = carLook(tone, 148, i % 3 === 0 ? 0.99 : 0.36);
-    add(c, 148, () => car(s, p.x, p.y, sizeClass(p.s), 0, look));
+    add(c, 148, () => car(s, p.x, p.y, sizeClass(p.s), EAST, look));
   }
   for (let i = 0; i < 5; i++) addTree(c, 156 + i * 7, 134, 7100 + i);
   // signals and a signal box by the line

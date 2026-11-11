@@ -29,6 +29,12 @@ export interface PointerInfo {
   touch?: boolean;
 }
 
+/**
+ * A CSS cursor for the canvas: "grab" over something that can be turned or dragged,
+ * "grabbing" while it is.
+ */
+export type SceneCursor = "default" | "pointer" | "grab" | "grabbing";
+
 export interface Scene {
   /** The logical size of the surface `draw` will be given. Called before the first frame. */
   resize(w: number, h: number): void;
@@ -46,5 +52,5 @@ export interface Scene {
    */
   setReducedMotion?(on: boolean): void;
   /** What the mouse cursor should be right now. The host reads it after every pointer event. */
-  cursor?(): "default" | "pointer";
+  cursor?(): SceneCursor;
 }

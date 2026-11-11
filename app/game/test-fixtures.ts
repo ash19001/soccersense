@@ -15,6 +15,7 @@ export function answer(
   lat = 0,
   lng = 0,
   aliases: string[] = [],
+  popularity = 1,
 ): Answer {
   return {
     id: slug(name),
@@ -24,7 +25,17 @@ export function answer(
     country: "Testland",
     lat,
     lng,
+    popularity,
   };
+}
+
+/** An answer that only matters for its popularity (a share of players, in percent). */
+export function popular(
+  name: string,
+  popularity: number,
+  aliases: string[] = [],
+): Answer {
+  return answer(name, 1, 1, aliases, popularity);
 }
 
 export function question(
@@ -61,11 +72,15 @@ export const ORIGIN: Stadium = stadium("origin", 0, 0);
 /**
  * Answers strung out along the equator, so that from ORIGIN `east("A", 3)` is 334 km away
  * (3 degrees at 111.195 km each).
+ *
+ * Their popularity falls as they get further away (`180 - degrees`), so under HOME
+ * (`common`) and AWAY (`niche`) they rank exactly as they do under `closest` and
+ * `furthest` from ORIGIN. The session tests lean on that.
  */
 export function east(
   name: string,
   degrees: number,
   aliases: string[] = [],
 ): Answer {
-  return answer(name, 0, degrees, aliases);
+  return answer(name, 0, degrees, aliases, 180 - degrees);
 }

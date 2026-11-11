@@ -98,13 +98,14 @@
 }
 
 /*
- * The units that follow the font pixel. The menu captions are in this list because on a
- * wide screen they swap --fp for the caption pixel (section 15), and everything below has
- * to be worked out again from it.
+ * The units that follow the font pixel. The menu captions and the game's four screens are
+ * in this list because on a wide screen they swap --fp for the caption pixel (sections 15
+ * and 16b), and everything below has to be worked out again from it.
  */
 :root,
 .ss-root,
-.ss-menu {
+.ss-menu,
+.ss-game[data-wide] :is(.ss-board, .ss-answer, .ss-sheet, .ss-full) {
   /*
    * Type. The Jersey faces are drawn on 56/3, 27, 34 and 41 pixels per em (their capitals
    * are 10, 15, 20 and 25 pixels tall), so these sizes put one font pixel on exactly --fp
@@ -142,7 +143,8 @@
 
   :root,
   .ss-root,
-  .ss-menu {
+  .ss-menu,
+  .ss-game[data-wide] :is(.ss-board, .ss-answer, .ss-sheet, .ss-full) {
     --plate: max(
       calc(var(--px) * 5),
       round(up, calc(var(--fp) * 14), var(--px))
@@ -2193,6 +2195,232 @@ button.ss-menu__card:active {
 .ss-game__mid > *,
 .ss-game__bottom > * {
   pointer-events: auto;
+}
+
+/*
+ * ---- 16b. The game on a wide screen ----------------------------------------------------
+ *
+ * A monitor, not a phone (GameLayout's data-wide, as for the menu row in 15b). The board,
+ * the answer bar, the reveal sheet and the full-time card are set in caption pixels: --fp
+ * is swapped for --cp in each of them (and the units that follow it are worked out again,
+ * section 1), so the type is twice the size on most monitors, the size of the home screen's
+ * row, and every Jersey face is still on its own pixel grid. The column is 656 caption
+ * pixels wide (1312 CSS px on a 1920 x 1080 monitor; at most the screen less 8 logical
+ * pixels each side), rounded down to a whole number of logical pixels.
+ *
+ * Doubled, the phone's stacks would not fit the heights the career scene is composed
+ * around (COVER in app/art/layout.ts: the board 30% of the height while asking and 18%
+ * after, the bar 10%, the sheet and the card 46%), so each part lies down:
+ *
+ *     board:  [ the question, the rule, the measure ][ HOME  ANFIELD        152 PTS ]
+ *             [                                     ][ lamps  SUNDAY LEAGUE        ]
+ *             [                                     ][ clock                    22 ]
+ *     sheet:  [ GOAL!                          +61 ][ #  ANSWER        DIST   PTS ]
+ *             [ the sentence                       ][ the table                    ]
+ *             [ NEXT QUESTION                      ][                              ]
+ *     card:   [ FULL TIME                                      WORLD CUP FINAL ]
+ *             [        620/700         ][ the seven answers                     ]
+ *             [ SHARE  PLAY AWAY  MENU ][                                       ]
+ */
+.ss-game[data-wide] .ss-game__col {
+  --ss-col: min(calc(var(--cp) * 656), calc(100% - var(--px) * 16));
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-game[data-wide] .ss-game__col {
+    --ss-col: round(
+      down,
+      min(calc(var(--cp) * 656), calc(100% - var(--px) * 16)),
+      var(--px)
+    );
+  }
+}
+
+.ss-game[data-wide] :is(.ss-board, .ss-answer, .ss-sheet, .ss-full) {
+  --fp: var(--cp);
+
+  /* Body type again, in the new unit: what is inherited was worked out in the old one. */
+  font-size: var(--fs-10);
+  line-height: var(--lh-10);
+}
+
+/*
+ * The board: the screen with the question on the left, and on its right, one line each,
+ * who is playing where and the score, the lamps and the career bar, and the clock.
+ */
+.ss-game[data-wide] .ss-board {
+  /*
+   * Room for the longest tier (WORLD CUP WINNER) beside the lamps, and for a seven-letter
+   * stadium (ANFIELD) beside the badge and the score; a longer name ends in an ellipsis.
+   */
+  --ss-side: max(
+    calc(var(--px) * 47 + var(--fp) * 120),
+    calc(var(--px) * 14 + var(--fp) * 182)
+  );
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--ss-side);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "screen head"
+    "screen run"
+    "screen clock";
+  gap: var(--u2) var(--u4);
+}
+
+.ss-game[data-wide] .ss-board--compact {
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "screen head"
+    "screen run";
+}
+
+.ss-game[data-wide] .ss-board__head {
+  grid-area: head;
+}
+
+.ss-game[data-wide] .ss-board__run {
+  grid-area: run;
+}
+
+.ss-game[data-wide] .ss-board__screen {
+  grid-area: screen;
+  min-width: 0;
+}
+
+.ss-game[data-wide] .ss-board > .ss-timer {
+  grid-area: clock;
+  align-self: end;
+}
+
+/*
+ * The lamps are logical pixels and the career bar is now caption pixels tall, so the two
+ * no longer differ by an even amount: the lamps are dropped by a whole number of pixels.
+ */
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-game[data-wide] .ss-board__run {
+    align-items: flex-start;
+  }
+
+  .ss-game[data-wide] .ss-board__run > .ss-pips {
+    margin-top: round(
+      down,
+      calc((var(--plate) - var(--px) * 5) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+/* The recap after an answer is two tight lines at most, so the board keeps to 18%. */
+.ss-game[data-wide] .ss-board--compact .ss-board__question,
+.ss-game[data-wide] .ss-board--compact .ss-board__instruction {
+  line-height: var(--lh-tight);
+}
+
+/*
+ * The answer bar: the field and SHOOT are one line of their type tall inside their border
+ * (or a touch target, if that is more), with nothing but the frame round them, and the bar
+ * stands on the bottom edge of the screen like the sheet that follows it (its outline and
+ * shadow are below the edge). So it keeps to the bottom 10% even where a logical pixel is
+ * three CSS pixels and a caption pixel two (1366 x 768: 75 px, 9.8%).
+ */
+.ss-game[data-wide] .ss-answer {
+  --ss-field: max(var(--tap), calc(var(--lh-15) + var(--px) * 2));
+
+  margin-bottom: calc(var(--ss-pad-b, 0px) * -1);
+}
+
+.ss-game[data-wide] .ss-answer__bar {
+  padding: var(--u3);
+}
+
+.ss-game[data-wide] .ss-answer__bar > .ss-input,
+.ss-game[data-wide] .ss-answer__bar > .ss-btn {
+  height: var(--ss-field);
+}
+
+/*
+ * The reveal sheet: what happened, the sentence and the button on the left, the table on
+ * the right, as tall as the sheet. The body's three parts are laid out by the sheet itself.
+ */
+.ss-game[data-wide] .ss-sheet {
+  /* A wide screen is never as short as a phone on its side: less is enough here. */
+  --cover-least: min(
+    calc(var(--ss-h, 100dvh) - var(--px) * 4),
+    calc(var(--fp) * 160)
+  );
+
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "band table"
+    "text table"
+    "next table";
+  column-gap: var(--u3);
+  padding-bottom: max(var(--u3), var(--ss-pad-b, 0px));
+}
+
+.ss-game[data-wide] .ss-sheet__body {
+  display: contents;
+}
+
+.ss-game[data-wide] .ss-sheet__band {
+  grid-area: band;
+}
+
+.ss-game[data-wide] .ss-sheet__sentence {
+  grid-area: text;
+  max-height: none;
+  min-height: 0;
+  padding: var(--u3);
+}
+
+.ss-game[data-wide] .ss-sheet .ss-table-wrap {
+  grid-area: table;
+  min-height: 0;
+}
+
+.ss-game[data-wide] .ss-sheet__body > .ss-btn {
+  grid-area: next;
+  margin: var(--u2) var(--u) 0 var(--u2);
+}
+
+/*
+ * The full-time card: the heading and the career title across the top, the score and the
+ * three buttons on the left, the seven answers on the right.
+ */
+.ss-game[data-wide] .ss-full {
+  --cover-least: min(
+    calc(var(--ss-h, 100dvh) - var(--px) * 4),
+    calc(var(--fp) * 160)
+  );
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "top top"
+    "score list"
+    "actions list";
+  gap: var(--u3) var(--u5);
+}
+
+.ss-game[data-wide] .ss-full__top {
+  grid-area: top;
+}
+
+.ss-game[data-wide] .ss-full__score {
+  grid-area: score;
+}
+
+.ss-game[data-wide] .ss-full__list {
+  grid-area: list;
+}
+
+.ss-game[data-wide] .ss-full__actions {
+  grid-area: actions;
+  align-self: end;
 }
 
 /* ---------- 17. Plain pages (rules, errors) ------------------------------------------------------ */

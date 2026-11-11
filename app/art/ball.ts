@@ -16,6 +16,9 @@
  * Pose. Axes are the screen's: x right, y down, z towards the viewer. At yaw 0, pitch 0 two
  * neighbouring pentagons sit level either side of the middle (slots "left" and "right",
  * 31.7 degrees round) and two more sit 58.3 degrees above and below ("top", "bottom").
+ * Two more slots are on the back, directly behind "right" and "left" ("backRight" and
+ * "backLeft"): half a turn of yaw brings them round to where "left" and "right" were.
+ * `ballShowPose(slot)` is the pose that shows a slot.
  * Positive `yaw` turns the front of the ball to the right, positive `pitch` rolls it up and
  * away (a ball struck towards the stand), positive `roll` turns it clockwise.
  *
@@ -58,12 +61,43 @@ import { P } from "./palette";
 // Public types
 // ---------------------------------------------------------------------------
 
-export type BallSlot = "left" | "right" | "top" | "bottom";
+/**
+ * The pentagons that can carry a patch. At yaw 0, pitch 0: "left" and "right" level either
+ * side of the middle, "top" and "bottom" above and below them, and "backLeft" and
+ * "backRight" on the back of the ball, directly behind "left" and "right" (as seen from
+ * the front). Half a turn about the vertical brings "backRight" round to where "left" was
+ * and "backLeft" to where "right" was.
+ */
+export type BallSlot =
+  "left" | "right" | "top" | "bottom" | "backLeft" | "backRight";
+
+/** Every slot, in the order of `BallSlot`. */
+export const BALL_SLOTS: readonly BallSlot[] = [
+  "left",
+  "right",
+  "top",
+  "bottom",
+  "backLeft",
+  "backRight",
+];
+
+/**
+ * A patch's picture. "home" a house, "away" an aeroplane, "forward" a fast-forward (the
+ * future), "rewind" a rewind (the past), "pin" a map pin, "globe" a globe, "lock" a padlock
+ * alone, "none" nothing.
+ */
+export type BallIcon =
+  "home" | "away" | "forward" | "rewind" | "pin" | "globe" | "lock" | "none";
 
 export interface BallPatch {
   label: string;
-  icon: "home" | "away" | "lock" | "none";
+  icon: BallIcon;
   accent?: { dark: Color; base: Color; light: Color };
+  /**
+   * A locked patch never takes a colour: it wears its picture with a padlock beside it, in
+   * a quiet grey, and its word when it faces the viewer (on a dark tag when the word is
+   * wider than the patch).
+   */
   locked?: boolean;
   badge?: string;
 }
@@ -98,14 +132,21 @@ const PENTAGONS = 12;
  */
 const PENTAGON_DEPTH = 1.0;
 
-/** Slot order is the order of the first four pentagons. */
-const SLOTS: readonly BallSlot[] = ["left", "right", "top", "bottom"];
+const SLOTS = BALL_SLOTS;
+const SLOT_COUNT = SLOTS.length;
 const SLOT_INDEX: Readonly<Record<BallSlot, number>> = {
   left: 0,
   right: 1,
   top: 2,
   bottom: 3,
+  backLeft: 4,
+  backRight: 5,
 };
+/** The pentagon each slot is (see the corners in `buildSolid`). */
+const SLOT_FACE: readonly number[] = [0, 1, 2, 3, 10, 11];
+/** The slot each panel is, or -1. */
+const FACE_SLOT = new Int8Array(FACES).fill(-1);
+SLOT_FACE.forEach((f, i) => (FACE_SLOT[f] = i));
 
 /** Unit centres in ball space, three numbers a face. Pentagons first. */
 const CENTRE = new Float64Array(FACES * 3);
@@ -116,7 +157,8 @@ const NEIGHBOUR_COUNT = new Int8Array(FACES);
 (function buildSolid(): void {
   // The menu pose: two neighbouring corners of the icosahedron level, either side of the
   // view axis (HOME and AWAY), and the two corners that finish their triangles above and
-  // below (the locked slots). Then the four on the rim and the four on the back.
+  // below (NEXT-GEN and RETRO). Then the four on the rim and the four on the back, the
+  // last two of which (CLOSEST and FURTHEST) are directly behind AWAY and HOME.
   const corners: readonly (readonly [number, number, number])[] = [
     [-1, 0, PHI],
     [1, 0, PHI],
@@ -221,6 +263,8 @@ const BLACK_FACE = 0.47;
 const RIM_SIDE = -0.05;
 /** The idle rock of the menu: labels are sized to stay inside their patch this far round. */
 const ROCK = 0.12;
+/** How far the top and bottom slots sit above and below the middle at rest (58.3 degrees). */
+const TILT = Math.atan2(PHI, 1);
 
 interface Tones {
   ink: Color;
@@ -607,12 +651,141 @@ wwwww..ww....
   "w",
 );
 
+// The pictures of the locked patches: one size only, as quiet as the patches they ride on.
+
+const ICON_FORWARD = sprite(
+  `
+w...w...
+ww..ww..
+www.www.
+wwwwwwww
+www.www.
+ww..ww..
+w...w...
+`,
+  "w",
+);
+
+const ICON_REWIND = sprite(
+  `
+...w...w
+..ww..ww
+.www.www
+wwwwwwww
+.www.www
+..ww..ww
+...w...w
+`,
+  "w",
+);
+
+const ICON_PIN = sprite(
+  `
+.wwwww.
+wwwwwww
+ww...ww
+ww...ww
+wwwwwww
+.wwwww.
+..www..
+...w...
+`,
+  "w",
+);
+
+const ICON_GLOBE = sprite(
+  `
+..wwwww..
+.w..w..w.
+w..w.w..w
+wwwwwwwww
+w..w.w..w
+.w..w..w.
+..wwwww..
+`,
+  "w",
+);
+
+// The same, small, for a locked patch squashed far round the ball (the top and bottom
+// patches of the menu pose): five rows, beside the small padlock.
+
+const ICON_FORWARD_SMALL = sprite(
+  `
+w..w..
+ww.ww.
+wwwwww
+ww.ww.
+w..w..
+`,
+  "w",
+);
+
+const ICON_REWIND_SMALL = sprite(
+  `
+..w..w
+.ww.ww
+wwwwww
+.ww.ww
+..w..w
+`,
+  "w",
+);
+
+const ICON_PIN_SMALL = sprite(
+  `
+.www.
+ww.ww
+wwwww
+.www.
+..w..
+`,
+  "w",
+);
+
+const ICON_GLOBE_SMALL = sprite(
+  `
+.www.
+w.w.w
+wwwww
+w.w.w
+.www.
+`,
+  "w",
+);
+
+/** A locked patch's picture, full size or squashed, or null for "lock" and "none". */
+function pictureFor(patch: BallPatch, small: boolean): Sprite | null {
+  switch (patch.icon) {
+    case "forward":
+      return small ? ICON_FORWARD_SMALL : ICON_FORWARD;
+    case "rewind":
+      return small ? ICON_REWIND_SMALL : ICON_REWIND;
+    case "pin":
+      return small ? ICON_PIN_SMALL : ICON_PIN;
+    case "globe":
+      return small ? ICON_GLOBE_SMALL : ICON_GLOBE;
+    case "home":
+    case "away":
+      return small ? null : iconFor(patch, false);
+    default:
+      return null;
+  }
+}
+
 function iconFor(patch: BallPatch, big: boolean): Sprite | null {
   switch (patch.icon) {
     case "home":
       return big ? ICON_HOME_BIG : ICON_HOME;
     case "away":
       return big ? ICON_AWAY_BIG : ICON_AWAY;
+    case "forward":
+      return ICON_FORWARD;
+    case "rewind":
+      return ICON_REWIND;
+    case "pin":
+      return ICON_PIN;
+    case "globe":
+      return ICON_GLOBE;
     case "lock":
       return ICON_LOCK;
     default:
@@ -631,19 +804,19 @@ const PRESSED = 3;
 const CHOSEN = 4;
 const LIFTED = 5;
 
-const slotMode = new Int8Array(4);
+const slotMode = new Int8Array(SLOT_COUNT);
 /** Colours per slot: fill light, fill base, fill dark, edge, inner line. */
-const slotColor = new Uint32Array(4 * 5);
+const slotColor = new Uint32Array(SLOT_COUNT * 5);
 /** The dark ink for a score on its plate, per slot. */
-const slotDeep = new Uint32Array(4);
-/** Projected centre of each panel, in pixels (the first four are the slots). */
+const slotDeep = new Uint32Array(SLOT_COUNT);
+/** Projected centre of each panel, in pixels (see `SLOT_FACE` for the slots). */
 const panelX = new Int32Array(FACES);
 const panelY = new Int32Array(FACES);
 /**
  * Where the shine is on an idle patch this frame, as a diagonal offset from the patch
  * centre, or NO_SHINE.
  */
-const slotShine = new Int32Array(4);
+const slotShine = new Int32Array(SLOT_COUNT);
 const NO_SHINE = 1 << 20;
 /** The shine crosses HOME, then AWAY, once every this many seconds (the rock's period). */
 const SHINE_PERIOD = 5;
@@ -692,7 +865,7 @@ function prepareSlots(
     panelX[i] = Math.round(disc.tx + VIEW[i * 3] * disc.rad);
     panelY[i] = Math.round(disc.ty + VIEW[i * 3 + 1] * disc.rad);
   }
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < SLOT_COUNT; i++) {
     const slot = SLOTS[i];
     const patch = patches[slot];
     const accent = accentOf(patch);
@@ -823,6 +996,18 @@ function textTop(cy: number, h: number): number {
  */
 const roomCache = new Map<number, Int16Array>();
 
+/** The rest of a room table: a locked patch's picture row and word, and its picture row
+ * squashed far round (the top and bottom patches of the menu pose). */
+const ROOM_MARK = 6;
+const ROOM_WORD = 7;
+const ROOM_SQUASHED = 8;
+/** The picture row and word of the top or bottom patch, shown straight on. */
+const ROOM_MARK_FRONT = 9;
+const ROOM_WORD_FRONT = 10;
+const ROOM_SIZE = 11;
+/** The menu's deepest nod, give or take: the squashed room is measured that far each way. */
+const SQUASH_NOD = 0.065;
+
 /** Index into a room table: the line's place (0 none, 1 edge, 2 inset), rows of text. */
 function roomAt(ring: number, rows: number): number {
   return ring * 2 + (rows > 5 ? 1 : 0);
@@ -832,7 +1017,7 @@ function roomFor(): Int16Array {
   const d = disc.d;
   let room = roomCache.get(d);
   if (room) return room;
-  room = new Int16Array(6);
+  room = new Int16Array(ROOM_SIZE);
   if (disc.rad >= ICON_MIN_R) {
     orient(ROCK, 0, 0);
     rasterise();
@@ -843,6 +1028,68 @@ function roomFor(): Int16Array {
       room[roomAt(ring, 5)] = freeRun(1, x, textTop(y, 5), 5, ring + 2);
       room[roomAt(ring, 7)] = freeRun(1, x, textTop(y, 7), 7, ring + 2);
     }
+    // A locked patch in a side place (where CLOSEST and FURTHEST rest after half a turn):
+    // its picture row, and its word under it. And the top and bottom patches of the menu
+    // pose, squashed, measured as a run centred on the patch (the picture is placed so).
+    // Both at either end of the rock and of a deep nod.
+    let mark = 1 << 14;
+    let word = 1 << 14;
+    let squashed = 1 << 14;
+    for (const yaw of [-ROCK, ROCK]) {
+      for (const pitch of [-SQUASH_NOD, SQUASH_NOD]) {
+        orient(yaw, pitch, 0);
+        rasterise();
+        const top = lockedTop(Math.round(disc.ty + VIEW[4] * disc.rad));
+        const sx = Math.round(disc.tx + VIEW[3] * disc.rad);
+        mark = Math.min(mark, freeRun(1, sx, top, LOCKED_ROW, LOCKED_EDGE));
+        word = Math.min(
+          word,
+          freeRun(1, sx, top + LOCKED_ROW + LOCKED_GAP, 5, LOCKED_EDGE),
+        );
+        for (const f of [2, 3]) {
+          const px = Math.round(disc.tx + VIEW[f * 3] * disc.rad);
+          const py = Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad);
+          const run = freeRun(
+            f,
+            px,
+            py - (SQUASHED_ROW >> 1),
+            SQUASHED_ROW,
+            LOCKED_EDGE,
+          );
+          const half =
+            run > 0 ? Math.min(px - runLo, runLo + run - 1 - px) : -1;
+          squashed = Math.min(squashed, 2 * half + 1);
+        }
+      }
+    }
+    room[ROOM_MARK] = mark;
+    room[ROOM_WORD] = word;
+    room[ROOM_SQUASHED] = Math.max(0, squashed);
+    // NEXT-GEN and RETRO shown straight on (`ballShowPose`), rocked and nodding
+    let frontMark = 1 << 14;
+    let frontWord = 1 << 14;
+    for (const f of [2, 3]) {
+      for (const yaw of [-ROCK, ROCK]) {
+        for (const nod of [-SQUASH_NOD, SQUASH_NOD]) {
+          orient(yaw, (f === 2 ? -TILT : TILT) + nod, 0);
+          rasterise();
+          const px = Math.round(disc.tx + VIEW[f * 3] * disc.rad);
+          const top = lockedTop(
+            Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad),
+          );
+          frontMark = Math.min(
+            frontMark,
+            freeRun(f, px, top, LOCKED_ROW, LOCKED_EDGE),
+          );
+          frontWord = Math.min(
+            frontWord,
+            freeRun(f, px, top + LOCKED_ROW + LOCKED_GAP, 5, LOCKED_EDGE),
+          );
+        }
+      }
+    }
+    room[ROOM_MARK_FRONT] = frontMark;
+    room[ROOM_WORD_FRONT] = frontWord;
   }
   if (roomCache.size > 400) roomCache.clear();
   roomCache.set(d, room);
@@ -864,9 +1111,10 @@ function chooseLayout(patches: BallPatches, room: Int16Array): void {
   let small = 0;
   let big = 0;
   let plate = 0;
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < SLOT_COUNT; i++) {
     const patch = patches[SLOTS[i]];
-    if (!patch) continue;
+    // the buttons (a locked patch has its own layout: see `drawLocked`)
+    if (!patch || !accentOf(patch)) continue;
     if (hasBadge(patch)) {
       const w = measureText(patch.badge as string, SMALL_DIGITS) + 4;
       plate = Math.max(plate, w);
@@ -1079,7 +1327,8 @@ export function drawBall(
           data[out + i] = tones.rimBlack;
           continue;
         }
-        const mode = f < 4 ? slotMode[f] : PLAIN;
+        const si = FACE_SLOT[f];
+        const mode = si >= 0 ? slotMode[si] : PLAIN;
         const edge = edgeBuf[k];
         const lb = BLACK_FACE * FACE_LIGHT[f] + (1 - BLACK_FACE) * flat;
         let tone = lb >= BLACK_STEPS[0] ? 0 : lb >= BLACK_STEPS[1] ? 1 : 2;
@@ -1093,9 +1342,9 @@ export function drawBall(
           if (spec >= GLINT_CORE) c = blackGlint[1];
           else if (spec >= GLINT_HALO) c = blackGlint[0];
           if (mode === NORMAL) {
-            const o = f * 5;
+            const o = si * 5;
             const diag = px - panelX[f] + (py - panelY[f]);
-            const shine = diag - slotShine[f];
+            const shine = diag - slotShine[si];
             const lit = shine >= -2 && shine <= 2;
             if (edge === ring) {
               c = (
@@ -1113,7 +1362,7 @@ export function drawBall(
             }
           }
         } else {
-          const o = f * 5;
+          const o = si * 5;
           const diag = px - panelX[f] + (py - panelY[f]);
           const edgeColor = slotColor[o + 3];
           const inner = slotColor[o + 4];
@@ -1133,7 +1382,7 @@ export function drawBall(
     }
   }
 
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < SLOT_COUNT; i++) {
     const patch = patches[SLOTS[i]];
     if (patch) drawContent(s, i, patch, tones);
   }
@@ -1187,7 +1436,10 @@ function plotSprite(
   }
 }
 
-/** The top left w x h of the stamp at (x0, y0), only on its own panel. */
+/**
+ * The top left w x h of the stamp at (x0, y0), only on panel `f` (at least `minEdge` in
+ * from its edge), or with `f` -1 anywhere on the ball inside its outline.
+ */
 function plotStamp(
   s: Surface,
   w: number,
@@ -1195,13 +1447,27 @@ function plotStamp(
   x0: number,
   y0: number,
   f: number,
+  minEdge = inkEdge,
 ): void {
+  const d = disc.d;
   for (let j = 0; j < h; j++) {
     for (let i = 0; i < w; i++) {
       const v = stamp.data[j * STAMP_W + i];
-      if (v !== TRANSPARENT && spot(s, x0 + i, y0 + j, f, inkEdge) >= 0) {
-        s.data[(y0 + j) * s.w + x0 + i] = v;
+      if (v === TRANSPARENT) continue;
+      const x = x0 + i;
+      const y = y0 + j;
+      if (f >= 0) {
+        if (spot(s, x, y, f, minEdge) < 0) continue;
+      } else {
+        const a = x - disc.x0;
+        const b = y - disc.y0;
+        if (a < 0 || a >= d || b < 0 || b >= d) continue;
+        if (x < s.clipX0 || x >= s.clipX1 || y < s.clipY0 || y >= s.clipY1) {
+          continue;
+        }
+        if (faceBuf[(b + 1) * (d + 2) + 1 + a] < 0) continue;
       }
+      s.data[y * s.w + x] = v;
     }
   }
 }
@@ -1220,32 +1486,20 @@ function drawContent(
   patch: BallPatch,
   tones: Tones,
 ): void {
-  const facing = VIEW[i * 3 + 2];
+  const f = SLOT_FACE[i];
+  const facing = VIEW[f * 3 + 2];
   const rad = disc.rad;
   if (facing < FACING_MIN || rad < 20) return;
-  const mode = slotMode[i];
   const accent = accentOf(patch);
-  const o = i * 5;
-  const cx = panelX[i];
-  const cy = panelY[i] + (mode === PRESSED ? 1 : 0);
-
-  let ink: Color = tones.chalk;
-  if (mode === CHOSEN && accent) ink = accent.dark;
-  else if (!accent) ink = mode === LIFTED ? tones.chalk : tones.mist;
-
-  if (i >= 2) {
-    if (rad < 30) return;
-    // A squashed slot: one small mark.
-    if (patch.icon === "lock" || patch.locked === true) {
-      const lock = rad >= 40 ? ICON_LOCK_MID : ICON_LOCK_SMALL;
-      plotSprite(s, lock, cx - (lock.w >> 1), cy - (lock.h >> 1), i, ink, 2);
-    } else if (patch.icon !== "none" || patch.label !== "") {
-      for (let n = -2; n <= 2; n += 2) {
-        if (spot(s, cx + n, cy, i, 2) >= 0) s.data[cy * s.w + cx + n] = ink;
-      }
-    }
+  if (!accent) {
+    drawLocked(s, i, f, patch, tones, facing);
     return;
   }
+  const mode = slotMode[i];
+  const o = i * 5;
+  const cx = panelX[f];
+  const cy = panelY[f] + (mode === PRESSED ? 1 : 0);
+  const ink: Color = mode === CHOSEN ? accent.dark : tones.chalk;
 
   const icon =
     rad >= ICON_MIN_R && facing >= FACING_ICON
@@ -1271,7 +1525,7 @@ function drawContent(
   }
   if (opts === null || text === "" || facing < FACING_LABEL) {
     if (icon) {
-      plotSprite(s, icon, cx - (icon.w >> 1), cy - (icon.h >> 1), i, iconInk);
+      plotSprite(s, icon, cx - (icon.w >> 1), cy - (icon.h >> 1), f, iconInk);
     }
     return;
   }
@@ -1282,7 +1536,7 @@ function drawContent(
   const w = plate ? tw + 4 : tw;
   const h = (opts === BIG || opts === BIG_DIGITS ? 7 : 5) + (plate ? 2 : 0);
   const top = icon ? textTop(cy, h) : cy - (h >> 1);
-  const free = freeRun(i, cx, top, h, ringAt + 2);
+  const free = freeRun(f, cx, top, h, ringAt + 2);
   const left = free > 0 ? runLo + ((free - w) >> 1) : cx - (w >> 1);
   const mid = left + (w >> 1);
 
@@ -1296,10 +1550,10 @@ function drawContent(
   } else {
     drawText(stamp, text, 0, 0, badge && mode === NORMAL ? iconInk : ink, opts);
   }
-  plotStamp(s, w, h, left, top, i);
+  plotStamp(s, w, h, left, top, f);
   if (!icon) return;
-  plotSprite(s, icon, mid - (icon.w >> 1), top - 1 - icon.h, i, iconInk);
-  if (accent && !plate) {
+  plotSprite(s, icon, mid - (icon.w >> 1), top - 1 - icon.h, f, iconInk);
+  if (!plate) {
     // The tab: a little bar in the button's colour.
     const tab =
       mode === NORMAL
@@ -1310,10 +1564,127 @@ function drawContent(
     const half = bigIcons ? 5 : 3;
     for (let y = top + h + 2; y < top + h + 4; y++) {
       for (let x = mid - half; x <= mid + half; x++) {
-        if (spot(s, x, y, i, inkEdge) >= 0) s.data[y * s.w + x] = tab;
+        if (spot(s, x, y, f, inkEdge) >= 0) s.data[y * s.w + x] = tab;
       }
     }
   }
+}
+
+/** The row a locked patch's picture and padlock stand in: as tall as the tallest picture. */
+const LOCKED_ROW = 8;
+/** The same for the small pictures of a squashed patch. */
+const SQUASHED_ROW = 5;
+/** Locked pictures and words keep this far in from the pentagon's edge (there is no line). */
+const LOCKED_EDGE = 2;
+/** Rows between the picture and the word on a locked patch. */
+const LOCKED_GAP = 2;
+
+/** The top of a locked patch's picture row, with its word under it, on a patch centred on cy. */
+function lockedTop(cy: number): number {
+  return cy + 1 - ((LOCKED_ROW + LOCKED_GAP + 5) >> 1);
+}
+
+/**
+ * A locked patch, quiet: its picture with a small padlock at its foot, and under them its
+ * word once the patch faces the viewer. A word wider than the patch is written on a dark
+ * tag that may run over the seams onto the leather either side. Squashed far round the
+ * ball, the patch keeps the picture and the padlock if they fit, and the padlock if not.
+ * Below a radius of 30 it shows the padlock only, and below 26 nothing.
+ *
+ * What it carries is decided by the radius alone (the room measured once per size by
+ * `roomFor`, at the far end of the idle rock), never by this frame's pixels, so that it
+ * cannot flicker as the ball breathes and rocks.
+ */
+function drawLocked(
+  s: Surface,
+  i: number,
+  f: number,
+  patch: BallPatch,
+  tones: Tones,
+  facing: number,
+): void {
+  const rad = disc.rad;
+  if (rad < 26) return;
+  const room = roomFor();
+  const ink = slotMode[i] === LIFTED ? tones.chalk : tones.mist;
+  const cx = panelX[f];
+  const cy = panelY[f];
+  // facing the viewer: the full-size picture and room for the word; squashed far round
+  // (the top and bottom of the menu pose, which nods either side of FACING_ICON), the small
+  // one, whatever the facing, so that it never comes and goes as the ball breathes
+  const facingUs = facing >= FACING_LABEL;
+  // (a squashed patch has five rows to spare at the deepest nod: the small padlock)
+  const lock = rad >= 40 && facingUs ? ICON_LOCK_MID : ICON_LOCK_SMALL;
+  let pic = rad >= 30 ? pictureFor(patch, !facingUs) : null;
+  // The picture and its padlock side by side, or the padlock alone.
+  const markW = (sp: Sprite | null): number =>
+    sp ? sp.w + 1 + ICON_LOCK_SMALL.w : lock.w;
+  // (the top and bottom patches are measured where they rest, straight on; any other in
+  // a side place, where CLOSEST and FURTHEST rest)
+  const front = f === SLOT_FACE[2] || f === SLOT_FACE[3];
+  const markRoom = front ? ROOM_MARK_FRONT : ROOM_MARK;
+  if (pic && markW(pic) > room[facingUs ? markRoom : ROOM_SQUASHED]) {
+    pic = null;
+  }
+  const aw = markW(pic);
+  const ah = !pic ? lock.h : facingUs ? LOCKED_ROW : SQUASHED_ROW;
+
+  const word = patch.label !== "" && facingUs ? patch.label : "";
+  if (word !== "" && pic) {
+    const tw = Math.min(STAMP_W - 4, measureText(word, SMALL));
+    const top = lockedTop(cy);
+    const run = freeRun(f, cx, top, ah, LOCKED_EDGE);
+    const left = run >= aw ? runLo + ((run - aw) >> 1) : cx - (aw >> 1);
+    plotLockedMark(s, pic, lock, left, top, ah, f, ink);
+    const ty = top + ah + LOCKED_GAP;
+    stamp.erase(0, 0, STAMP_W, STAMP_H);
+    if (tw <= room[front ? ROOM_WORD_FRONT : ROOM_WORD]) {
+      const free = freeRun(f, cx, ty, 5, LOCKED_EDGE);
+      const x = free >= tw ? runLo + ((free - tw) >> 1) : cx - (tw >> 1);
+      drawText(stamp, word, 0, 0, ink, SMALL);
+      plotStamp(s, tw, 5, x, ty, f, LOCKED_EDGE);
+      return;
+    }
+    // the tag: centred under the picture, and moved in as far as it must be to lie whole
+    // inside the ball's outline; with no room for it, there is no word
+    const w = tw + 4;
+    const far = Math.max(
+      Math.abs(ty - 1 - disc.ty),
+      Math.abs(ty + 5 - disc.ty),
+    );
+    const half = Math.sqrt(Math.max(0, disc.rad * disc.rad - far * far)) - 2;
+    const lo = Math.ceil(disc.tx - half);
+    const hi = Math.floor(disc.tx + half) - w + 1;
+    if (lo <= hi) {
+      const x = clamp(left + (aw >> 1) - (w >> 1), lo, hi);
+      stamp.rect(1, 0, w - 2, 7, tones.ink);
+      stamp.rect(0, 1, w, 5, tones.ink);
+      drawText(stamp, word, 2, 1, ink, SMALL);
+      plotStamp(s, w, 7, x, ty - 1, -1, 1);
+    }
+    return;
+  }
+  plotLockedMark(s, pic, lock, cx - (aw >> 1), cy - (ah >> 1), ah, f, ink);
+}
+
+/** A locked patch's picture with the small padlock at its foot, or the padlock alone. */
+function plotLockedMark(
+  s: Surface,
+  pic: Sprite | null,
+  lock: Sprite,
+  x: number,
+  y: number,
+  h: number,
+  f: number,
+  ink: Color,
+): void {
+  if (!pic) {
+    plotSprite(s, lock, x, y, f, ink, LOCKED_EDGE);
+    return;
+  }
+  const small = ICON_LOCK_SMALL;
+  plotSprite(s, pic, x, y + h - pic.h, f, ink, LOCKED_EDGE);
+  plotSprite(s, small, x + pic.w + 1, y + h - small.h, f, ink, LOCKED_EDGE);
 }
 
 // ---------------------------------------------------------------------------
@@ -1386,7 +1757,31 @@ export function ballSlotAt(
   const ny = dy / rad;
   const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
   const f = panelAt(nx, ny, nz, 0);
-  return f < 4 ? SLOTS[f] : null;
+  const i = FACE_SLOT[f];
+  return i >= 0 ? SLOTS[i] : null;
+}
+
+/**
+ * The pose that shows a slot: yaw 0, pitch 0 (the menu pose) for "left" and "right", half
+ * a turn about the vertical for "backLeft" and "backRight" (which then sit where "right"
+ * and "left" were), and "top" or "bottom" turned to face the viewer straight on.
+ */
+export function ballShowPose(slot: BallSlot): {
+  yaw: number;
+  pitch: number;
+  roll: number;
+} {
+  switch (slot) {
+    case "top":
+      return { yaw: 0, pitch: -TILT, roll: 0 };
+    case "bottom":
+      return { yaw: 0, pitch: TILT, roll: 0 };
+    case "backLeft":
+    case "backRight":
+      return { yaw: Math.PI, pitch: 0, roll: 0 };
+    default:
+      return { yaw: 0, pitch: 0, roll: 0 };
+  }
 }
 
 /**
@@ -1397,7 +1792,7 @@ export function ballSlotCenter(
   state: BallState,
   slot: BallSlot,
 ): { x: number; y: number; facing: number } {
-  const i = SLOT_INDEX[slot];
+  const i = SLOT_FACE[SLOT_INDEX[slot]];
   if (!measure(state)) return { x: state.cx, y: state.cy, facing: 0 };
   orientTo(state);
   return {

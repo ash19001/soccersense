@@ -337,6 +337,13 @@ export function PixelStage({
       // is first seen.
       const took = performance.now() - began;
       if (rebuilding && took >= LONG_FRAME_MS) st.last = now + took;
+      // The cursor can change under a pointer that does not move (a spun ball coming to
+      // rest with a patch under it, the airship drifting in): it is read every frame too.
+      const canvas = canvasRef.current;
+      const cursor = st.scene?.cursor?.();
+      if (canvas && cursor && canvas.style.cursor !== cursor) {
+        canvas.style.cursor = cursor;
+      }
       if (wanted && st.raf === 0) st.raf = window.requestAnimationFrame(tick);
     };
     const start = () => {

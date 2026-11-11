@@ -175,7 +175,8 @@ The interface is matchday furniture, not a web app.
 
 - **The board** is a stadium scoreboard: `ink` and `night` panel, bolted frame, `amber` LED
   numbers, `chalk` question text.
-- **The table** in the reveal is a league table: position, name, place, distance, points.
+- **The table** in the reveal is a league table: position, name, place, share of players
+  (`PICKED`; a distance for the locked modes CLOSEST and FURTHEST), points.
 - Panels and buttons: square corners, borders in whole `--px` units, a hard 1 or 2 px drop
   shadow, a darker bottom edge that disappears when pressed. No border-radius, no blur, no
   CSS gradients, no opacity fades. Transitions use `steps()` or are instant.

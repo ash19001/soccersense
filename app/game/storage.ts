@@ -77,6 +77,8 @@ function isTurn(value: unknown): value is Turn {
     t.points >= 0 &&
     t.points <= 100 &&
     (t.km === null || isNumber(t.km)) &&
+    // Games saved before HOME and AWAY were scored by popularity have no share.
+    (t.share === undefined || t.share === null || isNumber(t.share)) &&
     (t.rank === null || isNumber(t.rank)) &&
     isNumber(t.msLeft)
   );
@@ -147,7 +149,13 @@ export function loadGame(
     if (raw === null) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!isStoredGame(parsed)) return null;
-    return { total: parsed.total, turns: parsed.turns };
+    return {
+      total: parsed.total,
+      turns: parsed.turns.map((turn) => ({
+        ...turn,
+        share: turn.share ?? null,
+      })),
+    };
   } catch {
     return null;
   }

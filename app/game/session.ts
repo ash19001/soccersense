@@ -1,7 +1,14 @@
 import { tierFor, isPerfect } from "./career";
 import { judge } from "./judge";
-import { gradeFor, rankAnswers, rankedFor } from "./scoring";
-import type { Grade, Mode, Question, RankedAnswer, Stadium } from "./types";
+import { gradeFor, rankAnswers, rankedFor, ruleFor } from "./scoring";
+import type {
+  Grade,
+  Mode,
+  Question,
+  RankedAnswer,
+  Rule,
+  Stadium,
+} from "./types";
 
 /** The clock for one question. */
 export const QUESTION_MS = 30_000;
@@ -28,6 +35,8 @@ export interface Turn {
   points: number;
   /** Whole kilometres from the stadium to the answer's place. Null without an answer. */
   km: number | null;
+  /** The answer's share of players, in percent. Null without an answer. */
+  share: number | null;
   /** 1-based place in the table. Null without an answer. */
   rank: number | null;
   /** What was left on the clock when the turn was decided. QUESTION_MS with no timer. */
@@ -112,25 +121,31 @@ const TABLES = new WeakMap<Question, Map<string, RankedAnswer[]>>();
 function tableOf(
   question: Question,
   stadium: Stadium,
-  mode: Mode,
+  rule: Rule,
 ): RankedAnswer[] {
   let byPin = TABLES.get(question);
   if (!byPin) {
     byPin = new Map();
     TABLES.set(question, byPin);
   }
-  const key = `${mode}:${stadium.lat},${stadium.lng}`;
+  const key = `${rule}:${stadium.lat},${stadium.lng}`;
   let table = byPin.get(key);
   if (!table) {
-    table = rankAnswers(question, stadium, mode);
+    table = rankAnswers(question, stadium, rule);
     byPin.set(key, table);
   }
   return table;
 }
 
+/** The rule this game is scored by: `ruleFor(session.mode)`. */
+export function ruleOf(session: Session): Rule {
+  return ruleFor(session.mode);
+}
+
 /**
- * The full ranked table for question `index` of this game (best first). Computed once per
- * question, stadium and mode, so it is cheap to call on every render. Empty for a bad index.
+ * The full ranked table for question `index` of this game (best first), under the game's
+ * rule. Computed once per question, stadium and rule, so it is cheap to call on every render.
+ * Empty for a bad index.
  */
 export function tableFor(
   session: Session,
@@ -138,7 +153,7 @@ export function tableFor(
 ): readonly RankedAnswer[] {
   const question = session.questions[index];
   if (!question) return [];
-  return tableOf(question, session.stadium, session.mode);
+  return tableOf(question, session.stadium, ruleOf(session));
 }
 
 /** The question being asked, or just answered. The last question once the game is done. */
@@ -219,6 +234,7 @@ function blank(session: Session, grade: Grade, left: number): Session {
     grade,
     points: 0,
     km: null,
+    share: null,
     rank: null,
     msLeft: left,
   });
@@ -265,7 +281,7 @@ export function reduce(session: Session, action: Action): Session {
       if (result.kind !== "match") {
         return { ...session, rejected: { input, reason: result.kind } };
       }
-      const table = tableOf(question, session.stadium, session.mode);
+      const table = tableOf(question, session.stadium, ruleOf(session));
       const row = rankedFor(table, result.answer.id);
       if (!row) return session;
       return record(session, {
@@ -275,6 +291,7 @@ export function reduce(session: Session, action: Action): Session {
         grade: gradeFor(row.points),
         points: row.points,
         km: row.km,
+        share: row.share,
         rank: row.rank,
         msLeft: msLeft(session, action.now),
       });

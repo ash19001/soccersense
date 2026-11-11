@@ -20,8 +20,6 @@ import {
   wallPoint,
 } from "~/art/stadium-bowl";
 import {
-  CLEAR_ACROSS,
-  CLEAR_ALONG,
   lapOf,
   planWalk,
   roadway,
@@ -29,23 +27,17 @@ import {
   type Stop,
   type WalkPlace,
 } from "~/art/stadium-crossing";
-import { PLAYERS, REFEREE, makeMatchState, matchAt } from "~/art/stadium-match";
+import type { Zone } from "~/art/layout";
 import {
-  AISLE,
-  GATE,
-  KERB_V,
-  LIVE,
-  PERIOD,
-  TICK,
-  bayPlace,
-  liveCars,
-  parkedFrom,
-  roadBusy,
-  roadCars,
-  turnInTime,
-  type LiveCar,
-  type RoadCar,
-} from "~/art/stadium-parking";
+  GOAL_AT,
+  MATCH_PERIOD,
+  PLAYERS,
+  REFEREE,
+  makeMatchState,
+  matchAt,
+} from "~/art/stadium-match";
+import { GATE, KERB_V } from "~/art/stadium-parking";
+import { CYCLE, roadCars, type RoadCar } from "~/art/stadium-road";
 import {
   CARPARK,
   COACH_BAY,
@@ -56,9 +48,16 @@ import {
   STATION,
 } from "~/art/stadium-plan";
 import {
+  EAST,
+  WEST,
+  carLamps,
+  coachLamps,
+  coachSprite,
+  groundHeading,
+  headingAngle,
+} from "~/art/stadium-cars";
+import {
   car,
-  coach,
-  coachNS,
   person,
   shadowBlob,
   type CarLook,
@@ -109,9 +108,10 @@ interface Route {
   V1: number;
   len: number;
   speed: number;
-  /** Sprite heading: 0 east, 1 west, 2 north, 3 south. */
-  dir: number;
-  cars: { off: number; paint: number; bus: boolean }[];
+  /** The way it runs on the map, a unit vector. */
+  dX: number;
+  dV: number;
+  cars: { off: number; paint: number; bus: boolean; key: number }[];
 }
 
 interface Path {
@@ -130,6 +130,8 @@ interface Path {
     /** Where it waits for the traffic (stadium-crossing.ts), and how long a lap takes. */
     stops: Stop[];
     lap: number;
+    /** Who this is, for the lap-by-lap choice of who is out at night. */
+    key: number;
   }[];
 }
 
@@ -194,9 +196,28 @@ export interface Life {
   draw(s: Surface, t: number, roar: number): void;
   /**
    * Everybody on foot who walks a way at time `t`: where they are on the map, and whether
-   * they are standing at a kerb. For tests (nobody is ever under a car).
+   * they are standing at a kerb, and who they are (the same number all the way along).
+   * For tests (nobody is ever under a car).
    */
-  people(t: number, fn: (X: number, V: number, waiting: boolean) => void): void;
+  people(
+    t: number,
+    fn: (X: number, V: number, waiting: boolean, who: number) => void,
+  ): void;
+  /**
+   * Everybody standing about who never moves from the spot (the queues at the
+   * turnstiles, their stewards, groups on the plaza and by the wall): where they stand on
+   * the map. For tests (nobody stands on Stadium Road).
+   */
+  standers(fn: (X: number, V: number) => void): void;
+  /**
+   * Every car, bus and coach on the road at time `t`: where it is on the map, the heading
+   * of its sprite on screen (stadium-cars.ts) and the way its nose points on the map
+   * (`fX`, `fV`; a coach backing out points the other way from the way it moves). For tests.
+   */
+  cars(
+    t: number,
+    fn: (X: number, V: number, heading: number, fX: number, fV: number) => void,
+  ): void;
 }
 
 const TAU = Math.PI * 2;
@@ -205,21 +226,78 @@ const TAU = Math.PI * 2;
 function mod(a: number, n: number): number {
   return ((a % n) + n) % n;
 }
+/**
+ * The share of the day's walkers out and about in this light: all of them by day, fewer
+ * at dusk and dawn, 0.28 at night (with the pie van's customers, who keep coming, about a
+ * third of the day's people on foot). The queues and the crowd stay: the match is on.
+ */
+export function walkersOut(light: Lighting): number {
+  const e = light.sun.elevation;
+  return 0.28 + 0.72 * Math.max(0, Math.min(1, (e + 12) / 18));
+}
+
+/** The share of the day's traffic on the roads: thinning more gently, to 0.6 at night. */
+export function carsOut(light: Lighting): number {
+  const e = light.sun.elevation;
+  return 0.6 + 0.4 * Math.max(0, Math.min(1, (e + 12) / 18));
+}
+
+/** Seconds the goal's fireworks last, from the moment the ball goes in. */
+export const FIREWORKS = 4.2;
+/** How many rockets go up for the goal. */
+const ROCKETS = 5;
+/** Seconds a rocket takes to climb, and its burst by day and by night. */
+const RISE = 0.4;
+const BURST_DAY = 1.1;
+const BURST_NIGHT = 1.5;
+/** When rocket `i` goes up, seconds after the goal. */
+function launchOf(i: number): number {
+  return 0.2 + i * 0.5 + (i % 2) * 0.12;
+}
+
+/**
+ * How many of the goal's rockets are in the air at time `t` (climbing or bursting): none
+ * except in the FIREWORKS seconds after the match's goal. `night`: the longer bursts.
+ */
+export function fireworksAt(t: number, night = false): number {
+  const since = mod(t, MATCH_PERIOD) - GOAL_AT;
+  if (!(since >= 0 && since < FIREWORKS)) return 0;
+  const burst = night ? BURST_NIGHT : BURST_DAY;
+  let n = 0;
+  for (let i = 0; i < ROCKETS; i++) {
+    const a = since - launchOf(i);
+    if (a >= 0 && a < RISE + burst) n++;
+  }
+  return n;
+}
+
 /** How fast the side roads' traffic (and the coach in it) goes, units a second. */
 const COACH_SPEED = 6;
 
 /** Where people wait for the traffic (stadium-crossing.ts), per canvas size and seed. */
 const PLANS = new Map<string, Stop[][]>();
 
+/**
+ * What moves, for this view, light and seed over the painted town. `clear`: places on
+ * screen the goal's fireworks keep out of (the airship).
+ */
 export function makeLife(
   view: View,
   light: Lighting,
   seed: number,
   town: Town,
+  clear: readonly Zone[] = [],
 ): Life {
   const { w, h, hy, k } = view;
   const night = light.lightsOn;
   const sunny = light.sun.elevation > 6;
+  // At night fewer people are about: a walker is out for a whole lap or not at all, so
+  // they come and go only at the ends of their walks. Cars thin out more gently.
+  const walking = walkersOut(light);
+  const driving = carsOut(light);
+  /** Whether car `key`, on lap `lap` of its way, is on the road tonight. */
+  const carOut = (key: number, lap: number): boolean =>
+    driving >= 1 || h2(key, lap + 4099) < driving;
   const h2 = (a: number, b: number): number => hash2(a, b, seed);
   const tone = (c: Color, V: number): Color =>
     distant(light, c, hazeAt(view, V));
@@ -266,14 +344,6 @@ export function makeLife(
   ): void => {
     const len = Math.hypot(X1 - X0, V1 - V0);
     if (len < 1) return;
-    const dir =
-      Math.abs(X1 - X0) > Math.abs(V1 - V0)
-        ? X1 > X0
-          ? 0
-          : 1
-        : V1 > V0
-          ? 2
-          : 3;
     const cars: Route["cars"] = [];
     const n = Math.max(1, Math.floor(len / gap));
     for (let i = 0; i < n; i++) {
@@ -282,16 +352,20 @@ export function makeLife(
         off: (i + 0.15 + h2(i, key + 1) * 0.5) * (len / n),
         paint: h2(i, key + 2),
         bus: buses && i % 5 === 2,
+        key: key * 61 + i,
       });
     }
-    routes.push({ X0, V0, X1, V1, len, speed, dir, cars });
+    const dX = (X1 - X0) / len;
+    const dV = (V1 - V0) / len;
+    routes.push({ X0, V0, X1, V1, len, speed, dX, dV, cars });
   };
   // how far east-west the screen reaches at a depth
   const reach = (V: number): number => w / 2 / scaleAt(view, V) + 16;
   const rs = reach(-113);
   const rn = reach(125);
-  addRoute(-rn, ROAD.northV1 - 2.4, rn, ROAD.northV1 - 2.4, 9, 60, 13);
-  addRoute(rn, ROAD.northV0 + 2.4, -rn, ROAD.northV0 + 2.4, 9, 70, 14);
+  // (the gaps were a third shorter until the product owner asked for a little less traffic)
+  addRoute(-rn, ROAD.northV1 - 2.4, rn, ROAD.northV1 - 2.4, 9, 78, 13);
+  addRoute(rn, ROAD.northV0 + 2.4, -rn, ROAD.northV0 + 2.4, 9, 92, 14);
   const westNorth = routes.length;
   addRoute(
     ROAD.westX0 + 2.9,
@@ -299,7 +373,7 @@ export function makeLife(
     ROAD.westX0 + 2.9,
     ROAD.northV0,
     COACH_SPEED,
-    50,
+    62,
     15,
   );
   addRoute(
@@ -308,7 +382,7 @@ export function makeLife(
     ROAD.westX1 - 2.9,
     ROAD.stadiumV1,
     6,
-    60,
+    74,
     16,
   );
   addRoute(
@@ -317,7 +391,7 @@ export function makeLife(
     ROAD.eastX0 + 2.9,
     ROAD.northV0,
     6,
-    56,
+    70,
     17,
   );
   addRoute(
@@ -326,23 +400,26 @@ export function makeLife(
     ROAD.eastX1 - 2.9,
     ROAD.stadiumV1,
     6,
-    64,
+    80,
     18,
   );
   // the avenue: two lanes each way, out to the far town
-  addRoute(-251, -226, -251, 640, 15, 44, 19);
-  addRoute(-246.5, -226, -246.5, 640, 12, 58, 20, true);
-  addRoute(-229, 640, -229, -226, 15, 42, 21);
-  addRoute(-233.5, 640, -233.5, -226, 12, 62, 22);
+  addRoute(-251, -226, -251, 640, 15, 58, 19);
+  addRoute(-246.5, -226, -246.5, 640, 12, 76, 20, true);
+  addRoute(-229, 640, -229, -226, 15, 56, 21);
+  addRoute(-233.5, 640, -233.5, -226, 12, 82, 22);
   addRoute(ROAD.laneX0 + 2.6, -226, ROAD.laneX0 + 2.6, ROAD.sideEnd, 7, 70, 23);
   addRoute(ROAD.laneX1 - 2.6, ROAD.sideEnd, ROAD.laneX1 - 2.6, -226, 7, 80, 24);
 
-  /** A car or a bus on the ground at (X, V). `state`: 0 parked, 1 driving, 2 reversing. */
+  /**
+   * A car or a bus on the ground at (X, V), pointing `heading` on screen (stadium-cars.ts).
+   * `state`: 0 parked, 1 driving, 2 reversing.
+   */
   const drawCar = (
     s: Surface,
     X: number,
     V: number,
-    dir: number,
+    heading: number,
     paint: number,
     bus: boolean,
     state: number,
@@ -351,193 +428,51 @@ export function makeLife(
     if (p.x < -12 || p.x > w + 12 || p.y > h + 8 || p.y < hy) return;
     const cls = sizeClass(p.s);
     ink.V = V;
-    const long = bus && dir < 2;
-    if (cls === 2 && !long) {
-      if (dir < 2) shadowBlob(s, p.x + 1, p.y + 2, 4, 1);
-      else shadowBlob(s, p.x + 2, p.y + 3, 3, 1);
-    }
-    if (long)
-      coach(ink, p.x, p.y, cls, coachLook(tone, V, paint < 0.5 ? 3 : 0));
-    else car(ink, p.x, p.y, cls, dir, carLook(tone, V, bus ? 0.3 : paint));
-    if (!night || state === 0) return;
-    // headlights and tail lights; white reversing lights
-    const half = long
-      ? cls === 2
-        ? 8
-        : cls === 1
-          ? 5
-          : 3
-      : cls === 2
-        ? 3
-        : cls === 1
-          ? 2
-          : 1;
-    if (dir === 0 || dir === 1) {
-      const f = dir === 0 ? 1 : -1;
-      ink.px(p.x + f * (half + 1), p.y - 1, P.goldLight);
-      if (cls > 0) ink.px(p.x + f * (half + 2), p.y - 1, P.gold);
-      ink.px(p.x - f * half, p.y - 1, P.ledRed);
+    const lit = night && state !== 0;
+    if (bus) {
+      const look = coachLook(tone, V, paint < 0.5 ? 3 : 0);
+      coachSprite(ink, p.x, p.y, cls, heading, look);
+      if (lit) coachLamps(ink, p.x, p.y, cls, heading, state === 2 ? 2 : 1);
       return;
     }
-    // north-south: the nose is at the bottom when it points south
-    const top = p.y - (cls === 2 ? 4 : cls === 1 ? 3 : 2);
-    const bottom = p.y + (cls === 2 ? 3 : cls === 1 ? 1 : 0);
-    const x0 = p.x - (cls === 0 ? 0 : 1);
-    const x1 = p.x + 1 + (cls === 2 ? 1 : 0);
-    const noseY = dir === 3 ? bottom : top;
-    const tailY = dir === 3 ? top : bottom;
-    ink.px(x0, noseY, P.goldLight);
-    ink.px(x1, noseY, P.goldLight);
-    if (cls > 0 && state === 1)
-      ink.px(p.x, noseY + (dir === 3 ? 1 : -1), P.gold);
-    ink.px(x0, tailY, state === 2 ? P.white : P.ledRed);
-    ink.px(x1, tailY, state === 2 ? P.white : P.ledRed);
+    if (cls === 2) {
+      if (Math.abs(Math.sin((headingAngle(heading) * Math.PI) / 180)) < 0.5) {
+        shadowBlob(s, p.x + 1, p.y + 2, 4, 1);
+      } else shadowBlob(s, p.x + 2, p.y + 3, 3, 1);
+    }
+    car(ink, p.x, p.y, cls, heading, carLook(tone, V, paint));
+    if (lit) carLamps(ink, p.x, p.y, cls, heading, state === 2 ? 2 : 1);
   };
 
   const drawTraffic = (s: Surface, t: number): void => {
     for (const r of routes) {
       for (const cr of r.cars) {
-        const d = (((t * r.speed + cr.off) % r.len) + r.len) % r.len;
+        const run = t * r.speed + cr.off;
+        if (!carOut(cr.key, Math.floor(run / r.len))) continue;
+        const d = ((run % r.len) + r.len) % r.len;
         const u = d / r.len;
-        drawCar(
-          s,
-          r.X0 + (r.X1 - r.X0) * u,
-          r.V0 + (r.V1 - r.V0) * u,
-          r.dir,
-          cr.paint,
-          cr.bus,
-          1,
-        );
+        const X = r.X0 + (r.X1 - r.X0) * u;
+        const V = r.V0 + (r.V1 - r.V0) * u;
+        const heading = groundHeading(view, X, V, r.dX, r.dV);
+        drawCar(s, X, V, heading, cr.paint, cr.bus, 1);
       }
     }
   };
 
-  // ---- Stadium Road and the car park: the timetable (stadium-parking.ts) ------------
-  const live: LiveCar[] = [];
+  // ---- Stadium Road: its timetable keeps the zebra (stadium-road.ts) -----------------
   let frame = town.land;
+  /** A Stadium Road car's pass: its paint is a hash of its slot, the same all the way. */
+  const roadOut = (rc: RoadCar): boolean =>
+    carOut(Math.floor(rc.paint * 65521), 977);
   const roadCar = (rc: RoadCar): void => {
-    drawCar(frame, rc.X, rc.V, rc.dir, rc.paint, false, 1);
+    if (!roadOut(rc)) return;
+    drawCar(frame, rc.X, rc.V, rc.dir === 0 ? EAST : WEST, rc.paint, false, 1);
   };
-  // People walk from a car that has just parked along the hedge to the plaza, over the
-  // zebra and up to the turnstiles.
-  const lotWays = LIVE.map((_, i) => {
-    const b = bayPlace(i);
-    return makeWay([
-      [b.X + 2, b.V + (b.row === 0 ? 0.5 : 1.5)],
-      [b.X + 2, KERB_V],
-      [GATE.x1 + 0.5, KERB_V],
-      [GATE.x0 - 1.5, KERB_V],
-      [57, ROAD.stadiumV0 - 2.5],
-      [46, ROAD.stadiumV0 - 0.5],
-      [44, ROAD.stadiumV1 + 2],
-      gate(-60),
-    ]);
-  });
-  // They get out a second after the car has parked, one after another, and give way to
-  // the cars in the aisle, at the gate and on the road. The whole timetable repeats every
-  // PERIOD, so each of the (up to three) people of a bay has one plan for all its visits.
-  const LOT_PACE = 3.3;
-  const LOT_APART = 0.9;
-  const planCars: LiveCar[] = [];
-  const lotRules = {
-    // the aisle is roadway too
-    roadway: (X: number, V: number): boolean =>
-      roadway(X, V) || (V > AISLE.south - 2.6 && V < AISLE.north + 2.6),
-    busy: (X: number, V: number, t: number): boolean => {
-      if (roadBusy(X, V, t, CLEAR_ALONG, CLEAR_ACROSS)) return true;
-      // the timetable's own cars, wherever they are driving
-      const n = liveCars(planCars, t, seed, rs);
-      for (let a = 0; a < n; a++) {
-        const c = planCars[a];
-        if (c.state === 0) continue;
-        const ew = c.dir < 2;
-        if (
-          Math.abs(X - c.X) < (ew ? CLEAR_ALONG : CLEAR_ACROSS) &&
-          Math.abs(V - c.V) < (ew ? CLEAR_ACROSS : CLEAR_ALONG)
-        )
-          return true;
-      }
-      return false;
-    },
-    patience: TICK * 2,
-  };
-  const lotStops = LIVE.map((_, i) =>
-    [0, 1, 2].map((j) =>
-      plan(
-        (d) => wayPoint(lotWays[i], d, 0),
-        lotWays[i].len,
-        LOT_PACE,
-        parkedFrom(i, 0) + 1 + j * LOT_APART,
-        lotRules,
-      ),
-    ),
-  );
-  const place: WalkPlace = { d: 0, waiting: false };
-  /** Everybody walking from a parked car at time t: fn(bay, visit, which, X, V, waiting). */
-  const lotPeople = (
-    t: number,
-    fn: (
-      i: number,
-      visit: number,
-      j: number,
-      X: number,
-      V: number,
-      waiting: boolean,
-    ) => void,
-  ): void => {
-    for (let i = 0; i < LIVE.length; i++) {
-      const way = lotWays[i];
-      const base = Math.floor((t - turnInTime(i, 0)) / PERIOD);
-      for (let visit = base - 1; visit <= base; visit++) {
-        const from = parkedFrom(i, visit) + 1;
-        if (t < from) continue;
-        const people = 1 + Math.floor(h2(i * 5 + 1, visit & 255) * 2.99);
-        for (let j = 0; j < people; j++) {
-          const tau = t - from - j * LOT_APART;
-          if (tau < 0) continue;
-          walkAt(lotStops[i][j], LOT_PACE, tau, place);
-          if (place.d >= way.len) continue;
-          const q = wayPoint(way, place.d, 0);
-          fn(i, visit, j, q.X, q.V, place.waiting);
-        }
-      }
-    }
-  };
-  let lotBeat = 0;
-  let lotRoar = 0;
-  const drawLotPerson = (
-    i: number,
-    visit: number,
-    j: number,
-    X: number,
-    V: number,
-    waiting: boolean,
-  ): void => {
-    const p = project(view, X, V);
-    if (p.x < -4 || p.x > w + 4 || p.y > h + 6 || p.y < hy) return;
-    const cls = sizeClass(p.s);
-    ink.V = V;
-    const look = personLook(
-      (c) => tone(c, V),
-      h2(i * 7 + j, (visit & 255) + 9),
-      j === 2 ? 3 : 0,
-    );
-    const jump =
-      lotRoar > 0 && h2(i * 3 + j, lotBeat + 7) < lotRoar * 0.7 ? 1 : 0;
-    person(ink, p.x, p.y, cls, look, waiting ? 0 : (lotBeat + j) % 2, jump);
-  };
-  const drawParking = (s: Surface, t: number, roar: number): void => {
+  const drawRoad = (s: Surface, t: number): void => {
     frame = s;
     roadCars(t, seed, rs, roadCar);
-    const n = liveCars(live, t, seed, rs);
-    for (let i = 0; i < n; i++) {
-      const c = live[i];
-      drawCar(s, c.X, c.V, c.dir, c.paint, false, c.state);
-    }
-    lotBeat = Math.floor(t * 5);
-    lotRoar = roar;
-    lotPeople(t, drawLotPerson);
   };
+  const place: WalkPlace = { d: 0, waiting: false };
 
   // ---- the away coach ---------------------------------------------------------
   // It comes up West Road in a gap in the traffic, turns into its bay in the coach park,
@@ -560,8 +495,56 @@ export function makeLife(
     }
     return at % coachRoute.len;
   })();
-  const coachToBay = (COACH_BAY.V - ROAD.stadiumV1) / COACH_SPEED;
-  const coachTurn = (coachRoute.X0 - COACH_BAY.X) / 4;
+  // It turns into the coach park on a quarter circle, from pointing north to pointing
+  // west, then runs straight into its bay; it backs out the same way.
+  const TURN_R = 3;
+  const turnArc = (Math.PI * TURN_R) / 2;
+  const turnLen = turnArc + (coachRoute.X0 - TURN_R - COACH_BAY.X);
+  const coachToBay = (COACH_BAY.V - TURN_R - ROAD.stadiumV1) / COACH_SPEED;
+  const coachTurn = turnLen / 4;
+  /** Where the coach is `d` along its turn into the bay, and which way it points. */
+  const coachPose = { X: 0, V: 0, fX: 0, fV: 1, moving: true, back: false };
+  const turnAt = (d: number): void => {
+    if (d < turnArc) {
+      const a = d / TURN_R;
+      coachPose.X = coachRoute.X0 - TURN_R + TURN_R * Math.cos(a);
+      coachPose.V = COACH_BAY.V - TURN_R + TURN_R * Math.sin(a);
+      coachPose.fX = -Math.sin(a);
+      coachPose.fV = Math.cos(a);
+      return;
+    }
+    coachPose.X = coachRoute.X0 - TURN_R - (d - turnArc);
+    coachPose.V = COACH_BAY.V;
+    coachPose.fX = -1;
+    coachPose.fV = 0;
+  };
+  /** The coach at time t: coachPose. Its lap is coachCycle seconds. */
+  const coachAt = (tau: number): void => {
+    coachPose.moving = true;
+    coachPose.back = false;
+    if (tau < coachToBay) {
+      coachPose.X = coachRoute.X0;
+      coachPose.V = ROAD.stadiumV1 + tau * COACH_SPEED;
+      coachPose.fX = 0;
+      coachPose.fV = 1;
+    } else if (tau < coachToBay + coachTurn) {
+      turnAt((tau - coachToBay) * 4);
+    } else if (tau < coachToBay + coachLap - coachTurn) {
+      turnAt(turnLen);
+      coachPose.moving = false;
+    } else if (tau < coachToBay + coachLap) {
+      turnAt((coachToBay + coachLap - tau) * 4);
+      coachPose.back = true;
+    } else {
+      coachPose.X = coachRoute.X0;
+      coachPose.V =
+        COACH_BAY.V - TURN_R + (tau - coachToBay - coachLap) * COACH_SPEED;
+      coachPose.fX = 0;
+      coachPose.fV = 1;
+    }
+  };
+  const coachTau = (t: number): number =>
+    (((t + coachSlot / COACH_SPEED) % coachCycle) + coachCycle) % coachCycle;
   const coachWay = makeWay([
     [COACH_BAY.X + 4, COACH_BAY.V - 2.2],
     [-181, COACH_BAY.V - 3.5],
@@ -571,43 +554,17 @@ export function makeLife(
   const COACH_FANS = 14;
   const coachPaint = coachLook(tone, COACH_BAY.V, 1);
   const drawCoach = (s: Surface, t: number, roar: number): void => {
-    const tau =
-      (((t + coachSlot / COACH_SPEED) % coachCycle) + coachCycle) % coachCycle;
-    let X: number = coachRoute.X0;
-    let V = COACH_BAY.V;
-    let ns = true;
-    let moving = true;
-    if (tau < coachToBay) V = ROAD.stadiumV1 + tau * COACH_SPEED;
-    else if (tau < coachToBay + coachTurn) {
-      X = coachRoute.X0 - (tau - coachToBay) * 4;
-      ns = false;
-    } else if (tau < coachToBay + coachLap - coachTurn) {
-      X = COACH_BAY.X;
-      ns = false;
-      moving = false;
-    } else if (tau < coachToBay + coachLap) {
-      X = coachRoute.X0 - (coachToBay + coachLap - tau) * 4;
-      ns = false;
-    } else V = COACH_BAY.V + (tau - coachToBay - coachLap) * COACH_SPEED;
+    const tau = coachTau(t);
+    coachAt(tau);
+    const { X, V } = coachPose;
     const p = project(view, X, V);
     if (p.x > -12 && p.x < w + 12 && p.y < h + 10 && p.y >= hy) {
       const cls = sizeClass(p.s);
       ink.V = V;
-      if (ns) coachNS(ink, p.x, p.y, cls, true, coachPaint);
-      else coach(ink, p.x, p.y, cls, coachPaint);
-      if (night && moving) {
-        if (ns) {
-          const top = p.y - (cls === 2 ? 9 : cls === 1 ? 6 : 4);
-          const bottom = p.y + (cls === 2 ? 6 : cls === 1 ? 3 : 1);
-          ink.px(p.x - (cls === 0 ? 0 : 1), top, P.goldLight);
-          ink.px(p.x + (cls === 0 ? 1 : 2), top, P.goldLight);
-          ink.px(p.x - (cls === 0 ? 0 : 1), bottom, P.ledRed);
-          ink.px(p.x + (cls === 0 ? 1 : 2), bottom, P.ledRed);
-        } else {
-          const half = cls === 2 ? 8 : cls === 1 ? 5 : 3;
-          ink.px(p.x - half - 1, p.y - 1, P.goldLight);
-          ink.px(p.x + half, p.y - 1, P.ledRed);
-        }
+      const heading = groundHeading(view, X, V, coachPose.fX, coachPose.fV);
+      coachSprite(ink, p.x, p.y, cls, heading, coachPaint);
+      if (night && coachPose.moving) {
+        coachLamps(ink, p.x, p.y, cls, heading, coachPose.back ? 2 : 1);
       }
     }
     // the fans off it, one after another
@@ -737,7 +694,7 @@ export function makeLife(
       const speed = 2.6 + h2(i, key + 1) * 1.4;
       const lat = (h2(i, key + 2) - 0.5) * 2 * spread;
       const shift = (((i + h2(i, key) * 0.8) / count) * len) / speed;
-      // a lap is a whole number of ticks, so every lap sets off at the moment -shift of one
+      // a lap is a whole number of cycles, so every lap sets off at the moment -shift of one
       const stops = nearRoad
         ? plan((d) => wayPoint(path, d, lat), len, speed, -shift)
         : [];
@@ -749,26 +706,30 @@ export function makeLife(
         kind: kind === 9 ? (i % 6 === 0 ? 2 : 1) : kind,
         stops,
         lap: nearRoad ? lapOf(len, speed, stops) : len / speed,
+        key: key * 97 + i,
       });
     }
     paths.push(path);
   };
-  // up the plaza to the main gates, either side of the middle
+  // up the plaza to the main gates, either side of the middle, over the zebra (the
+  // outermost lanes come in to its ends). There were 44 of them until the product owner
+  // asked for a few less people.
   for (const [lane, deg, n] of [
-    [-52, -127.5, 6],
-    [-43, -105, 7],
-    [-33, -105, 5],
-    [-14, -82.5, 4],
-    [12, -82.5, 4],
-    [33, -82.5, 5],
-    [43, -60, 7],
-    [52, -60, 6],
+    [-52, -127.5, 3],
+    [-43, -105, 4],
+    [-33, -105, 3],
+    [-14, -82.5, 2],
+    [12, -82.5, 2],
+    [33, -82.5, 3],
+    [43, -60, 4],
+    [52, -60, 3],
   ] as const) {
+    const cross = Math.abs(lane) > 45 ? Math.sign(lane) * 45 : lane * 0.98;
     addPath(
       [
         [lane, -236],
-        [lane * 0.98, ROAD.stadiumV0 - 4],
-        [lane * 0.95, ROAD.stadiumV1 + 3],
+        [cross, ROAD.stadiumV0 - 4],
+        [cross * 0.97, ROAD.stadiumV1 + 3],
         gate(deg),
       ],
       n,
@@ -788,7 +749,7 @@ export function makeLife(
       [44, ROAD.stadiumV1 + 2],
       gate(-60),
     ],
-    8,
+    6,
     0,
     false,
     0.4,
@@ -796,21 +757,21 @@ export function makeLife(
   // along Stadium Road from the west and the east
   addPath(
     [[-rs, ROAD.stadiumV1 + 1.6], [-150, ROAD.stadiumV1 + 1.6], gate(-150)],
-    7,
-    0,
-    true,
-    1.2,
-  );
-  addPath(
-    [[-rs, ROAD.stadiumV1 + 1.4], [-120, ROAD.stadiumV1 + 2], gate(-127.5)],
     5,
     0,
     true,
     1.2,
   );
   addPath(
+    [[-rs, ROAD.stadiumV1 + 1.4], [-120, ROAD.stadiumV1 + 2], gate(-127.5)],
+    4,
+    0,
+    true,
+    1.2,
+  );
+  addPath(
     [[rs, ROAD.stadiumV1 + 1.6], [150, ROAD.stadiumV1 + 1.6], gate(-37.5)],
-    6,
+    4,
     0,
     true,
     1.2,
@@ -823,7 +784,7 @@ export function makeLife(
       [-56, ROAD.stadiumV1 + 2],
       gate(-127.5),
     ],
-    4,
+    3,
     0,
     true,
     1,
@@ -831,14 +792,14 @@ export function makeLife(
   // from the station, down East Road
   addPath(
     [[222, 156], [190, 150], [164.6, 126], [164.4, 44], gate(15, 1.03)],
-    9,
+    7,
     0,
     false,
     1.3,
   );
   addPath(
     [[236, 156], [192, 152], [164.6, 128], [164.2, -8], gate(-15, 1.03)],
-    9,
+    7,
     0,
     false,
     1.3,
@@ -853,7 +814,7 @@ export function makeLife(
   );
   addPath(
     [[-198, -24], [-180, -22], [-166.5, -26], gate(-172.5, 1.03)],
-    6,
+    5,
     0,
     false,
     1.5,
@@ -867,7 +828,7 @@ export function makeLife(
       [326, -96],
       [190, -96],
     ],
-    7,
+    5,
     3,
     false,
     1,
@@ -909,6 +870,10 @@ export function makeLife(
     wk: Path["walkers"][number],
     t: number,
   ): boolean => {
+    if (walking < 1) {
+      const lap = Math.floor((t + wk.shift) / wk.lap);
+      if (h2(wk.key, lap + 31337) >= walking) return false;
+    }
     const tau = (((t + wk.shift) % wk.lap) + wk.lap) % wk.lap;
     walkAt(wk.stops, wk.speed, tau, step);
     if (step.d >= path.len) return false;
@@ -951,6 +916,10 @@ export function makeLife(
     const p = project(view, X, V);
     if (p.x < -4 || p.x > w + 4 || p.y > h + 6 || p.y < hy) return;
     const key = standKey++;
+    // Nobody stands about on Stadium Road: the cars would drive through them, and some of
+    // the groups by the wall reach that far out. (The key is still used up, so everybody
+    // else keeps the clothes they had.)
+    if (roadway(X, V)) return;
     standers.push({
       X,
       V,
@@ -1053,7 +1022,8 @@ export function makeLife(
   // Whoever has been served steps aside (place -1) and walks off with a pie: to the kerb,
   // over the road in a gap in the traffic like everybody else, and up to a turnstile. They
   // used to walk into the road and vanish there. A turn is SERVE seconds and the traffic
-  // repeats every TICK, so there is one plan for each turn modulo TICK.
+  // repeats every CYCLE (a whole number of turns), so there is one plan for each turn
+  // modulo CYCLE / SERVE.
   const pieWay = makeWay([
     [queueSpots[0].X, queueSpots[0].V],
     [PLAZA_HALF - 22, ROAD.stadiumV0 - 2.4],
@@ -1062,13 +1032,35 @@ export function makeLife(
   ]);
   const PIE_PACE = 3;
   const piePlans: Stop[][] = [];
-  for (let n = 0; n < TICK; n++) {
+  const PIE_PLANS = Math.round(CYCLE / SERVE);
+  for (let n = 0; n < PIE_PLANS; n++) {
     piePlans.push(
       plan((d) => wayPoint(pieWay, d, 0), pieWay.len, PIE_PACE, n * SERVE),
     );
   }
   /** How many of them can be on their way at once. */
-  const PIE_MOST = Math.ceil((pieWay.len / PIE_PACE + TICK) / SERVE);
+  const PIE_MOST = Math.ceil((pieWay.len / PIE_PACE + CYCLE) / SERVE);
+  /** Everybody walking off with a pie at time t: fn(how many turns ago, which turn, X, V, waiting). */
+  const pieWalkers = (
+    t: number,
+    fn: (
+      ago: number,
+      served: number,
+      X: number,
+      V: number,
+      waiting: boolean,
+    ) => void,
+  ): void => {
+    const turn = Math.floor(t / SERVE);
+    for (let ago = 1; ago <= PIE_MOST; ago++) {
+      const served = turn - ago;
+      const tau = t - (served + 1) * SERVE;
+      walkAt(piePlans[mod(served + 1, PIE_PLANS)], PIE_PACE, tau, place);
+      if (place.d >= pieWay.len) continue;
+      const q = wayPoint(pieWay, place.d, 0);
+      fn(ago, served, q.X, q.V, place.waiting);
+    }
+  };
   const drawQueue = (s: Surface, t: number, roar: number): void => {
     const turn = Math.floor(t / SERVE);
     const u = t / SERVE - turn;
@@ -1099,15 +1091,10 @@ export function makeLife(
     }
     // those who have been served walk off with a pie, one every turn
     const stride = Math.floor(t * 5);
-    for (let ago = 1; ago <= PIE_MOST; ago++) {
-      const served = turn - ago;
-      const tau = t - (served + 1) * SERVE;
-      walkAt(piePlans[mod(served + 1, TICK)], PIE_PACE, tau, place);
-      if (place.d >= pieWay.len) continue;
-      const q = wayPoint(pieWay, place.d, 0);
-      const p = project(view, q.X, q.V);
-      if (p.x < 0 || p.x >= w || p.y >= h || p.y < hy) continue;
-      ink.V = q.V;
+    pieWalkers(t, (ago, served, X, V, waiting) => {
+      const p = project(view, X, V);
+      if (p.x < 0 || p.x >= w || p.y >= h || p.y < hy) return;
+      ink.V = V;
       const who = mod(served, 16);
       const jump = roar > 0 && h2(who, beat + 3) < roar * 0.7 ? 1 : 0;
       person(
@@ -1116,10 +1103,10 @@ export function makeLife(
         p.y,
         sizeClass(p.s),
         queueLooks[who],
-        place.waiting ? 0 : (stride + ago) % 2,
+        waiting ? 0 : (stride + ago) % 2,
         jump,
       );
-    }
+    });
   };
 
   // ---- the kickabout and the dog walker in the park -------------------------
@@ -1625,6 +1612,121 @@ export function makeLife(
     }
   };
 
+  // ---- fireworks for the goal ------------------------------------------------
+  // A few small rockets go up from the roof over the far stands when the home side
+  // scores, and burst in the club's colours and gold; bigger and longer by night. Each
+  // goes up where its burst stays clear of the logo's sky and of the airship.
+  const fwScale = Math.min(1.25, k + 0.35);
+  const burstFor = night ? BURST_NIGHT : BURST_DAY;
+  const rockets: ({ x: number; y: number; top: number; r: number } | null)[] =
+    [];
+  const meets = (a: Zone, b: Zone): boolean =>
+    a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  for (let i = 0; i < ROCKETS; i++) {
+    const r = Math.round(
+      (night ? 7.5 + h2(i, 811) * 2.5 : 5.5 + h2(i, 811) * 2) * fwScale,
+    );
+    const full = (11 + h2(i, 812) * 7) * fwScale;
+    let found: (typeof rockets)[number] = null;
+    // where there is no room (a phone, the airship right over the far stands) it climbs
+    // less, over the ends of the ground
+    for (let tries = 0; tries < 32 && !found; tries++) {
+      const rise = Math.round(tries < 16 ? full : full * 0.55);
+      const deg =
+        32 + ((i * 47 + tries * 29 + Math.floor(h2(i, 813) * 40)) % 116);
+      const q = wallPoint((deg * Math.PI) / 180, 1.0);
+      const base = project(view, q.X, q.V, HR);
+      const top = base.y - rise;
+      const box: Zone = {
+        x: base.x - r - 1,
+        y: top - r - 1,
+        w: r * 2 + 3,
+        h: base.y - top + r + 2,
+      };
+      if (box.y <= view.logoH + 1 || box.x < 1 || box.x + box.w >= w - 1) {
+        continue;
+      }
+      if (clear.some((z) => meets(z, box))) continue;
+      if (rockets.some((o) => o && Math.abs(o.x - base.x) < r + 2)) continue;
+      found = { x: base.x, y: base.y, top, r };
+    }
+    rockets.push(found);
+  }
+  const SPARK_A: readonly (readonly [Color, Color])[] = [
+    [P.homeLight, P.goldLight],
+    [P.goldLight, P.homeLight],
+    [P.white, P.home],
+  ];
+  const SPARK_B: readonly (readonly [Color, Color])[] = [
+    [P.home, P.gold],
+    [P.gold, P.home],
+    [P.goldLight, P.homeDark],
+  ];
+  const SPARK_C: readonly (readonly [Color, Color])[] = [
+    [P.homeDark, P.goldDark],
+    [P.goldDark, P.homeDark],
+    [P.gold, P.brickDark],
+  ];
+  const drawFireworks = (s: Surface, t: number, roar: number): void => {
+    if (roar > 0.45) return; // the roar sends up its own
+    const since = mod(t, MATCH_PERIOD) - GOAL_AT;
+    if (!(since >= 0 && since < FIREWORKS)) return;
+    const beat = Math.floor(t * 12);
+    s.pushClip(0, view.logoH, w, h);
+    for (let i = 0; i < rockets.length; i++) {
+      const rk = rockets[i];
+      if (!rk) continue;
+      const a = since - launchOf(i);
+      if (a < 0) continue;
+      if (a < RISE) {
+        // the climb slows as it goes
+        const u = a / RISE;
+        const y = rk.y - Math.round(u * (2 - u) * (rk.y - rk.top));
+        s.px(rk.x, y, P.goldLight);
+        s.px(rk.x, y + 1, P.gold);
+        if (night) s.px(rk.x, y + 2, P.goldDark);
+        continue;
+      }
+      const e = (a - RISE) / burstFor;
+      if (e >= 1) continue;
+      // it opens fast and hangs, drooping a little as it fades
+      const grow = 1 - (1 - e) * (1 - e) * (1 - e);
+      const r = rk.r * grow;
+      const droop = Math.round(e * e * 3 * fwScale);
+      const cy = rk.top + droop;
+      const pal = i % SPARK_A.length;
+      if (night && e < 0.45) {
+        const glow = Math.max(1, Math.round(r * 0.9));
+        s.disc(rk.x, cy, glow, P.goldLight, e < 0.2 ? 0.3 : 0.15);
+      }
+      if (e < 0.16) s.disc(rk.x, cy, e < 0.08 ? 2 : 1, P.white);
+      const n = night ? 12 : 10;
+      for (let j = 0; j < n; j++) {
+        // the last of it twinkles out
+        if (e > 0.6 && (j + beat + i) % 3 === 0) continue;
+        if (e > 0.8 && (j + beat) % 2 === 0) continue;
+        const an = (j / n) * Math.PI * 2 + i * 0.7;
+        const c = Math.cos(an);
+        const sn = Math.sin(an) * 0.85;
+        // by night the light tones glow; by day, against a pale sky, the strong ones
+        const head = (night && e < 0.45 ? SPARK_A : SPARK_B)[pal][j % 2];
+        const tail = (night ? SPARK_B : SPARK_C)[pal][j % 2];
+        // a streak from the middle outwards: bright at its head
+        const len = e < 0.55 ? (night ? 3 : 2) : 1;
+        for (let q = len; q >= 1; q--) {
+          const d = r - (q - 1) * 1.2;
+          if (d < 1) continue;
+          s.px(
+            rk.x + Math.round(c * d),
+            cy + Math.round(sn * d),
+            q === 1 ? head : tail,
+          );
+        }
+      }
+    }
+    s.popClip();
+  };
+
   // ---- lights that twinkle at night -----------------------------------------
   const drawNight = (s: Surface, t: number): void => {
     if (!night) return;
@@ -1645,7 +1747,7 @@ export function makeLife(
       drawMatch(s, t, roar);
       drawTrain(s, t);
       drawTraffic(s, t);
-      drawParking(s, t, roar);
+      drawRoad(s, t);
       drawCoach(s, t, roar);
       drawStanders(s, t, roar);
       drawQueue(s, t, roar);
@@ -1655,14 +1757,43 @@ export function makeLife(
       drawNight(s, t);
       drawAir(s, t);
       drawRoar(s, t, roar);
+      drawFireworks(s, t, roar);
     },
     people(t, fn): void {
       for (const path of paths) {
         for (const wk of path.walkers) {
-          if (walkerAt(path, wk, t)) fn(wayOut.X, wayOut.V, step.waiting);
+          if (walkerAt(path, wk, t)) {
+            fn(wayOut.X, wayOut.V, step.waiting, wk.key);
+          }
         }
       }
-      lotPeople(t, (_i, _visit, _j, X, V, waiting) => fn(X, V, waiting));
+      pieWalkers(t, (_ago, served, X, V, waiting) =>
+        fn(X, V, waiting, -1 - served),
+      );
+    },
+    standers(fn): void {
+      for (const p of standers) fn(p.X, p.V);
+    },
+    cars(t, fn): void {
+      for (const r of routes) {
+        for (const cr of r.cars) {
+          const run = t * r.speed + cr.off;
+          if (!carOut(cr.key, Math.floor(run / r.len))) continue;
+          const d = ((run % r.len) + r.len) % r.len;
+          const u = d / r.len;
+          const X = r.X0 + (r.X1 - r.X0) * u;
+          const V = r.V0 + (r.V1 - r.V0) * u;
+          fn(X, V, groundHeading(view, X, V, r.dX, r.dV), r.dX, r.dV);
+        }
+      }
+      roadCars(t, seed, rs, (rc) => {
+        if (!roadOut(rc)) return;
+        const f = rc.dir === 0 ? 1 : -1;
+        fn(rc.X, rc.V, rc.dir === 0 ? EAST : WEST, f, 0);
+      });
+      coachAt(coachTau(t));
+      const { X, V, fX, fV } = coachPose;
+      fn(X, V, groundHeading(view, X, V, fX, fV), fX, fV);
     },
   };
 }

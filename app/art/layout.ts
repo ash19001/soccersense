@@ -195,8 +195,9 @@ export function menuLayout(w: number, h: number): MenuLayout {
     Math.min(H, spotY + Math.round(MENU_CAMERA.bowlDown * scale)),
   );
 
-  // The sign: big enough for "TODAY'S STADIUM" in the small font, never wider than a
-  // phone. On a monitor it hangs at the left, clear of the wordmark and the skyline.
+  // The sign: "DID YOU KNOW?" in the small font over about 14 letters of the fact of the
+  // day in the big one, which scrolls (stadium-airship.ts); never wider than a phone. On a
+  // monitor it hangs at the left, clear of the wordmark and the skyline.
   const roomy = W >= 400 && wide;
   const signW = roomy ? 92 : Math.max(1, Math.min(92, Math.max(86, W - 40), W));
   const signH = roomy ? 35 : 33;
@@ -267,8 +268,15 @@ export function menuLayout(w: number, h: number): MenuLayout {
 // Career scene
 // ---------------------------------------------------------------------------
 
-/** The career stage is this wide, centred on the canvas. Wider canvases show more ground. */
+/**
+ * The career stage is this wide on a phone, centred on the canvas. On a wider canvas it
+ * grows with the width (`2 * round(W * 0.2)`: 192 at 480 x 270) up to `STAGE_W_MAX`, so on
+ * a monitor the hero and the goal stand further apart. Beyond the stage, wide canvases show
+ * more of the same ground.
+ */
 export const STAGE_W = 130;
+/** The widest the career stage gets (a canvas of 520 logical px or more). */
+export const STAGE_W_MAX = 208;
 
 export interface CareerLayout {
   /** The canvas size this layout was made for. */
@@ -278,15 +286,25 @@ export interface CareerLayout {
   cx: number;
   /** The ground line: the row the players' feet stand on. round(H * 0.52). */
   groundY: number;
-  /** Left edge of the 130 px stage (may be off-canvas on a narrow screen). */
+  /**
+   * Left edge of the stage: 130 px wide on a phone, wider on a monitor (192 at 480 x 270,
+   * at most `STAGE_W_MAX`). May be off-canvas on a narrow screen.
+   */
   stageLeft: number;
   /** Right edge of the stage (first column past it). */
   stageRight: number;
-  /** Where the hero rests: cx - 26. */
+  /**
+   * The stage's width over 130: 1 on a phone, 192 / 130 (about 1.48) at 480 x 270.
+   * Horizontal offsets written for the 130 px stage (the cast's places in
+   * `docs/CAREER_SCENE.md`, the ground's dressing) are multiplied by it and rounded.
+   * Sprites never are.
+   */
+  stageScale: number;
+  /** Where the hero rests: cx - round(26 * stageScale). */
   heroX: number;
-  /** The goal line, at the mouth of the goal: cx + 44. */
+  /** The goal line, at the mouth of the goal: cx + round(44 * stageScale). */
   goalX: number;
-  /** Where the keeper stands, a few px in front of the goal line: cx + 38. */
+  /** Where the keeper stands, 6 px in front of the goal line: goalX - 6. */
   keeperX: number;
   /**
    * The far touchline: the pitch starts here, 9 px behind the players' feet, so stands
@@ -318,17 +336,24 @@ export function careerLayout(w: number, h: number): CareerLayout {
   const H = Math.max(1, Math.round(h));
   const cx = Math.round(W / 2);
   const groundY = Math.round(H * 0.52);
-  const stageLeft = cx - STAGE_W / 2;
+  const stageW = Math.max(
+    STAGE_W,
+    Math.min(STAGE_W_MAX, 2 * Math.round(W * 0.2)),
+  );
+  const stageScale = stageW / STAGE_W;
+  const stageLeft = cx - stageW / 2;
+  const goalX = cx + Math.round(44 * stageScale);
   return {
     w: W,
     h: H,
     cx,
     groundY,
     stageLeft,
-    stageRight: stageLeft + STAGE_W,
-    heroX: cx - 26,
-    goalX: cx + 44,
-    keeperX: cx + 38,
+    stageRight: stageLeft + stageW,
+    stageScale,
+    heroX: cx - Math.round(26 * stageScale),
+    goalX,
+    keeperX: goalX - 6,
     farTouchY: groundY - 9,
     nearTouchY: groundY + Math.round(H * 0.12),
     actionTop: Math.round(H * 0.31),

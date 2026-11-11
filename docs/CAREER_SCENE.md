@@ -19,9 +19,14 @@ It is made of three kinds of art, each with its own owner:
   from left to right. The goal is on the right.
 - Positions come from `careerLayout(w, h)` in `~/art/layout` (see `docs/API_ART.md`). At the
   reference phone size, 130 x 281: feet row `groundY` 146, hero at x 39, keeper at x 103, goal
-  line at x 109, far touchline at row 137, near touchline at row 180.
-- The stage is 130 px wide, centred. Everything the story needs happens inside it. Outside it,
-  wide screens show more of the same ground: more houses, more stand, more pitch.
+  line at x 109, far touchline at row 137, near touchline at row 180. On the reference monitor,
+  480 x 270: feet row 140, hero at x 202, keeper at x 299, goal line at x 305, far touchline
+  at row 131, near touchline at row 172.
+- The stage is 130 px wide on a phone, centred. On a wider canvas it widens with the width
+  (`2 * round(W * 0.2)`, 192 px at 480 x 270, at most 208), so the hero and the goal stand
+  further apart on a monitor: `careerLayout().stageScale` is its width over 130. Everything
+  the story needs happens inside it. Outside it, wide screens show more of the same ground:
+  more houses, more stand, more pitch.
 - There are three depth zones, and each tier dresses all three:
   1. **The far side** (above the far touchline): what grows with the tiers, then whatever is
      behind it, then the sky.
@@ -49,7 +54,9 @@ Nothing essential goes below row 152.
 
 All people are drawn with the footballer sprite set (`~/art/characters`), side on, feet on the
 ground point `(x, y)`. Positions are offsets from `(cx, groundY)`. A larger `y` is nearer the
-camera and is drawn later.
+camera and is drawn later. The `x` offsets are for the 130 px stage: multiply them by
+`careerLayout().stageScale` and round (the hero, keeper and goal line are already in the
+layout as `heroX`, `keeperX`, `goalX`; the keeper is always 6 px in front of the goal line).
 
 | who         | x         | y             | faces | notes                        |
 | ----------- | --------- | ------------- | ----- | ---------------------------- |
@@ -115,6 +122,10 @@ seconds. With reduced motion: the result pose and the ball's final place are sho
 | `skipped`  | side-footed back to team-mate A                                                                         | relaxes                     | shrug, back to idle                           | `idle`  |
 
 The grade's name and the points are shown by the DOM reveal sheet, not painted in the scene.
+
+At the stadium tiers (4 to 7), every goal (`worldie`, `topbins`, `goal`) also sets off a few
+small fireworks over the stand, bigger for a worldie (the product owner asked for this on
+2026-11-11). Tiers 6 and 7 are at night, where they show best.
 
 ## 5. Promotion
 
@@ -194,9 +205,10 @@ class CareerGround {
   setLighting(light: Lighting): void; // the ground applies the always-night rule itself
   setMode(mode: Mode): void;
   setTier(tier: Tier): void;
-  setMood(mood: CrowdMood): void; // the crowd and extras react from now on
+  setMood(mood: CrowdMood, t: number): void; // the crowd and extras react from scene time t
   readonly goal: GroundGoal;
   readonly light: Lighting; // the light actually in use (night at tiers 6 and 7)
+  readonly podium: GroundPodium | null; // tier 7: { x, top, w }, his feet on (x, top)
   drawBack(s: Surface, t: number): void; // covers every pixel: sky to near side, goal back layer
   drawFront(s: Surface, t: number, bulge?: NetBulge | null): void; // goal front layer, anything in front of the cast
 }

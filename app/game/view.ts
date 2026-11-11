@@ -17,6 +17,7 @@ import {
   currentTurn,
   isLastQuestion,
   msLeft,
+  ruleOf,
   tableFor,
 } from "./session";
 import type { Session, Turn } from "./session";
@@ -28,6 +29,7 @@ import type {
   Mode,
   Question,
   RankedAnswer,
+  Rule,
   Stadium,
 } from "./types";
 
@@ -40,12 +42,15 @@ export interface QuestionView {
   question: Question;
   /** "Name a manager who has won the Premier League" */
   prompt: string;
-  /** HOME: closest to the stadium wins. AWAY: furthest from it wins. */
+  /** HOME: the most common answer wins. AWAY: the most niche answer wins. */
   mode: Mode;
-  /** Today's stadium, the pin the instruction names. */
+  /** How the answers are ranked: `ruleFor(mode)`. */
+  rule: Rule;
+  /** Today's stadium: the day's venue, named on the board (and the pin of the distance rules). */
   stadium: Stadium;
+  /** What an answer's place is (the distance rules measure it; the judge reads it too). */
   measure: Measure;
-  /** Completes "Measured by ...": "where the manager was born". */
+  /** Completes "Measured by ...": "where the manager was born". For the distance rules. */
   measureLabel: string;
   /** This is the last question: the reveal's button reads FULL TIME. */
   isLast: boolean;
@@ -59,6 +64,7 @@ export function questionView(session: Session): QuestionView {
     question,
     prompt: question.prompt,
     mode: session.mode,
+    rule: ruleOf(session),
     stadium: session.stadium,
     measure: question.measure,
     measureLabel: question.measureLabel,
@@ -103,13 +109,13 @@ export interface RevealView {
   /** 0-based question index. */
   index: number;
   question: Question;
-  /** The outcome: grade, points, distance, rank. */
+  /** The outcome: grade, points, share, distance, rank. */
   turn: Turn;
   /** The answer the player gave. Null for a pass or a time-up. */
   answer: Answer | null;
   /** That answer's row in the table. Null for a pass or a time-up. */
   row: RankedAnswer | null;
-  /** The best answer of the day: the top row. Null only for an empty answer list. */
+  /** The best answer under the game's rule: the top row. Null only for an empty answer list. */
   best: RankedAnswer | null;
   /** The table rows to draw, best first, with the player's row marked `isPlayer`. */
   rows: TableRow[];

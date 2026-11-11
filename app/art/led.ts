@@ -3,9 +3,9 @@
  * and lines of lit text on it. A line too long for its window scrolls as a marquee.
  *
  *   const field = drawLedPanel(layer, x, y, w, h, { grade: light.env });  // once, cached
- *   drawLedLine(s, "TODAY'S STADIUM", field.x + 2, field.y + 4, field.w - 4,
+ *   drawLedLine(s, "DID YOU KNOW?", field.x + 2, field.y + 4, field.w - 4,
  *     { font: FONT_3x5, color: P.ledGreen });                             // every frame
- *   drawLedLine(s, name, field.x + 2, field.y + 13, field.w - 4, { t });
+ *   drawLedLine(s, fact, field.x + 2, field.y + 13, field.w - 4, { t });
  *
  * The panel and the text are light sources, so they are raw palette colour whatever the
  * time of day. Only the housing takes the scene's light, through `grade`.

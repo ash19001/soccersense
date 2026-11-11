@@ -101,10 +101,53 @@ frame's static layers before the loop starts.
 
 ## Milestone B: a playable game
 
-Footballer sprites (three attempts, judged), the keeper and extras, the HOME ground at each
-career tier, shot outcomes for each grade, `CareerScene`, then the `Game` state machine wiring
-the interface kit to the rules: asking, shot, reveal, full time, saved results, share text. The
-how-to-play page.
+Built on the evening of 2026-11-11 (on Opus 5.5), one artist or engineer per piece, no
+tournaments, and playable end to end: the footballer, keeper and props (`app/art/characters`);
+the career ground framework and all eight HOME tiers (`app/art/grounds`); a monitor layout for
+the game screens (`app/ui`; the product owner pictures the game on a PC, so this was decided
+without waiting for an answer); the game page at `/play/home` and `/play/away`
+(`app/routes/play.tsx`, `app/routes/play/`); the `CareerScene` (`app/scenes/career*.ts`): idle
+keepie-uppies, a shot for every grade, the ground built around him on promotion, fireworks for
+goals at the stadium tiers, the full-time tableaux and the trophy lift. The 14 sample questions
+in `app/data` are the game's questions for now. Builders' known weak points: the last goal's
+ball vanishes from the net when the next shot starts; people snap back if the player moves on
+quickly; the child keeper never dives; the near crowd at the stadium tiers is a busy block; the
+floodlight beams at tiers 6 and 7 look dotted; the goal is boxy in profile.
+
+Done the same evening, five home-screen changes the product owner asked for: drag and flick to
+spin the menu ball; the airship can be clicked, and five or six quick clicks pop it and it
+crashes into the town, then a new one drifts in with the sign; about a third fewer cars and
+people; a car and a person are never on the zebra together; no car drives in the car park any
+more (they asked for that or a fixed parking animation; the lead chose static).
+
+**Then the rules changed** (the product owner, 2026-11-11 evening): HOME is now the most common
+answer and AWAY the most niche (popularity estimated in the sample data until a backend counts
+real answers); CLOSEST and FURTHEST (the old distance modes) are locked patches on the back of
+the ball; the top patch is NEXT-GEN and the bottom RETRO, both locked; a ball spun onto a
+locked patch holds there about 4.5 s and a click names the mode. Done with it: cars drawn along
+their bays and their direction of travel (24 headings), fewer people walking at night, small
+fireworks when the home-screen match scores (and at the career scene's stadium tiers).
+
+Done too: the blimp's sign shows a fun football fact of the day ("DID YOU KNOW?"), from 60
+facts in `app/data/facts.ts`, each checked against a source (59 of them against Wikipedia;
+see `docs/data-notes/facts.md`). Today's stadium no longer shows on the home screen; it stays
+the day's venue on the game's board and the pin for CLOSEST and FURTHEST later.
+
+Done: a final independent review of all of it in a real browser (2026-11-11, 19:20). All twelve
+of the evening's requests are met on screen; one was not until the review (people standing on
+Stadium Road and the zebra: fixed, with a test over 30 days). Also fixed: the cursor now
+follows a ball or airship that moves under a still mouse; leftovers of the old sign; stale
+docs. Whole HOME and AWAY games were played at 1920 x 1080, 1536 x 864 at 125% and on a phone,
+including a perfect 700, saves, reloads and replays. tsc, eslint, prettier and 1,825 tests pass;
+the production build loads with no console errors.
+
+Weak points the review left for the product owner: the board cuts the stadium's name short
+("MARACA..."); after a reveal that earned a promotion the board shows the new tier while the
+picture still shows the old ground until NEXT; in the game scene the players sit in a thin band,
+the near crowd fills 30 to 40% of the screen from tier 3, and tiers 0 and 1 have a lot of empty
+grass; the how-to-play and 404 pages are phone-sized on a monitor and the rules are one
+paragraph; the home page's title and description still say "one stadium a day"; AWAY uses the
+HOME grounds until Milestone C. Not yet committed since `0db2e54`.
 
 ## Milestone C: the AWAY journey and polish
 
@@ -129,7 +172,8 @@ answer-judge decoys for near-miss names, whole-game visual checks on phone and d
 
 - The machine's C: drive runs nearly full. Check free space before a multi-agent round, and
   write only inside the repository.
-- Nothing has been committed to git yet.
+- The code is on GitHub (`origin`, branch `main`). First commit `0db2e54` on 2026-11-11, at the
+  end of Milestone A. Commit and push only when the product owner asks.
 - The losing attempts from the art round (two balls, three stadiums) are in scratch folders on
   D: (`D:\ss-ball-a-tmp`, `D:\tmp\soccersense-ball-b`, `D:\claude-scratch`,
   `D:\claude-scratch-stadium-b`, `D:\soccersense-stadium-c-scratch`, `D:\soccersense-logo-scratch`).

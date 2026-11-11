@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Surface, TRANSPARENT, type Color } from "~/pixel";
 import {
+  BALL_SLOTS,
+  ballShowPose,
   ballSlotAt,
   ballSlotCenter,
   drawBall,
@@ -12,13 +14,16 @@ import {
 import { lightingFor } from "./lighting";
 import { MODE_COLORS, P } from "./palette";
 
-const SLOTS: readonly BallSlot[] = ["left", "right", "top", "bottom"];
+const SLOTS = BALL_SLOTS;
+const LOCKED: readonly BallSlot[] = ["top", "bottom", "backLeft", "backRight"];
 
 const MENU: BallPatches = {
   left: { label: "HOME", icon: "home", accent: MODE_COLORS.home },
   right: { label: "AWAY", icon: "away", accent: MODE_COLORS.away },
-  top: { label: "SOON", icon: "lock", locked: true },
-  bottom: { label: "SOON", icon: "lock", locked: true },
+  top: { label: "NEXT-GEN", icon: "forward", locked: true },
+  bottom: { label: "RETRO", icon: "rewind", locked: true },
+  backRight: { label: "CLOSEST", icon: "pin", locked: true },
+  backLeft: { label: "FURTHEST", icon: "globe", locked: true },
 };
 
 // Above 20 degrees the lighting grade is the identity: pixels are raw palette colours.
@@ -118,13 +123,210 @@ describe("the menu pose", () => {
   });
 });
 
-describe("ballSlotAt", () => {
-  it("finds each slot at its own centre", () => {
-    const state = ball();
-    for (const slot of SLOTS) {
+describe("the poses that show the other patches", () => {
+  it("turns NEXT-GEN and RETRO to face the viewer straight on", () => {
+    for (const slot of ["top", "bottom"] as const) {
+      const state = ball(ballShowPose(slot));
       const c = ballSlotCenter(state, slot);
-      expect(ballSlotAt(state, c.x, c.y)).toBe(slot);
+      expect(c.facing).toBeCloseTo(1, 6);
+      expect(c.x).toBe(state.cx);
+      expect(Math.abs(c.y - state.cy)).toBeLessThanOrEqual(1);
     }
+  });
+
+  it("brings the two on the back round to where HOME and AWAY were in half a turn", () => {
+    const menu = ball();
+    const half = ball(ballShowPose("backRight"));
+    expect(ballShowPose("backLeft")).toEqual(ballShowPose("backRight"));
+    expect(half.yaw).toBeCloseTo(Math.PI, 9);
+    // behind AWAY, it comes round to HOME's place; behind HOME, to AWAY's
+    const pairs = [
+      ["backRight", "left"],
+      ["backLeft", "right"],
+    ] as const;
+    for (const [back, front] of pairs) {
+      const a = ballSlotCenter(half, back);
+      const b = ballSlotCenter(menu, front);
+      expect(Math.abs(a.x - b.x)).toBeLessThanOrEqual(1);
+      expect(a.y).toBe(b.y);
+      expect(a.facing).toBeCloseTo(b.facing, 6);
+      // and in the menu pose it is on the back, behind the other
+      expect(ballSlotCenter(menu, back).facing).toBeLessThan(-0.8);
+    }
+    expect(ballSlotCenter(menu, "backRight").x).toBeGreaterThan(menu.cx);
+    expect(ballSlotCenter(menu, "backLeft").x).toBeLessThan(menu.cx);
+  });
+
+  it("draws every patch where it is hit-tested, in the pose that shows it", () => {
+    for (const r of [37, 45, 59]) {
+      for (const slot of SLOTS) {
+        const state = ball({ r, ...ballShowPose(slot) });
+        const s = render(state);
+        // a locked patch's picture and padlock are mist; a button's icon wears its colour
+        const ink =
+          slot === "left"
+            ? MODE_COLORS.home.light
+            : slot === "right"
+              ? MODE_COLORS.away.light
+              : P.mist;
+        expect(count(s, state, slot, ink)).toBeGreaterThan(20);
+      }
+    }
+  });
+
+  it("shows a locked patch's picture and padlock in the menu pose, and its word facing", () => {
+    const words = (state: BallState, slot: BallSlot): number => {
+      const bare = render(state, {
+        ...MENU,
+        [slot]: { ...MENU[slot], label: "" },
+      });
+      const s = render(state);
+      let n = 0;
+      for (let i = 0; i < s.data.length; i++) {
+        if (s.data[i] !== bare.data[i]) n++;
+      }
+      return n;
+    };
+    for (const slot of ["top", "bottom"] as const) {
+      // squashed far round: no word, but more than a padlock alone
+      const menu = ball({ r: 45 });
+      expect(words(menu, slot)).toBe(0);
+      const lockOnly = render(menu, {
+        ...MENU,
+        [slot]: { label: "", icon: "lock", locked: true },
+      });
+      expect(count(render(menu), menu, slot, P.mist)).toBeGreaterThan(
+        count(lockOnly, menu, slot, P.mist),
+      );
+    }
+    for (const slot of LOCKED) {
+      for (const r of [45, 51]) {
+        expect(words(ball({ r, ...ballShowPose(slot) }), slot)).toBeGreaterThan(
+          20,
+        );
+      }
+    }
+  });
+
+  it("never flickers: what a locked patch carries stays the same through the rock and the nod", () => {
+    const sway = (n: number) => ({
+      yaw: 0.12 * Math.sin(n * 0.7),
+      pitch: 0.061 * Math.sin(n * 1.3),
+    });
+    // squashed in the menu pose: the same picture and padlock, whole, every frame
+    for (const r of [36, 37, 41, 44, 45, 51, 59]) {
+      for (const slot of ["top", "bottom"] as const) {
+        const seen = new Set<number>();
+        for (let n = 0; n < 24; n++) {
+          const state = ball({ r, ...sway(n) });
+          seen.add(count(render(state), state, slot, P.mist));
+        }
+        expect(seen.size).toBe(1);
+        expect([...seen][0]).toBeGreaterThan(r >= 44 ? 25 : 15);
+      }
+    }
+    // shown: the picture, the padlock and a word that fits stay whole every frame...
+    const short: BallPatches = {};
+    for (const slot of LOCKED) {
+      short[slot] = { icon: "none", ...MENU[slot], label: "SOON" };
+    }
+    const poses = [
+      { pose: ballShowPose("backLeft"), slots: ["backLeft", "backRight"] },
+      { pose: ballShowPose("top"), slots: ["top"] },
+      { pose: ballShowPose("bottom"), slots: ["bottom"] },
+    ] as const;
+    for (const r of [36, 37, 41, 45, 51, 59]) {
+      for (const { pose, slots } of poses) {
+        for (const slot of slots) {
+          const seen = new Set<number>();
+          // ...and a word too wide for its patch is on a tag in every frame, or in none
+          const tagged = new Set<boolean>();
+          for (let n = 0; n < 24; n++) {
+            const state = ball({
+              r,
+              yaw: pose.yaw + sway(n).yaw,
+              pitch: pose.pitch + sway(n).pitch,
+            });
+            seen.add(count(render(state, short), state, slot, P.mist));
+            const only: BallPatches = { [slot]: MENU[slot] };
+            const s = render(state, only);
+            const ring = new Surface(160, 160);
+            ring.circle(state.cx, state.cy, r, P.white);
+            let tag = 0;
+            for (let y = 0; y < s.h; y++) {
+              for (let x = 0; x < s.w; x++) {
+                if (s.get(x, y) !== P.ink || ring.get(x, y) !== TRANSPARENT) {
+                  continue;
+                }
+                if (ballSlotAt(state, x, y) === null) tag++;
+              }
+            }
+            tagged.add(tag > 0);
+          }
+          // (a pixel or two at a panel edge may change hands as it rocks)
+          expect(Math.max(...seen) - Math.min(...seen)).toBeLessThanOrEqual(2);
+          expect(Math.min(...seen)).toBeGreaterThan(60);
+          expect(tagged.size).toBe(1);
+        }
+      }
+    }
+  });
+
+  it("writes a word too wide for its patch on a tag, inside the ball's outline", () => {
+    for (const r of [37, 45]) {
+      const state = ball({ r, ...ballShowPose("backLeft") });
+      const s = render(state);
+      const ring = new Surface(160, 160);
+      ring.circle(state.cx, state.cy, r, P.white);
+      // the outline is whole: no tag runs over it
+      for (let i = 0; i < s.data.length; i++) {
+        if (ring.data[i] !== TRANSPARENT) expect(s.data[i]).toBe(P.ink);
+      }
+      // FURTHEST is wider than its patch: there are ink pixels of the tag on the leather
+      let tag = 0;
+      for (let y = 0; y < s.h; y++) {
+        for (let x = 0; x < s.w; x++) {
+          if (s.get(x, y) !== P.ink || ring.get(x, y) !== TRANSPARENT) continue;
+          if (ballSlotAt(state, x, y) === null) tag++;
+        }
+      }
+      expect(tag).toBeGreaterThan(10);
+    }
+  });
+
+  it("keeps the locked patches quiet: never a mode colour, hovered or not", () => {
+    const loud = new Set<number>([
+      ...Object.values(MODE_COLORS.home),
+      ...Object.values(MODE_COLORS.away),
+    ]);
+    for (const slot of LOCKED) {
+      for (const hovered of [null, slot]) {
+        const state = ball({ ...ballShowPose(slot), hovered });
+        const s = render(state);
+        for (let y = 0; y < s.h; y++) {
+          for (let x = 0; x < s.w; x++) {
+            if (ballSlotAt(state, x, y) !== slot) continue;
+            expect(loud.has(s.get(x, y))).toBe(false);
+          }
+        }
+      }
+    }
+  });
+});
+
+describe("ballSlotAt", () => {
+  it("finds each slot at its own centre, in every pose that shows one", () => {
+    let seen = 0;
+    for (const shown of SLOTS) {
+      const state = ball(ballShowPose(shown));
+      for (const slot of SLOTS) {
+        const c = ballSlotCenter(state, slot);
+        if (c.facing <= 0.2) continue;
+        seen++;
+        expect(ballSlotAt(state, c.x, c.y)).toBe(slot);
+      }
+    }
+    expect(seen).toBeGreaterThan(SLOTS.length * 2);
   });
 
   it("stays right at both ends of the idle rock", () => {
@@ -133,6 +335,7 @@ describe("ballSlotAt", () => {
         const state = ball({ yaw, r });
         for (const slot of SLOTS) {
           const c = ballSlotCenter(state, slot);
+          if (c.facing <= 0) continue;
           expect(ballSlotAt(state, c.x, c.y)).toBe(slot);
         }
       }

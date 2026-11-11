@@ -3,6 +3,15 @@
 The rules are pure TypeScript: no DOM, no clock reads. The current time is always passed in.
 Import everything from `~/game`. Never import `test-fixtures.ts`.
 
+**Changed on 2026-11-11.** HOME is scored by the most common answer and AWAY by the most niche
+(`ruleFor(mode)` gives `"common"` or `"niche"`), from each answer's `popularity`: an
+estimated share of players in percent (`docs/data-notes/popularity.md`). Today's stadium is
+still the day's venue but no longer scores them. Distance scoring is kept as the rules
+`"closest"` and `"furthest"` for the locked modes CLOSEST and FURTHEST: to switch one on, add
+the mode and map it in `ruleFor`; nothing else in the rules changes. `rankAnswers` takes a
+`Rule` instead of a `Mode`; `Answer.popularity`, `RankedAnswer.share`, `Turn.share` and
+`QuestionView.rule` are new.
+
 ## How an interface uses it
 
 ```
@@ -19,7 +28,7 @@ Game
   Board: questionView(s), pips(s), progressFor(s), clockView(s, now)
   Answer bar: s.rejected (new object per rejection, key the shake on it), clockView(s, now).canPass
   Shot (phase "resolving"): currentTurn(s).grade, progressFor(s).promotions; then dispatch { type: "resolved" }
-  Reveal (phase "reveal"): revealFor(s, maxRows); formatDistance(km, locale); then { type: "next", now }
+  Reveal (phase "reveal"): revealFor(s, maxRows); formatShare(row.share) for "34%"; then { type: "next", now }
   Full time (phase "done"): summary(s), results(s), careerFor(s.total), saveSession(s), buildShareText(shareInputFor(s, tierName))
 
 Use one clock for every `now` (Date.now() or performance.now(), never mixed). A game keeps the day and stadium it started with, so playing across midnight saves under the day it began.
@@ -29,7 +38,8 @@ Notes:
 
 - `Rejection.reason` is `"unknown"` or `"ambiguous"`. The second needs its own line of text
   (for example "Which one? Be more specific.").
-- Two answers tied for best both score 100 and both are a WORLDIE.
+- Two answers tied for best both score 100 and both are a WORLDIE. The sample data has no tie at
+  either end of any question (a data test keeps it so).
 - Tier names are interface text, keyed by `TierId`.
 - `Question.decoys` (optional) lists strings the judge must never accept, for real things that
   are one typo away from a listed answer ("Bayer" next to "Bayern").
@@ -38,14 +48,15 @@ Notes:
 
 ```
 types.ts
-- type Mode = "home" | "away"
+- type Mode = "home" | "away". The two playable modes.
+- type Rule = "common" | "niche" | "closest" | "furthest". New. How a question's answers are ranked.
 - interface LatLng { lat: number; lng: number }
 - interface Stadium extends LatLng { id; name; city; country }
 - type Measure = "birthplace" | "ground" | "location" | "capital". The judge uses it: people, clubs, stadiums, countries.
-- interface Answer extends LatLng { id; name; aliases: string[]; place; country }
+- interface Answer extends LatLng { id; name; aliases: string[]; place; country; popularity: number }. popularity is new: the estimated share of players who give the answer, in percent, 0.1 to 100, one decimal at most; a question's shares add up to about 100.
 - interface Question { id; mode; prompt; measure; measureLabel; asOf; answers: Answer[]; decoys?: string[] }. decoys is new and optional.
 - type Grade = "worldie" | "topbins" | "goal" | "ontarget" | "wide" | "timeup" | "skipped"
-- interface RankedAnswer { answer: Answer; km: number; points: number; rank: number }
+- interface RankedAnswer { answer: Answer; km: number; share: number; points: number; rank: number }. share (new) is the answer's popularity; km is filled under every rule.
 
 geo.ts
 - EARTH_RADIUS_KM = 6371.0088; KM_PER_MILE = 1.609344
@@ -54,7 +65,11 @@ geo.ts
 - formatDistance(km: number, locale: string): string. "3 miles", "1 mile", "11,589 miles", "5 km", "under 1 mile", "under 1 km".
 
 scoring.ts
-- rankAnswers(question: Question, stadium: LatLng, mode: Mode): RankedAnswer[]. Full table, best first, ties in name order. points = round(100 * worse / (better + worse)); only the best distance scores 100.
+- RULES: readonly Rule[]. New. ["common", "niche", "closest", "furthest"].
+- ruleFor(mode: Mode): Rule. New. home → "common", away → "niche".
+- isDistanceRule(rule: Rule): boolean. New. True for "closest" and "furthest".
+- rankAnswers(question: Question, stadium: LatLng, rule: Rule): RankedAnswer[]. Changed: takes a Rule (was a Mode). Full table, best first, ties in name order. common: highest share first; niche: lowest share first (shares tie when equal to a tenth of a percent); closest / furthest: by whole kilometres from the stadium. points = round(100 * worse / (better + worse)); only the best scores 100. The stadium only matters to the distance rules.
+- formatShare(share: number): string. New. "34%", "2.5%", "0.4%"; "under 0.1%" below 0.05 or for a non-number; capped at "100%".
 - gradeFor(points: number): Grade. 100 worldie, 80-99 topbins, 55-79 goal, 30-54 ontarget, 0-29 wide.
 - rankedFor(table: readonly RankedAnswer[], answerId: string | null): RankedAnswer | null
 - interface TableRow extends RankedAnswer { grade: Grade; isPlayer: boolean; index: number; gapBefore: boolean }. grade is new; gapBefore means draw an ellipsis row above.
@@ -93,7 +108,7 @@ day.ts
 session.ts
 - QUESTION_MS = 30000; PASS_AFTER_MS = 8000
 - type Phase = "asking" | "resolving" | "reveal" | "done"
-- interface Turn { questionId: string; input: string | null; answerId: string | null; grade: Grade; points: number; km: number | null; rank: number | null; msLeft: number }
+- interface Turn { questionId: string; input: string | null; answerId: string | null; grade: Grade; points: number; km: number | null; share: number | null; rank: number | null; msLeft: number }. share is new (null without an answer).
 - interface Rejection { input: string; reason: "unknown" | "ambiguous" }
 - interface Session { mode; dayNumber; stadium; questions: readonly Question[]; index: number; phase: Phase; turns: readonly Turn[]; total: number; startedAt: number; deadline: number | null; rejected: Rejection | null; noTimer: boolean }
 - type Action = { type: "submit"; input: string; now: number } | { type: "pass"; now: number } | { type: "tick"; now: number } | { type: "resolved" } | { type: "next"; now: number }
@@ -105,13 +120,14 @@ session.ts
 - isLastQuestion(session): boolean
 - canPass(session, now: number): boolean
 - msLeft(session, now: number): number. Counts down while asking, frozen in resolving and reveal, 0 when done, full with noTimer.
-- tableFor(session, index: number): readonly RankedAnswer[]. Memoised, same array every call; [] for a bad index.
+- ruleOf(session): Rule. New. ruleFor(session.mode).
+- tableFor(session, index: number): readonly RankedAnswer[]. Ranked under the game's rule. Memoised per question, stadium and rule, same array every call; [] for a bad index.
 - interface Summary { total: number; tier: number; grades: Grade[]; perfect: boolean }
 - summary(session): Summary
 
 view.ts (new: selectors, pure, cheap to call on every render)
-- interface QuestionView { number: number; count: number; question: Question; prompt: string; mode: Mode; stadium: Stadium; measure: Measure; measureLabel: string; isLast: boolean }
-- questionView(session): QuestionView. The board's question and instruction line ("Question 3 of 7", "Closest to ANFIELD wins", "Measured by ...").
+- interface QuestionView { number: number; count: number; question: Question; prompt: string; mode: Mode; rule: Rule; stadium: Stadium; measure: Measure; measureLabel: string; isLast: boolean }. rule is new. measureLabel is for the distance rules.
+- questionView(session): QuestionView. The board's question and instruction line ("Question 3 of 7", "The most common answer wins.").
 - interface ClockView { msLeft: number; secondsLeft: number; fraction: number; running: boolean; canPass: boolean; msUntilPass: number | null }
 - clockView(session, now: number): ClockView. secondsLeft is 30 at the start, 1 until the last instant, 0 at time up; fraction is 1 to 0 for the timer strip; msUntilPass is null outside asking.
 - interface RevealView { index: number; question: Question; turn: Turn; answer: Answer | null; row: RankedAnswer | null; best: RankedAnswer | null; rows: TableRow[]; tableSize: number; isLast: boolean }
@@ -123,7 +139,7 @@ view.ts (new: selectors, pure, cheap to call on every render)
 - results(session): ResultLine[]. Each decided question with the answer given, for full time.
 - shareInputFor(session, tierName: string): ShareInput
 
-storage.ts (key "soccersense:v1:<dayKey>:<mode>", value { total, turns }; none of these throw)
+storage.ts (key "soccersense:v1:<dayKey>:<mode>", value { total, turns }; none of these throw. A game saved before Turn.share existed still loads, with share null.)
 - STORAGE_PREFIX = "soccersense:v1"
 - interface StoredGame { total: number; turns: readonly Turn[] }
 - type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">

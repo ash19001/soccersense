@@ -284,6 +284,7 @@ describe("the deadline, to the millisecond", () => {
         grade: "timeup",
         points: 0,
         km: null,
+        share: null,
         rank: null,
         msLeft: 0,
       });
@@ -346,6 +347,7 @@ describe("PASS, to the millisecond", () => {
       grade: "skipped",
       points: 0,
       km: null,
+      share: null,
       rank: null,
       msLeft: QUESTION_MS - PASS_AFTER_MS,
     });

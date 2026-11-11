@@ -6,31 +6,41 @@ the game **looks and feels right**. Graphics come first.
 
 ## 1. The game in one paragraph
 
-A daily football trivia game. Every day has one stadium, "today's stadium" (the pin). The
-player picks a mode on the home screen and answers 7 typed questions against a 30 second clock.
-Every valid answer has a place on the map: where a player was born, a club's ground, a stadium's
-location, a country's capital. In **HOME** you want the answer whose place is _closest_ to
-today's stadium. In **AWAY** you want the one _furthest_ from it. Each answer scores 0 to 100,
-a game is out of 700, and the running total drives a footballer's career from a kickabout in the
-park to lifting the World Cup.
+A daily football trivia game. Every day has one stadium, "today's stadium": the day's venue,
+shown on the home screen and named on the scoreboard. The player picks a mode on the home screen
+and answers 7 typed questions against a 30 second clock. Every valid answer has a **popularity**:
+the share of players who give it. In **HOME** you want the _most common_ answer, the one most
+players give. In **AWAY** you want the _most niche_ one, the valid answer fewest players think
+of. Each answer scores 0 to 100, a game is out of 700, and the running total drives a
+footballer's career from a kickabout in the park to lifting the World Cup.
+
+(Changed on 2026-11-11. HOME and AWAY used to be "closest to today's stadium" and "furthest from
+it". Those two rules are kept, as the locked modes **CLOSEST** and **FURTHEST** on the back of
+the ball; **NEXT-GEN** and **RETRO** are locked too, on its top and bottom patches.)
 
 ## 2. Daily structure
 
 - The day changes at midnight UTC, for everyone at once. `dayNumber` counts whole UTC days from
   2026-11-10, which is day 1.
-- One stadium per day, shared by both modes. In the demo the stadium rotates through
-  `app/data/stadiums.ts`: index `(dayNumber - 1) mod count`. Anfield is first.
+- One stadium per day, shared by every mode: the day's venue, drawn on the home screen and named
+  on the board. In the demo it rotates through `app/data/stadiums.ts`: index
+  `(dayNumber - 1) mod count`. Anfield is first. It does not score HOME or AWAY; it will be the
+  scoring pin of CLOSEST and FURTHEST when they are switched on (every answer keeps a place on
+  the map for them: where a player was born, a club's ground, a stadium, a country's capital).
 - Each mode has its **own** 7 questions, so the reveal in one mode never gives away the other.
-  The demo ships one fixed set per mode. It still plays differently every day, because every
-  answer is scored by its distance from that day's stadium.
+  The demo ships one fixed set per mode.
+- Popularity is a share of players in percent, at most one decimal place, and the shares of a
+  question add up to about 100. There is no backend yet, so in the demo it is an **estimate**
+  built into the sample questions (method: `docs/data-notes/popularity.md`). A backend will
+  count the answers real players give and replace the estimates.
 - Debug overrides (query string, demo only): `?stadium=<id>`, `?day=<n>`, `?time=HH:MM`
   (forces the sky's time of day), `?notimer=1`.
 
 ## 3. One question, start to finish
 
-1. The board shows `Question 3 of 7`, the question, and one instruction line:
-   - HOME: `Closest to ANFIELD wins.` plus `Measured by where the manager was born.`
-   - AWAY: `Furthest from ANFIELD wins.` plus the same measure line.
+1. The board shows `Question 3 of 7`, the question, today's stadium, and two short lines:
+   - HOME: `The most common answer wins.` plus `Scored by how many players give the same answer.`
+   - AWAY: `The most niche answer wins.` plus `Scored by how few players give the same answer.`
 2. A 30 second timer runs. The player types an answer and presses **SHOOT** (Enter also works).
 3. The judge checks the answer against the question's answer list (names plus aliases, accents
    and case ignored, small typos forgiven).
@@ -40,27 +50,45 @@ park to lifting the World Cup.
    - Clock hits zero: `TIME'S UP`, 0 points.
 4. Recognised answer: the footballer takes a shot. The shot's outcome is the grade (see 4.2).
 5. The career meter fills. If the total crosses a threshold he is promoted and the ground changes.
-6. The reveal sheet slides up: grade, points, one plain sentence
-   (`Trent Alexander-Arnold was born in West Derby, Liverpool: 3 miles from Anfield.`),
-   and **the table**: the ranked answers with place, distance and points, the player's row
-   highlighted. Then **NEXT QUESTION**, or **FULL TIME** after question 7.
+6. The reveal sheet slides up: grade, points, one plain sentence saying how many players gave
+   that answer, and **the table**: the ranked answers with each one's share (`PICKED`) and
+   points, the player's row highlighted. Then **NEXT QUESTION**, or **FULL TIME** after
+   question 7.
+   - The sentence has two tones. An answer at least 2% of players gave is with the crowd
+     (`Lionel Messi: about 32% of players said the same.`); one under 2% is a lonely one, cheered
+     in AWAY (`Allan Simonsen: only 0.2% of players went for that one. A proper deep cut!`) and
+     gently ribbed in HOME (`... Brave, but the crowd went elsewhere.`).
+   - A pass or a time-up names the top of the table instead: the crowd's favourite in HOME, the
+     deepest cut in AWAY.
+   - Under each name the table shows the answer's country, unless every answer shares one (the
+     Premier League's clubs) or the answers are countries themselves.
 
 ## 4. Scoring
 
 ### 4.1 Points: your place in the table
 
-For a question and today's stadium, every answer gets a distance in whole kilometres
-(great-circle, `Math.round`). Answers with the same rounded distance are tied.
+Each mode is scored by a **rule** that ranks the question's answers, best first:
 
-- HOME: closer is better. AWAY: further is better.
+| rule       | used by           | best answer                       |
+| ---------- | ----------------- | --------------------------------- |
+| `common`   | HOME              | the highest share of players      |
+| `niche`    | AWAY              | the lowest share of players       |
+| `closest`  | CLOSEST (locked)  | the place nearest today's stadium |
+| `furthest` | FURTHEST (locked) | the place furthest from it        |
+
+Shares are compared to a tenth of a percent, distances in whole kilometres (great-circle,
+`Math.round`). Answers that compare equal are tied.
+
 - `points = round(100 * worse / (better + worse))`, where `better` and `worse` are the numbers
   of answers strictly better and strictly worse than this one. If every answer is tied, 100.
 - So the best answer always scores 100, the worst always 0, and ties score the same.
 
-This is rank based on purpose. It needs no tuning per question, it works for any stadium, and
-it reads naturally as a league table.
+This is rank based on purpose. It needs no tuning per question, it is the same for every rule,
+and it reads naturally as a league table. In AWAY every valid answer is in the table, so the
+most niche answer is still a real one: nobody scores for an answer that is not on the list.
 
-Distances are shown in miles for `en-GB` and `en-US` locales and in kilometres otherwise.
+Shares are shown as `34%`, `2.5%`, `0.4%`. For the distance rules, distances are shown in miles
+for `en-GB` and `en-US` locales and in kilometres otherwise.
 
 ### 4.2 Grades
 
@@ -74,7 +102,8 @@ Distances are shown in miles for `en-GB` and `en-US` locales and in kilometres o
 | `timeup`   | none     | TIME'S UP  | the whistle goes, hands on hips                   |
 | `skipped`  | none     | PASSED     | he rolls the ball away                            |
 
-Only the best answer in the list is a WORLDIE, shown in gold.
+Only the best answer in the list (and any tied with it) is a WORLDIE, shown in gold: the most
+common answer in HOME, the most niche in AWAY.
 
 ## 5. The career
 
@@ -99,7 +128,8 @@ The two modes tell two different stories with the same ladder.
 
 ### 5.1 HOME: the hometown hero
 
-Everything happens in one place, and the ground grows around him. The same pitch, the same
+The common answer is the crowd's answer, and he is the crowd's man. Everything happens in one
+place, and the ground grows around him. The same pitch, the same
 row of houses behind it, slowly hidden by the stands he fills.
 
 | tier | the ground                                                                 |
@@ -117,7 +147,8 @@ He wears the home kit (warm red-orange). The crowd wears his colours.
 
 ### 5.2 AWAY: the journeyman
 
-Every step up is a ground further from home. Between tiers a small vehicle crosses the screen
+The niche answer is the road less travelled, and so is his career: every step up is a ground
+further from home. Between tiers a small vehicle crosses the screen
 (coach, then ferry, then plane) with a `NEXT STOP` caption.
 
 | tier | where                                                                        |
@@ -151,24 +182,45 @@ crowd colours and kit differ.
   cars, streets of housing with gardens, trees and bushes, a park, people arriving for the
   match. It runs away to a horizon about a quarter of the way down the screen, where **a city
   skyline** stands in silhouette.
-- **The car parks are full of parked cars, and the cars come and go**: one arrives along the
-  road, turns in, finds a bay and parks; another pulls out and drives away. The rest of the
-  life in the picture is animated in the same spirit (supporters walking in, coaches, a train).
+- **The car parks are full of parked cars**, each along its bay (on the slanted bays too). They
+  are part of the background: no car drives in or out of a car park (the product owner,
+  2026-11-11: the parking animation looked wrong, so it went). The rest of the picture is
+  alive: traffic on every road, each car facing the way it goes, supporters walking in (fewer
+  at night), coaches, a train. A car and a person are never on the zebra at the same time.
 - **A match is being played inside the stadium**: a looped animation of two teams of tiny
   players and a ball on the pitch, with the crowd reacting to the big moments.
 - **The top is all sky**, with the logo in it.
 - In front of the picture floats a classic black and white football. **The ball is the menu**,
   the focus point of the screen: it hovers and does not rest on the ground. Its black patches
   are the options.
-- The two big patches facing the player are **HOME** (left) and **AWAY** (right). The smaller
-  patches above and below are locked `SOON` slots for categories not yet designed.
-- A dot-matrix sign reads `TODAY'S STADIUM` and the stadium's name, city and country. What
-  carries it must make sense from the air (an airship, the stadium's own screen, or a panel
-  floating with the ball).
+- The two big patches facing the player are **HOME** (left, the house, warm red-orange: the most
+  common answer wins) and **AWAY** (right, the aeroplane, teal: the most niche answer wins).
+- Four more patches are **locked modes**, each with its own picture and a small padlock, in
+  quiet greys so that HOME and AWAY lead: **NEXT-GEN** on the patch above (a fast-forward: the
+  future), **RETRO** on the patch below (a rewind: the past), and on the back of the ball,
+  directly behind AWAY and HOME, **CLOSEST** (a map pin) and **FURTHEST** (a globe): the old
+  distance rules, closest to today's stadium and furthest from it. Half a turn of the ball brings
+  CLOSEST round to where HOME was and FURTHEST to where AWAY was.
+- The ball can be spun by hand. Let go, it comes to rest: if a locked patch faces the player most
+  it turns to show it (NEXT-GEN or RETRO straight on, CLOSEST and FURTHEST side by side) and
+  stays about four seconds, long enough to read it and press it, then goes back to HOME and
+  AWAY. Each locked patch shows its word when it faces the player. Pressing one shakes the ball
+  ("no") and puts up a notice naming the mode ("RETRO kicks off soon.") for 2.5 seconds, which
+  screen readers hear too. HOME and AWAY can be chosen from any pose in which they are in view.
+- An airship drifts over the town with a dot-matrix sign on its flank: `DID YOU KNOW?` in
+  green and under it **a fun football fact of the day** in amber, scrolling (the product owner,
+  2026-11-11: "The blimp should now say just a fun football daily fact instead"). It used to
+  show today's stadium; the stadium now belongs to the game screens. Sixty fact-checked facts
+  in a fixed cycle, the first on day 1 (2026-11-10): `app/data/facts.ts`, notes in
+  `docs/data-notes/facts.md`. The fact starts at its beginning and rests a moment, then
+  scrolls at a steady reading pace (a whole fact passes in 17 to 28 seconds) and comes round
+  again. Screen readers hear "Fact of the day: ...". The airship can be clicked: it wobbles,
+  five or six quick clicks pop it, it crashes into the town, and a new one drifts in with the
+  same fact, from its start.
 - The sky is the player's own sky: day, dusk, night or dawn, worked out from their device clock
   and time zone (no location permission prompt). At night the floodlights are on.
-- Under the ball: one line per mode (`HOME: closest to the stadium wins`,
-  `AWAY: furthest from it wins`), a `?` how-to-play button, and the day number.
+- Under the ball: one line per mode (`HOME: the most common answer wins`,
+  `AWAY: the most niche answer wins`), a `?` how-to-play button, and the day number.
 - Choosing a patch: it lights up in the mode's colour and the ball is struck. HOME: it drops
   into the stadium, onto the pitch, and the ground erupts. AWAY: it sails away over the town
   and out of sight. Then the screen wipes into the career scene.
@@ -201,7 +253,8 @@ A short rules page at `/how-to-play`, linked from the `?` button.
 ## 7. What is deliberately not in this iteration
 
 Backend, accounts, real daily content, leaderboards, streaks, payments, analytics, sound,
-other languages, more categories, drag-to-spin on the ball. The code should leave room for them
+other languages, more categories. (Drag-to-spin on the ball was on this list; the product
+owner asked for it on 2026-11-11 and it is built.) The code should leave room for them
 but must not build them.
 
 ## 8. Originality

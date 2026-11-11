@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { distanceKm } from "./geo";
 import { gradeFor, rankAnswers, tableExcerpt } from "./scoring";
 import { answer, question } from "./test-fixtures";
-import type { Answer, LatLng, Mode, Question, RankedAnswer } from "./types";
+import type { Answer, LatLng, Rule, Question, RankedAnswer } from "./types";
 
 /** mulberry32: a small seeded generator, so every run sees the same tables. */
 function seeded(seed: number): () => number {
@@ -62,10 +62,10 @@ function sample(seed: number): Sample {
 }
 
 const SAMPLES = Array.from({ length: 300 }, (_, i) => sample(i + 1));
-const MODES: Mode[] = ["home", "away"];
+const DISTANCE_RULES: Rule[] = ["closest", "furthest"];
 
-function better(mode: Mode, a: number, b: number): boolean {
-  return mode === "home" ? a < b : a > b;
+function better(mode: Rule, a: number, b: number): boolean {
+  return mode === "closest" ? a < b : a > b;
 }
 
 describe("rankAnswers on random tables", () => {
@@ -74,13 +74,15 @@ describe("rankAnswers on random tables", () => {
     expect(Math.min(...sizes)).toBe(1);
     expect(Math.max(...sizes)).toBeGreaterThan(50);
     const tied = SAMPLES.filter((s) => {
-      const kms = rankAnswers(s.question, s.stadium, "home").map((r) => r.km);
+      const kms = rankAnswers(s.question, s.stadium, "closest").map(
+        (r) => r.km,
+      );
       return new Set(kms).size < kms.length;
     });
     expect(tied.length).toBeGreaterThan(100);
   });
 
-  it.each(MODES)("keeps every answer exactly once (%s)", (mode) => {
+  it.each(DISTANCE_RULES)("keeps every answer exactly once (%s)", (mode) => {
     for (const s of SAMPLES) {
       const table = rankAnswers(s.question, s.stadium, mode);
       expect(table).toHaveLength(s.question.answers.length);
@@ -92,7 +94,7 @@ describe("rankAnswers on random tables", () => {
     }
   });
 
-  it.each(MODES)("gives the best answer 100, always (%s)", (mode) => {
+  it.each(DISTANCE_RULES)("gives the best answer 100, always (%s)", (mode) => {
     for (const s of SAMPLES) {
       const table = rankAnswers(s.question, s.stadium, mode);
       expect(table[0].points, `seed ${s.seed}`).toBe(100);
@@ -104,7 +106,7 @@ describe("rankAnswers on random tables", () => {
     }
   });
 
-  it.each(MODES)(
+  it.each(DISTANCE_RULES)(
     "gives the worst answer 0 when there are two distinct distances (%s)",
     (mode) => {
       let checked = 0;
@@ -124,7 +126,7 @@ describe("rankAnswers on random tables", () => {
     },
   );
 
-  it.each(MODES)(
+  it.each(DISTANCE_RULES)(
     "never gives more points to a worse answer, and ties are equal (%s)",
     (mode) => {
       for (const s of SAMPLES) {
@@ -156,7 +158,7 @@ describe("rankAnswers on random tables", () => {
     },
   );
 
-  it.each(MODES)("follows the formula to the letter (%s)", (mode) => {
+  it.each(DISTANCE_RULES)("follows the formula to the letter (%s)", (mode) => {
     for (const s of SAMPLES) {
       const table = rankAnswers(s.question, s.stadium, mode);
       for (const row of table) {
@@ -175,12 +177,12 @@ describe("rankAnswers on random tables", () => {
     }
   });
 
-  it("makes HOME and AWAY mirror orders", () => {
+  it("makes CLOSEST and FURTHEST mirror orders", () => {
     for (const s of SAMPLES) {
-      const home = rankAnswers(s.question, s.stadium, "home");
-      const away = rankAnswers(s.question, s.stadium, "away");
+      const home = rankAnswers(s.question, s.stadium, "closest");
+      const away = rankAnswers(s.question, s.stadium, "furthest");
       const label = `seed ${s.seed}`;
-      // The distances run one way in HOME and the other way in AWAY.
+      // The distances run one way in CLOSEST and the other way in FURTHEST.
       expect(
         away.map((r) => r.km),
         label,
@@ -217,7 +219,7 @@ describe("rankAnswers on random tables", () => {
         ...s.question,
         answers: [...s.question.answers].reverse(),
       };
-      for (const mode of MODES) {
+      for (const mode of DISTANCE_RULES) {
         const a = rankAnswers(s.question, s.stadium, mode);
         const b = rankAnswers(reversed, s.stadium, mode);
         expect(b.map((r) => [r.answer.id, r.km, r.points, r.rank])).toEqual(
@@ -229,7 +231,7 @@ describe("rankAnswers on random tables", () => {
 
   it("grades exactly one distance as a worldie", () => {
     for (const s of SAMPLES) {
-      for (const mode of MODES) {
+      for (const mode of DISTANCE_RULES) {
         const table = rankAnswers(s.question, s.stadium, mode);
         const worldies = table.filter((r) => gradeFor(r.points) === "worldie");
         expect(worldies.length).toBeGreaterThanOrEqual(1);
@@ -249,7 +251,7 @@ describe("rankAnswers at the extremes", () => {
   const pin = { lat: 0, lng: 0 };
 
   it("keeps 100 for the best alone in a list of 1000", () => {
-    for (const mode of MODES) {
+    for (const mode of DISTANCE_RULES) {
       const table = rankAnswers(line(1000), pin, mode);
       expect(table.filter((r) => r.points === 100)).toHaveLength(
         table.filter((r) => r.km === table[0].km).length,
@@ -260,14 +262,14 @@ describe("rankAnswers at the extremes", () => {
   });
 
   it("two answers score 100 and 0", () => {
-    for (const mode of MODES) {
+    for (const mode of DISTANCE_RULES) {
       const table = rankAnswers(
         question("two", [answer("Near", 0, 1), answer("Far", 0, 50)]),
         pin,
         mode,
       );
       expect(table.map((r) => r.points)).toEqual([100, 0]);
-      expect(table[0].answer.name).toBe(mode === "home" ? "Near" : "Far");
+      expect(table[0].answer.name).toBe(mode === "closest" ? "Near" : "Far");
     }
   });
 
@@ -277,16 +279,16 @@ describe("rankAnswers at the extremes", () => {
       answer("B", 0, 2),
       answer("C", 0, 3),
     ]);
-    for (const mode of MODES) {
+    for (const mode of DISTANCE_RULES) {
       expect(rankAnswers(q, pin, mode).map((r) => r.points)).toEqual([
         100, 50, 0,
       ]);
     }
   });
 
-  it("an answer at the stadium itself is 0 km and the best HOME answer", () => {
+  it("an answer at the stadium itself is 0 km and the best CLOSEST answer", () => {
     const q = question("at", [answer("Here", 10, 10), answer("There", 20, 20)]);
-    const table = rankAnswers(q, { lat: 10, lng: 10 }, "home");
+    const table = rankAnswers(q, { lat: 10, lng: 10 }, "closest");
     expect(table[0]).toMatchObject({ km: 0, points: 100, rank: 1 });
     expect(Object.is(table[0].km, -0)).toBe(false);
   });
@@ -298,7 +300,7 @@ describe("rankAnswers at the extremes", () => {
       answer("Fiji", -17.7, 178),
       answer("Samoa", -13.8, -172),
     ]);
-    const fromFiji = rankAnswers(q, { lat: -17.7, lng: 178 }, "home");
+    const fromFiji = rankAnswers(q, { lat: -17.7, lng: 178 }, "closest");
     expect(fromFiji.map((r) => r.answer.name)).toEqual([
       "Fiji",
       "Samoa",
@@ -341,7 +343,11 @@ describe("gradeFor at every point", () => {
 describe("tableExcerpt on random tables", () => {
   it("always shows the best, the worst and the player's row, in order, once each", () => {
     for (const s of SAMPLES) {
-      const table: RankedAnswer[] = rankAnswers(s.question, s.stadium, "home");
+      const table: RankedAnswer[] = rankAnswers(
+        s.question,
+        s.stadium,
+        "closest",
+      );
       const rand = seeded(s.seed * 7919);
       for (const maxRows of [0, 1, 2, 3, 5, 8, 12, 1000, Infinity, NaN, -4]) {
         const pick = Math.floor(rand() * table.length);
@@ -379,7 +385,7 @@ describe("tableExcerpt on random tables", () => {
     const table = rankAnswers(
       SAMPLES[10].question,
       SAMPLES[10].stadium,
-      "home",
+      "closest",
     );
     expect(tableExcerpt(table, "nobody", 5).some((r) => r.isPlayer)).toBe(
       false,

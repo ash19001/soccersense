@@ -46,6 +46,7 @@ const TURNS: Turn[] = [
     grade: "worldie",
     points: 100,
     km: 3,
+    share: 34,
     rank: 1,
     msLeft: 21_500,
   },
@@ -56,6 +57,7 @@ const TURNS: Turn[] = [
     grade: "skipped",
     points: 0,
     km: null,
+    share: null,
     rank: null,
     msLeft: 12_000,
   },
@@ -66,6 +68,7 @@ const TURNS: Turn[] = [
     grade: "timeup",
     points: 0,
     km: null,
+    share: null,
     rank: null,
     msLeft: 0,
   },
@@ -97,6 +100,33 @@ describe("with a storage", () => {
       "soccersense:v1:2026-11-10:home",
     ]);
     expect(loadGame(DAY, "home", storage)).toEqual(GAME);
+  });
+
+  it("reads a game saved before HOME and AWAY were scored by popularity", () => {
+    const storage = new FakeStorage();
+    const old = GAME.turns.map((turn) => {
+      const copy: Partial<Turn> = { ...turn };
+      delete copy.share;
+      return copy;
+    });
+    storage.setItem(
+      storageKey(DAY, "home"),
+      JSON.stringify({ total: GAME.total, turns: old }),
+    );
+    const back = loadGame(DAY, "home", storage);
+    expect(back?.total).toBe(GAME.total);
+    expect(back?.turns.map((turn) => turn.share)).toEqual(
+      GAME.turns.map(() => null),
+    );
+    // A share that is there must be a number.
+    storage.setItem(
+      storageKey(DAY, "away"),
+      JSON.stringify({
+        total: GAME.total,
+        turns: GAME.turns.map((turn) => ({ ...turn, share: "34%" })),
+      }),
+    );
+    expect(loadGame(DAY, "away", storage)).toBeNull();
   });
 
   it("stores exactly { total, turns } as JSON", () => {

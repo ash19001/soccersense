@@ -169,6 +169,34 @@ describe.each(ALL_QUESTIONS.map((q) => [q.id, q] as const))(
       ).toEqual([]);
     });
 
+    it("every answer has a popularity: 0.1 to 100, at most one decimal place", () => {
+      expect(
+        eachAnswer(question, (answer, label) => {
+          const share = answer.popularity;
+          const ok =
+            typeof share === "number" &&
+            Number.isFinite(share) &&
+            share >= 0.1 &&
+            share <= 100 &&
+            Math.abs(share * 10 - Math.round(share * 10)) < 1e-9;
+          return ok ? [] : [`${label}: popularity ${String(share)}`];
+        }),
+      ).toEqual([]);
+    });
+
+    it("the popularity shares add up to about 100", () => {
+      const sum = question.answers.reduce((t, a) => t + a.popularity, 0);
+      expect(Math.abs(sum - 100)).toBeLessThanOrEqual(0.5);
+    });
+
+    it("has one most common and one most niche answer (no tie at either end)", () => {
+      const tenths = question.answers
+        .map((a) => Math.round(a.popularity * 10))
+        .sort((a, b) => b - a);
+      expect(tenths[0]).toBeGreaterThan(tenths[1]);
+      expect(tenths.at(-1)).toBeLessThan(tenths.at(-2) ?? 0);
+    });
+
     it("no alias is empty or equal to its own name", () => {
       expect(
         eachAnswer(question, (answer, label) => {

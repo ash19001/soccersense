@@ -11,6 +11,8 @@
  *   ./node_modules/.bin/tsx tools/snap.ts ball/shine --t 2 --strip 10 --dt 0.09 --scale 3
  *   ./node_modules/.bin/tsx tools/snap.ts ball/fit --scale 3
  *   ./node_modules/.bin/tsx tools/snap.ts ball/spin --strip 8 --dt 0.1 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts ball/modes --scale 3
+ *   ./node_modules/.bin/tsx tools/snap.ts ball/modes-fit --scale 3
  */
 
 import {
@@ -22,6 +24,7 @@ import {
   type ShotMap,
 } from "~/pixel";
 import {
+  ballShowPose,
   drawBall,
   drawBallShadow,
   type BallPatches,
@@ -35,8 +38,10 @@ import { drawSky } from "./sky";
 const PATCHES: BallPatches = {
   left: { label: "HOME", icon: "home", accent: MODE_COLORS.home },
   right: { label: "AWAY", icon: "away", accent: MODE_COLORS.away },
-  top: { label: "SOON", icon: "lock", locked: true },
-  bottom: { label: "SOON", icon: "lock", locked: true },
+  top: { label: "NEXT-GEN", icon: "forward", locked: true },
+  bottom: { label: "RETRO", icon: "rewind", locked: true },
+  backRight: { label: "CLOSEST", icon: "pin", locked: true },
+  backLeft: { label: "FURTHEST", icon: "globe", locked: true },
 };
 
 const SCORED: BallPatches = {
@@ -210,6 +215,50 @@ export const shots: ShotMap = {
         })),
       ),
       6,
+    ),
+
+  // Every patch in the pose that shows it: the menu pose, half a turn (CLOSEST and
+  // FURTHEST), NEXT-GEN and RETRO straight on, and a locked patch under the pointer.
+  "ball/modes": (ctx) =>
+    sheet(
+      ctx,
+      [
+        { r: 45, name: "MENU" },
+        { r: 45, name: "HALF TURN", ...ballShowPose("backLeft") },
+        { r: 45, name: "NEXT-GEN", ...ballShowPose("top") },
+        { r: 45, name: "RETRO", ...ballShowPose("bottom") },
+        {
+          r: 45,
+          name: "CLOSEST HOVERED",
+          ...ballShowPose("backRight"),
+          hovered: "backRight",
+        },
+        {
+          r: 45,
+          name: "RETRO HOVERED",
+          ...ballShowPose("bottom"),
+          hovered: "bottom",
+        },
+      ],
+      3,
+    ),
+
+  // The shown poses at the radii the home screen uses, at both ends of the rock.
+  "ball/modes-fit": (ctx) =>
+    sheet(
+      ctx,
+      (["backLeft", "top", "bottom"] as const).flatMap((slot) =>
+        [37, 45, 51, 59].map((r, n) => {
+          const pose = ballShowPose(slot);
+          return {
+            r,
+            name: `R ${r}`,
+            ...pose,
+            yaw: pose.yaw + (n % 2 === 0 ? -0.12 : 0.12),
+          };
+        }),
+      ),
+      4,
     ),
 
   // A slow turn about each axis, to check the solid and the masking.

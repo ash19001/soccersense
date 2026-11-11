@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Surface, TRANSPARENT, rgb } from "~/pixel";
-import { ballSlotCenter, type BallSlot } from "~/art/ball";
+import { ballShowPose, ballSlotCenter, type BallSlot } from "~/art/ball";
 import { menuLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
 import { logoSize } from "~/art/logo";
@@ -9,6 +9,7 @@ import { MenuBackdrop } from "~/art/stadium";
 import type { Mode } from "~/game";
 import {
   MenuScene,
+  type LockedMode,
   type MenuLabels,
   type MenuPhase,
   type MenuSceneOptions,
@@ -21,11 +22,15 @@ import source from "./menu.ts?raw";
 const LABELS: MenuLabels = {
   home: "HOME",
   away: "AWAY",
-  locked: "SOON",
-  header: "TODAY'S STADIUM",
+  nextgen: "NEXT-GEN",
+  retro: "RETRO",
+  closest: "CLOSEST",
+  furthest: "FURTHEST",
+  header: "DID YOU KNOW?",
   tagline: "DAILY FOOTBALL TRIVIA",
 };
-const STADIUM = { name: "Anfield", city: "Liverpool", country: "England" };
+const FACT =
+  "The penalty kick was the idea of William McCrum, a goalkeeper from County Armagh, and arrived in 1891.";
 
 const DAY = lightingFor({ elevation: 45, morning: false });
 const NIGHT = lightingFor({ elevation: -30, morning: false });
@@ -112,7 +117,7 @@ function make(
 ): MenuScene {
   const scene = new MenuScene({
     seed: 7,
-    stadium: STADIUM,
+    fact: FACT,
     labels: LABELS,
     intro: false,
     ...opts,
@@ -168,6 +173,11 @@ function patch(slot: BallSlot, w = 130, h = 281): { x: number; y: number } {
   );
 }
 
+/** No airship anywhere: the backdrop's own may be under any point a test picks. */
+function noAirship(): void {
+  vi.spyOn(MenuBackdrop.prototype, "airshipAt").mockReturnValue(false);
+}
+
 function click(scene: MenuScene, slot: BallSlot, touch = false): void {
   const p = patch(slot);
   scene.pointer({ type: "down", x: p.x, y: p.y, touch });
@@ -178,7 +188,7 @@ interface Log {
   kickoff: Mode[];
   choose: Mode[];
   hover: (Mode | null)[];
-  locked: BallSlot[];
+  locked: LockedMode[];
 }
 
 function listen(scene: MenuScene): Log {
@@ -186,7 +196,7 @@ function listen(scene: MenuScene): Log {
   scene.onKickoff = (mode) => log.kickoff.push(mode);
   scene.onChoose = (mode) => log.choose.push(mode);
   scene.onHover = (mode) => log.hover.push(mode);
-  scene.onLocked = (slot) => log.locked.push(slot);
+  scene.onLocked = (mode) => log.locked.push(mode);
   return log;
 }
 
@@ -341,12 +351,14 @@ describe("MenuScene: the picture", () => {
     expect(same(draw(dom), draw(plain))).toBe(true);
   });
 
-  it("takes new labels, a new stadium and a moon phase", () => {
+  it("takes new labels, a new fact and a moon phase", () => {
     const scene = make();
     const before = draw(scene);
     scene.setLabels({ ...LABELS, home: "CASA", tagline: undefined });
     expect(same(before, draw(scene))).toBe(false);
-    scene.setStadium({ name: "Maracanã", city: "Rio", country: "Brazil" });
+    const labelled = draw(scene);
+    scene.setFact("Goal nets arrived in 1889.");
+    expect(same(labelled, draw(scene))).toBe(false);
     scene.setMoonPhase(0.25);
     scene.setMoonPhase(Number.NaN);
     expect(covered(draw(scene))).toBe(true);
@@ -670,6 +682,108 @@ describe("MenuScene: where the kick-offs go", () => {
   });
 });
 
+describe("MenuScene: the fact on the airship", () => {
+  /** The pixels in and round the sign's panel at rest. */
+  function signPixels(s: Surface): number[] {
+    const z = menuLayout(s.w, s.h).scoreboard;
+    const out: number[] = [];
+    for (let y = z.y - 3; y < z.y + z.h + 3; y++) {
+      for (let x = z.x - 3; x < z.x + z.w + 3; x++) out.push(s.get(x, y));
+    }
+    return out;
+  }
+
+  it("draws the sign a backdrop given the fact and the header draws", () => {
+    for (const [w, h] of [
+      [480, 270],
+      [130, 281],
+    ] as const) {
+      const scene = make(w, h);
+      const b = new MenuBackdrop({
+        seed: 7,
+        sign: { header: LABELS.header, text: FACT },
+      });
+      b.resize(w, h);
+      b.setLighting(DAY);
+      const bs = new Surface(w, h);
+      b.draw(bs, 0);
+      expect(signPixels(draw(scene, w, h))).toEqual(signPixels(bs));
+      // and another fact is another sign
+      const other = make(w, h, { fact: "Goal nets arrived in 1889." });
+      expect(signPixels(draw(other, w, h))).not.toEqual(signPixels(bs));
+    }
+  });
+
+  it("hands the backdrop a new fact, and a new header from the labels", () => {
+    const sign = vi.spyOn(MenuBackdrop.prototype, "setSign");
+    const scene = make();
+    scene.setFact("Goal nets arrived in 1889.");
+    expect(sign).toHaveBeenLastCalledWith({
+      header: LABELS.header,
+      text: "Goal nets arrived in 1889.",
+    });
+    scene.setLabels({ ...LABELS, header: "FACT!" });
+    expect(sign).toHaveBeenLastCalledWith({
+      header: "FACT!",
+      text: "Goal nets arrived in 1889.",
+    });
+    // the same again is nothing new
+    const calls = sign.mock.calls.length;
+    scene.setFact("Goal nets arrived in 1889.");
+    scene.setLabels({ ...LABELS, header: "FACT!", home: "CASA" });
+    expect(sign.mock.calls.length).toBe(calls);
+  });
+
+  it("keeps the fact through a pop and gives it to the next airship", () => {
+    const sign = vi.spyOn(MenuBackdrop.prototype, "setSign");
+    const scene = make(480, 270);
+    const z = menuLayout(480, 270).scoreboard;
+    // poke the top of the envelope until it bursts
+    let popped = false;
+    for (let i = 0; i < 12 && !popped; i++) {
+      const at = { x: z.x + 12, y: z.y - 4 };
+      const pop = vi.spyOn(MenuBackdrop.prototype, "pokeAirship");
+      scene.pointer({ type: "move", ...at });
+      scene.pointer({ type: "down", ...at });
+      scene.pointer({ type: "up", ...at });
+      popped = pop.mock.results.some((r) => r.value === "pop");
+      pop.mockRestore();
+      advance(scene, 0.15);
+    }
+    expect(popped).toBe(true);
+    // the new airship is in its place 14.5 s after the pop, its fact back at the start
+    advance(scene, 15);
+    const back = draw(scene, 480, 270);
+    expect(sign).not.toHaveBeenCalled();
+    const b = new MenuBackdrop({
+      seed: 7,
+      sign: { header: LABELS.header, text: FACT },
+    });
+    b.resize(480, 270);
+    b.setLighting(DAY);
+    // the panel's lamp field shows the fact's first words, as on a fresh airship
+    const s = new Surface(480, 270);
+    b.draw(s, 0);
+    const field = (q: Surface): number[] => {
+      const out: number[] = [];
+      for (let y = z.y + 2; y < z.y + z.h - 2; y++) {
+        for (let x = z.x + 2; x < z.x + z.w - 2; x++) out.push(q.get(x, y));
+      }
+      return out;
+    };
+    // the drift moves the airship a pixel or two: find the offset that matches
+    let found = false;
+    for (let dy = -2; dy <= 2 && !found; dy++) {
+      for (let dx = -3; dx <= 3 && !found; dx++) {
+        const moved = new Surface(480, 270);
+        moved.blit(back, -dx, -dy);
+        found = field(moved).join() === field(s).join();
+      }
+    }
+    expect(found).toBe(true);
+  });
+});
+
 describe("MenuScene: the backdrop contract", () => {
   it("uses nothing of the backdrop but its contract", () => {
     // the code, without its comments
@@ -689,12 +803,13 @@ describe("MenuScene: the backdrop contract", () => {
     const allowed = [
       "resize",
       "setLighting",
-      "setStadium",
-      "setHeader",
+      "setSign",
       "setMoonPhase",
       "target",
       "setRoar",
       "draw",
+      "airshipAt",
+      "pokeAirship",
     ];
     expect(calls.length).toBeGreaterThan(0);
     for (const name of calls) expect(allowed).toContain(name);
@@ -771,7 +886,8 @@ describe("MenuScene: the backdrop contract", () => {
 });
 
 describe("MenuScene: hover and press", () => {
-  it("hovers HOME and AWAY under the pointer, and nothing else", () => {
+  it("hovers HOME and AWAY under the pointer, and points at the locked patches", () => {
+    noAirship();
     const scene = make();
     const log = listen(scene);
     expect(scene.cursor()).toBe("default");
@@ -782,11 +898,14 @@ describe("MenuScene: hover and press", () => {
     scene.pointer({ type: "move", x: home.x + 1, y: home.y });
     scene.pointer({ type: "move", x: away.x, y: away.y });
     expect(scene.cursor()).toBe("pointer");
-    // a locked patch, the white of the ball, the backdrop: no hover
-    for (const p of [patch("top"), patch("bottom"), { x: 65, y: 197 }]) {
+    // a locked patch can be pressed, but hovers no mode
+    for (const p of [patch("top"), patch("bottom")]) {
       scene.pointer({ type: "move", x: p.x, y: p.y });
-      expect(scene.cursor()).toBe("default");
+      expect(scene.cursor()).toBe("pointer");
     }
+    // the white of the ball: the ball can be turned
+    scene.pointer({ type: "move", x: 65, y: 197 });
+    expect(scene.cursor()).toBe("grab");
     scene.pointer({ type: "move", x: 3, y: 3 });
     expect(scene.cursor()).toBe("default");
     scene.pointer({ type: "move", x: home.x, y: home.y });
@@ -838,19 +957,35 @@ describe("MenuScene: hover and press", () => {
   });
 
   it("release anywhere else, or leaving, cancels", () => {
+    noAirship();
     const scene = make();
+    const calm = make();
     const log = listen(scene);
     const home = patch("left");
     const away = patch("right");
-    const idle = draw(scene);
 
+    // pressed, and nudged off the patch by less than a drag: the press no longer shows
+    let edge = home.x;
+    for (; edge > 0; edge--) {
+      scene.pointer({ type: "move", x: edge, y: home.y });
+      if (scene.cursor() !== "pointer") break;
+    }
+    scene.pointer({ type: "down", x: edge + 1, y: home.y });
+    expect(scene.cursor()).toBe("pointer");
+    scene.pointer({ type: "move", x: edge - 1, y: home.y });
+    expect(scene.cursor()).toBe("grab");
+    expect(same(draw(calm), draw(scene))).toBe(true);
+    scene.pointer({ type: "up", x: edge - 1, y: home.y });
+    expect(scene.phase).toBe("idle");
+
+    // dragged away (it turns the ball) and let go on the backdrop
     scene.pointer({ type: "down", x: home.x, y: home.y });
     scene.pointer({ type: "move", x: 5, y: 5 });
-    // off its patch the press no longer shows
-    expect(same(idle, draw(scene))).toBe(true);
+    expect(same(draw(calm), draw(scene))).toBe(false);
     scene.pointer({ type: "up", x: 5, y: 5 });
     expect(scene.phase).toBe("idle");
 
+    // released on the other patch
     scene.pointer({ type: "down", x: home.x, y: home.y });
     scene.pointer({ type: "up", x: away.x, y: away.y });
     expect(scene.phase).toBe("idle");
@@ -866,7 +1001,10 @@ describe("MenuScene: hover and press", () => {
     expect(log.kickoff).toEqual([]);
     expect(log.locked).toEqual([]);
     scene.pointer({ type: "leave", x: 0, y: 0 });
-    expect(same(idle, draw(scene))).toBe(true);
+    // and the ball is back in its pose (after a rest, if it stopped on a locked patch)
+    advance(scene, 6);
+    advance(calm, 6);
+    expect(same(draw(calm), draw(scene))).toBe(true);
   });
 
   it("a touch leaves no hover behind", () => {
@@ -881,8 +1019,10 @@ describe("MenuScene: hover and press", () => {
     expect(scene.phase).toBe("idle");
     expect(scene.cursor()).toBe("default");
     expect(log.hover.at(-1)).toBe(null);
-    const idle = draw(make());
-    expect(same(idle, draw(scene))).toBe(true);
+    advance(scene, 6);
+    const idle = make();
+    advance(idle, 6);
+    expect(same(draw(idle), draw(scene))).toBe(true);
     // and a tap chooses
     click(scene, "right", true);
     expect(log.kickoff).toEqual(["away"]);
@@ -890,11 +1030,14 @@ describe("MenuScene: hover and press", () => {
   });
 
   it("a locked patch says no and never chooses", () => {
-    for (const slot of ["top", "bottom"] as const) {
+    for (const [slot, mode] of [
+      ["top", "nextgen"],
+      ["bottom", "retro"],
+    ] as const) {
       const scene = make();
       const log = listen(scene);
       click(scene, slot);
-      expect(log.locked).toEqual([slot]);
+      expect(log.locked).toEqual([mode]);
       expect(log.kickoff).toEqual([]);
       expect(scene.phase).toBe("idle");
       scene.pointer({ type: "leave", x: 0, y: 0 });
@@ -1070,7 +1213,7 @@ describe("MenuScene: the hover", () => {
       let top = -1;
       for (let y = 0; y < h && top < 0; y++) {
         scene.pointer({ type: "move", x: p.x, y });
-        if (scene.cursor() === "pointer") top = y;
+        if (log.hover.at(-1) === "home") top = y;
       }
       expect(top).toBeGreaterThan(0);
       return { scene, log, top };
@@ -1103,11 +1246,11 @@ describe("MenuScene: the hover", () => {
     const moved = high();
     advance(moved.scene, 2);
     moved.scene.pointer({ type: "move", x: p.x, y: moved.top - 2 });
-    expect(moved.scene.cursor()).toBe("default");
+    expect(moved.scene.cursor()).toBe("grab");
     expect(moved.log.hover).toEqual(["home", null]);
     // and going back to where it was does not bring it back: the ball is not there now
     moved.scene.pointer({ type: "move", x: p.x, y: moved.top });
-    expect(moved.scene.cursor()).toBe("default");
+    expect(moved.scene.cursor()).toBe("grab");
     moved.scene.pointer({ type: "down", x: p.x, y: moved.top });
     moved.scene.pointer({ type: "up", x: p.x, y: moved.top });
     expect(moved.log.kickoff).toEqual([]);
@@ -1546,7 +1689,7 @@ describe("MenuScene: reduced motion", () => {
     const calm = make();
     calm.setReducedMotion(true);
     click(scene, "top", true);
-    expect(log.locked).toEqual(["top"]);
+    expect(log.locked).toEqual(["nextgen"]);
     advance(scene, 0.1);
     advance(calm, 0.1);
     expect(same(draw(scene), draw(calm))).toBe(true);
@@ -1672,7 +1815,7 @@ describe("MenuScene: robust", () => {
     expect(scene.phase).toBe("done");
     expect(log.choose).toEqual(["away"]);
     // an up before any frame, and a scene that was never resized
-    const bare = new MenuScene({ seed: 1, stadium: STADIUM, labels: LABELS });
+    const bare = new MenuScene({ seed: 1, fact: FACT, labels: LABELS });
     bare.pointer({ type: "up", x: 0, y: 0 });
     bare.pointer({ type: "down", x: 0, y: 0 });
     bare.update(0.1);
@@ -1706,4 +1849,586 @@ describe("MenuScene: robust", () => {
     scene.update(STEP);
     expect(scene.phase).toBe("done");
   });
+});
+
+describe("MenuScene: spinning the ball", () => {
+  const W = 480;
+  const H = 270;
+
+  /**
+   * Press at (x, y) and drag by (dx, dy) a frame for `frames` frames, with a frame's
+   * update after each move. The pointer stays down. Returns where it is.
+   */
+  function drag(
+    scene: MenuScene,
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    frames: number,
+    touch = false,
+  ): { x: number; y: number } {
+    scene.pointer({ type: "down", x, y, touch });
+    for (let i = 1; i <= frames; i++) {
+      scene.pointer({ type: "move", x: x + dx * i, y: y + dy * i, touch });
+      scene.update(STEP);
+    }
+    return { x: x + dx * frames, y: y + dy * frames };
+  }
+
+  /**
+   * With the mouse resting on HOME, step until HOME hovers again: the ball is back in its
+   * pose. Returns the seconds that took, or Infinity.
+   */
+  function timeToRest(scene: MenuScene, limit = 8): number {
+    const home = patch("left", W, H);
+    scene.pointer({ type: "move", x: home.x, y: home.y });
+    let t = 0;
+    while (scene.cursor() !== "pointer") {
+      if (t > limit) return Infinity;
+      scene.update(STEP);
+      t += STEP;
+    }
+    return t;
+  }
+
+  function tap(scene: MenuScene, slot: BallSlot): void {
+    const p = patch(slot, W, H);
+    scene.pointer({ type: "down", x: p.x, y: p.y });
+    scene.pointer({ type: "up", x: p.x, y: p.y });
+  }
+
+  it("a drag turns the ball and never chooses, wherever it is let go", () => {
+    flatBackdrop();
+    noAirship();
+    for (const [dx, dy] of [
+      [4, 0],
+      [0, 4],
+      [3, -3],
+    ] as const) {
+      const scene = make(W, H);
+      const calm = make(W, H);
+      const log = listen(scene);
+      const home = patch("left", W, H);
+      const away = patch("right", W, H);
+      scene.pointer({ type: "move", x: home.x, y: home.y });
+      expect(scene.cursor()).toBe("pointer");
+      drag(scene, home.x, home.y, dx, dy, 6);
+      for (let i = 0; i < 6; i++) calm.update(STEP);
+      expect(scene.cursor()).toBe("grabbing");
+      // the ball turned under the hand
+      expect(same(draw(calm, W, H), draw(scene, W, H))).toBe(false);
+      // no hover while it is held
+      expect(log.hover).toEqual(["home", null]);
+      // let go on AWAY, then on HOME: nothing is chosen
+      scene.pointer({ type: "move", x: away.x, y: away.y });
+      scene.pointer({ type: "up", x: away.x, y: away.y });
+      expect(scene.phase).toBe("idle");
+      drag(scene, away.x, away.y, -dx, -dy, 6);
+      scene.pointer({ type: "up", x: home.x, y: home.y });
+      advance(scene, 1);
+      expect(log.kickoff).toEqual([]);
+      expect(log.locked).toEqual([]);
+      expect(scene.phase).toBe("idle");
+    }
+  });
+
+  it("a press that wobbles by a pixel or two is still a click", () => {
+    noAirship();
+    for (const [slot, mode] of [
+      ["left", "home"],
+      ["right", "away"],
+    ] as const) {
+      const scene = make(W, H);
+      const log = listen(scene);
+      const p = patch(slot, W, H);
+      scene.pointer({ type: "down", x: p.x, y: p.y });
+      scene.pointer({ type: "move", x: p.x + 2, y: p.y - 1 });
+      scene.update(STEP);
+      expect(scene.cursor()).toBe("pointer");
+      scene.pointer({ type: "up", x: p.x + 2, y: p.y - 1 });
+      expect(log.kickoff).toEqual([mode]);
+    }
+  });
+
+  it("a flick keeps it spinning, and it is back in its pose within a few seconds", () => {
+    flatBackdrop();
+    noAirship();
+    const scene = make(W, H);
+    const log = listen(scene);
+    const home = patch("left", W, H);
+    const away = patch("right", W, H);
+    let steps = 0;
+    drag(scene, home.x, home.y, 12, 2, 6);
+    steps += 6;
+    scene.pointer({ type: "up", x: home.x + 72, y: home.y + 12 });
+    // still spinning half a second later: nothing hovers, the ball can be grabbed
+    for (let i = 0; i < 30; i++) scene.update(STEP);
+    steps += 30;
+    scene.pointer({ type: "move", x: away.x, y: away.y });
+    expect(scene.cursor()).toBe("grab");
+    const spinning = draw(scene, W, H);
+    scene.update(STEP);
+    steps += 1;
+    expect(same(spinning, draw(scene, W, H))).toBe(false);
+    // and home again in a few seconds
+    const t = timeToRest(scene);
+    steps += Math.round(t / STEP);
+    expect(t).toBeGreaterThan(1.5);
+    expect(t).toBeLessThan(4.5);
+    // exactly in its pose: the same picture as a ball never touched, with HOME hovered
+    const calm = make(W, H);
+    for (let i = 0; i < steps; i++) calm.update(STEP);
+    calm.pointer({ type: "move", x: home.x, y: home.y });
+    expect(same(draw(calm, W, H), draw(scene, W, H))).toBe(true);
+    // HOME on the left, AWAY on the right
+    expect(log.hover.at(-1)).toBe("home");
+    tap(scene, "right");
+    expect(log.kickoff).toEqual(["away"]);
+  });
+
+  it("a ball let go with no speed eases straight home", () => {
+    noAirship();
+    const scene = make(W, H);
+    const home = patch("left", W, H);
+    const at = drag(scene, home.x, home.y, 6, 0, 8);
+    // held still before letting go: the flick's speed is gone
+    for (let i = 0; i < 20; i++) scene.update(STEP);
+    scene.pointer({ type: "up", x: at.x, y: at.y });
+    expect(timeToRest(scene)).toBeLessThan(1.6);
+  });
+
+  it("with reduced motion it turns under the hand but keeps no momentum", () => {
+    flatBackdrop();
+    noAirship();
+    const flicked = (reduced: boolean): number => {
+      const scene = make(W, H);
+      scene.setReducedMotion(reduced);
+      const calm = make(W, H);
+      calm.setReducedMotion(reduced);
+      const home = patch("left", W, H);
+      drag(scene, home.x, home.y, 12, 2, 6);
+      for (let i = 0; i < 6; i++) calm.update(STEP);
+      // it turned
+      expect(same(draw(calm, W, H), draw(scene, W, H))).toBe(false);
+      scene.pointer({ type: "up", x: home.x + 72, y: home.y + 12 });
+      return timeToRest(scene);
+    };
+    const still = flicked(true);
+    const spun = flicked(false);
+    expect(still).toBeLessThan(1.3);
+    expect(spun).toBeGreaterThan(still + 1);
+  });
+
+  it("a press on a turning ball catches it, and never chooses", () => {
+    noAirship();
+    const scene = make(W, H);
+    const log = listen(scene);
+    const home = patch("left", W, H);
+    drag(scene, home.x, home.y, 12, 0, 6);
+    scene.pointer({ type: "up", x: home.x + 72, y: home.y });
+    advance(scene, 0.2);
+    // pressed and released where HOME lives
+    scene.pointer({ type: "down", x: home.x, y: home.y });
+    expect(scene.cursor()).toBe("grabbing");
+    scene.pointer({ type: "up", x: home.x, y: home.y });
+    expect(log.kickoff).toEqual([]);
+    // caught: no speed left, so it is home quickly
+    expect(timeToRest(scene)).toBeLessThan(1.6);
+  });
+
+  it("choose() mid-spin brings the ball round and kicks off, each callback once", () => {
+    for (const reduced of [false, true]) {
+      const scene = make(W, H);
+      scene.setReducedMotion(reduced);
+      const log = listen(scene);
+      const home = patch("left", W, H);
+      drag(scene, home.x, home.y, 12, 3, 6);
+      scene.pointer({ type: "up", x: home.x + 72, y: home.y + 18 });
+      advance(scene, 0.3);
+      expect(scene.choose("away")).toBe(true);
+      expect(log.kickoff).toEqual(["away"]);
+      expect(scene.choose("home")).toBe(false);
+      // pointer input waits
+      tap(scene, "left");
+      expect(scene.cursor()).toBe("default");
+      if (reduced) {
+        expect(scene.phase).toBe("kickoff");
+      } else {
+        expect(scene.phase).toBe("idle");
+        advance(scene, 0.3);
+        expect(scene.phase).toBe("kickoff");
+      }
+      runToDone(scene);
+      expect(log.kickoff).toEqual(["away"]);
+      expect(log.choose).toEqual(["away"]);
+    }
+  });
+
+  it("choose() while the ball is held takes it from the hand", () => {
+    const scene = make(W, H);
+    const log = listen(scene);
+    const home = patch("left", W, H);
+    const at = drag(scene, home.x, home.y, 6, 0, 4);
+    expect(scene.choose("home")).toBe(true);
+    scene.pointer({ type: "move", x: at.x + 30, y: at.y });
+    scene.pointer({ type: "up", x: at.x + 30, y: at.y });
+    expect(scene.cursor()).toBe("default");
+    runToDone(scene);
+    expect(log.kickoff).toEqual(["home"]);
+    expect(log.choose).toEqual(["home"]);
+  });
+
+  it("names its cursors: grab, grabbing, pointer and default", () => {
+    noAirship();
+    const scene = make(W, H);
+    const m = menuLayout(W, H);
+    const home = patch("left", W, H);
+    scene.pointer({ type: "move", x: 2, y: H - 2 });
+    expect(scene.cursor()).toBe("default");
+    scene.pointer({ type: "move", x: m.cx, y: m.ballCy });
+    expect(scene.cursor()).toBe("grab");
+    scene.pointer({ type: "move", x: home.x, y: home.y });
+    expect(scene.cursor()).toBe("pointer");
+    drag(scene, home.x, home.y, 5, 0, 4);
+    expect(scene.cursor()).toBe("grabbing");
+    // even off the ball
+    scene.pointer({ type: "move", x: 2, y: H - 2 });
+    expect(scene.cursor()).toBe("grabbing");
+    scene.pointer({ type: "up", x: 2, y: H - 2 });
+    expect(scene.cursor()).toBe("default");
+    // over a turning ball a patch is only more of the ball
+    scene.pointer({ type: "move", x: home.x, y: home.y });
+    expect(scene.cursor()).toBe("grab");
+    // a ball still arriving cannot be grabbed
+    const arriving = make(W, H, { intro: true });
+    arriving.update(0);
+    arriving.update(0.3);
+    arriving.pointer({ type: "move", x: m.cx, y: m.ballCy });
+    expect(arriving.cursor()).not.toMatch(/grab/);
+    arriving.pointer({ type: "down", x: m.cx, y: m.ballCy });
+    arriving.pointer({ type: "move", x: m.cx + 20, y: m.ballCy });
+    expect(arriving.cursor()).not.toMatch(/grab/);
+    // and nothing during a kick-off
+    expect(scene.choose("home")).toBe(true);
+    advance(scene, 0.5);
+    scene.pointer({ type: "move", x: m.cx, y: m.ballCy });
+    expect(scene.cursor()).toBe("default");
+  });
+
+  it("a drag that leaves the ball keeps turning it until it is let go", () => {
+    flatBackdrop();
+    noAirship();
+    const scene = make(W, H);
+    const m = menuLayout(W, H);
+    drag(scene, m.cx, m.ballCy, 6, 0, Math.ceil((m.ballR + 20) / 6));
+    const a = draw(scene, W, H);
+    // well off the ball, still dragging
+    scene.pointer({ type: "move", x: m.cx + m.ballR + 60, y: m.ballCy + 30 });
+    expect(same(a, draw(scene, W, H))).toBe(false);
+    expect(scene.cursor()).toBe("grabbing");
+    // a pointer that goes lets go
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+    expect(scene.cursor()).toBe("default");
+    expect(timeToRest(scene)).toBeLessThan(5);
+  });
+
+  it("a touch drag turns the ball and leaves no hover behind", () => {
+    noAirship();
+    const scene = make(W, H);
+    const log = listen(scene);
+    const home = patch("left", W, H);
+    const at = drag(scene, home.x, home.y, 5, 0, 6, true);
+    scene.pointer({ type: "up", x: at.x, y: at.y, touch: true });
+    scene.pointer({ type: "leave", x: at.x, y: at.y, touch: true });
+    expect(log.kickoff).toEqual([]);
+    expect(log.hover.at(-1)).toBe(null);
+    expect(scene.cursor()).toBe("default");
+  });
+
+  it("is deterministic, and survives resize, reset and any numbers mid-spin", () => {
+    const run = (): Surface => {
+      const scene = make(W, H);
+      const home = patch("left", W, H);
+      drag(scene, home.x, home.y, 9, -4, 7);
+      scene.pointer({ type: "up", x: home.x + 63, y: home.y - 28 });
+      advance(scene, 0.4);
+      return draw(scene, W, H);
+    };
+    expect(same(run(), run())).toBe(true);
+
+    const scene = make(W, H);
+    const home = patch("left", W, H);
+    drag(scene, home.x, home.y, 9, -4, 3);
+    scene.pointer({ type: "move", x: Number.NaN, y: Infinity });
+    scene.update(STEP);
+    scene.resize(130, 281);
+    scene.update(Number.NaN);
+    scene.update(STEP);
+    expect(covered(draw(scene))).toBe(true);
+    // a stalled tab puts it straight home
+    scene.update(1e6);
+    expect(scene.cursor()).toBe("default");
+    const fresh = make();
+    for (let i = 0; i < 5; i++) fresh.update(STEP);
+    fresh.update(1e6);
+    expect(same(draw(fresh), draw(scene))).toBe(true);
+    scene.reset();
+    expect(scene.phase).toBe("idle");
+  });
+});
+
+describe("MenuScene: the locked patches", () => {
+  const W = 480;
+  const H = 270;
+
+  /** Where `slot` is when the ball shows `shown`, before the hover moves it a pixel or two. */
+  function shownAt(slot: BallSlot, shown: BallSlot): { x: number; y: number } {
+    const m = menuLayout(W, H);
+    return ballSlotCenter(
+      {
+        cx: m.cx,
+        cy: m.ballCy,
+        r: m.ballR,
+        ...ballShowPose(shown),
+        hovered: null,
+        pressed: null,
+        chosen: null,
+        t: 0,
+      },
+      slot,
+    );
+  }
+
+  /**
+   * Grab the ball at `from`, carry it slowly to `to`, hold it still and let go: no flick.
+   * Steps 40 frames.
+   */
+  function carry(
+    scene: MenuScene,
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+  ): void {
+    scene.pointer({ type: "down", x: from.x, y: from.y });
+    for (let i = 1; i <= 20; i++) {
+      scene.pointer({
+        type: "move",
+        x: from.x + ((to.x - from.x) * i) / 20,
+        y: from.y + ((to.y - from.y) * i) / 20,
+      });
+      scene.update(STEP);
+    }
+    for (let i = 0; i < 20; i++) scene.update(STEP);
+    scene.pointer({ type: "up", x: to.x, y: to.y });
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+  }
+
+  /** Turn the ball by hand until `slot` faces the viewer, and let it go. */
+  function show(scene: MenuScene, slot: BallSlot): void {
+    const m = menuLayout(W, H);
+    const middle = { x: m.cx, y: m.ballCy };
+    if (slot === "top" || slot === "bottom") {
+      carry(scene, patch(slot, W, H), middle);
+    } else {
+      // most of half a turn, dragged left to right across the ball
+      const reach = Math.round(m.ballR * 0.85);
+      carry(
+        scene,
+        { x: m.cx - reach, y: m.ballCy + 6 },
+        { x: m.cx + reach, y: m.ballCy + 6 },
+      );
+    }
+  }
+
+  const CASES = [
+    ["top", "top", "nextgen"],
+    ["bottom", "bottom", "retro"],
+    ["backRight", "backRight", "closest"],
+    ["backLeft", "backRight", "furthest"],
+  ] as const;
+
+  it("puts CLOSEST where HOME was and FURTHEST where AWAY was, half a turn round", () => {
+    const cx = menuLayout(W, H).cx;
+    expect(shownAt("backRight", "backRight").x).toBeLessThan(cx - 15);
+    expect(shownAt("backLeft", "backLeft").x).toBeGreaterThan(cx + 15);
+  });
+
+  it("a ball left showing a locked patch holds it about four seconds, then goes home", () => {
+    flatBackdrop();
+    noAirship();
+    for (const [slot, shown] of CASES) {
+      const scene = make(W, H);
+      const calm = make(W, H);
+      const log = listen(scene);
+      show(scene, shown);
+      for (let i = 0; i < 40; i++) calm.update(STEP);
+      const at = shownAt(slot, shown);
+      // at rest showing it: it can be pointed at, and hovers no mode
+      advance(scene, 1);
+      advance(calm, 1);
+      scene.pointer({ type: "move", x: at.x, y: at.y });
+      expect(scene.cursor()).toBe("pointer");
+      scene.pointer({ type: "leave", x: 0, y: 0 });
+      // still there nearly four seconds after it stopped
+      advance(scene, 2.9);
+      advance(calm, 2.9);
+      scene.pointer({ type: "move", x: at.x, y: at.y });
+      expect(scene.cursor()).toBe("pointer");
+      scene.pointer({ type: "leave", x: 0, y: 0 });
+      expect(same(draw(calm, W, H), draw(scene, W, H))).toBe(false);
+      // and then home, exactly in its pose
+      advance(scene, 3);
+      advance(calm, 3);
+      expect(same(draw(calm, W, H), draw(scene, W, H))).toBe(true);
+      expect(log.hover.filter((m) => m !== null)).toEqual([]);
+      expect(log.locked).toEqual([]);
+    }
+  });
+
+  it("a press on a locked patch at rest names its mode, never chooses, and waits again", () => {
+    noAirship();
+    for (const [slot, shown, mode] of CASES) {
+      const scene = make(W, H);
+      const log = listen(scene);
+      show(scene, shown);
+      advance(scene, 3.5);
+      const at = shownAt(slot, shown);
+      scene.pointer({ type: "down", x: at.x, y: at.y });
+      scene.pointer({ type: "up", x: at.x, y: at.y });
+      expect(log.locked).toEqual([mode]);
+      expect(log.kickoff).toEqual([]);
+      expect(scene.phase).toBe("idle");
+      scene.pointer({ type: "leave", x: 0, y: 0 });
+      // the wait starts afresh: still showing it well past the first four seconds
+      advance(scene, 3.5);
+      scene.pointer({ type: "move", x: at.x, y: at.y });
+      expect(scene.cursor()).toBe("pointer");
+      scene.pointer({ type: "down", x: at.x, y: at.y });
+      scene.pointer({ type: "up", x: at.x, y: at.y });
+      expect(log.locked).toEqual([mode, mode]);
+      expect(log.choose).toEqual([]);
+    }
+  });
+
+  it("stays while the pointer rests on it, and goes home when it leaves", () => {
+    noAirship();
+    const scene = make(W, H);
+    const log = listen(scene);
+    show(scene, "top");
+    const at = shownAt("top", "top");
+    scene.pointer({ type: "move", x: at.x, y: at.y });
+    advance(scene, 8);
+    expect(scene.cursor()).toBe("pointer");
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+    advance(scene, 6);
+    // home: HOME is back on the left
+    const home = patch("left", W, H);
+    scene.pointer({ type: "move", x: home.x, y: home.y });
+    expect(log.hover.at(-1)).toBe("home");
+  });
+
+  it("HOME and AWAY still choose from a pose that shows another patch", () => {
+    noAirship();
+    for (const [shown, slot, mode] of [
+      ["top", "left", "home"],
+      ["bottom", "right", "away"],
+    ] as const) {
+      const scene = make(W, H);
+      const log = listen(scene);
+      show(scene, shown);
+      advance(scene, 1);
+      const at = shownAt(slot, shown);
+      scene.pointer({ type: "move", x: at.x, y: at.y });
+      expect(log.hover.at(-1)).toBe(mode);
+      scene.pointer({ type: "down", x: at.x, y: at.y });
+      scene.pointer({ type: "up", x: at.x, y: at.y });
+      expect(log.kickoff).toEqual([mode]);
+      expect(log.locked).toEqual([]);
+      runToDone(scene);
+      expect(log.choose).toEqual([mode]);
+    }
+  });
+});
+
+describe("MenuScene: the airship", () => {
+  const W = 480;
+  const H = 270;
+
+  it("hovers and takes clicks on the backdrop's clock, and never chooses", () => {
+    const clocks: number[] = [];
+    vi.spyOn(MenuBackdrop.prototype, "draw").mockImplementation((s, t) => {
+      clocks.push(t);
+      s.clear(FLAT);
+    });
+    const at = vi
+      .spyOn(MenuBackdrop.prototype, "airshipAt")
+      .mockImplementation((x, y) => x < 60 && y < 40);
+    const poke = vi
+      .spyOn(MenuBackdrop.prototype, "pokeAirship")
+      .mockReturnValue("wobble");
+    const scene = make(W, H);
+    const log = listen(scene);
+    advance(scene, 1.3);
+    draw(scene, W, H);
+    scene.pointer({ type: "move", x: 30, y: 20 });
+    expect(scene.cursor()).toBe("pointer");
+    expect(at).toHaveBeenLastCalledWith(30, 20, clocks.at(-1));
+    // six quick clicks: six pokes, each on the clock the picture is drawn with
+    for (let i = 0; i < 6; i++) {
+      scene.pointer({ type: "down", x: 30, y: 20 });
+      scene.pointer({ type: "up", x: 30, y: 20 });
+      draw(scene, W, H);
+      expect(poke).toHaveBeenLastCalledWith(clocks.at(-1));
+      advance(scene, 0.1);
+    }
+    expect(poke).toHaveBeenCalledTimes(6);
+    // a tap too
+    scene.pointer({ type: "down", x: 20, y: 10, touch: true });
+    scene.pointer({ type: "up", x: 20, y: 10, touch: true });
+    expect(poke).toHaveBeenCalledTimes(7);
+    // a press that drags, or that ends off the airship, is no click
+    scene.pointer({ type: "down", x: 30, y: 20 });
+    scene.pointer({ type: "move", x: 40, y: 30 });
+    scene.pointer({ type: "up", x: 30, y: 20 });
+    scene.pointer({ type: "down", x: 58, y: 20 });
+    scene.pointer({ type: "up", x: 61, y: 20 });
+    expect(poke).toHaveBeenCalledTimes(7);
+    expect(log.kickoff).toEqual([]);
+    expect(log.locked).toEqual([]);
+    expect(log.hover).toEqual([]);
+    expect(scene.phase).toBe("idle");
+    // and the ball took none of it
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+    const calm = make(W, H);
+    advance(calm, 1.3 + 0.6);
+    expect(same(draw(calm, W, H), draw(scene, W, H))).toBe(true);
+  });
+
+  it("never takes what is meant for the ball", () => {
+    vi.spyOn(MenuBackdrop.prototype, "airshipAt").mockReturnValue(true);
+    const poke = vi
+      .spyOn(MenuBackdrop.prototype, "pokeAirship")
+      .mockReturnValue("pop");
+    const scene = make(W, H);
+    const log = listen(scene);
+    const m = menuLayout(W, H);
+    scene.pointer({ type: "move", x: m.cx, y: m.ballCy });
+    expect(scene.cursor()).toBe("grab");
+    // pressed on the ball and let go off it: a drag, not a click on the airship
+    scene.pointer({ type: "down", x: m.cx, y: m.ballCy });
+    scene.pointer({ type: "up", x: m.cx + m.ballR + 20, y: m.ballCy });
+    advance(scene, 3);
+    tap(scene, "left");
+    expect(log.kickoff).toEqual(["home"]);
+    expect(poke).not.toHaveBeenCalled();
+    // and it is off the air during a kick-off
+    scene.pointer({ type: "move", x: 5, y: 5 });
+    expect(scene.cursor()).toBe("default");
+  });
+
+  function tap(scene: MenuScene, slot: BallSlot): void {
+    const p = patch(slot, W, H);
+    scene.pointer({ type: "down", x: p.x, y: p.y });
+    scene.pointer({ type: "up", x: p.x, y: p.y });
+  }
 });

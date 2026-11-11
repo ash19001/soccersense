@@ -4,6 +4,7 @@ import {
   FAN,
   PLAYER,
   STAGE_W,
+  STAGE_W_MAX,
   YOUTH,
   careerLayout,
   menuLayout,
@@ -240,18 +241,41 @@ describe("careerLayout", () => {
     expect(c.sheetY).toBe(152);
   });
 
-  it("centres the 130 px stage on a wide canvas", () => {
+  it("widens the stage on a monitor, centred", () => {
     const c = careerLayout(480, 270);
     expect(c.cx).toBe(240);
-    expect(c.stageLeft).toBe(175);
-    expect(c.stageRight).toBe(305);
-    expect(c.heroX).toBe(214);
-    expect(c.goalX).toBe(284);
+    expect(c.stageLeft).toBe(144);
+    expect(c.stageRight).toBe(336);
+    expect(c.stageScale).toBeCloseTo(192 / 130, 6);
+    expect(c.heroX).toBe(202);
+    expect(c.goalX).toBe(305);
+    expect(c.keeperX).toBe(299);
+    expect(c.groundY).toBe(140);
+    const big = careerLayout(720, 360);
+    expect(big.stageRight - big.stageLeft).toBe(STAGE_W_MAX);
+  });
+
+  it("keeps the 130 px stage on every phone", () => {
+    for (const [w, h] of [
+      [130, 281],
+      [120, 222],
+      [160, 300],
+      [195, 310],
+    ] as const) {
+      const c = careerLayout(w, h);
+      expect(c.stageRight - c.stageLeft).toBe(STAGE_W);
+      expect(c.stageScale).toBe(1);
+      expect(c.goalX - c.heroX).toBe(70);
+      expect(c.keeperX).toBe(c.cx + 38);
+    }
   });
 
   it.each(SIZES)("keeps the action in the visible band at %i x %i", (w, h) => {
     const c = careerLayout(w, h);
-    for (const n of numbers(c)) expect(Number.isInteger(n)).toBe(true);
+    // Every position is a whole pixel (the stage's scale is a ratio, not a position).
+    const { stageScale, ...positions } = c;
+    expect(stageScale).toBeGreaterThanOrEqual(1);
+    for (const n of numbers(positions)) expect(Number.isInteger(n)).toBe(true);
     // Feet on the ground line, inside the band every interface state leaves visible.
     expect(c.groundY).toBeLessThanOrEqual(c.actionBottom);
     expect(c.groundY - PLAYER.h).toBeGreaterThanOrEqual(c.actionTop);
@@ -280,6 +304,9 @@ describe("careerLayout", () => {
     expect(c.heroX).toBeLessThan(c.keeperX);
     expect(c.keeperX).toBeLessThan(c.goalX);
     expect(c.goalX).toBeLessThan(c.stageRight);
-    expect(c.stageRight - c.stageLeft).toBe(STAGE_W);
+    expect(c.stageRight - c.stageLeft).toBeGreaterThanOrEqual(STAGE_W);
+    expect(c.stageRight - c.stageLeft).toBeLessThanOrEqual(STAGE_W_MAX);
+    // The goal's net (11 px deep) stays on the stage.
+    expect(c.goalX + 11).toBeLessThan(c.stageRight);
   });
 });

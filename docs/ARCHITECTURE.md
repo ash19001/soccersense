@@ -111,7 +111,7 @@ export interface Scene {
   draw(s: Surface): void; // must fully cover the surface
   pointer?(p: PointerInfo): void;
   setReducedMotion?(on: boolean): void;
-  cursor?(): "default" | "pointer";
+  cursor?(): "default" | "pointer" | "grab" | "grabbing";
 }
 ```
 
