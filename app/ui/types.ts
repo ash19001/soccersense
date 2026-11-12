@@ -5,15 +5,24 @@
  */
 export type UiMode = "home" | "away";
 
+/** The six shots, best first, then no answer: the clock ran out, or a pass. */
 export type UiGrade =
-  "worldie" | "topbins" | "goal" | "ontarget" | "wide" | "timeup" | "skipped";
+  | "worldie"
+  | "golazo"
+  | "trivela"
+  | "toepoke"
+  | "tapin"
+  | "miss"
+  | "timeup"
+  | "skipped";
 
 export const UI_GRADES: readonly UiGrade[] = [
   "worldie",
-  "topbins",
-  "goal",
-  "ontarget",
-  "wide",
+  "golazo",
+  "trivela",
+  "toepoke",
+  "tapin",
+  "miss",
   "timeup",
   "skipped",
 ];

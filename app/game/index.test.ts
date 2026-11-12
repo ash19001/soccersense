@@ -11,9 +11,18 @@ describe("the barrel", () => {
       "formatDistance",
       // scoring
       "rankAnswers",
-      "gradeFor",
+      "shotsOf",
+      "shotsFor",
+      "standings",
+      "shotForStanding",
+      "isShot",
+      "isGoal",
+      "shotIndex",
       "rankedFor",
       "tableExcerpt",
+      // reveal
+      "shotRows",
+      "revealRows",
       // judge
       "normalise",
       "judge",
@@ -52,6 +61,8 @@ describe("the barrel", () => {
       "clearGame",
       // share
       "buildShareText",
+      // titles
+      "titleFor",
       // view
       "questionView",
       "clockView",
@@ -73,12 +84,23 @@ describe("the barrel", () => {
     expect(game.TIER_STEP).toBe(90);
     expect(game.TOP_TIER).toBe(7);
     expect(game.TIERS).toHaveLength(8);
+    expect(game.TITLE_FROM).toHaveLength(10);
+    expect(game.TITLES.home).toHaveLength(10);
     expect(game.EPOCH_UTC).toBe(Date.UTC(2026, 10, 10));
     expect(game.MS_PER_DAY).toBe(86_400_000);
     expect(game.EARTH_RADIUS_KM).toBe(6371.0088);
     expect(game.KM_PER_MILE).toBe(1.609344);
     expect(game.STORAGE_PREFIX).toBe("soccersense:v1");
-    expect(Object.keys(game.GRADE_SYMBOLS)).toHaveLength(7);
+    expect(Object.keys(game.GRADE_SYMBOLS)).toHaveLength(8);
+    expect(game.SHOT_ORDER).toEqual([
+      "worldie",
+      "golazo",
+      "trivela",
+      "toepoke",
+      "tapin",
+      "miss",
+    ]);
+    expect(game.SHOT_POINTS.worldie).toBe(100);
   });
 
   it("does not export the test fixtures", () => {
@@ -103,6 +125,7 @@ describe("the barrel", () => {
       lat: number,
       lng: number,
       popularity: number,
+      shot: game.Shot,
     ) => ({
       id,
       name,
@@ -112,6 +135,7 @@ describe("the barrel", () => {
       lat,
       lng,
       popularity,
+      shot,
     });
     const questions: game.Question[] = [
       {
@@ -122,15 +146,30 @@ describe("the barrel", () => {
         measureLabel: "where the manager was born",
         asOf: "2026-11-10",
         answers: [
-          place("kenny-dalglish", "Kenny Dalglish", 55.8642, -4.2518, 60),
+          place(
+            "kenny-dalglish",
+            "Kenny Dalglish",
+            55.8642,
+            -4.2518,
+            60,
+            "worldie",
+          ),
           place(
             "manuel-pellegrini",
             "Manuel Pellegrini",
             -33.4489,
             -70.6693,
             10,
+            "miss",
           ),
-          place("jose-mourinho", "José Mourinho", 38.5244, -8.8882, 30),
+          place(
+            "jose-mourinho",
+            "José Mourinho",
+            38.5244,
+            -8.8882,
+            30,
+            "golazo",
+          ),
         ],
       },
     ];
@@ -166,7 +205,7 @@ describe("the barrel", () => {
     );
     expect(rows.map((r) => [r.answer.name, r.points, r.isPlayer])).toEqual([
       ["Kenny Dalglish", 100, true],
-      ["José Mourinho", 50, false],
+      ["José Mourinho", 80, false],
       ["Manuel Pellegrini", 0, false],
     ]);
     session = game.reduce(session, { type: "next", now: now.getTime() + 9000 });

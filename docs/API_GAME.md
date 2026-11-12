@@ -3,14 +3,32 @@
 The rules are pure TypeScript: no DOM, no clock reads. The current time is always passed in.
 Import everything from `~/game`. Never import `test-fixtures.ts`.
 
-**Changed on 2026-11-11.** HOME is scored by the most common answer and AWAY by the most niche
-(`ruleFor(mode)` gives `"common"` or `"niche"`), from each answer's `popularity`: an
+**Changed on 2026-11-11.** HOME is scored by the most common answer and AWAY by the most
+uncommon (`ruleFor(mode)` gives `"common"` or `"niche"`: the rule keeps its id in code, while
+every word a player sees says "uncommon"), from each answer's `popularity`: an
 estimated share of players in percent (`docs/data-notes/popularity.md`). Today's stadium is
 still the day's venue but no longer scores them. Distance scoring is kept as the rules
 `"closest"` and `"furthest"` for the locked modes CLOSEST and FURTHEST: to switch one on, add
 the mode and map it in `ruleFor`; nothing else in the rules changes. `rankAnswers` takes a
 `Rule` instead of a `Mode`; `Answer.popularity`, `RankedAnswer.share`, `Turn.share` and
 `QuestionView.rule` are new.
+
+**Changed again on 2026-11-11: six shots.** Points no longer slide with an answer's place.
+Every answer is one of six shots (`Shot`): `worldie` 100, `golazo` 80, `trivela` 60,
+`toepoke` 30, `tapin` 10, `miss` 0, stored in the data as `Answer.shot` for the question's own
+mode. `Grade` is the six plus `timeup` and `skipped` (both 0); the sliding grades before them
+(topbins, goal, ontarget, wide) are gone. New: `shots.ts` (`SHOT_ORDER`, `SHOT_POINTS`, the
+rule `shotsFor`), `Shot`, `Answer.shot`, `RankedAnswer.shot`, `shotsOf`. Gone: `gradeFor`. The
+table is ranked by shot first. Games saved with the sliding grades (finished or in progress)
+read as nothing.
+
+**Changed a third time on 2026-11-11: the shots renamed, and titles.** The ids changed with
+the names; the points did not: `bicycle` is now `worldie`, `finesse` `golazo`, `power`
+`trivela`, `chip` `toepoke`. A finished game saved under the first names loads with the new
+ones (`loadGame`); a game in progress under them is not carried on. New: `titles.ts`
+(`titleFor`, `TITLES`, `TITLE_FROM`, `HomeTitleId`, `AwayTitleId`, `TitleId`), the title a
+total earns at full time; `ShareInput.title` and the third argument of `shareInputFor` put it
+in the share text.
 
 ## How an interface uses it
 
@@ -28,7 +46,7 @@ Game
   Board: questionView(s), pips(s), progressFor(s), clockView(s, now)
   Answer bar: s.rejected (new object per rejection, key the shake on it), clockView(s, now).canPass
   Shot (phase "resolving"): currentTurn(s).grade, progressFor(s).promotions; then dispatch { type: "resolved" }
-  Reveal (phase "reveal"): revealFor(s, maxRows); formatShare(row.share) for "34%"; then { type: "next", now }
+  Reveal (phase "reveal"): revealFor(s): five rows, one per scoring shot, and playerInRows; formatShare(row.share) for "34%"; then { type: "next", now }
   Full time (phase "done"): summary(s), results(s), careerFor(s.total), saveSession(s), buildShareText(shareInputFor(s, tierName))
 
 Use one clock for every `now` (Date.now() or performance.now(), never mixed). A game keeps the day and stadium it started with, so playing across midnight saves under the day it began.
@@ -38,8 +56,18 @@ Notes:
 
 - `Rejection.reason` is `"unknown"` or `"ambiguous"`. The second needs its own line of text
   (for example "Which one? Be more specific.").
-- Two answers tied for best both score 100 and both are a WORLDIE. The sample data has no tie at
-  either end of any question (a data test keeps it so).
+- Many answers can share a shot: a question usually has one to three worldies. The sample
+  data has no tie in popularity at either end of any question (a data test keeps it so).
+- The reveal's band: `turn.grade` names the shot; show `+points` for every shot but a miss.
+- The reveal's table (changed 2026-11-12): `revealFor(s).rows` is one row for each shot that
+  scores, best first (`SCORING_SHOTS`). The player's answer is the row for its shot when it
+  scored; every other row is that shot's best answer, the one ranked highest in the full
+  table (`rankAnswers`): in HOME the most picked answer in the shot, in AWAY the least
+  picked. So the WORLDIE row is always #1, and the AWAY pass or time-up sentence (which
+  names the deepest cut) names an answer on screen. A miss is never a
+  row: when `playerInRows` is false (a miss, a pass, a time-up) show the player's answer and
+  its 0 on their own (`answer`, `row`, `turn`). A question with no answer in some shot gets
+  no row for it; the data tests keep every sample question complete.
 - Tier names are interface text, keyed by `TierId`.
 - `Question.decoys` (optional) lists strings the judge must never accept, for real things that
   are one typo away from a listed answer ("Bayer" next to "Bayern").
@@ -53,10 +81,11 @@ types.ts
 - interface LatLng { lat: number; lng: number }
 - interface Stadium extends LatLng { id; name; city; country }
 - type Measure = "birthplace" | "ground" | "location" | "capital". The judge uses it: people, clubs, stadiums, countries.
-- interface Answer extends LatLng { id; name; aliases: string[]; place; country; popularity: number }. popularity is new: the estimated share of players who give the answer, in percent, 0.1 to 100, one decimal at most; a question's shares add up to about 100.
+- interface Answer extends LatLng { id; name; aliases: string[]; place; country; popularity: number; shot: Shot }. popularity: the estimated share of players who give the answer, in percent, 0.1 to 100, one decimal at most; a question's shares add up to about 100. shot (new): the answer's shot in its question's own mode (docs/data-notes/shots.md).
 - interface Question { id; mode; prompt; measure; measureLabel; asOf; answers: Answer[]; decoys?: string[] }. decoys is new and optional.
-- type Grade = "worldie" | "topbins" | "goal" | "ontarget" | "wide" | "timeup" | "skipped"
-- interface RankedAnswer { answer: Answer; km: number; share: number; points: number; rank: number }. share (new) is the answer's popularity; km is filled under every rule.
+- type Shot = "worldie" | "golazo" | "trivela" | "toepoke" | "tapin" | "miss". New (renamed 2026-11-11). The six shots, best first.
+- type Grade = Shot | "timeup" | "skipped". Changed: the six shots, or no answer.
+- interface RankedAnswer { answer: Answer; km: number; share: number; shot: Shot; points: number; rank: number }. share is the answer's popularity; km is filled under every rule; shot (new) is its shot under the table's rule and points = SHOT_POINTS[shot].
 
 geo.ts
 - EARTH_RADIUS_KM = 6371.0088; KM_PER_MILE = 1.609344
@@ -68,12 +97,18 @@ scoring.ts
 - RULES: readonly Rule[]. New. ["common", "niche", "closest", "furthest"].
 - ruleFor(mode: Mode): Rule. New. home → "common", away → "niche".
 - isDistanceRule(rule: Rule): boolean. New. True for "closest" and "furthest".
-- rankAnswers(question: Question, stadium: LatLng, rule: Rule): RankedAnswer[]. Changed: takes a Rule (was a Mode). Full table, best first, ties in name order. common: highest share first; niche: lowest share first (shares tie when equal to a tenth of a percent); closest / furthest: by whole kilometres from the stadium. points = round(100 * worse / (better + worse)); only the best scores 100. The stadium only matters to the distance rules.
+- rankAnswers(question: Question, stadium: LatLng, rule: Rule): RankedAnswer[]. Changed: takes a Rule (was a Mode). Full table, best first, ties in name order. common: highest share first; niche: lowest share first (shares tie when equal to a tenth of a percent); closest / furthest: by whole kilometres from the stadium. Changed: ranked by shot first (worldies first), then by the rule, then by name; a row's points are its shot's; ties (same shot and same key) share a rank. The stadium only matters to the distance rules.
+- shotsOf(question: Question, stadium: LatLng, rule: Rule): Shot[]. New. Each answer's shot, in answer order: the data's Answer.shot under ruleFor(question.mode), else shotsFor of the shares (common, niche) or of the whole kilometres (closest, furthest).
 - formatShare(share: number): string. New. "34%", "2.5%", "0.4%"; "under 0.1%" below 0.05 or for a non-number; capped at "100%".
-- gradeFor(points: number): Grade. 100 worldie, 80-99 topbins, 55-79 goal, 30-54 ontarget, 0-29 wide.
 - rankedFor(table: readonly RankedAnswer[], answerId: string | null): RankedAnswer | null
-- interface TableRow extends RankedAnswer { grade: Grade; isPlayer: boolean; index: number; gapBefore: boolean }. grade is new; gapBefore means draw an ellipsis row above.
-- tableExcerpt(table: readonly RankedAnswer[], answerId: string | null, maxRows: number): TableRow[]. Whole table if it fits (pass Infinity for all); otherwise first, player's, last and an even spread.
+- interface TableRow extends RankedAnswer { grade: Grade; isPlayer: boolean; index: number; gapBefore: boolean }. grade is the row's shot (the same as shot); gapBefore means draw an ellipsis row above.
+- tableExcerpt(table: readonly RankedAnswer[], answerId: string | null, maxRows: number): TableRow[]. Whole table if it fits (pass Infinity for all); otherwise first, player's, last and an even spread. No longer used by the reveal (see reveal.ts).
+
+reveal.ts (new 2026-11-12)
+- SCORING_SHOTS: readonly Shot[]. ["worldie", "golazo", "trivela", "toepoke", "tapin"]: the shots that score, best first.
+- interface RevealRow extends RankedAnswer { grade: Shot; isPlayer: boolean; index: number }. grade is the row's shot; index is its 0-based place in the full table.
+- shotRows(table: readonly RankedAnswer[], answerId: string | null): RevealRow[]. From a full ranked table: one row per scoring shot the table has, best first. The player's answer takes its own shot's row when it scored; every other row is the shot's most popular answer (ties: the one higher in the table). A miss is never a row.
+- revealRows(question: Question, mode: Mode, result: { answerId: string | null }, stadium: LatLng): RevealRow[]. The same from a question played in a mode (a Turn will do as the result); the stadium only fills km.
 
 judge.ts
 - type JudgeResult = { kind: "empty" } | { kind: "unknown" } | { kind: "ambiguous"; candidates: Answer[] } | { kind: "match"; answer: Answer; via: "exact" | "surname" | "fuzzy" }
@@ -130,16 +165,33 @@ view.ts (new: selectors, pure, cheap to call on every render)
 - questionView(session): QuestionView. The board's question and instruction line ("Question 3 of 7", "The most common answer wins.").
 - interface ClockView { msLeft: number; secondsLeft: number; fraction: number; running: boolean; canPass: boolean; msUntilPass: number | null }
 - clockView(session, now: number): ClockView. secondsLeft is 30 at the start, 1 until the last instant, 0 at time up; fraction is 1 to 0 for the timer strip; msUntilPass is null outside asking.
-- interface RevealView { index: number; question: Question; turn: Turn; answer: Answer | null; row: RankedAnswer | null; best: RankedAnswer | null; rows: TableRow[]; tableSize: number; isLast: boolean }
-- revealFor(session, maxRows = Infinity, index = session.index): RevealView | null. Null until that question is decided. rows has the player's row marked; answer and row are null for a pass or time-up; best is the top row.
+- interface RevealView { index: number; question: Question; turn: Turn; answer: Answer | null; row: RankedAnswer | null; best: RankedAnswer | null; rows: RevealRow[]; playerInRows: boolean; tableSize: number; isLast: boolean }. Changed 2026-11-12: rows are shotRows (was TableRow[], an excerpt of the whole table); playerInRows (new) is false for a miss, a pass or a time-up; tableSize is the full table's length.
+- revealFor(session, index = session.index): RevealView | null. Changed 2026-11-12: the maxRows argument is gone. Null until that question is decided. rows has the player's row marked when it scored; answer and row (its place in the full table) are null for a pass or time-up; best is the top of the full table.
 - interface ProgressView { totalBefore: number; total: number; gained: number; before: Career; after: Career; promotions: number[] }
 - progressFor(session): ProgressView. The career meter for the current question's turn: hold `before` until the shot lands, then fill to `after`; promotions lists the tiers reached.
 - pips(session): (Grade | null)[]. One per question, null until decided.
 - interface ResultLine { index: number; question: Question; turn: Turn; answer: Answer | null }
 - results(session): ResultLine[]. Each decided question with the answer given, for full time.
-- shareInputFor(session, tierName: string): ShareInput
+- shareInputFor(session, tierName: string, title?: string): ShareInput. `title` is the earned title as shown ("SEASON TICKET HOLDER").
 
-storage.ts (key "soccersense:v1:<dayKey>:<mode>", value { total, turns }; none of these throw. A game saved before Turn.share existed still loads, with share null.)
+shots.ts (new)
+- SHOT_ORDER: readonly Shot[]. ["worldie", "golazo", "trivela", "toepoke", "tapin", "miss"], best first.
+- SHOT_POINTS: Readonly<Record<Grade, number>>. worldie 100, golazo 80, trivela 60, toepoke 30, tapin 10, miss 0, timeup 0, skipped 0.
+- isShot(grade): grade is Shot. False for timeup and skipped. isGoal(grade): every shot but a miss. shotIndex(grade): 0 (worldie) to 5 (miss), 6 for no answer.
+- SHOT_BANDS: readonly { shot: Shot; upTo: number }[]. The bands of standing: worldie up to 0.10, golazo 0.25, trivela 0.42, toepoke 0.58, tapin 0.80, miss up to 1.
+- shotForStanding(standing: number): Shot.
+- standings(values: readonly number[], rule: Rule): number[]. Each answer from 0 (best) to 1 (worst): the mean of its place (better / (better + worse)) and its gap from the best (ratios of shares on a log scale for common and niche, shares tied to a tenth; kilometres for closest and furthest).
+- shotsFor(values: readonly number[], rule: Rule): Shot[]. The rule that filed the sample data and that a backend runs on real counts (as shares). The best is always a worldie, the worst a miss, and a better value never a worse shot.
+
+titles.ts (new)
+- type HomeTitleId = "wrongend" | "findingseat" | "turnstile" | "piequeue" | "seasonticket" | "knowschants" | "startschants" | "voice" | "whisperer" | "hivemind". Lowest first.
+- type AwayTitleId = "herd" | "backpages" | "highlights" | "retroshirt" | "thirdkit" | "fanzine" | "lowerleague" | "beforecool" | "deepcuts" | "hipster". Lowest first.
+- type TitleId = HomeTitleId | AwayTitleId. interface TitleRung<Id> { id: Id; from: number }
+- TITLE_FROM: readonly number[]. [0, 10, 120, 220, 300, 380, 460, 540, 620, 700]: where each rung starts, the same in both modes (0 exactly; 700, a perfect game, alone).
+- TITLES: { home: TitleRung<HomeTitleId>[]; away: TitleRung<AwayTitleId>[] }. Each ladder, lowest first.
+- titleFor(mode, total): the title id for a total (typed by mode). Under 0 or NaN counts as 0, over 700 as 700. The words: strings.play.titles[mode][id].
+
+storage.ts (key "soccersense:v1:<dayKey>:<mode>", value { total, turns }; none of these throw. A game saved before Turn.share existed still loads, with share null; one saved with the sliding grades, before the six shots, reads as nothing; one saved under the shots' first names (bicycle, finesse, power, chip) loads with today's names.)
 - STORAGE_PREFIX = "soccersense:v1"
 - interface StoredGame { total: number; turns: readonly Turn[] }
 - type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">
@@ -152,7 +204,7 @@ storage.ts (key "soccersense:v1:<dayKey>:<mode>", value { total, turns }; none o
   Omit storage to use localStorage; pass null for "none".
 
 share.ts
-- GRADE_SYMBOLS: Record<Grade, string>
-- interface ShareInput { dayNumber: number; mode: Mode; stadiumName: string; total: number; tierName: string; grades: readonly Grade[] }
-- buildShareText(input: ShareInput): string. Three lines joined with "\n".
+- GRADE_SYMBOLS: Record<Grade, string>. worldie a glowing star, golazo a bullseye, trivela a collision, toepoke a rainbow, tapin a football, miss a cross, timeup a stopwatch, skipped a minus (escapes in share.ts).
+- interface ShareInput { dayNumber: number; mode: Mode; stadiumName: string; total: number; tierName: string; title?: string; grades: readonly Grade[] }
+- buildShareText(input: ShareInput): string. Lines joined with "\n": "soccersense #12 · HOME · Anfield", the title if given ("SEASON TICKET HOLDER"), "512/700 · TOP FLIGHT", one symbol per question.
 ```

@@ -65,6 +65,7 @@ import {
   type PersonLook,
 } from "~/art/stadium-things";
 import { carLook, coachLook, personLook, type Town } from "~/art/stadium-town";
+import { clubOf, clubRaw } from "~/art/stadium-club";
 import {
   hazeAt,
   project,
@@ -98,6 +99,11 @@ class MaskedInk implements Ink {
     for (let j = 0; j < h; j++) {
       for (let i = 0; i < w; i++) this.px(x + i, y + j, c);
     }
+  }
+
+  /** A shadow on the ground (shadowBlob), hidden by the same rule as the thing casting it. */
+  shadow(cx: number, cy: number, rx: number, ry: number): void {
+    shadowBlob(this.s, cx, cy, rx, ry, this.depth, this.V);
   }
 }
 
@@ -195,6 +201,11 @@ interface Flag {
 export interface Life {
   draw(s: Surface, t: number, roar: number): void;
   /**
+   * When the goal's rockets go up, seconds after the goal: only those with room to burst
+   * (none on a phone). For the sound of them.
+   */
+  launches: readonly number[];
+  /**
    * Everybody on foot who walks a way at time `t`: where they are on the map, and whether
    * they are standing at a kerb, and who they are (the same number all the way along).
    * For tests (nobody is ever under a car).
@@ -291,6 +302,9 @@ export function makeLife(
   const { w, h, hy, k } = view;
   const night = light.lightsOn;
   const sunny = light.sun.elevation > 6;
+  // the day's club colours (stadium-club.ts): `light` grades the HOME ramp in them
+  const club = clubOf(light);
+  const raw = clubRaw(light);
   // At night fewer people are about: a walker is out for a whole lap or not at all, so
   // they come and go only at the ends of their walks. Cars thin out more gently.
   const walking = walkersOut(light);
@@ -416,7 +430,6 @@ export function makeLife(
    * `state`: 0 parked, 1 driving, 2 reversing.
    */
   const drawCar = (
-    s: Surface,
     X: number,
     V: number,
     heading: number,
@@ -435,10 +448,12 @@ export function makeLife(
       if (lit) coachLamps(ink, p.x, p.y, cls, heading, state === 2 ? 2 : 1);
       return;
     }
+    // its shadow goes through the depth mask like the car: never over a tree or a roof
+    // that stands in front of it
     if (cls === 2) {
       if (Math.abs(Math.sin((headingAngle(heading) * Math.PI) / 180)) < 0.5) {
-        shadowBlob(s, p.x + 1, p.y + 2, 4, 1);
-      } else shadowBlob(s, p.x + 2, p.y + 3, 3, 1);
+        ink.shadow(p.x + 1, p.y + 2, 4, 1);
+      } else ink.shadow(p.x + 2, p.y + 3, 3, 1);
     }
     car(ink, p.x, p.y, cls, heading, carLook(tone, V, paint));
     if (lit) carLamps(ink, p.x, p.y, cls, heading, state === 2 ? 2 : 1);
@@ -454,22 +469,20 @@ export function makeLife(
         const X = r.X0 + (r.X1 - r.X0) * u;
         const V = r.V0 + (r.V1 - r.V0) * u;
         const heading = groundHeading(view, X, V, r.dX, r.dV);
-        drawCar(s, X, V, heading, cr.paint, cr.bus, 1);
+        drawCar(X, V, heading, cr.paint, cr.bus, 1);
       }
     }
   };
 
   // ---- Stadium Road: its timetable keeps the zebra (stadium-road.ts) -----------------
-  let frame = town.land;
   /** A Stadium Road car's pass: its paint is a hash of its slot, the same all the way. */
   const roadOut = (rc: RoadCar): boolean =>
     carOut(Math.floor(rc.paint * 65521), 977);
   const roadCar = (rc: RoadCar): void => {
     if (!roadOut(rc)) return;
-    drawCar(frame, rc.X, rc.V, rc.dir === 0 ? EAST : WEST, rc.paint, false, 1);
+    drawCar(rc.X, rc.V, rc.dir === 0 ? EAST : WEST, rc.paint, false, 1);
   };
-  const drawRoad = (s: Surface, t: number): void => {
-    frame = s;
+  const drawRoad = (t: number): void => {
     roadCars(t, seed, rs, roadCar);
   };
   const place: WalkPlace = { d: 0, waiting: false };
@@ -583,6 +596,7 @@ export function makeLife(
         (c) => tone(c, q.V),
         h2(j, 641 + (visit & 63)),
         j % 7 === 0 ? 2 : 1,
+        club,
       );
       const jump = roar > 0 && h2(j, beat + 11) < roar * 0.7 ? 1 : 0;
       person(ink, fp.x, fp.y, sizeClass(fp.s), look, (beat + j) % 2, jump);
@@ -855,12 +869,12 @@ export function makeLife(
       const key = Math.floor(wk.look * 4096) * 4 + wk.kind;
       let lk = walkerLooks.get(key);
       if (!lk) {
-        lk = personLook(light.lit, wk.look, wk.kind);
+        lk = personLook(light.lit, wk.look, wk.kind, club);
         walkerLooks.set(key, lk);
       }
       return lk;
     }
-    return personLook((c) => tone(c, V), wk.look, wk.kind);
+    return personLook((c) => tone(c, V), wk.look, wk.kind, club);
   };
 
   const step: WalkPlace = { d: 0, waiting: false };
@@ -926,7 +940,12 @@ export function makeLife(
       x: p.x,
       y: p.y,
       cls: sizeClass(p.s),
-      look: personLook(lit ? light.lit : (c) => tone(c, V), h2(key, 3), kind),
+      look: personLook(
+        lit ? light.lit : (c) => tone(c, V),
+        h2(key, 3),
+        kind,
+        club,
+      ),
       key,
     });
   };
@@ -1016,7 +1035,12 @@ export function makeLife(
   const queueLooks: PersonLook[] = [];
   for (let i = 0; i < 16; i++) {
     queueLooks.push(
-      personLook(light.lit, h2(i, 610), i % 5 === 3 ? 3 : i % 7 === 6 ? 1 : 0),
+      personLook(
+        light.lit,
+        h2(i, 610),
+        i % 5 === 3 ? 3 : i % 7 === 6 ? 1 : 0,
+        club,
+      ),
     );
   }
   // Whoever has been served steps aside (place -1) and walks off with a pie: to the kerb,
@@ -1128,7 +1152,7 @@ export function makeLife(
         p.x,
         p.y,
         sizeClass(p.s),
-        personLook((c) => tone(c, kd.V), 0.13 * (i + 1), kd.kind),
+        personLook((c) => tone(c, kd.V), 0.13 * (i + 1), kd.kind, club),
         step % 2,
       );
     }
@@ -1165,7 +1189,7 @@ export function makeLife(
           p.x,
           p.y,
           sizeClass(p.s),
-          personLook((c) => tone(c, V), 0.77, 3),
+          personLook((c) => tone(c, V), 0.77, 3, club),
           step % 2,
         );
       }
@@ -1196,8 +1220,8 @@ export function makeLife(
     const key = flagKey++;
     const pair = [
       [P.home, P.homeLight],
-      [P.chalk, P.white],
-      [P.gold, P.goldLight],
+      [club.second.base, club.second.light],
+      [club.second.dark, club.second.base],
       [P.home, P.homeLight],
       [P.away, P.awayLight],
     ][key % 5];
@@ -1261,10 +1285,10 @@ export function makeLife(
   // ---- the match (stadium-match.ts) -------------------------------------------------
   const game = makeMatchState();
   const kit = {
-    home: light.lit(P.home),
+    home: light.lit(club.kit.shirt),
     away: light.lit(P.awayLight),
     // dark shorts for both sides: the ball is the only white thing that moves
-    homeShorts: light.lit(P.homeDark),
+    homeShorts: light.lit(club.kit.shorts),
     awayShorts: light.lit(P.awayDark),
     dark: light.lit(P.night),
     homeKeeper: light.lit(P.gold),
@@ -1495,16 +1519,16 @@ export function makeLife(
   // ---- the roar -------------------------------------------------------------
   const TAPE: readonly Color[] = [
     P.chalk,
-    P.gold,
-    P.homeLight,
+    club.bright.base,
+    raw(P.homeLight),
     P.white,
-    P.home,
+    raw(P.home),
   ];
   const BURSTS: readonly (readonly Color[])[] = [
-    [P.goldLight, P.gold],
-    [P.homeLight, P.home],
-    [P.white, P.awayLight],
-    [P.goldLight, P.homeLight],
+    [club.bright.light, club.bright.base],
+    [raw(P.homeLight), raw(P.home)],
+    [P.white, raw(P.awayLight)],
+    [club.bright.light, raw(P.homeLight)],
   ];
   const drawRoar = (s: Surface, t: number, roar: number): void => {
     if (roar <= 0) return;
@@ -1540,7 +1564,7 @@ export function makeLife(
             x,
             y,
             r,
-            age < 0.5 ? P.homeLight : P.home,
+            age < 0.5 ? raw(P.homeLight) : raw(P.home),
             age < 0.35 ? 1 : age < 0.7 ? 0.5 : 0.25,
           );
         }
@@ -1652,20 +1676,23 @@ export function makeLife(
     }
     rockets.push(found);
   }
+  // the club's main colour and its bright one (its second, or gold when that is dark)
+  const fwMain = club.spark;
+  const fwBright = club.bright;
   const SPARK_A: readonly (readonly [Color, Color])[] = [
-    [P.homeLight, P.goldLight],
-    [P.goldLight, P.homeLight],
-    [P.white, P.home],
+    [fwMain.light, fwBright.light],
+    [fwBright.light, fwMain.light],
+    [P.white, fwMain.base],
   ];
   const SPARK_B: readonly (readonly [Color, Color])[] = [
-    [P.home, P.gold],
-    [P.gold, P.home],
-    [P.goldLight, P.homeDark],
+    [fwMain.base, fwBright.base],
+    [fwBright.base, fwMain.base],
+    [fwBright.light, fwMain.dark],
   ];
   const SPARK_C: readonly (readonly [Color, Color])[] = [
-    [P.homeDark, P.goldDark],
-    [P.goldDark, P.homeDark],
-    [P.gold, P.brickDark],
+    [fwMain.dark, fwBright.dark],
+    [fwBright.dark, fwMain.dark],
+    [fwBright.base, P.brickDark],
   ];
   const drawFireworks = (s: Surface, t: number, roar: number): void => {
     if (roar > 0.45) return; // the roar sends up its own
@@ -1741,13 +1768,14 @@ export function makeLife(
   };
 
   return {
+    launches: rockets.flatMap((r, i) => (r ? [launchOf(i)] : [])),
     draw(s: Surface, t: number, roar: number): void {
       ink.target(s);
       drawCloudShadows(s, t);
       drawMatch(s, t, roar);
       drawTrain(s, t);
       drawTraffic(s, t);
-      drawRoad(s, t);
+      drawRoad(t);
       drawCoach(s, t, roar);
       drawStanders(s, t, roar);
       drawQueue(s, t, roar);

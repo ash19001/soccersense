@@ -12,15 +12,24 @@ export {
   type KitBase,
 } from "./kit";
 export {
+  BICYCLE_CELL,
+  BICYCLE_YOUTH_CELL,
   KEEPER_ANIMS,
   KICK_STRIKE_FRAME,
   PLAYER_ANIMS,
+  SHOT_ANIMS,
+  SPRAWL_CELL,
+  STRIKE_FRAME,
   ballSpot,
   drawKeeper,
   drawPlayer,
   handsSpot,
+  keeperCell,
   keeperHands,
+  playerCell,
+  type Cell,
   type KeeperAnim,
   type PlayerAnim,
+  type ShotAnim,
 } from "./people";
 export { drawMatchBall, drawPuff, drawTrophy } from "./props";

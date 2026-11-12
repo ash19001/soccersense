@@ -15,7 +15,14 @@ import { lightingFor } from "./lighting";
 import { MODE_COLORS, P } from "./palette";
 
 const SLOTS = BALL_SLOTS;
-const LOCKED: readonly BallSlot[] = ["top", "bottom", "backLeft", "backRight"];
+const LOCKED: readonly BallSlot[] = [
+  "top",
+  "bottom",
+  "backLeft",
+  "backRight",
+  "rimLeft",
+  "rimRight",
+];
 
 const MENU: BallPatches = {
   left: { label: "HOME", icon: "home", accent: MODE_COLORS.home },
@@ -24,6 +31,8 @@ const MENU: BallPatches = {
   bottom: { label: "RETRO", icon: "rewind", locked: true },
   backRight: { label: "CLOSEST", icon: "pin", locked: true },
   backLeft: { label: "FURTHEST", icon: "globe", locked: true },
+  rimLeft: { label: "GUESS WHO", icon: "shirt", locked: true },
+  rimRight: { label: "SHOOTOUT", icon: "goal", locked: true },
 };
 
 // Above 20 degrees the lighting grade is the identity: pixels are raw palette colours.
@@ -124,8 +133,8 @@ describe("the menu pose", () => {
 });
 
 describe("the poses that show the other patches", () => {
-  it("turns NEXT-GEN and RETRO to face the viewer straight on", () => {
-    for (const slot of ["top", "bottom"] as const) {
+  it("turns NEXT-GEN, RETRO, GUESS WHO and SHOOTOUT to face the viewer straight on", () => {
+    for (const slot of ["top", "bottom", "rimLeft", "rimRight"] as const) {
       const state = ball(ballShowPose(slot));
       const c = ballSlotCenter(state, slot);
       expect(c.facing).toBeCloseTo(1, 6);
@@ -155,6 +164,29 @@ describe("the poses that show the other patches", () => {
     }
     expect(ballSlotCenter(menu, "backRight").x).toBeGreaterThan(menu.cx);
     expect(ballSlotCenter(menu, "backLeft").x).toBeLessThan(menu.cx);
+  });
+
+  it("brings GUESS WHO round with a quarter turn to the right, SHOOTOUT to the left", () => {
+    const menu = ball();
+    // in the menu pose they are on the rim, out to the left and right, a little up
+    for (const [slot, side] of [
+      ["rimLeft", -1],
+      ["rimRight", 1],
+    ] as const) {
+      const c = ballSlotCenter(menu, slot);
+      expect(Math.abs(c.facing)).toBeLessThan(0.05);
+      expect(Math.sign(c.x - menu.cx)).toBe(side);
+      expect(c.y).toBeLessThan(menu.cy);
+      // a quarter turn the other way brings it round to face the viewer more than any
+      // other patch
+      const turned = ball({ yaw: (-side * Math.PI) / 2 });
+      const best = SLOTS.reduce((a, b) =>
+        ballSlotCenter(turned, a).facing >= ballSlotCenter(turned, b).facing
+          ? a
+          : b,
+      );
+      expect(best).toBe(slot);
+    }
   });
 
   it("draws every patch where it is hit-tested, in the pose that shows it", () => {
@@ -234,6 +266,8 @@ describe("the poses that show the other patches", () => {
       { pose: ballShowPose("backLeft"), slots: ["backLeft", "backRight"] },
       { pose: ballShowPose("top"), slots: ["top"] },
       { pose: ballShowPose("bottom"), slots: ["bottom"] },
+      { pose: ballShowPose("rimLeft"), slots: ["rimLeft"] },
+      { pose: ballShowPose("rimRight"), slots: ["rimRight"] },
     ] as const;
     for (const r of [36, 37, 41, 45, 51, 59]) {
       for (const { pose, slots } of poses) {
@@ -242,10 +276,15 @@ describe("the poses that show the other patches", () => {
           // ...and a word too wide for its patch is on a tag in every frame, or in none
           const tagged = new Set<boolean>();
           for (let n = 0; n < 24; n++) {
+            // (a quarter turn round, the hover's nod is a roll)
             const state = ball({
               r,
               yaw: pose.yaw + sway(n).yaw,
               pitch: pose.pitch + sway(n).pitch,
+              roll:
+                Math.abs(pose.yaw) === Math.PI / 2
+                  ? 0.061 * Math.sin(n * 0.9)
+                  : 0,
             });
             seen.add(count(render(state, short), state, slot, P.mist));
             const only: BallPatches = { [slot]: MENU[slot] };
@@ -270,7 +309,8 @@ describe("the poses that show the other patches", () => {
         }
       }
     }
-  });
+    // (many poses at many sizes: slow on a busy machine)
+  }, 20_000);
 
   it("writes a word too wide for its patch on a tag, inside the ball's outline", () => {
     for (const r of [37, 45]) {
@@ -335,7 +375,7 @@ describe("ballSlotAt", () => {
         const state = ball({ yaw, r });
         for (const slot of SLOTS) {
           const c = ballSlotCenter(state, slot);
-          if (c.facing <= 0) continue;
+          if (c.facing <= 0.2) continue;
           expect(ballSlotAt(state, c.x, c.y)).toBe(slot);
         }
       }

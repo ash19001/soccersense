@@ -3,18 +3,20 @@ import { describe, expect, it } from "vitest";
 import {
   RULES,
   formatShare,
-  gradeFor,
   isDistanceRule,
   rankAnswers,
   rankedFor,
   ruleFor,
+  shotsOf,
   tableExcerpt,
 } from "./scoring";
+import { SHOT_ORDER, SHOT_POINTS } from "./shots";
 import { answer, east, ORIGIN, popular, question } from "./test-fixtures";
 import type { Rule, RankedAnswer } from "./types";
 
 const names = (table: readonly RankedAnswer[]) =>
   table.map((r) => r.answer.name);
+const shots = (table: readonly RankedAnswer[]) => table.map((r) => r.shot);
 const points = (table: readonly RankedAnswer[]) => table.map((r) => r.points);
 const ranks = (table: readonly RankedAnswer[]) => table.map((r) => r.rank);
 const kms = (table: readonly RankedAnswer[]) => table.map((r) => r.km);
@@ -22,7 +24,19 @@ const shares = (table: readonly RankedAnswer[]) => table.map((r) => r.share);
 
 const DISTANCE_RULES: Rule[] = ["closest", "furthest"];
 
-describe("rankAnswers", () => {
+/** What every table keeps: shots best first, and each row's points are its shot's. */
+function expectWellFormed(table: readonly RankedAnswer[]) {
+  for (let i = 0; i < table.length; i++) {
+    expect(table[i].points).toBe(SHOT_POINTS[table[i].shot]);
+    if (i > 0) {
+      expect(SHOT_ORDER.indexOf(table[i].shot)).toBeGreaterThanOrEqual(
+        SHOT_ORDER.indexOf(table[i - 1].shot),
+      );
+    }
+  }
+}
+
+describe("rankAnswers by distance (the locked modes CLOSEST and FURTHEST)", () => {
   // Deliberately out of order in the list.
   const five = question("five", [
     east("Charlie", 3),
@@ -37,7 +51,7 @@ describe("rankAnswers", () => {
     expect(kms(table)).toEqual([111, 222, 334, 445, 556]);
   });
 
-  it("CLOSEST: nearest first, 100 for the best down to 0 for the worst", () => {
+  it("CLOSEST: nearest first, a worldie down to a miss", () => {
     const table = rankAnswers(five, ORIGIN, "closest");
     expect(names(table)).toEqual([
       "Alpha",
@@ -46,11 +60,18 @@ describe("rankAnswers", () => {
       "Delta",
       "Echo",
     ]);
-    expect(points(table)).toEqual([100, 75, 50, 25, 0]);
+    expect(shots(table)).toEqual([
+      "worldie",
+      "golazo",
+      "toepoke",
+      "tapin",
+      "miss",
+    ]);
+    expect(points(table)).toEqual([100, 80, 30, 10, 0]);
     expect(ranks(table)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("FURTHEST: furthest first, 100 for the best down to 0 for the worst", () => {
+  it("FURTHEST: furthest first, a worldie down to a miss", () => {
     const table = rankAnswers(five, ORIGIN, "furthest");
     expect(names(table)).toEqual([
       "Echo",
@@ -59,18 +80,24 @@ describe("rankAnswers", () => {
       "Bravo",
       "Alpha",
     ]);
-    expect(points(table)).toEqual([100, 75, 50, 25, 0]);
+    expect(shots(table)).toEqual([
+      "worldie",
+      "golazo",
+      "toepoke",
+      "tapin",
+      "miss",
+    ]);
     expect(ranks(table)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("CLOSEST and FURTHEST are mirror images", () => {
+  it("CLOSEST and FURTHEST are mirror images for evenly spaced answers", () => {
     const home = rankAnswers(five, ORIGIN, "closest");
     const away = rankAnswers(five, ORIGIN, "furthest");
     expect(names(away)).toEqual(names(home).reverse());
+    expect(shots(away)).toEqual(shots(home));
     for (const row of home) {
       const mirrored = rankedFor(away, row.answer.id);
       expect(mirrored?.km).toBe(row.km);
-      expect(mirrored?.points).toBe(100 - row.points);
       expect(mirrored?.rank).toBe(home.length + 1 - row.rank);
     }
   });
@@ -86,7 +113,7 @@ describe("rankAnswers", () => {
     ]);
   });
 
-  it("gives tied answers the same points and the best rank of their group", () => {
+  it("gives tied answers the same shot and the best rank of their group", () => {
     const q = question("ties", [
       east("Far", 3),
       east("Mid Zulu", 2),
@@ -95,16 +122,16 @@ describe("rankAnswers", () => {
     ]);
     const home = rankAnswers(q, ORIGIN, "closest");
     expect(names(home)).toEqual(["Near", "Mid Alpha", "Mid Zulu", "Far"]);
-    expect(points(home)).toEqual([100, 50, 50, 0]);
+    expect(shots(home)).toEqual(["worldie", "toepoke", "toepoke", "miss"]);
     expect(ranks(home)).toEqual([1, 2, 2, 4]);
 
     const away = rankAnswers(q, ORIGIN, "furthest");
     expect(names(away)).toEqual(["Far", "Mid Alpha", "Mid Zulu", "Near"]);
-    expect(points(away)).toEqual([100, 50, 50, 0]);
+    expect(shots(away)).toEqual(["worldie", "toepoke", "toepoke", "miss"]);
     expect(ranks(away)).toEqual([1, 2, 2, 4]);
   });
 
-  it("ties the best answers at 100 and the worst at 0", () => {
+  it("ties the best answers as worldies and the worst as misses", () => {
     const q = question("ends", [
       east("A", 1),
       east("B", 1),
@@ -114,11 +141,11 @@ describe("rankAnswers", () => {
       east("F", 3),
     ]);
     const home = rankAnswers(q, ORIGIN, "closest");
-    expect(points(home)).toEqual([100, 100, 60, 0, 0, 0]);
+    expect(points(home)).toEqual([100, 100, 30, 0, 0, 0]);
     expect(ranks(home)).toEqual([1, 1, 3, 4, 4, 4]);
     const away = rankAnswers(q, ORIGIN, "furthest");
     expect(names(away)).toEqual(["D", "E", "F", "C", "A", "B"]);
-    expect(points(away)).toEqual([100, 100, 100, 40, 0, 0]);
+    expect(points(away)).toEqual([100, 100, 100, 30, 0, 0]);
     expect(ranks(away)).toEqual([1, 1, 1, 4, 5, 5]);
   });
 
@@ -132,18 +159,19 @@ describe("rankAnswers", () => {
     const table = rankAnswers(q, ORIGIN, "closest");
     expect(kms(table)).toEqual([0, 1, 1]);
     expect(names(table)).toEqual(["Point four", "One point four", "Point six"]);
-    expect(points(table)).toEqual([100, 0, 0]);
+    expect(shots(table)).toEqual(["worldie", "miss", "miss"]);
     expect(ranks(table)).toEqual([1, 2, 2]);
   });
 
-  it.each(DISTANCE_RULES)("scores a single answer 100 (%s)", (mode) => {
+  it.each(DISTANCE_RULES)("makes a single answer a worldie (%s)", (mode) => {
     const table = rankAnswers(question("one", [east("Only", 7)]), ORIGIN, mode);
+    expect(shots(table)).toEqual(["worldie"]);
     expect(points(table)).toEqual([100]);
     expect(ranks(table)).toEqual([1]);
   });
 
   it.each(DISTANCE_RULES)(
-    "scores 100 all round when every answer is tied (%s)",
+    "makes every answer a worldie when all are tied (%s)",
     (mode) => {
       const q = question("level", [east("C", 2), east("A", 2), east("B", 2)]);
       const table = rankAnswers(q, ORIGIN, mode);
@@ -175,22 +203,30 @@ describe("rankAnswers", () => {
     ]);
   });
 
-  it("rounds half points up, so the two modes can add up to 101", () => {
-    // Nine answers: second place has 1 better and 7 worse (87.5).
+  it("uses all six shots on a list of nine", () => {
     const q = question(
       "nine",
       Array.from({ length: 9 }, (_, i) => east(`N${i + 1}`, i + 1)),
     );
-    expect(points(rankAnswers(q, ORIGIN, "closest"))).toEqual([
-      100, 88, 75, 63, 50, 38, 25, 13, 0,
-    ]);
-    expect(points(rankAnswers(q, ORIGIN, "furthest"))).toEqual([
-      100, 88, 75, 63, 50, 38, 25, 13, 0,
-    ]);
+    for (const rule of DISTANCE_RULES) {
+      const table = rankAnswers(q, ORIGIN, rule);
+      expect(shots(table)).toEqual([
+        "worldie",
+        "golazo",
+        "trivela",
+        "trivela",
+        "toepoke",
+        "tapin",
+        "tapin",
+        "miss",
+        "miss",
+      ]);
+      expectWellFormed(table);
+    }
   });
 
   it.each(DISTANCE_RULES)(
-    "keeps 100 for the best answer alone, however long the list (%s)",
+    "makes the best a worldie and the worst a miss, however long the list (%s)",
     (mode) => {
       const q = question(
         "long",
@@ -200,14 +236,10 @@ describe("rankAnswers", () => {
       );
       const table = rankAnswers(q, ORIGIN, mode);
       expect(table).toHaveLength(400);
-      expect(table.filter((r) => r.points === 100)).toHaveLength(1);
-      expect(table[0].points).toBe(100);
-      // 100 * 398 / 399 is 99.7, which would round to 100.
-      expect(table[1].points).toBe(99);
-      expect(table[399].points).toBe(0);
-      for (let i = 1; i < table.length; i++) {
-        expect(table[i].points).toBeLessThanOrEqual(table[i - 1].points);
-      }
+      expect(table[0].shot).toBe("worldie");
+      expect(table[399].shot).toBe("miss");
+      expect(new Set(shots(table))).toEqual(new Set(SHOT_ORDER));
+      expectWellFormed(table);
     },
   );
 
@@ -246,16 +278,16 @@ describe("rankAnswers", () => {
         "Auckland",
       ]);
       expect(kms(table)).toEqual([3, 44, 276, 283, 11_644, 18_163]);
-      expect(points(table)).toEqual([100, 80, 60, 40, 20, 0]);
-      expect(ranks(table)).toEqual([1, 2, 3, 4, 5, 6]);
-      expect(table.map((r) => gradeFor(r.points))).toEqual([
+      expect(shots(table)).toEqual([
         "worldie",
-        "topbins",
-        "goal",
-        "ontarget",
-        "wide",
-        "wide",
+        "golazo",
+        "golazo",
+        "trivela",
+        "tapin",
+        "miss",
       ]);
+      expect(points(table)).toEqual([100, 80, 80, 60, 10, 0]);
+      expect(ranks(table)).toEqual([1, 2, 3, 4, 5, 6]);
     });
 
     it("FURTHEST rewards the other side of the world", () => {
@@ -269,7 +301,15 @@ describe("rankAnswers", () => {
         "West Derby",
       ]);
       expect(kms(table)).toEqual([18_163, 11_644, 283, 276, 44, 3]);
-      expect(points(table)).toEqual([100, 80, 60, 40, 20, 0]);
+      // Glasgow and Wembley are near Anfield as the world goes: both a long way from best.
+      expect(shots(table)).toEqual([
+        "worldie",
+        "trivela",
+        "tapin",
+        "tapin",
+        "miss",
+        "miss",
+      ]);
     });
 
     it("plays differently from another stadium", () => {
@@ -281,23 +321,6 @@ describe("rankAnswers", () => {
         "Old Trafford",
       ]);
     });
-  });
-});
-
-describe("gradeFor", () => {
-  it.each([
-    [100, "worldie"],
-    [99, "topbins"],
-    [80, "topbins"],
-    [79, "goal"],
-    [55, "goal"],
-    [54, "ontarget"],
-    [30, "ontarget"],
-    [29, "wide"],
-    [1, "wide"],
-    [0, "wide"],
-  ])("%i points is %s", (pts, grade) => {
-    expect(gradeFor(pts)).toBe(grade);
   });
 });
 
@@ -439,7 +462,7 @@ describe("tableExcerpt", () => {
 });
 
 describe("ruleFor", () => {
-  it("scores HOME by the most common answer and AWAY by the most niche", () => {
+  it("scores HOME by the most common answer and AWAY by the most uncommon", () => {
     expect(ruleFor("home")).toBe("common");
     expect(ruleFor("away")).toBe("niche");
   });
@@ -460,7 +483,7 @@ describe("rankAnswers by popularity", () => {
     answer("Luka Modric", 0, 5, [], 3),
   ]);
 
-  it("common: the most popular first, 100 down to 0", () => {
+  it("common: the most popular first, a worldie down to a miss", () => {
     const table = rankAnswers(ballon, ORIGIN, "common");
     expect(names(table)).toEqual([
       "Lionel Messi",
@@ -470,11 +493,18 @@ describe("rankAnswers by popularity", () => {
       "Josef Masopust",
     ]);
     expect(shares(table)).toEqual([32, 24.7, 3, 2.6, 0.1]);
-    expect(points(table)).toEqual([100, 75, 50, 25, 0]);
+    expect(shots(table)).toEqual([
+      "worldie",
+      "golazo",
+      "toepoke",
+      "tapin",
+      "miss",
+    ]);
+    expect(points(table)).toEqual([100, 80, 30, 10, 0]);
     expect(ranks(table)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("niche: the least popular first, 100 down to 0", () => {
+  it("niche: the least popular first, a worldie down to a miss", () => {
     const table = rankAnswers(ballon, ORIGIN, "niche");
     expect(names(table)).toEqual([
       "Josef Masopust",
@@ -483,17 +513,57 @@ describe("rankAnswers by popularity", () => {
       "Cristiano Ronaldo",
       "Lionel Messi",
     ]);
-    expect(points(table)).toEqual([100, 75, 50, 25, 0]);
+    // Kaka is 26 times as common as Masopust, but much further from Messi: a trivela.
+    expect(shots(table)).toEqual([
+      "worldie",
+      "trivela",
+      "toepoke",
+      "miss",
+      "miss",
+    ]);
+    expect(points(table)).toEqual([100, 60, 30, 0, 0]);
   });
 
-  it("common and niche are mirror images", () => {
-    const common = rankAnswers(ballon, ORIGIN, "common");
-    const niche = rankAnswers(ballon, ORIGIN, "niche");
-    for (const row of common) {
-      const mirrored = rankedFor(niche, row.answer.id);
-      expect(mirrored?.points).toBe(100 - row.points);
-      expect(mirrored?.rank).toBe(common.length + 1 - row.rank);
-    }
+  it("uses the shots filed in the data under the question's own rule", () => {
+    const q = question("filed", [
+      popular("A", 50),
+      popular("B", 30),
+      popular("C", 20),
+    ]);
+    const filed = {
+      ...q,
+      answers: q.answers.map((a) => ({ ...a, shot: "trivela" as const })),
+    };
+    const table = rankAnswers(filed, ORIGIN, "common");
+    expect(shots(table)).toEqual(["trivela", "trivela", "trivela"]);
+    expect(points(table)).toEqual([60, 60, 60]);
+    // Under another rule they are worked out again.
+    expect(shotsOf(filed, ORIGIN, "niche")).toEqual([
+      "miss",
+      "toepoke",
+      "worldie",
+    ]);
+  });
+
+  it("ranks by shot first, then by share within a shot", () => {
+    // Filed by hand against the popularity: the table follows the shots.
+    const q = question("hand", [
+      popular("A", 50),
+      popular("B", 30),
+      popular("C", 20),
+    ]);
+    const filed = {
+      ...q,
+      answers: [
+        { ...q.answers[0], shot: "toepoke" as const },
+        { ...q.answers[1], shot: "worldie" as const },
+        { ...q.answers[2], shot: "toepoke" as const },
+      ],
+    };
+    const table = rankAnswers(filed, ORIGIN, "common");
+    expect(names(table)).toEqual(["B", "A", "C"]);
+    expect(ranks(table)).toEqual([1, 2, 3]);
+    expectWellFormed(table);
   });
 
   it("ignores the stadium, but every row still carries its distance", () => {
@@ -505,7 +575,7 @@ describe("rankAnswers by popularity", () => {
     expect(rankedFor(there, "lionel-messi")?.km).toBe(0);
   });
 
-  it("ties shares to a tenth of a percent: shared points and rank, name order", () => {
+  it("ties shares to a tenth of a percent: shared shot and rank, name order", () => {
     const q = question("ties", [
       popular("Zed", 10),
       popular("Bravo", 4.04),
@@ -514,30 +584,26 @@ describe("rankAnswers by popularity", () => {
     ]);
     const common = rankAnswers(q, ORIGIN, "common");
     expect(names(common)).toEqual(["Zed", "Alpha", "Bravo", "Echo"]);
-    expect(points(common)).toEqual([100, 50, 50, 0]);
+    expect(shots(common)).toEqual(["worldie", "toepoke", "toepoke", "miss"]);
     expect(ranks(common)).toEqual([1, 2, 2, 4]);
     const niche = rankAnswers(q, ORIGIN, "niche");
     expect(names(niche)).toEqual(["Echo", "Alpha", "Bravo", "Zed"]);
-    expect(points(niche)).toEqual([100, 50, 50, 0]);
+    expect(shots(niche)).toEqual(["worldie", "toepoke", "toepoke", "miss"]);
     expect(ranks(niche)).toEqual([1, 2, 2, 4]);
   });
 
-  it("gives every answer tied at the top 100 and a worldie", () => {
+  it("makes every answer tied at the top a worldie", () => {
     const q = question("top", [
       popular("Brazil", 30),
       popular("Germany", 30),
       popular("Uruguay", 2),
     ]);
     const table = rankAnswers(q, ORIGIN, "common");
+    expect(shots(table)).toEqual(["worldie", "worldie", "miss"]);
     expect(points(table)).toEqual([100, 100, 0]);
-    expect(table.map((r) => gradeFor(r.points))).toEqual([
-      "worldie",
-      "worldie",
-      "wide",
-    ]);
   });
 
-  it("scores a lone answer 100 under every rule", () => {
+  it("makes a lone answer a worldie under every rule", () => {
     const q = question("one", [popular("Only", 100)]);
     for (const rule of RULES) {
       expect(points(rankAnswers(q, ORIGIN, rule))).toEqual([100]);

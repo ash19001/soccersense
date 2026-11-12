@@ -10,11 +10,18 @@
 // app/data/stadiums.ts: it is the game's, not this page's), ?time=HH:MM, and ?speed=<n>,
 // which multiplies the scene's time (0.1 is slow motion, for looking at the kick-off).
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { PrefetchPageLinks, useNavigate } from "react-router";
 
 import { STADIUMS } from "~/data";
 import { factForDay, type Fact } from "~/data/facts";
+import { leaderboardFor } from "~/data/leaderboard";
 import {
   type Mode,
   type Today,
@@ -27,6 +34,9 @@ import { MenuScene } from "~/scenes";
 import type { LockedMode } from "~/scenes/menu";
 import {
   GameLayout,
+  HowToPlay,
+  Leaderboard,
+  type LeaderboardBoard,
   MenuCaptions,
   Panel,
   PixelStage,
@@ -35,6 +45,7 @@ import {
   useDeviceSky,
 } from "~/ui";
 import type { Route } from "./+types/home";
+import { howToPlayContent } from "./how-to-play-card";
 
 export const meta: Route.MetaFunction = () => [
   { title: strings.home.title },
@@ -61,6 +72,8 @@ const STRANDED_MS = 8000;
  */
 const FACES_AFTER_MS = 1500;
 const MODES: readonly Mode[] = ["home", "away"];
+/** What the rules' pop-up says (the "?" button opens it). */
+const RULES = howToPlayContent();
 
 /**
  * The entrance plays once per page load: the first time the home screen is shown. This
@@ -220,6 +233,47 @@ function serverMatchday(): null {
   return null;
 }
 
+/** Rows of the day's table on the home screen. */
+const TOP = 10;
+
+/**
+ * Today's top ten for each mode, the player placed in it if they have played (mock data for
+ * now: `leaderboardFor` in app/data/leaderboard.ts, which a backend will replace).
+ */
+function leaderboards(
+  day: number,
+  scores: Record<Mode, number | null>,
+): LeaderboardBoard[] {
+  const text = strings.home.leaderboard;
+  return MODES.map((mode) => {
+    const board = leaderboardFor(day, mode, scores[mode]);
+    const top = board.rows.slice(0, TOP);
+    const mine =
+      board.yourRank === null ? null : board.rows.find((row) => row.you);
+    const label = strings.home.modes[mode].label;
+    return {
+      mode,
+      label,
+      caption: text.caption(label),
+      played: text.played(board.total),
+      rows: top.map((row) => ({
+        rank: row.rank,
+        name: row.name,
+        points: row.total,
+        you: row.you,
+      })),
+      you:
+        mine && !top.includes(mine)
+          ? { rank: mine.rank, name: "", points: mine.total, you: true }
+          : null,
+      youSpoken:
+        board.yourRank === null
+          ? undefined
+          : text.youSpoken(board.yourRank, board.total),
+    };
+  });
+}
+
 export default function Home() {
   const navigate = useNavigate();
   const sky = useDeviceSky();
@@ -251,6 +305,9 @@ export default function Home() {
   const left = useRef(false);
   // Coming back from another page, the name takes the focus: a screen reader reads it.
   const heading = useArrivalFocus<HTMLHeadingElement>();
+  /** The rules are up, over the menu: the "?" button opens them. */
+  const [help, setHelp] = useState(false);
+  const helpButton = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     if (scene && moonPhase !== undefined) scene.setMoonPhase(moonPhase);
@@ -336,6 +393,16 @@ export default function Home() {
 
   const text = strings.home;
   const fact = matchday?.fact ?? null;
+  const day = matchday?.today.dayNumber ?? null;
+  const homeScore = matchday?.scores.home ?? null;
+  const awayScore = matchday?.scores.away ?? null;
+  const boards = useMemo(
+    () =>
+      day === null
+        ? null
+        : leaderboards(day, { home: homeScore, away: awayScore }),
+    [day, homeScore, awayScore],
+  );
 
   return (
     <main>
@@ -371,9 +438,11 @@ export default function Home() {
             stowed={stowed}
             howToPlay={{
               label: strings.howToPlay.title,
-              // The debug overrides go along, and the rules page brings them back.
-              to: `/how-to-play${matchday?.search ?? ""}`,
+              // The rules open over the menu (HowToPlay below).
+              onClick: () => setHelp(true),
+              open: help,
             }}
+            howToPlayRef={helpButton}
             dayLabel={
               matchday ? text.day(matchday.today.dayNumber) : text.dayPending
             }
@@ -385,6 +454,18 @@ export default function Home() {
           {strings.siteName}
         </h1>
         {fact && <p className="ss-sr">{text.fact(fact.text)}</p>}
+        {/* Known once the day is: nothing of it is in the build-time page. */}
+        {boards && (
+          <Leaderboard
+            boards={boards}
+            labels={text.leaderboard}
+            // The mode played today, if only one was: the player wants to see where they came.
+            initialMode={
+              awayScore !== null && homeScore === null ? "away" : "home"
+            }
+            stowed={stowed}
+          />
+        )}
         {/* With no script there is no picture and no game: the page says what it is. */}
         <noscript>
           <Panel>
@@ -393,6 +474,13 @@ export default function Home() {
           </Panel>
         </noscript>
         {warm && <PrefetchPageLinks page={`/play/${warm}`} />}
+        {/* A modal dialog: while it is up nothing behind it, the ball included, can be reached. */}
+        <HowToPlay
+          {...RULES}
+          open={help}
+          onClose={() => setHelp(false)}
+          returnFocus={helpButton}
+        />
       </GameLayout>
     </main>
   );

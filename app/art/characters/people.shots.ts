@@ -11,6 +11,9 @@
  *   ./node_modules/.bin/tsx tools/snap.ts people/kick --strip 8 --dt 0.1 --scale 6
  *     (also people/run, juggle, celebrate, lift, leap, smother, and the child in
  *      people/youth-run, youth-kick, youth-juggle)
+ *   ./node_modules/.bin/tsx tools/snap.ts people/trivela --strip 8 --dt 0.08 --scale 8
+ *     (every shot: people/tapin, toepoke, trivela, chip, power, finesse, bicycle, and
+ *      their people/youth-* twins)
  *
  * The keeper sheet draws the ball at keeperHands where he holds it (hold, smother 1)
  * and a red dot at keeperHands on the other frames.
@@ -33,13 +36,17 @@ import {
   KEEPER_ANIM_NAMES,
   PLAYER_ANIMS,
   PLAYER_ANIM_NAMES,
+  STRIKE_FRAME,
   ballSpot,
   drawKeeper,
   drawPlayer,
   handsSpot,
+  keeperCell,
   keeperHands,
+  playerCell,
   type KeeperAnim,
   type PlayerAnim,
+  type ShotAnim,
 } from "./people";
 import { drawMatchBall, drawPuff, drawTrophy } from "./props";
 
@@ -58,28 +65,38 @@ function grassRow(s: Surface, top: number, h: number, groundY: number): void {
   s.rect(0, groundY, s.w, top + h - groundY, P.grassDark);
 }
 
+/** A sheet row: tall enough for the cell (the bicycle's is bigger) and the labels. */
+function rowHeight(cellH: number, youth: boolean): number {
+  return cellH + (youth ? 16 : 18);
+}
+
 function playerSheet(youth: boolean, kit: Kit): Surface {
-  const rowH = youth ? 32 : 38;
-  const s = new Surface(
-    LABEL_W + 8 * STEP + 6,
-    rowH * PLAYER_ANIM_NAMES.length,
+  const heights = PLAYER_ANIM_NAMES.map((a) =>
+    rowHeight(playerCell(a, youth).cellH, youth),
   );
+  const s = new Surface(
+    LABEL_W + 8 * (STEP + 8) + 6,
+    heights.reduce((a, b) => a + b, 0),
+  );
+  let top = 0;
   PLAYER_ANIM_NAMES.forEach((anim, row) => {
-    const top = row * rowH;
+    const rowH = heights[row];
     const gy = top + rowH - 4;
-    grassRow(s, top, rowH, gy);
+    top += rowH;
+    grassRow(s, gy - rowH + 4, rowH, gy);
     const info = PLAYER_ANIMS[anim];
+    const step = Math.max(STEP, playerCell(anim, youth).cellW + 4);
     label(s, anim, 2, gy - 8);
     label(s, `${info.frames}@${info.fps}`, 2, gy - 1);
     for (let f = 0; f < info.frames; f++) {
-      const x = LABEL_W + 8 + f * STEP;
+      const x = LABEL_W + 8 + Math.floor(step / 2) - 8 + f * step;
       drawPlayer(s, anim, f, x, gy, kit, { youth });
       const b = ballSpot(anim, f, { youth });
       if (b !== null) drawMatchBall(s, x + b.x, gy + b.y, f, DAY);
       const h = handsSpot(anim, f, { youth });
       if (h !== null) drawTrophy(s, x + h.x, gy + h.y, DAY, f === 1);
     }
-    s.hline(0, top, s.w, P.grassDeep);
+    s.hline(0, gy - rowH + 4, s.w, P.grassDeep);
   });
   return s;
 }
@@ -88,7 +105,7 @@ function keeperSheet(): Surface {
   const rowH = 30;
   const kit = makeKit("keeper", { look: 2 });
   const s = new Surface(
-    LABEL_W + 3 * STEP + 6,
+    LABEL_W + 3 * (STEP + 8) + 6,
     rowH * KEEPER_ANIM_NAMES.length,
   );
   KEEPER_ANIM_NAMES.forEach((anim, row) => {
@@ -98,13 +115,14 @@ function keeperSheet(): Surface {
     const info = KEEPER_ANIMS[anim];
     label(s, anim, 2, gy - 8);
     label(s, `${info.frames}@${info.fps}`, 2, gy - 1);
+    const step = Math.max(STEP, keeperCell(anim).cellW + 4);
     for (let f = 0; f < info.frames; f++) {
-      const x = LABEL_W + 8 + f * STEP;
+      const x = LABEL_W + 8 + Math.floor(step / 2) - 8 + f * step;
       drawKeeper(s, anim, f, x, gy, kit);
       const g = keeperHands(anim, f);
       if (g !== null && (anim === "hold" || (anim === "smother" && f === 1)))
         drawMatchBall(s, x + g.x, gy + g.y, 0, DAY);
-      else if (g !== null) s.px(x + g.x, gy + g.y, P.gradeWide);
+      else if (g !== null) s.px(x + g.x, gy + g.y, P.gradeMiss);
     }
     s.hline(0, top, s.w, P.grassDeep);
   });
@@ -149,12 +167,57 @@ function motion(anim: PlayerAnim, youth = false) {
 
 function keeperMotion(anim: KeeperAnim) {
   return (ctx: ShotContext): Surface => {
-    const s = new Surface(48, 48);
+    const wide = keeperCell(anim).cellW > 16;
+    const s = new Surface(wide ? 56 : 48, 48);
     const gy = s.h - 6;
     grassRow(s, 0, s.h, gy);
     const info = KEEPER_ANIMS[anim];
     const f = playFrame(ctx.t, info.fps, info.frames, info.loop);
-    drawKeeper(s, anim, f, 26, gy, makeKit("keeper", { look: 2 }));
+    drawKeeper(s, anim, f, wide ? 34 : 26, gy, makeKit("keeper", { look: 2 }));
+    const g = keeperHands(anim, f);
+    if (g !== null) s.px((wide ? 34 : 26) + g.x, gy + g.y, P.gradeMiss);
+    return s;
+  };
+}
+
+/** How the ball leaves each shot, per frame after the strike: [vx, vy, gravity]. */
+const FLIGHT: Record<ShotAnim, readonly [number, number, number]> = {
+  kick: [7, -1, 0],
+  tapin: [4, 0, 0],
+  toepoke: [6, 0, 0],
+  trivela: [7, -2, 0.2],
+  chip: [4, -5, 1],
+  power: [10, -1, 0],
+  finesse: [6, -2, 0.3],
+  bicycle: [8, 2, 0],
+};
+
+/** A shot played over ctx.t: the ball at his spots, then away from the strike point. */
+function shotMotion(anim: ShotAnim, youth = false) {
+  return (ctx: ShotContext): Surface => {
+    const cell = playerCell(anim, youth);
+    const s = new Surface(72, cell.cellH + 24);
+    const gy = s.h - 6;
+    grassRow(s, 0, s.h, gy);
+    const info = PLAYER_ANIMS[anim];
+    const tick = Math.floor(ctx.t * info.fps) % (info.frames + 3);
+    const f = Math.min(tick, info.frames - 1);
+    const x = 22;
+    drawPlayer(s, anim, f, x, gy, makeKit(youth ? "casual-home" : "home"), {
+      youth,
+    });
+    const b = ballSpot(anim, f, { youth });
+    if (b !== null && tick <= STRIKE_FRAME[anim]) {
+      drawMatchBall(s, x + b.x, gy + b.y, Math.floor(ctx.t * 12), DAY);
+    } else if (tick > STRIKE_FRAME[anim]) {
+      const st = ballSpot(anim, STRIKE_FRAME[anim], { youth });
+      const n = tick - STRIKE_FRAME[anim];
+      const [vx, vy, g] = FLIGHT[anim];
+      if (st !== null) {
+        const by = Math.min(gy - 2, gy + st.y + vy * n + Math.round(g * n * n));
+        drawMatchBall(s, x + st.x + vx * n, by, n, DAY);
+      }
+    }
     return s;
   };
 }
@@ -324,4 +387,20 @@ export const shots: ShotMap = {
   "people/youth-run": motion("run", true),
   "people/youth-kick": motion("kick", true),
   "people/youth-juggle": motion("juggle", true),
+  "people/tapin": shotMotion("tapin"),
+  "people/toepoke": shotMotion("toepoke"),
+  "people/trivela": shotMotion("trivela"),
+  "people/chip": shotMotion("chip"),
+  "people/power": shotMotion("power"),
+  "people/finesse": shotMotion("finesse"),
+  "people/bicycle": shotMotion("bicycle"),
+  "people/youth-tapin": shotMotion("tapin", true),
+  "people/youth-toepoke": shotMotion("toepoke", true),
+  "people/youth-trivela": shotMotion("trivela", true),
+  "people/youth-chip": shotMotion("chip", true),
+  "people/youth-power": shotMotion("power", true),
+  "people/youth-finesse": shotMotion("finesse", true),
+  "people/youth-bicycle": shotMotion("bicycle", true),
+  "people/stranded": keeperMotion("stranded"),
+  "people/sprawl": keeperMotion("sprawl"),
 };

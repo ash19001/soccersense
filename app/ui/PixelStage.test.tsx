@@ -4,8 +4,11 @@ import { renderToString } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { lightingFor, type Lighting } from "~/art/lighting";
+import { resetSoundEngineForTests, soundEngine } from "~/audio";
+import { resetSoundMutedForTests } from "~/audio/mute";
+import { FakeAudioContext } from "~/audio/testing";
 import type { Surface } from "~/pixel";
-import type { PointerInfo, Scene } from "~/scenes/scene";
+import type { Ambience, PointerInfo, Scene, SoundCue } from "~/scenes/scene";
 
 import { PixelRoot } from "./PixelRoot";
 import { PixelStage, type PixelStageProps } from "./PixelStage";
@@ -1040,5 +1043,120 @@ describe("PixelStage: the pointer", () => {
     fireEvent.pointerMove(canvas, { isPrimary: true });
     expect(b.pointers).toHaveLength(1);
     expect(a.pointers).toHaveLength(1);
+  });
+});
+
+describe("PixelStage: sound", () => {
+  /** A scene that makes sounds and has a bed of its own. */
+  class Noisy extends Recorder {
+    onSound: ((cue: SoundCue) => void) | null = null;
+    bed: Ambience = { venue: "stadium", crowd: 1, night: false };
+    ambience(): Ambience {
+      return this.bed;
+    }
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    resetSoundMutedForTests();
+    vi.stubGlobal("AudioContext", FakeAudioContext);
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  });
+
+  afterEach(() => {
+    resetSoundEngineForTests();
+    resetSoundMutedForTests();
+    vi.useRealTimers();
+    localStorage.clear();
+  });
+
+  function gesture(): void {
+    window.dispatchEvent(new Event("pointerdown"));
+  }
+
+  test("the scene's cues reach the engine, and its bed is asked for once a second", () => {
+    const a = new Noisy("a");
+    render(stage({ scene: a, light: DAY }));
+    expect(a.onSound).toBeTypeOf("function");
+    const engine = soundEngine();
+    if (!engine) throw new Error("no engine");
+
+    // Nothing before the first gesture.
+    a.onSound?.({ kind: "touch" });
+    expect(engine.debug()).toMatchObject({ state: "none", ambience: null });
+    expect(engine.debug().dropped.locked).toBe(1);
+
+    gesture();
+    expect(engine.debug().ambience).toBe("top");
+    a.onSound?.({ kind: "kick", power: 1 });
+    expect(engine.debug().played.kick).toBe(1);
+
+    a.bed = { venue: "park", crowd: 0.5, night: true };
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(engine.debug().ambience).toBe("park:night");
+  });
+
+  test("a new scene takes the sound over, and unmounting lets it go", () => {
+    const a = new Noisy("a");
+    const b = new Noisy("b");
+    b.bed = { venue: "ground", crowd: 0.6, night: false };
+    const { rerender, unmount } = render(stage({ scene: a, light: DAY }));
+    gesture();
+    rerender(stage({ scene: b, light: DAY }));
+    expect(a.onSound).toBeNull();
+    expect(b.onSound).toBeTypeOf("function");
+    const engine = soundEngine();
+    expect(engine?.debug().ambience).toBe("nonleague");
+
+    unmount();
+    expect(b.onSound).toBeNull();
+    expect(engine?.debug().ambience).toBeNull();
+    // The poll has stopped: the bed does not come back.
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(engine?.debug().ambience).toBeNull();
+  });
+
+  test("a scene with no bed of its own is heard over silence", () => {
+    const a = new Recorder("plain") as Recorder & Pick<Scene, "onSound">;
+    render(stage({ scene: a, light: DAY }));
+    gesture();
+    expect(a.onSound).toBeTypeOf("function");
+    a.onSound?.({ kind: "whistle", long: true });
+    expect(soundEngine()?.debug()).toMatchObject({
+      ambience: null,
+      played: { whistle: 1 },
+    });
+  });
+
+  test("reduced motion does not mute; a hidden tab is silent", () => {
+    const a = new Noisy("a");
+    render(stage({ scene: a, light: DAY }));
+    gesture();
+    media.set(true);
+    a.onSound?.({ kind: "touch" });
+    const engine = soundEngine();
+    expect(engine?.isMuted).toBe(false);
+    expect(engine?.debug().played.touch).toBe(1);
+
+    setVisibility("hidden");
+    a.onSound?.({ kind: "kick", power: 0.4 });
+    expect(engine?.debug().dropped.hidden).toBe(1);
+    setVisibility("visible");
+    a.onSound?.({ kind: "kick", power: 0.4 });
+    expect(engine?.debug().played.kick).toBe(1);
+  });
+
+  test("without Web Audio the stage runs as before, in silence", () => {
+    vi.stubGlobal("AudioContext", undefined);
+    const a = new Noisy("a");
+    render(stage({ scene: a, light: DAY }));
+    frames.step(0);
+    frames.step(16);
+    expect(a.onSound).toBeNull();
+    expect(a.updates()).toEqual([0, 0.016]);
   });
 });

@@ -13,13 +13,23 @@
  *                      new airship drifting in (the times are fixed; --t is ignored)
  *   stadium/zebra      a close crop of the zebra in front of the ball, no ball: use --strip
  *   stadium/cars       every car heading at each size, day and night lamps, and the coach
+ *   stadium/mascot     the mascot close up (480 x 270): a row of idle frames, then a row
+ *                      for each trick in turn (--t is ignored)
+ *   stadium/schemes    the backdrop in every club scheme, 480 x 270 each, four to a row,
+ *                      in the order the days take them (--seed N wears day N's)
  *   led/panel          the shared dot-matrix panel on its own, with every kind of line
  *
  *   ./node_modules/.bin/tsx tools/snap.ts stadium/composed --size 480x270 --time all --scale 3
  *   ./node_modules/.bin/tsx tools/snap.ts stadium/composed --size 480x270 --strip 8 --dt 1.5 --scale 2
  */
 
-import { FONT_3x5, Surface, type ShotContext, type ShotMap } from "~/pixel";
+import {
+  FONT_3x5,
+  Surface,
+  drawText,
+  type ShotContext,
+  type ShotMap,
+} from "~/pixel";
 import { drawBall, type BallPatches, type BallState } from "~/art/ball";
 import { UI_COLUMN_W, menuLayout } from "~/art/layout";
 import { drawLedLine, drawLedPanel } from "~/art/led";
@@ -27,6 +37,8 @@ import { lightingFor } from "~/art/lighting";
 import { drawLogo, logoSize } from "~/art/logo";
 import { MODE_COLORS, P } from "~/art/palette";
 import { MenuBackdrop } from "~/art/stadium";
+import { SCHEMES, schemeForDay } from "~/art/stadium-club";
+import { TRICKS } from "~/art/stadium-mascot";
 import { factForDay } from "~/data/facts";
 import {
   HEADINGS,
@@ -53,6 +65,7 @@ function scene(ctx: ShotContext): MenuBackdrop {
   });
   backdrop.resize(ctx.w, ctx.h);
   backdrop.setLighting(lightingFor(ctx.sun));
+  backdrop.setScheme(schemeForDay(ctx.seed).id);
   return backdrop;
 }
 
@@ -106,6 +119,59 @@ export const shots: ShotMap = {
   },
 
   "stadium/composed": (ctx) => composed(ctx).s,
+
+  "stadium/mascot": (ctx) => {
+    const W = 480;
+    const H = 270;
+    const CW = 28;
+    const CH = 30;
+    const COLS = 12;
+    const rows = TRICKS.length + 1;
+    const out = new Surface(CW * COLS, CH * rows);
+    const one = new Surface(W, H);
+    for (let row = 0; row < rows; row++) {
+      const backdrop = scene({ ...ctx, w: W, h: H });
+      const spot = backdrop.mascotSpot();
+      if (!spot) return out;
+      // the tricks before this one, each played out in turn
+      for (let k = 0; k < row - 1; k++) backdrop.pokeMascot(k * 10);
+      const start = (row - 1) * 10;
+      if (row > 0) backdrop.pokeMascot(start);
+      const dur = row === 0 ? 9 : TRICKS[row - 1].dur;
+      for (let i = 0; i < COLS; i++) {
+        const t = row === 0 ? 0.3 + i * 0.75 : start + (i / (COLS - 1)) * dur;
+        backdrop.draw(one, t);
+        out.blit(one, i * CW, row * CH, {
+          sx: spot.x - CW / 2,
+          sy: spot.y - CH + 5,
+          sw: CW,
+          sh: CH,
+        });
+      }
+      const label = row === 0 ? "IDLE" : TRICKS[row - 1].name;
+      drawText(out, label, 1, row * CH + 1, P.ink, { font: FONT_3x5 });
+    }
+    return out;
+  },
+
+  "stadium/schemes": (ctx) => {
+    const W = 480;
+    const H = 270;
+    const out = new Surface(W * 4, H * Math.ceil(SCHEMES.length / 4));
+    const one = new Surface(W, H);
+    const backdrop = scene({ ...ctx, w: W, h: H });
+    SCHEMES.forEach((scheme, i) => {
+      backdrop.setScheme(scheme.id);
+      backdrop.draw(one, ctx.t);
+      const x = (i % 4) * W;
+      const y = Math.floor(i / 4) * H;
+      out.blit(one, x, y);
+      const label = `${i} ${scheme.name}`;
+      out.rect(x, y + H - 9, label.length * 4 + 3, 9, P.ink);
+      drawText(out, label, x + 2, y + H - 7, P.chalk, { font: FONT_3x5 });
+    });
+    return out;
+  },
 
   "stadium/sign": (ctx) => {
     const { s } = composed(ctx);

@@ -18,8 +18,9 @@ Checked by `app/data/data.test.ts`:
   always thinks of it);
 - the shares of a question add up to 100 (the test allows 99.5 to 100.5);
 - one answer is the most common and one the most niche: no tie at the very top or the very
-  bottom, so HOME and AWAY each have a single WORLDIE. Ties in the middle are allowed (they
-  share points, as in any table).
+  bottom. Ties in the middle are allowed (they share a shot and a rank, as in any table).
+
+Each answer's shot (WORLDIE down to MISS) is filed from these numbers: see `shots.md`.
 
 ## How they were estimated
 

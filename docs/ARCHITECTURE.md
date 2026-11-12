@@ -24,7 +24,9 @@ app/
   data/       demo content: stadiums and questions.
   lib/        sun position, time-zone to location guess.
   ui/         React components and CSS for the DOM interface, plus PixelStage (the canvas host).
-  routes/     pages. `/` hosts the game. `/how-to-play` is the rules page.
+  audio/      the sound engine (Web Audio, docs/AUDIO.md); mix.ts holds every level, pure data.
+  routes/     pages. `/` hosts the game; its "?" opens the rules as a pop-up, and
+              `/how-to-play` is the same rules as a page. `/dev/sound` is the sound board.
   i18n/       all user-facing interface text.
 tools/        Node-only scripts: snap.ts (render shots to PNG), png.ts, browser screenshots.
 docs/         these briefs.
@@ -35,6 +37,12 @@ docs/         these briefs.
 `window`, `document`, `navigator`, `localStorage` or `Date.now()` at module load or inside
 painters. Browser access belongs in `app/ui` (inside effects and handlers) and in the few
 functions that are documented as browser-only.
+
+`app/audio` is browser code (the Web Audio engine), with one exception: `app/audio/mix.ts`,
+every level of every sound, is pure data (type-only imports, no browser), so scenes and art
+may import it (`import { HOME_PAGE } from "~/audio/mix"`) for the powers and sizes of the
+sound cues they send. They import nothing else from `~/audio`; `app/audio/knobs.test.ts`
+keeps `mix.ts` pure.
 
 ## 2. Engine (`app/pixel`)
 

@@ -57,11 +57,15 @@ rendered, but the names and roles are fixed and every change must be reported.
 | AWAY (cool) | `awayDark #116a80`, `away #19a9bf`, `awayLight #6fe0dc`                                                                              |
 | gold        | `goldDark #b9770e`, `gold #ffc928`, `goldLight #fff2a0`                                                                              |
 | scoreboard  | `ledOff #1c1f2b`, `amberDim #6b3f0e`, `amber #ffb21f`, `ledGreen #6dff7a`, `ledRed #ff5a4d`                                          |
-| grades      | `worldie` = `gold`, `topbins #8fe35c`, `goal #2fb36b`, `ontarget #4aa6e8`, `wide #e9584a`, `timeup #7b86a3`                          |
+| grades      | `worldie` = `gold`, `golazo #8fe35c`, `trivela #2fb36b`, `toepoke #4aa6e8`, `tapin #a66bea`, `miss #e9584a`, `timeup #7b86a3`        |
 | sky extras  | `nightGlow #344a82`, `cloudLight #ffffff`, `cloud #d6e6f7`, `cloudShade #b4cbe8`, `sun #fff8d0`, `moon #f6f1dc`, `moonShade #c3c8d8` |
 
-In code the grades are named `gradeWorldie`, `gradeTopbins`, `gradeGoal`, `gradeOntarget`,
-`gradeWide` and `gradeTimeup`. The sky extras exist only in `app/art/palette.ts`; every other
+The grades are the six shots, best first, then the time-up grey: a ramp round the colour wheel
+from gold through the greens and blue to red. `tapin` (added 2026-11-11 with the six shots) is
+the ramp's step between the toe poke's blue and the miss's red, a violet as light as its
+neighbours. In code the grades are named `gradeWorldie`, `gradeGolazo`, `gradeTrivela`,
+`gradeToepoke`, `gradeTapin`, `gradeMiss` and `gradeTimeup` (renamed 2026-11-11 with the
+shots, the colours unchanged). The sky extras exist only in `app/art/palette.ts`; every other
 colour is also a CSS variable in `app/ui/tokens.css`, and a test keeps the two in step.
 
 HOME is always warm red-orange and AWAY is always teal: in kits, patches, badges, buttons.

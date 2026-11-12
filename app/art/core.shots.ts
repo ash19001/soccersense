@@ -69,10 +69,11 @@ const GROUPS: readonly (readonly [string, readonly PaletteName[]])[] = [
     "GRADES",
     [
       "gradeWorldie",
-      "gradeTopbins",
-      "gradeGoal",
-      "gradeOntarget",
-      "gradeWide",
+      "gradeGolazo",
+      "gradeTrivela",
+      "gradeToepoke",
+      "gradeTapin",
+      "gradeMiss",
       "gradeTimeup",
     ],
   ],
@@ -166,7 +167,7 @@ function gradeStrip(grade: (c: Color) => Color, label: string): Surface {
     ["concreteDark", "concrete", "concreteLight", "steelHi"],
     ["brickDark", "brick", "brickLight"],
     ["woodDark", "wood"],
-    ["gradeTopbins", "gradeGoal", "gradeOntarget", "gradeWide"],
+    ["gradeGolazo", "gradeTrivela", "gradeToepoke", "gradeTapin", "gradeMiss"],
   ];
   let w = 6;
   for (const ramp of ramps) w += ramp.length * 4 + 5;
@@ -805,8 +806,8 @@ function careerGuide(
     pitch,
     c.keeperX,
     c.groundY,
-    P.gradeTopbins,
-    P.gradeGoal,
+    P.gradeGolazo,
+    P.gradeTrivela,
     P.skinB,
     P.skinBShade,
     P.hairDark,

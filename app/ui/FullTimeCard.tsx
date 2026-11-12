@@ -9,8 +9,10 @@ import type { UiGrade, UiMode } from "./types";
 export interface FullTimeResult {
   grade: UiGrade;
   points: number;
-  /** What the player answered, or the text for a miss: "Time's up". */
+  /** What the player answered, or the text for no answer: "Time's up". */
   answer: string;
+  /** The shot's name, beside the points: "GOLAZO". Leave out for no answer. */
+  label?: string;
 }
 
 export interface FullTimeCardProps {
@@ -23,8 +25,12 @@ export interface FullTimeCardProps {
   maxTotal: number;
   /** Read out for the score: "620 out of 700". */
   totalSpoken?: string;
-  /** "WORLD CUP FINAL" */
+  /** The career tier reached: "WORLD CUP FINAL". */
   careerTitle: string;
+  /** The title the total earned, shown big with it: "SEASON TICKET HOLDER". */
+  earnedTitle?: string;
+  /** Read out before the title: "Your title". */
+  earnedTitleSpoken?: string;
   /** "PERFECT GAME", only on a 700. */
   perfectLine?: string;
   results: readonly FullTimeResult[];
@@ -56,6 +62,8 @@ export function FullTimeCard({
   maxTotal,
   totalSpoken,
   careerTitle,
+  earnedTitle,
+  earnedTitleSpoken,
   perfectLine,
   results,
   resultsLabel,
@@ -88,6 +96,14 @@ export function FullTimeCard({
           tone={perfectLine ? "gold" : "amber"}
           label={totalSpoken ?? `${total} / ${maxTotal}`}
         />
+        {earnedTitle && (
+          <p className="ss-full__title">
+            {earnedTitleSpoken && (
+              <span className="ss-sr">{earnedTitleSpoken}: </span>
+            )}
+            {earnedTitle}
+          </p>
+        )}
         {perfectLine && <p className="ss-full__perfect">{perfectLine}</p>}
       </div>
       <ol
@@ -100,6 +116,9 @@ export function FullTimeCard({
           <li key={i} className="ss-full__row" data-grade={result.grade}>
             <Pip grade={result.grade} />
             <span className="ss-full__answer">{result.answer}</span>
+            {result.label && (
+              <span className="ss-full__shot">{result.label}</span>
+            )}
             <span className="ss-full__points">{result.points}</span>
           </li>
         ))}

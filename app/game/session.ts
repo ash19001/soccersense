@@ -1,6 +1,6 @@
 import { tierFor, isPerfect } from "./career";
 import { judge } from "./judge";
-import { gradeFor, rankAnswers, rankedFor, ruleFor } from "./scoring";
+import { rankAnswers, rankedFor, ruleFor } from "./scoring";
 import type {
   Grade,
   Mode,
@@ -288,7 +288,7 @@ export function reduce(session: Session, action: Action): Session {
         questionId: question.id,
         input,
         answerId: row.answer.id,
-        grade: gradeFor(row.points),
+        grade: row.shot,
         points: row.points,
         km: row.km,
         share: row.share,

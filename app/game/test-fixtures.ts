@@ -1,4 +1,6 @@
 /** Small builders for the rule tests. Not part of the game: never import this from app code. */
+import { ruleFor } from "./scoring";
+import { shotsFor } from "./shots";
 import type { Answer, Measure, Mode, Question, Stadium } from "./types";
 
 export function slug(name: string): string {
@@ -26,6 +28,8 @@ export function answer(
     lat,
     lng,
     popularity,
+    // Filed for real by `question`, from the popularity under its mode's rule.
+    shot: "miss",
   };
 }
 
@@ -44,6 +48,11 @@ export function question(
   mode: Mode = "home",
   measure: Measure = "birthplace",
 ): Question {
+  // The answers' shots, filed by the rule from their popularity, as the data is.
+  const shots = shotsFor(
+    answers.map((a) => a.popularity),
+    ruleFor(mode),
+  );
   return {
     id,
     mode,
@@ -51,7 +60,7 @@ export function question(
     measure,
     measureLabel: "where it was born",
     asOf: "2026-11-10",
-    answers,
+    answers: answers.map((a, i) => ({ ...a, shot: shots[i] })),
   };
 }
 

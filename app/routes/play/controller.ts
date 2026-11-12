@@ -19,6 +19,7 @@
 
 import {
   MAX_TOTAL,
+  type Mode,
   type Session,
   type StorageLike,
   type Today,
@@ -33,6 +34,7 @@ import {
   reduce,
   saveSession,
   shareInputFor,
+  titleFor,
 } from "~/game";
 import { questionsFor } from "~/data";
 import { strings } from "~/i18n";
@@ -88,6 +90,13 @@ export interface GameOptions {
 /** The tier's name, as the board and the card show it. */
 export function tierName(total: number): string {
   return strings.play.tiers[careerFor(total).id];
+}
+
+/** The title a total earned in a mode, as the full-time card and the share text show it. */
+export function titleName(mode: Mode, total: number): string {
+  return mode === "home"
+    ? strings.play.titles.home[titleFor("home", total)]
+    : strings.play.titles.away[titleFor("away", total)];
 }
 
 function copyToClipboard(text: string): Promise<void> {
@@ -242,6 +251,7 @@ export class GameController {
         announcement: strings.play.fullTime.spoken(
           done.total,
           MAX_TOTAL,
+          titleName(done.mode, done.total),
           tierName(done.total),
         ),
       });
@@ -269,7 +279,11 @@ export class GameController {
     const { session } = this.view;
     if (session.phase !== "done") return;
     const text = buildShareText(
-      shareInputFor(session, tierName(session.total)),
+      shareInputFor(
+        session,
+        tierName(session.total),
+        titleName(session.mode, session.total),
+      ),
     );
     const settle = (state: ShareState) => {
       if (this.disposed) return;

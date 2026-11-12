@@ -6,6 +6,8 @@ of its own (every string is a prop, so it comes from `app/i18n`). Import everyth
 The styles (`app/ui/tokens.css`, `app/ui/ui.css`) are loaded once from `app/app.css`.
 
 Look at it: `/dev/ui` is the gallery, `/dev/ui?only=<name>` is one composition full-screen.
+Beside it, `/dev/sound` is the sound board: every sound the game plays, with its level from
+`app/audio/mix.ts` on a slider (docs/AUDIO.md, "Changing the volumes").
 
 `~/ui` also holds the canvas host, `PixelStage`, and the hook that gives a page the player's own
 sky, `useDeviceSky`. They have their own section below ("The canvas host") and their own test
@@ -112,7 +114,8 @@ when rounding up). At ratios 1, 2 and 3 `--snap` is `1px` and `--nudge` is `0px`
 CSS there always was. A test in `kit.test.tsx` reads the stylesheet and fails on a bare step.
 
 Palette: `--c-<kebab-name>` for every colour in art bible section 3.1 (`--c-ink`, `--c-amber`,
-`--c-home-light`, `--c-grade-topbins` ...). No other colours.
+`--c-home-light`, `--c-grade-golazo` ...). No other colours. A test in
+`app/art/palette.test.ts` checks every one against the palette.
 
 Set by `GameLayout` for its children: `--ss-h` (the full height the sheet and the card measure
 their 46% against), `--ss-pad-t` and `--ss-pad-b` (column padding, safe areas included),
@@ -138,11 +141,14 @@ Colour is inherited from attributes, on any element:
 
 - `data-mode="home" | "away"` sets `--mode`, `--mode-dark`, `--mode-light` (warm or teal).
   Components that take a `mode` prop set it themselves.
-- `data-grade="worldie" | "topbins" | "goal" | "ontarget" | "wide" | "timeup" | "skipped"` sets
-  `--grade`.
+- `data-grade="worldie" | "golazo" | "trivela" | "toepoke" | "tapin" | "miss" | "timeup" | "skipped"`
+  sets `--grade`: the six shots (gold, light green, green, blue, violet, red: a ramp round the
+  colour wheel, best first), then the time-up grey and, for a pass, mist. (Changed on
+  2026-11-11: the six shots replace the sliding grades; renamed the same day, from bicycle,
+  finesse, power and chip, the colours unchanged.)
 
 `UiMode` and `UiGrade` are structurally the same as `Mode` and `Grade` in `~/game`, so game values
-pass straight in. `UI_GRADES` lists the grades in order.
+pass straight in. `UI_GRADES` lists the grades in order, best shot first.
 
 ## Components
 
@@ -150,7 +156,9 @@ Props marked `?` are optional. Every component also takes `className?`.
 
 ### `GameLayout`
 
-`canvas?`, `top?`, `bottom?`, `children?`, `contained?`
+`canvas?`, `top?`, `bottom?`, `children?`, `contained?`, `sound?` (a sound switch in the
+corner, off by default: the switch normally lives in `MenuCaptions` and `Board`, see
+`SoundToggle`)
 
 The game shell and the only layout component. It is a `PixelRoot` fixed to the viewport, with
 the `canvas` slot filling it and one column over it: 135 logical px wide (405 fp where that is
@@ -220,8 +228,9 @@ and 768 x 1024 @2).
 - **Answer bar**: the field and SHOOT are one line of their type tall inside their border (or
   a touch target if that is more), with only the frame round them, and the bar stands on the
   bottom edge of the screen like the sheet (its outline and shadow below the edge).
-- **Reveal sheet**: the grade band, the sentence (it takes the height there is and scrolls past
-  it) and the button on the left, the league table on the right, as tall as the sheet.
+- **Reveal sheet**: the grade band, the sentence (it scrolls past the height there is), the
+  player's own answer under it when it did not score, and the button on the left; the league
+  table on the right, as tall as the sheet.
 - **Full-time card**: FULL TIME and the career title across the top, the score and the three
   buttons on the left (the buttons at the foot), the seven answers on the right.
 
@@ -255,12 +264,15 @@ like that any more: the rules page and the error page are each a `PixelRoot` (se
 
 ### `Board`
 
-`mode`, `stadiumName`, `questionNumber` (1-based), `questionCount`, `results` (grade or `null` per
-question), `total`, `tierName`, `tierProgress` (0 to 1), `question`, `instruction`, `measureLine`,
+`mode`, `questionNumber` (1-based), `questionCount`, `results` (grade or `null` per question),
+`total`, `tierName`, `tierProgress` (0 to 1), `question`, `instruction`, `measureLine`,
 `secondsLeft`, `secondsTotal`, `compact?`, `labels: { mode, questionOf, points, totalSpoken?,
-timeLeft?, board? }`
+timeLeft?, board? }`, `sound?` (the sound switch after the mode badge: labels, default
+`strings.sound`, or `false`; see `SoundToggle`). (`stadiumName` is gone, 2026-11-11: the board no longer names the day's
+stadium, and on a monitor its right-hand column is only as wide as the career bar needs, the
+rest going to the question.)
 
-The scoreboard: badge, stadium, total (LED), seven lamps, career bar, the question screen, the
+The scoreboard: badge, total (LED), seven lamps, career bar, the question screen, the
 clock. `compact` (from the moment an answer is in) shrinks the question to a recap, keeps the
 instruction line, and removes the measure line and the clock.
 
@@ -277,44 +289,77 @@ the field read-only and turns the buttons off.
 
 ### `RevealSheet`
 
-`grade`, `mode`, `gradeLabel`, `pointsLabel?`, `sentence`, `rows`, `tableLabels`, `nextLabel`,
-`onNext()`, `focusNext?` (default true)
+`grade`, `mode`, `gradeLabel`, `pointsLabel?`, `sentence`, `rows`, `tableLabels`, `yours?`,
+`nextLabel`, `onNext()`, `focusNext?` (default true)
 
-Slides up in steps; at most the lower 46% of the screen. Band in the grade colour, the sentence
-(three lines at most, then it scrolls), a `LeagueTable`, the next button (focused on arrival).
+Slides up in steps; at most the lower 46% of the screen. Band in the grade colour (the shot's
+name and its points: `WORLDIE! +100`, `TAP IN +10`; leave `pointsLabel` out for a miss, a
+pass or a time-up), the sentence (three lines at most, then it scrolls), the `yours` line
+when given, a `LeagueTable` (with `inlinePlace`), the next button (focused on arrival).
+
+`yours` (`RevealYours`, new): `{ you, name, picked?, shot, points, spoken }`. The player's own
+answer when it is not one of `rows` (it did not score: a miss, a pass, a time-up): one line in
+the miss colour under the sentence, set like a table row (`YOU Blackburn Rovers 2% MISS 0`;
+leave `picked` out with no answer). It sits above the table on a phone and in the left column,
+under the sentence, on a wide screen. Screen readers hear `spoken` once ("Your answer: Blackburn
+Rovers, picked by 2%. MISS, 0 points."); the pieces are hidden from them. In the game it comes
+from `yoursLine(reveal)` in `app/routes/play/Game.tsx`, undefined when the answer is a row.
 
 ### `LeagueTable`
 
-`rows: LeagueEntry[]`, `labels: { caption, rank, answer, distance, points, you, gap }`,
-`followYou?` (default true), `pinFirst?` (default true), `ref?`
+`rows: LeagueEntry[]`, `labels: { caption, rank, answer, distance, shot?, points, you, gap }`,
+`followYou?` (default true), `pinFirst?` (default true), `inlinePlace?` (default false), `ref?`
 
-`LeagueEntry` is a `LeagueRow` `{ rank, name, place, distance, points, you?, best?, id? }` or a
-gap marker `{ gap: true }`. From `revealFor(...).rows` in `~/game`: put `{ gap: true }` before
-every row with `gapBefore`, and format `distance` with `formatDistance`. `best` defaults to
-`points === 100`. Pass the rows best first.
+`LeagueEntry` is a `LeagueRow` `{ rank, name, place, distance, points, grade?, shot?, you?,
+best?, id? }` or a gap marker `{ gap: true }`. The reveal's rows are `revealFor(...).rows` in
+`~/game`: five, one for each shot that scores, with no gaps (the gap marker stays in the kit
+but the reveal no longer uses it). Format `distance` with `formatShare` (or `formatDistance`
+for the distance rules). Pass the rows best first.
+
+- `inlinePlace` (new; the reveal sets it): the place follows the name on its line, in the
+  place colour, and wraps after it only when it must, so a row is one line tall (as tall as
+  its points box) unless a name is long. The YOU tag stands beside the rank (`6 YOU`), not
+  under it, so the player's row is as tall as the others. Without it every row is two lines,
+  name over place.
+  That is what lets the reveal's five rows and the headings fit at 1366 x 768 and 390 x 844.
+
+- With a `shot` heading in `labels` the table has a SHOT column, between the third column and
+  the points: each row's `shot` (`"GOLAZO"`) as a tag in its `grade`'s colour, ink on colour,
+  all tags one width. `grade` also goes on the row as `data-grade`.
+- `best` (the gold row: gold name and rank, the points on a gold box) defaults to
+  `grade === "worldie"`, or to `points === 100` for a row with no grade.
 
 It scrolls inside whatever height it is given (never less than the headings and two rows). The
 first row stays pinned under the headings; the player's row is brought into view with the row
-above it, until the player scrolls the table themselves. The place is one line (ellipsis). A
-distance such as `"540 miles"` is split at its last space and stacked.
+above it, until the player scrolls the table themselves. The place is one line (ellipsis),
+unless `inlinePlace`. A distance such as `"540 miles"` is split at its last space and stacked.
 
 ### `FullTimeCard`
 
-`mode`, `heading`, `total`, `maxTotal`, `totalSpoken?`, `careerTitle`, `perfectLine?`,
-`results: { grade, points, answer }[]`, `resultsLabel?`, `shareLabel`, `onShare()`, `otherLabel`,
-`otherMode`, `onPlayOther()`, `menuLabel`, `onMenu()`
+`mode`, `heading`, `total`, `maxTotal`, `totalSpoken?`, `careerTitle`, `earnedTitle?`,
+`earnedTitleSpoken?`, `perfectLine?`, `results: { grade, points, answer, label? }[]`,
+`resultsLabel?`, `shareLabel`, `onShare()`, `otherLabel`, `otherMode`, `onPlayOther()`,
+`menuLabel`, `onMenu()`
 
-Heading and career title, the score as a large LED (gold with `perfectLine`), the seven
-answers, three buttons. At most the lower 46%; the answers scroll when they do not fit (phones
+Heading and career tier (`careerTitle`), the score as a large LED (gold with `perfectLine`),
+under it the title the total earned (`earnedTitle`, new 2026-11-11: big type, the mode's light
+colour, one line at 20 characters on a monitor; `earnedTitleSpoken`, "Your title", is read out
+before it), the seven answers (each with its lamp, and its shot's `label`, `"TRIVELA"`, in the
+shot's colour beside the points; a worldie's answer and points are gold), three buttons. At most the lower 46%; the answers scroll when they do not fit (phones
 shorter than about 670 CSS px).
 
 ### `MenuCaptions`
 
 `modes: { mode, label, line, score?, scoreSpoken? }[]` (HOME then AWAY), `onSelect?(mode)`,
 `onHover?(mode | null)`, `lit?`, `notice?`, `noticeKey?`, `stowed?`,
-`howToPlay: { label, to?, onClick? }`, `dayLabel`
+`howToPlay: { label, to?, onClick?, open? }`, `howToPlayRef?`, `dayLabel`, `sound?` (the sound
+switch beside the "?": labels, default `strings.sound`, or `false`; see `SoundToggle`)
 
-Two cards under the ball, the day and the "?" button. With `onSelect` the cards are buttons, so
+The "?" is a link with `to` and a button with `onClick`. With `open` (new 2026-11-12: the home
+page's rules pop-up is up, or not) the button carries `aria-haspopup="dialog"` and
+`aria-expanded`; `howToPlayRef` is the button, for `HowToPlay` to give the focus back to.
+
+Two cards under the ball, the day, the "?" button and the sound switch. With `onSelect` the cards are buttons, so
 the menu works without the canvas (keyboard, screen readers). `score` adds an amber points box.
 
 | prop        | what it does                                                                                                                                                                                                                                        |
@@ -323,7 +368,7 @@ the menu works without the canvas (keyboard, screen readers). `score` adds an am
 | `lit`       | `"home"`, `"away"` or `null`: draw that card as if it were hovered (the pointer is over its patch on the ball).                                                                                                                                     |
 | `notice`    | A short line on a plate with a yellow card, for example after a locked patch was pressed. It is a polite live region that is always in the page; `null` empties it. It lets the pointer through.                                                    |
 | `noticeKey` | Change it to have the same words announced again (the text gets a fresh node).                                                                                                                                                                      |
-| `stowed`    | The kick-off is on: the captions drop off the bottom of the screen in four steps, are `inert`, and let go of any hover (`onHover(null)`). Coming back is instant.                                                                                   |
+| `stowed`    | The kick-off is on: the captions slide down off the screen (`useStowSlide`), are `inert`, and let go of any hover (`onHover(null)`). Coming back is instant.                                                                                        |
 
 There are two layouts, from the same markup (ui.css section 15):
 
@@ -378,6 +423,276 @@ the cards shrink and the longer line takes two lines; both cards stay the same h
 The wide row is laid out with CSS `order` and by position (the first card, the last card), so the
 markup's order matters: the notice, the cards (HOME then AWAY), the day, the button; and in a
 card the badge, the score, the line. Screen readers get that order on both layouts.
+
+### `Leaderboard`
+
+`boards: LeaderboardBoard[]` (HOME then AWAY), `labels: LeaderboardLabels`, `initialMode?`,
+`stowed?`
+
+- `LeaderboardBoard`: `{ mode, label, rows, you?, caption, played, youSpoken? }`. `rows` is the
+  top of the table, best first (`LeaderboardEntry`: `{ rank, name, points, you?, id? }`; equal
+  totals share a rank); `you` is the player's own row when it is not among `rows` (shown under
+  them after a gap); `caption` names the table for screen readers ("Today's top 10, HOME");
+  `played` is the line under it ("1,284 played today"); `youSpoken` is read out for the
+  player's row in place of YOU ("You: 37th of 1,284").
+- `LeaderboardLabels`: `heading`, `tabs` (the tab list's name), `rank`, `name`, `points` (the
+  column headings), `you`, `gap`, `open` (the trophy button), `close` (the sheet's button),
+  `toggle`, `hide`, `show` (the tab that slides the panel away on a monitor: its name and its
+  two tooltips).
+- Also exported: `TROPHY`, the 9 x 9 cup bitmap of the trophy button (a generic cup, not any
+  real trophy); from `./Leaderboard` also `ARROW_RIGHT`, `ARROW_LEFT` and `LEADERBOARD_KEY`.
+
+Today's top ten, a tab per mode (a real `tablist`: click, or the arrow keys, Home and End,
+which move the focus and choose as they go). The table is the reveal's `LeagueTable` cut down
+to three columns, in the same skin: a slate heading row, night rows with an ink line between
+them, the leader gold (its points box too), the player's row a chalk plate with the rank as a
+flag in the mode's colour. The player's row under the gap has a rank of up to four digits, so
+there the flag and YOU share one cell: a long rank never takes width from the names above it.
+A name that does not fit ends in an ellipsis (the mock's handles are at most 10 characters and
+all fit). It must be inside a `GameLayout`; it reads the scale with `usePixelRootScale()`:
+
+- **On a wide screen** it is an `aside` (named by its heading) in the bolted `Panel` frame,
+  fixed on the right of the screen, in caption pixels like the row of captions (it swaps `--fp`
+  for `--cp` and works its type out from that itself: ui.css section 20). It is 128 caption
+  pixels and 14 logical pixels wide, 3 logical pixels from the right edge, and its top is level
+  with the airship's sign (18% of the height) unless that would bring its bottom within 32
+  logical pixels of the bottom of the screen, where the row of captions is (two lines tall when
+  both modes are played at 1366 x 768): then it rises (its tallest is 223 caption pixels and 50
+  logical pixels, outline included). Measured on the home page, day 2, both modes played
+  (HOME 289th, under the gap):
+
+  | screen             | panel box (x, y, w x h, CSS px) | gap above the captions |
+  | ------------------ | ------------------------------- | ---------------------- |
+  | 1920 x 1080        | 1596, 192, 312 x 634            | 186                    |
+  | 1440 x 900         | 1133, 162, 298 x 587            | 69                     |
+  | 1366 x 768         | 1059, 75, 298 x 587             | 24                     |
+  | 2560 x 1440        | 2091, 255, 454 x 904            | 191                    |
+  | 1536 x 864 at 125% | 1276.8, 153.6, 249.6 x 507.2    | 149                    |
+
+  The bowl takes the middle 60% of a monitor's width and the panel a little under the 20%
+  beside it: at 1920 x 1080 it is a few pixels clear of the stadium, at the other sizes its
+  left edge meets the far tip of the stadium's east wall.
+
+  **Sliding it away.** A tab hangs on the panel's left edge, level with the heading: a steel
+  button `--tap` wide with the gold cup over a solid arrow pointing the way the panel will go
+  (`ARROW_RIGHT` while it is out, `ARROW_LEFT` while it is away). A press slides the panel off
+  the right of the screen by its width plus its gap (`--ss-lb-shift`), so only the tab is left,
+  standing on the right edge; another press brings it back. The slide is a `Slider` (see the
+  motion rule under "Rules the kit keeps"): 0.3 s, every frame, ease-out each way (it leaves
+  quickly and settles gently, out to the edge and back into place), each frame's position on
+  whole device pixels. A press halfway turns it round from where it is, at the speed it has. The
+  classes hold the resting states (`is-collapsed`: `translateX(--ss-lb-shift)`; `is-stowed`:
+  `translateX(--ss-lb-stow)`); while it slides, the slide's `translateX` is on the element's
+  style and `data-sliding` keeps it visible, and both go when it comes to rest. The two lengths
+  are registered with `@property` as `<length>`, so the script reads them in CSS px; where they
+  cannot be read the panel simply moves. Under reduced motion it is instant. The tab is one
+  button throughout, so the focus stays on it: named by `labels.toggle` ("Leaderboard"),
+  `aria-expanded` (true while the panel is out), `aria-controls` the panel's content, and a
+  tooltip of `labels.hide` or `labels.show`. While the panel is away its content is `inert` and
+  hidden; the tab is not. The choice is kept in localStorage under `LEADERBOARD_KEY`
+  (`soccersense:v1:leaderboard`, `"closed"` or nothing), read in a layout effect after mounting
+  (before the first paint) and through `useSyncExternalStore`, never during a render: the
+  build-time page and a first visit have it out, and a remembered choice is simply there from
+  the first frame, with no slide. Stowed, the tab goes off with the panel. On a phone none of
+  this exists: the trophy and the sheet below.
+
+  Measured in Chrome (`tools/shoot.mjs`'s browser, the home page, a real press on the tab;
+  every change of the slide's position logged with its frame): 17 frames each way at 16.5 to
+  16.9 ms apart at 1920 x 1080 @1, 1366 x 768 @1 and 1536 x 864 @1.25, every position on whole
+  device pixels (the panel's box times the ratio, to a thousandth); a press 120 ms in turns it
+  round with no frame skipped. The first press after a page load used to start the sound
+  engine (about 100 ms of script on the pointer down) and so made one frame late; the engine
+  now gets ready in idle moments before any press (docs/AUDIO.md), and the first press's slide
+  has no frame over 20 ms (16.8 ms at worst, measured in the dev build). The slide's clock
+  still never moves on more than 1/30 s in a frame, so a late frame is a moment's wait.
+
+- **Anywhere else** (a phone, an upright tablet, and the build-time page) it is a gold trophy
+  button (`aria-haspopup="dialog"`), placed by ui.css at the bottom right of the column's middle
+  slot: just above the "?" button, clear of the ball. It opens the table as a sheet: a modal
+  `dialog` (named by the heading; `showModal`, so the focus stays inside, Escape closes it and
+  the page behind is out of reach) standing on the bottom edge, the column's width, framed like
+  the reveal sheet, with a close button beside the heading. It rises from below the screen
+  (its height and 4 px) and goes back down before it closes: a `Slider`, 0.3 s, every frame,
+  ease-out, on whole device pixels (at 390 x 844 @3 a third of a CSS px is a step: 16 or 17
+  frames 16.5 to 16.8 ms apart, every position a whole device pixel). The picture stays in
+  view above it (no scrim). Closing it, by the button, Escape (the dialog's `cancel` is turned
+  into the same slide down) or a press outside it, puts the focus back on the trophy once it is
+  gone. Under reduced motion it opens and closes at once.
+- `stowed` (the kick-off): the panel slides off the right, the tab with it (the same slide), or
+  the trophy slides down off the screen with the captions (`useStowSlide`: the same distance
+  in the same frames) and an open sheet closes at once; both are `inert`.
+
+The home page builds the boards from `leaderboardFor(day, mode, you)` in
+`app/data/leaderboard.ts` (mock data; a backend replaces it behind the same signature:
+`{ rows, total, yourRank }`, every player best first, the player among them as `you: true` and
+counted in `total`), takes the top ten, and renders it once the day is known (never at build
+time).
+
+### `HowToPlay` and `HowToPlayCard`
+
+(New 2026-11-12, at the product owner's request: "make how to play a pop up instead of new
+page". Cut down the same day: "less wordy and more human readable. drop the useless text and
+things that can be inferred", then "why even mention home and away especially since we are
+going to add more game modes". The modes are not on it: each mode's rule is on the home
+screen's caption row and on the game's board.)
+
+`HowToPlayCard`: `labels: HowToPlayLabels`, `shots`, `tiers`, `headingLevel?` (2, or 1 on a
+page of its own), `headingRef?` (for `useArrivalFocus`), `action?` (beside the heading)
+
+`HowToPlay`: the card's `labels`, `shots`, `tiers`, and `open`, `onClose()`, `returnFocus?` (a
+ref: where the focus goes on closing)
+
+- `HowToPlayLabels`: `heading` ("HOW TO PLAY", also the dialog's name), `close`, `intro` (the
+  one line under the heading, "7 questions a day. 30 seconds each.", read out as the dialog's
+  description), `shots` ("POINTS") and `career` ("YOUR CAREER"), the two section headings, and
+  two functions read out by screen readers: `points(n)` ("100 points") and `step(tier, from)`
+  ("SUNDAY LEAGUE, from 90 points").
+- `shots`: `HowToPlayShot[]`, `{ grade, label, points }`, the six shots best first.
+- `tiers`: `HowToPlayTier[]`, `{ name, from }`, the career from the park up.
+
+The home page and `/how-to-play` build all of it the same way, from `strings.howToPlay`,
+`strings.play.shots`, `strings.play.tiers`, `SHOT_ORDER`, `SHOT_POINTS` and `TIERS`
+(`howToPlayContent()` in `app/routes/how-to-play-card.ts`): change the words in `app/i18n/en.ts`.
+
+**The card** is the rules on one bolted panel (the board's frame, night plate, steel edge, four
+bolts): the heading in Jersey 20 with the close button at the far end; the one line on the day;
+**POINTS**, the six shots as tags in their grade colours (ink on colour, like the reveal's
+table) with their points, best first, no sentence; **YOUR CAREER**, a ladder of eight steps,
+each two logical pixels higher than the last and the top one gold, named PARK KICKABOUT and
+WORLD CUP WINNER at its ends (each step read out by name and points), no sentence. Nothing else.
+Section headings are Jersey 15 in amber. A tag and its points are clipped to their line (the
+face's box reaches below a tight line, and would otherwise make the body scroll by a pixel or
+two). ui.css section 22.
+
+- **On a wide screen** (`data-wide`, `isWide` of the nearest `PixelRoot`) it is set in caption
+  pixels (`--fp` swapped for `--cp`, its type worked out from that in its own rules, like the
+  leaderboard's): the line across the top, and under it POINTS on the left (two columns of
+  three: WORLDIE, GOLAZO, TRIVELA down the first, TOE POKE, TAP IN, MISS down the second) and
+  YOUR CAREER on the right, the two about the same height. It is 440 caption pixels and 10
+  logical pixels wide (a whole number of logical pixels, never wider than the screen less 8
+  logical pixels a side), as tall as its content, and it is placed on a whole device pixel
+  across.
+- **Anywhere else** it is one column: the line, the six shots (two columns of three, as on a
+  monitor), the career.
+
+**The dialog** is a modal `dialog` (`showModal`) over the whole screen, holding the card (on a
+phone, a sheet on the bottom edge):
+
+| screen             | card (x, y, w x h, CSS px) | what is round it                        |
+| ------------------ | -------------------------- | --------------------------------------- |
+| 1920 x 1080        | 500, 366, 920 x 348        | a dither of ink over the picture        |
+| 1366 x 768         | 228, 228, 909 x 312        | the same                                |
+| 1536 x 864 at 125% | 400, 292.8, 736 x 278.4    | the same (all on whole device pixels)   |
+| 390 x 844 at 3     | 0, 518, 390 x 326          | the picture: a sheet on the bottom edge |
+| 360 x 640 at 3     | 0, 365, 360 x 275          | the same                                |
+
+- On a monitor the picture behind is dimmed by a dither of ink, every other logical pixel (an
+  SVG pattern drawn in logical pixels from the top left corner, so it is crisp at any ratio and
+  nothing fades). On a phone the card is a sheet standing on the bottom edge (changed on
+  2026-11-12: it was the whole screen, half of it empty plate once the copy was cut), the
+  column's width and as tall as its content, clear of the home indicator, like the
+  leaderboard's sheet; the picture stays in view above it and a press there closes it. Its
+  body scrolls if it has to (it then takes the focus by Tab, so a keyboard can scroll it).
+- **In and out.** The card rises from below the screen and comes to rest in 0.26 s, slowing as
+  it arrives, and drops away the same way in 0.2 s, speeding up. Every frame, on a whole device
+  pixel: the animation moves a registered number (`--ss-help-t`, 1 to 0) and the offset is
+  `round(down, t * 100dvh, --snap)`, so it is smooth and never between pixels (sampled in
+  Chrome frame by frame at 1920 x 1080, 1536 x 864 at 125% and 390 x 844 at 3). The card waits
+  below the screen until the dialog's first frame has been drawn, so a long first frame does not
+  eat the start of the rise. Under reduced motion there is no movement: it is there, and gone.
+  On a phone the sheet rises from just below the screen and drops back with a `Slider`
+  (`./slide`, 0.3 s, ease-out, every frame on whole device pixels, like the leaderboard's
+  sheet), and `onClose()` is called once it is gone (sampled at 390 x 844 and 360 x 640 at 3:
+  17 or 18 frames 16.5 to 16.8 ms apart each way, every position a whole device pixel).
+- **Closing**: the close button, Escape and a press outside the card (one that starts and ends
+  outside it: a drag that starts on the card is not one). The dialog plays its way out, then
+  calls `onClose()`; set `open` to false then. Escape is caught before the browser's own close
+  request, and if a browser closes the dialog itself anyway, `onClose()` is called at once.
+- **Focus**: on opening it goes to the close button; Tab and Shift+Tab go round inside the
+  dialog and never out of it; on closing it goes back to `returnFocus` (the "?"), or to what had
+  it when the dialog opened.
+- **Behind it**: the rest of the page is inert (a modal dialog), so no pointer reaches the canvas
+  (no spinning the ball through it), and the page does not scroll (`html` has `overflow:
+hidden` while one is open). The click sound is the usual one, from the delegated listener in
+  `~/audio`. Like the leaderboard's sheet it is in the browser's top layer; the click burst is
+  drawn inside it, so it shows on top (`ClickBurst`).
+- It renders nothing while `open` is false, and nothing at build time.
+
+```tsx
+const [help, setHelp] = useState(false);
+const helpButton = useRef<HTMLButtonElement | null>(null);
+<MenuCaptions
+  howToPlay={{ label, onClick: () => setHelp(true), open: help }}
+  howToPlayRef={helpButton}
+  {...rest}
+/>;
+<HowToPlay
+  {...howToPlayContent()}
+  open={help}
+  onClose={() => setHelp(false)}
+  returnFocus={helpButton}
+/>;
+```
+
+### `ClickBurst`
+
+No props. Mounted once, in `Layout` in `app/root.tsx`, so every page has it.
+
+Every press of the main mouse button and every tap, anywhere, makes a small pixel burst at the
+pointer: a chalk plus where it landed, then eight gold sparks flying out and cooling from pale
+gold to gold to dark gold, each frame with a hard ink shadow a pixel down and right. Four
+frames of `BURST_FRAME_MS` (60 ms), about a quarter second, then it is removed. The frames
+(`BURST_FRAMES`, 17 x 17 bitmaps, symmetrical about the point) are drawn with `PixelGlyph` in
+logical pixels of the current scale (`usePixelScale`, the layer sets the units itself as it
+sits outside any `PixelRoot`), and the point is put on a whole device pixel, so it is crisp at
+any ratio. Each frame is shown only while its own animation runs (`ss-burst-frame`, no fill).
+
+It listens on the window in the capture phase (`pointerdown`, passive), so it hears presses
+that something below stops; the layer is `position: fixed`, `pointer-events: none`,
+`aria-hidden`, and never takes a press. At most `MAX_BURSTS` (4) at once: a fifth replaces the
+oldest. A right click and a second finger make none. Nothing is rendered at build time or
+before the first press, and nothing under reduced motion (checked at each press, and the layer
+is `display: none` there too). A modal `dialog` (the how-to-play pop-up, the leaderboard's sheet
+on a phone) is in the browser's top layer, above everything else whatever its z-index, so while
+one is open the layer is drawn inside the one on top (a portal) and the burst shows over it.
+
+### `SoundToggle`
+
+`labels: { label, on, off }` (`strings.sound`), `className?`
+
+The sound switch: a square steel icon button with a 9 x 9 pixel speaker, two waves when the
+sound is on (`SPEAKER_ON`) and crossed out when it is off (`SPEAKER_OFF`). It is a real switch
+for screen readers (`role="switch"`, named "Sound", `aria-checked`), with "Sound on" or "Sound
+off" in its tooltip, and works from the keyboard like any button. `data-muted` is set while the
+sound is off.
+
+The choice is remembered in `localStorage` (`soccersense:v1:sound`) through `~/audio`. The
+build-time HTML and the first render show it on; it follows the storage once the page runs, and
+another tab's change too. Turning the sound on is a user gesture, so the engine may start its
+audio there and then.
+
+There is only ever one on a screen, beside the how-to-play "?" where there is one:
+
+- **Home**: `MenuCaptions` puts it right after the "?" (its `sound` prop: the labels, default
+  `strings.sound`, or `false` for none; the side carries `data-sound`). On a phone the day plate
+  sits over the "?" and the speaker, side by side at the right of the cards. On a monitor it is
+  a square as tall as the caption row, off the row's right end after the "?"; where the screen
+  ends too soon for that (a small phone on its side, with the leaderboard filling the column
+  above the "?"), it stands on the day plate at the row's other end instead.
+- **The game**: `Board` puts it in its head, after the mode badge (its `sound` prop, the same).
+- **Anywhere else**: `GameLayout`'s `sound` prop (`true` for `strings.sound`, or the labels;
+  off by default) puts one in the top right corner of the column's middle slot, the free space
+  between the board and the bar, sheet or card. Use it only on a screen with neither captions
+  nor a board: the game page passes it at full time, where the board has gone.
+
+Checked with real Chrome at 1920 x 1080, 2560 x 1440, 1536 x 864 at 125%, 1440 x 900,
+1366 x 768, 1280 x 720 and 800, 1180 x 820, 1024 x 768, 768 x 1024, 844 x 390, 740 x 360 and
+phones from 390 x 844 down to 320 x 568: inside the screen and clear of the cards, the day, the
+"?", the leaderboard, the badge and the score at every size. Its styles are section 21 of
+`ui.css` (`.ss-sound`).
+
+Every press of a button anywhere also plays the engine's `click` (see `docs/AUDIO.md`): the
+switch included, so switching the sound on is heard.
 
 ### Parts
 
@@ -524,6 +839,15 @@ anything that is not a mouse.
   That suits buttons. A scene that needs drags from a finger needs `touch-action: none` on its
   canvas (pass a `className` and set it on `.that-class canvas`).
 
+**Sound.** When the stage is given a scene it connects it to the page's one sound engine
+(`soundEngine()` from `~/audio`, made on first use in the browser): it sets `scene.onSound`, so
+the scene's cues are played, and asks for `scene.ambience()` straight away and then once a
+second (the engine crossfades a change). When the scene changes or the stage unmounts, it sets
+`onSound` back to null, stops asking and lets the bed fade out. The engine stays quiet before
+the first gesture, while the sound is off and while the tab is hidden; reduced motion does not
+mute. Without Web Audio (or at build time) nothing is connected and the stage runs as before.
+See `docs/AUDIO.md`.
+
 **Cost.** Everything the host does in a frame apart from the scene's own `update` and `draw`
 takes about 0.13 ms at 480 x 270 and 0.4 ms at worst, against a budget of 1 ms (measured in
 Chrome with `/dev/stage?bench=1` at 1920 x 1080). With the menu scene a whole frame of the home
@@ -624,8 +948,26 @@ node tools/shoot.mjs "http://localhost:5173/dev/stage?time=12:00&pause=1" .snaps
 
 ## Rules the kit keeps (keep them when adding to it)
 
-- Square corners, borders and shadows in whole `--px`, no gradients, blur or fades; motion uses
-  `steps()`. Reduced motion turns every animation off.
+- Square corners, borders and shadows in whole `--px`, no gradients, blur or fades. Reduced
+  motion turns every animation off.
+- Motion. A thing that slides (a panel, a sheet) moves every frame, eased, and stays crisp:
+  each frame's position is rounded to whole device pixels
+  (`Math.round(x * devicePixelRatio) / devicePixelRatio`) before it is shown. Use `createSlider`
+  from `app/ui/slide.ts`: it runs on `requestAnimationFrame`, `SLIDE_MS` (0.3 s), an ease-out
+  cubic from rest (it leaves quickly and settles gently; the way back is the same curve the
+  other way), and `to()` while it is moving turns it round from where it is at the speed it has
+  (a cubic from that position and speed to rest, so there is no jolt; never towards the target
+  faster than a fresh slide, so it never passes it). Its clock starts one frame in on its first
+  frame and never moves on more than `MAX_STEP_MS` (1/30 s) in a frame: a late frame is a
+  moment's wait, not a jump. Keep the resting states in classes and put only the moving
+  position on the element's style, cleared when it comes to rest; check
+  `prefersReducedMotion()` at each start and simply move there when it is true. A CSS
+  transition or an unstepped keyframe animation cannot do this: the browser places its frames
+  between pixels. Things that change in a beat rather than travel (the click burst's frames)
+  use `steps()`. The reveal sheet's rise still travels in `steps()`. The kick-off's captions and
+  the phone's trophy slide with `useStowSlide(ref, stowed)` (`app/ui/useStowSlide.ts`): every
+  element marked `data-stow` goes the same distance, just enough to take the highest of them off
+  the bottom of the screen, so they leave together.
 - No animation fills `forwards` or `both`. One that goes on filling after it has ended keeps its
   element in a compositing layer of its own for as long as it is on screen, and in such a layer
   text with no background of its own is drawn without sub-pixel anti-aliasing (the reveal
@@ -657,15 +999,19 @@ then the loose parts. `?only=<name>` shows one composition exactly as the game w
 | `ask-reject`, `ask-pass`, `ask-reject-pass`                                                                            | a rejected answer, PASS available, both                  |
 | `ask-last5`                                                                                                            | the last five seconds                                    |
 | `ask-long`                                                                                                             | the longest strings the layout has to survive            |
-| `reveal-worldie`, `reveal-topbins`, `reveal-goal`, `reveal-ontarget`, `reveal-wide`, `reveal-timeup`, `reveal-skipped` | the reveal for each grade, over the compact board        |
+| `reveal-` and a grade: `worldie`, `golazo`, `trivela`, `toepoke`, `tapin`, `miss`, `timeup`, `skipped`, the best first | the reveal for each grade, over the compact board        |
 | `fulltime`, `fulltime-perfect`                                                                                         | full time                                                |
 | `menu`, `menu-played`, `menu-notice`                                                                                   | menu captions: fresh, HOME played, a notice and AWAY lit |
+| `help`                                                                                                                 | how to play: the pop-up over the menu captions           |
 | `parts`                                                                                                                | every part on its own, in every state (a long page)      |
 
 The backdrop is a flat stand-in. The text is sample content, not game copy. The menu
 compositions show the phone layout at a phone's size and the wide row at a monitor's
 (`?only=menu-notice` at 1920 x 1080: the square is where the ball is, and the notice must stand
-clear of it). In the overview's phone-sized frames they are always the phone layout.
+clear of it). In the overview's phone-sized frames they are always the phone layout. `help` uses
+the game's own words; full-screen it is the real modal dialog (close it, and the "?" opens it
+again), and in the overview's frames, where a modal dialog would take over the whole gallery,
+it is the card alone.
 
 ## Screenshots: `tools/shoot.mjs`
 
@@ -763,9 +1109,10 @@ and no `/` in it (on Windows a colon writes to a stream of another file).
 | -------------------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
 | `/`                        | `app/routes/home.tsx`        | the home screen: `GameLayout` with `PixelStage` (the menu scene) and `MenuCaptions` |
 | `/play/home`, `/play/away` | `app/routes/play.tsx`        | the game, one page per mode (`app/routes/play/`)                                    |
-| `/how-to-play`             | `app/routes/how-to-play.tsx` | the rules, behind the "?" button                                                    |
+| `/how-to-play`             | `app/routes/how-to-play.tsx` | the rules for old links (the "?" button now opens them over the home screen)        |
 | any other                  | `app/root.tsx`               | the error page (`ErrorBoundary`), which is also the 404                             |
 | `/dev/ui`, `/dev/stage`    | `app/routes/dev-*.tsx`       | the gallery and the stage test card                                                 |
+| `/dev/sound`               | `app/routes/dev-sound.tsx`   | the sound board: every sound and its level from `app/audio/mix.ts` (docs/AUDIO.md)  |
 
 Every page is rendered to HTML at build time, so none of them reads the window, the address or
 the storage while rendering: what depends on the day arrives after mounting, through
@@ -775,8 +1122,9 @@ the storage while rendering: what depends on the day arrives after mounting, thr
 must and must not do with a scene is in `docs/API_SCENES.md`). Beyond that:
 
 - Debug queries: `?day=<n>`, `?stadium=<id>`, `?time=HH:MM` and `?speed=<0 to 16>` (the scene's
-  time: `0.1` is slow motion). The query is carried to the mode pages and the rules page, and
-  they carry it back.
+  time: `0.1` is slow motion). The query is carried to the mode pages, and they carry it back.
+- The "?" button opens the rules over the menu (`HowToPlay`, a modal dialog); the address does
+  not change, and closing them puts the focus back on the "?".
 - The mode's page is fetched ahead of the kick-off (`PrefetchPageLinks`), from the moment a mode
   is pointed at, focused or chosen, so the ink the kick-off ends on lasts one frame. So is the
   face of the next page's heading (`fetchHeadingFaces`).
@@ -789,9 +1137,18 @@ must and must not do with a scene is in `docs/API_SCENES.md`). Beyond that:
   from another page) and a line with the fact of the day; the two cards are buttons; the notice is a
   polite live region. With no script, a `noscript` panel says what the site is.
 
-**A plain page** (the placeholder, the rules, the error page) is a `PixelRoot` with `ss-page`, its
+**A plain page** (the placeholder, the error page) is a `PixelRoot` with `ss-page`, its
 content in the game's own column in the middle of the screen: a `Panel`, and a button back to the
-ball. The headings of the placeholder and the rules take the focus on arrival.
+ball. The heading of the placeholder takes the focus on arrival.
+
+**The rules page** (`/how-to-play`, 2026-11-12) keeps old links working now that the "?" opens a
+pop-up. It is a `PixelRoot` with `ss-page` holding the pop-up's own card (`HowToPlayCard`, the
+same content, two columns on a monitor), its `h1` taking the focus on arrival, with the way back
+to the ball (a link carrying the query, `strings.play.back`) where the pop-up has its close
+button. It is a page rather than the home screen with the pop-up open because the site is
+prerendered with no server: as a page its HTML carries the whole of the rules (readable with no
+script, and by search engines), and one address does not have to show another's page by
+rewriting the address bar behind the router.
 
 **The error page and the fallback document.** The build writes `__spa-fallback.html`, which a
 static host serves for any address that is not a prerendered page. It holds the root layout round

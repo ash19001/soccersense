@@ -1,7 +1,10 @@
+import { strings } from "~/i18n";
+
 import { cx } from "./cx";
 import { LedNumber } from "./LedNumber";
 import { ModeBadge } from "./ModeBadge";
 import { Pips } from "./Pips";
+import { SoundToggle, type SoundToggleLabels } from "./SoundToggle";
 import { TierBar } from "./TierBar";
 import { TimerStrip } from "./TimerStrip";
 import type { UiGrade, UiMode } from "./types";
@@ -23,8 +26,6 @@ export interface BoardLabels {
 
 export interface BoardProps {
   mode: UiMode;
-  /** The stadium of the day: "ANFIELD". */
-  stadiumName: string;
   /** 1-based. */
   questionNumber: number;
   questionCount: number;
@@ -48,13 +49,21 @@ export interface BoardProps {
    */
   compact?: boolean;
   labels: BoardLabels;
+  /**
+   * The sound switch in the head, after the mode badge, with these words (default:
+   * `strings.sound`), or `false` for none.
+   */
+  sound?: SoundToggleLabels | false;
   className?: string;
 }
 
-/** The stadium scoreboard at the top of the game screen. */
+/**
+ * The stadium scoreboard at the top of the game screen. It does not name the day's stadium
+ * (the product owner, 2026-11-11: "no need for that detail"): the question has the room.
+ * The game's sound switch sits in its head, after the mode badge.
+ */
 export function Board({
   mode,
-  stadiumName,
   questionNumber,
   questionCount,
   results,
@@ -68,6 +77,7 @@ export function Board({
   secondsTotal,
   compact = false,
   labels,
+  sound = strings.sound,
   className,
 }: BoardProps) {
   const lamps: Array<UiGrade | null> = [];
@@ -86,7 +96,7 @@ export function Board({
       <i className="ss-board__hanger" aria-hidden="true" />
       <div className="ss-board__head">
         <ModeBadge mode={mode} label={labels.mode} />
-        <span className="ss-board__stadium">{stadiumName}</span>
+        {sound && <SoundToggle labels={sound} />}
         <span className="ss-board__total">
           <LedNumber
             value={total}

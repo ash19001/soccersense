@@ -7,8 +7,9 @@ import {
 } from "react";
 
 import type { Lighting } from "~/art/lighting";
+import { soundEngine } from "~/audio";
 import { Surface } from "~/pixel";
-import type { PointerInfo, Scene } from "~/scenes/scene";
+import type { PointerInfo, Scene, SoundCue } from "~/scenes/scene";
 
 import { cx } from "./cx";
 import {
@@ -41,6 +42,8 @@ const MAX_DT = 0.1;
  */
 const LONG_FRAME_MS = 34;
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+/** How often the scene's ambience is asked for (ms). The engine crossfades changes. */
+const AMBIENCE_POLL_MS = 1000;
 
 /**
  * Everything the loop needs, kept in one object for the life of the component. It is only
@@ -179,6 +182,25 @@ function renderFrame(st: Stage, dt: number): void {
 
 function hidden(): boolean {
   return document.visibilityState === "hidden";
+}
+
+/**
+ * Connects a scene to the page's sound engine: its cues are played, and its ambience is
+ * asked for once a second. Returns the undo. With no Web Audio it does nothing.
+ */
+function connectSound(scene: Scene): (() => void) | undefined {
+  const engine = soundEngine();
+  if (!engine) return undefined;
+  const hear = (cue: SoundCue) => engine.play(cue);
+  scene.onSound = hear;
+  const poll = () => engine.setAmbience(scene.ambience?.() ?? null);
+  poll();
+  const timer = window.setInterval(poll, AMBIENCE_POLL_MS);
+  return () => {
+    window.clearInterval(timer);
+    if (scene.onSound === hear) scene.onSound = null;
+    engine.setAmbience(null);
+  };
 }
 
 /**
@@ -370,6 +392,12 @@ export function PixelStage({
       stop();
     };
   }, [running]);
+
+  // 4. Sound. The scene's cues go to the page's sound engine, and its ambience is asked for
+  //    once a second. Undone when the scene changes or the stage goes. The engine itself
+  //    keeps quiet while the tab is hidden, before the first gesture and while muted;
+  //    reduced motion does not mute.
+  useEffect(() => (scene ? connectSound(scene) : undefined), [scene]);
 
   const forward = (
     type: PointerInfo["type"],

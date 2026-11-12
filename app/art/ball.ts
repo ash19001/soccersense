@@ -18,6 +18,8 @@
  * 31.7 degrees round) and two more sit 58.3 degrees above and below ("top", "bottom").
  * Two more slots are on the back, directly behind "right" and "left" ("backRight" and
  * "backLeft"): half a turn of yaw brings them round to where "left" and "right" were.
+ * And two sit on the rim, out to the left and right and a little up ("rimLeft" and
+ * "rimRight"): a quarter turn of yaw brings one round to the front.
  * `ballShowPose(slot)` is the pose that shows a slot.
  * Positive `yaw` turns the front of the ball to the right, positive `pitch` rolls it up and
  * away (a ball struck towards the stand), positive `roll` turns it clockwise.
@@ -66,10 +68,20 @@ import { P } from "./palette";
  * side of the middle, "top" and "bottom" above and below them, and "backLeft" and
  * "backRight" on the back of the ball, directly behind "left" and "right" (as seen from
  * the front). Half a turn about the vertical brings "backRight" round to where "left" was
- * and "backLeft" to where "right" was.
+ * and "backLeft" to where "right" was. "rimLeft" and "rimRight" are on the rim, out to
+ * the left and right and level with the top of "left" and "right", a quarter turn from the
+ * middle: a drag to the right brings "rimLeft" round to the front, a drag to the left
+ * "rimRight".
  */
 export type BallSlot =
-  "left" | "right" | "top" | "bottom" | "backLeft" | "backRight";
+  | "left"
+  | "right"
+  | "top"
+  | "bottom"
+  | "backLeft"
+  | "backRight"
+  | "rimLeft"
+  | "rimRight";
 
 /** Every slot, in the order of `BallSlot`. */
 export const BALL_SLOTS: readonly BallSlot[] = [
@@ -79,15 +91,27 @@ export const BALL_SLOTS: readonly BallSlot[] = [
   "bottom",
   "backLeft",
   "backRight",
+  "rimLeft",
+  "rimRight",
 ];
 
 /**
  * A patch's picture. "home" a house, "away" an aeroplane, "forward" a fast-forward (the
- * future), "rewind" a rewind (the past), "pin" a map pin, "globe" a globe, "lock" a padlock
+ * future), "rewind" a rewind (the past), "pin" a map pin, "globe" a globe, "shirt" the
+ * back of a shirt with its number, "goal" a goal with a ball on the spot, "lock" a padlock
  * alone, "none" nothing.
  */
 export type BallIcon =
-  "home" | "away" | "forward" | "rewind" | "pin" | "globe" | "lock" | "none";
+  | "home"
+  | "away"
+  | "forward"
+  | "rewind"
+  | "pin"
+  | "globe"
+  | "shirt"
+  | "goal"
+  | "lock"
+  | "none";
 
 export interface BallPatch {
   label: string;
@@ -141,9 +165,11 @@ const SLOT_INDEX: Readonly<Record<BallSlot, number>> = {
   bottom: 3,
   backLeft: 4,
   backRight: 5,
+  rimLeft: 6,
+  rimRight: 7,
 };
 /** The pentagon each slot is (see the corners in `buildSolid`). */
-const SLOT_FACE: readonly number[] = [0, 1, 2, 3, 10, 11];
+const SLOT_FACE: readonly number[] = [0, 1, 2, 3, 10, 11, 4, 5];
 /** The slot each panel is, or -1. */
 const FACE_SLOT = new Int8Array(FACES).fill(-1);
 SLOT_FACE.forEach((f, i) => (FACE_SLOT[f] = i));
@@ -157,8 +183,9 @@ const NEIGHBOUR_COUNT = new Int8Array(FACES);
 (function buildSolid(): void {
   // The menu pose: two neighbouring corners of the icosahedron level, either side of the
   // view axis (HOME and AWAY), and the two corners that finish their triangles above and
-  // below (NEXT-GEN and RETRO). Then the four on the rim and the four on the back, the
-  // last two of which (CLOSEST and FURTHEST) are directly behind AWAY and HOME.
+  // below (NEXT-GEN and RETRO). Then the four on the rim, the upper two of which carry
+  // GUESS WHO and SHOOTOUT, and the four on the back, the last two of which (CLOSEST and
+  // FURTHEST) are directly behind AWAY and HOME.
   const corners: readonly (readonly [number, number, number])[] = [
     [-1, 0, PHI],
     [1, 0, PHI],
@@ -265,6 +292,18 @@ const RIM_SIDE = -0.05;
 const ROCK = 0.12;
 /** How far the top and bottom slots sit above and below the middle at rest (58.3 degrees). */
 const TILT = Math.atan2(PHI, 1);
+/** How far the rim slots sit above the middle once a quarter turn has brought them round
+ * (31.7 degrees, as far round as "left" and "right" are at rest). */
+const RIM_TILT = Math.atan2(1, PHI);
+/** The slots whose pose shows them straight on, and their panels (1 for each). */
+const FRONT_SLOTS: readonly BallSlot[] = [
+  "top",
+  "bottom",
+  "rimLeft",
+  "rimRight",
+];
+const FRONT_FACE = new Uint8Array(FACES);
+for (const slot of FRONT_SLOTS) FRONT_FACE[SLOT_FACE[SLOT_INDEX[slot]]] = 1;
 
 interface Tones {
   ink: Color;
@@ -706,6 +745,36 @@ w..w.w..w
   "w",
 );
 
+/** GUESS WHO: the back of a shirt, its number cut out of it. */
+const ICON_SHIRT = sprite(
+  `
+.www.www.
+wwwwwwwww
+www...www
+.wwww.ww.
+.wwww.ww.
+.www.www.
+.www.www.
+.wwwwwww.
+`,
+  "w",
+);
+
+/** SHOOTOUT: a goal with its net, and the ball on the spot in front of it. */
+const ICON_GOAL = sprite(
+  `
+wwwwwwwww
+w.w.w.w.w
+ww.w.w.ww
+w.w.w.w.w
+w.......w
+....w....
+...www...
+....w....
+`,
+  "w",
+);
+
 // The same, small, for a locked patch squashed far round the ball (the top and bottom
 // patches of the menu pose): five rows, beside the small padlock.
 
@@ -753,6 +822,28 @@ w.w.w
   "w",
 );
 
+const ICON_SHIRT_SMALL = sprite(
+  `
+ww.ww
+wwwww
+.w.w.
+.www.
+.www.
+`,
+  "w",
+);
+
+const ICON_GOAL_SMALL = sprite(
+  `
+wwwww
+ww.ww
+w.w.w
+w...w
+..w..
+`,
+  "w",
+);
+
 /** A locked patch's picture, full size or squashed, or null for "lock" and "none". */
 function pictureFor(patch: BallPatch, small: boolean): Sprite | null {
   switch (patch.icon) {
@@ -764,6 +855,10 @@ function pictureFor(patch: BallPatch, small: boolean): Sprite | null {
       return small ? ICON_PIN_SMALL : ICON_PIN;
     case "globe":
       return small ? ICON_GLOBE_SMALL : ICON_GLOBE;
+    case "shirt":
+      return small ? ICON_SHIRT_SMALL : ICON_SHIRT;
+    case "goal":
+      return small ? ICON_GOAL_SMALL : ICON_GOAL;
     case "home":
     case "away":
       return small ? null : iconFor(patch, false);
@@ -786,6 +881,10 @@ function iconFor(patch: BallPatch, big: boolean): Sprite | null {
       return ICON_PIN;
     case "globe":
       return ICON_GLOBE;
+    case "shirt":
+      return ICON_SHIRT;
+    case "goal":
+      return ICON_GOAL;
     case "lock":
       return ICON_LOCK;
     default:
@@ -1065,26 +1164,33 @@ function roomFor(): Int16Array {
     room[ROOM_MARK] = mark;
     room[ROOM_WORD] = word;
     room[ROOM_SQUASHED] = Math.max(0, squashed);
-    // NEXT-GEN and RETRO shown straight on (`ballShowPose`), rocked and nodding
+    // NEXT-GEN, RETRO, GUESS WHO and SHOOTOUT shown straight on (`ballShowPose`), rocked
+    // and nodding. (Turned a quarter round, the hover's nod is a roll of GUESS WHO and
+    // SHOOTOUT: they are measured rolled as well.)
     let frontMark = 1 << 14;
     let frontWord = 1 << 14;
-    for (const f of [2, 3]) {
+    for (const slot of FRONT_SLOTS) {
+      const f = SLOT_FACE[SLOT_INDEX[slot]];
+      const pose = ballShowPose(slot);
+      const rolls = pose.yaw === 0 ? [0] : [-SQUASH_NOD, SQUASH_NOD];
       for (const yaw of [-ROCK, ROCK]) {
         for (const nod of [-SQUASH_NOD, SQUASH_NOD]) {
-          orient(yaw, (f === 2 ? -TILT : TILT) + nod, 0);
-          rasterise();
-          const px = Math.round(disc.tx + VIEW[f * 3] * disc.rad);
-          const top = lockedTop(
-            Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad),
-          );
-          frontMark = Math.min(
-            frontMark,
-            freeRun(f, px, top, LOCKED_ROW, LOCKED_EDGE),
-          );
-          frontWord = Math.min(
-            frontWord,
-            freeRun(f, px, top + LOCKED_ROW + LOCKED_GAP, 5, LOCKED_EDGE),
-          );
+          for (const roll of rolls) {
+            orient(pose.yaw + yaw, pose.pitch + nod, roll);
+            rasterise();
+            const px = Math.round(disc.tx + VIEW[f * 3] * disc.rad);
+            const top = lockedTop(
+              Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad),
+            );
+            frontMark = Math.min(
+              frontMark,
+              freeRun(f, px, top, LOCKED_ROW, LOCKED_EDGE),
+            );
+            frontWord = Math.min(
+              frontWord,
+              freeRun(f, px, top + LOCKED_ROW + LOCKED_GAP, 5, LOCKED_EDGE),
+            );
+          }
         }
       }
     }
@@ -1619,9 +1725,9 @@ function drawLocked(
   // The picture and its padlock side by side, or the padlock alone.
   const markW = (sp: Sprite | null): number =>
     sp ? sp.w + 1 + ICON_LOCK_SMALL.w : lock.w;
-  // (the top and bottom patches are measured where they rest, straight on; any other in
-  // a side place, where CLOSEST and FURTHEST rest)
-  const front = f === SLOT_FACE[2] || f === SLOT_FACE[3];
+  // (the top, bottom and rim patches are measured where they rest, straight on; the back
+  // ones in a side place, where CLOSEST and FURTHEST rest)
+  const front = FRONT_FACE[f] === 1;
   const markRoom = front ? ROOM_MARK_FRONT : ROOM_MARK;
   if (pic && markW(pic) > room[facingUs ? markRoom : ROOM_SQUASHED]) {
     pic = null;
@@ -1764,7 +1870,8 @@ export function ballSlotAt(
 /**
  * The pose that shows a slot: yaw 0, pitch 0 (the menu pose) for "left" and "right", half
  * a turn about the vertical for "backLeft" and "backRight" (which then sit where "right"
- * and "left" were), and "top" or "bottom" turned to face the viewer straight on.
+ * and "left" were), and "top", "bottom", "rimLeft" and "rimRight" turned to face the
+ * viewer straight on (the rim ones by a quarter turn about the vertical and a tilt down).
  */
 export function ballShowPose(slot: BallSlot): {
   yaw: number;
@@ -1779,6 +1886,10 @@ export function ballShowPose(slot: BallSlot): {
     case "backLeft":
     case "backRight":
       return { yaw: Math.PI, pitch: 0, roll: 0 };
+    case "rimLeft":
+      return { yaw: Math.PI / 2, pitch: -RIM_TILT, roll: 0 };
+    case "rimRight":
+      return { yaw: -Math.PI / 2, pitch: -RIM_TILT, roll: 0 };
     default:
       return { yaw: 0, pitch: 0, roll: 0 };
   }

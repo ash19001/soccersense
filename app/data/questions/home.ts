@@ -30,6 +30,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.4631,
         lng: -2.2914,
         popularity: 30,
+        shot: "worldie",
       },
       {
         id: "blackburn-rovers",
@@ -40,6 +41,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.7286,
         lng: -2.4892,
         popularity: 2,
+        shot: "miss",
       },
       {
         id: "arsenal",
@@ -50,6 +52,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.5549,
         lng: -0.1084,
         popularity: 14,
+        shot: "trivela",
       },
       {
         id: "chelsea",
@@ -60,6 +63,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.4817,
         lng: -0.191,
         popularity: 12,
+        shot: "toepoke",
       },
       {
         id: "manchester-city",
@@ -70,6 +74,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.4831,
         lng: -2.2004,
         popularity: 21,
+        shot: "golazo",
       },
       {
         id: "leicester-city",
@@ -80,6 +85,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.6203,
         lng: -1.1422,
         popularity: 4,
+        shot: "tapin",
       },
       {
         id: "liverpool",
@@ -90,6 +96,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.4308,
         lng: -2.9608,
         popularity: 17,
+        shot: "trivela",
       },
     ],
   },
@@ -110,6 +117,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.8615,
         lng: -4.3083,
         popularity: 28,
+        shot: "worldie",
       },
       {
         id: "kenny-dalglish",
@@ -125,6 +133,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.8423,
         lng: -4.2114,
         popularity: 1,
+        shot: "miss",
       },
       {
         id: "arsene-wenger",
@@ -135,6 +144,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.5733,
         lng: 7.7522,
         popularity: 12,
+        shot: "golazo",
       },
       {
         id: "jose-mourinho",
@@ -145,6 +155,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 38.5243,
         lng: -8.8926,
         popularity: 10,
+        shot: "golazo",
       },
       {
         id: "carlo-ancelotti",
@@ -155,6 +166,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 44.9167,
         lng: 10.8167,
         popularity: 2.2,
+        shot: "tapin",
       },
       {
         id: "roberto-mancini",
@@ -165,6 +177,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 43.5238,
         lng: 13.2462,
         popularity: 2.3,
+        shot: "tapin",
       },
       {
         id: "manuel-pellegrini",
@@ -175,6 +188,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -33.4375,
         lng: -70.65,
         popularity: 0.5,
+        shot: "miss",
       },
       {
         id: "claudio-ranieri",
@@ -185,6 +199,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.8931,
         lng: 12.4828,
         popularity: 4,
+        shot: "toepoke",
       },
       {
         id: "antonio-conte",
@@ -195,6 +210,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 40.352,
         lng: 18.1691,
         popularity: 3,
+        shot: "tapin",
       },
       {
         id: "pep-guardiola",
@@ -205,6 +221,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.7836,
         lng: 1.8392,
         popularity: 20,
+        shot: "worldie",
       },
       {
         id: "jurgen-klopp",
@@ -215,6 +232,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.7775,
         lng: 9.18,
         popularity: 9,
+        shot: "trivela",
       },
       {
         id: "arne-slot",
@@ -225,6 +243,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.5264,
         lng: 6.6139,
         popularity: 3.5,
+        shot: "toepoke",
       },
       {
         id: "mikel-arteta",
@@ -235,6 +254,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 43.3183,
         lng: -1.9812,
         popularity: 4.5,
+        shot: "toepoke",
       },
     ],
   },
@@ -261,6 +281,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.1731,
         lng: 11.5467,
         popularity: 3,
+        shot: "toepoke",
       },
       {
         id: "athens-olympic-stadium",
@@ -280,6 +301,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 38.0361,
         lng: 23.7876,
         popularity: 1.3,
+        shot: "miss",
       },
       {
         id: "ernst-happel-stadion",
@@ -298,6 +320,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.2072,
         lng: 16.4208,
         popularity: 1,
+        shot: "miss",
       },
       {
         id: "stadio-olimpico",
@@ -315,6 +338,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.9339,
         lng: 12.4547,
         popularity: 4.5,
+        shot: "trivela",
       },
       {
         id: "johan-cruyff-arena",
@@ -332,6 +356,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.3142,
         lng: 4.9419,
         popularity: 2.4,
+        shot: "tapin",
       },
       {
         id: "camp-nou",
@@ -342,6 +367,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.3809,
         lng: 2.1228,
         popularity: 8,
+        shot: "golazo",
       },
       {
         id: "stade-de-france",
@@ -352,6 +378,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.9244,
         lng: 2.36,
         popularity: 6,
+        shot: "trivela",
       },
       {
         id: "san-siro",
@@ -370,6 +397,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 45.4781,
         lng: 9.1239,
         popularity: 6.5,
+        shot: "golazo",
       },
       {
         id: "hampden-park",
@@ -380,6 +408,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.8258,
         lng: -4.2519,
         popularity: 3.2,
+        shot: "toepoke",
       },
       {
         id: "old-trafford",
@@ -390,6 +419,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.4631,
         lng: -2.2914,
         popularity: 7.5,
+        shot: "golazo",
       },
       {
         id: "veltins-arena",
@@ -407,6 +437,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.5544,
         lng: 7.0675,
         popularity: 1.2,
+        shot: "miss",
       },
       {
         id: "ataturk-olympic-stadium",
@@ -425,6 +456,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.0744,
         lng: 28.7658,
         popularity: 6.3,
+        shot: "trivela",
       },
       {
         id: "luzhniki-stadium",
@@ -435,6 +467,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.7158,
         lng: 37.5536,
         popularity: 4,
+        shot: "toepoke",
       },
       {
         id: "santiago-bernabeu",
@@ -451,6 +484,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 40.4531,
         lng: -3.6883,
         popularity: 7.6,
+        shot: "golazo",
       },
       {
         id: "wembley-stadium",
@@ -461,6 +495,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.5556,
         lng: -0.2794,
         popularity: 14,
+        shot: "worldie",
       },
       {
         id: "allianz-arena",
@@ -477,6 +512,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.2188,
         lng: 11.6247,
         popularity: 6,
+        shot: "trivela",
       },
       {
         id: "estadio-da-luz",
@@ -492,6 +528,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 38.7527,
         lng: -9.1847,
         popularity: 3,
+        shot: "toepoke",
       },
       {
         id: "berlin-olympic-stadium",
@@ -506,6 +543,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.5147,
         lng: 13.2394,
         popularity: 2.8,
+        shot: "tapin",
       },
       {
         id: "millennium-stadium",
@@ -522,6 +560,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.4781,
         lng: -3.1825,
         popularity: 3.5,
+        shot: "toepoke",
       },
       {
         id: "nsc-olimpiyskiy",
@@ -540,6 +579,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 50.4334,
         lng: 30.5219,
         popularity: 1.5,
+        shot: "miss",
       },
       {
         id: "metropolitano",
@@ -557,6 +597,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 40.4361,
         lng: -3.5994,
         popularity: 2.6,
+        shot: "tapin",
       },
       {
         id: "estadio-do-dragao",
@@ -567,6 +608,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.1618,
         lng: -8.5839,
         popularity: 2,
+        shot: "tapin",
       },
       {
         id: "puskas-arena",
@@ -583,6 +625,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 47.5031,
         lng: 19.098,
         popularity: 2.1,
+        shot: "tapin",
       },
     ],
   },
@@ -603,6 +646,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.0246,
         lng: -2.1729,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "alfredo-di-stefano",
@@ -613,6 +657,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -34.65,
         lng: -58.3833,
         popularity: 0.6,
+        shot: "toepoke",
       },
       {
         id: "raymond-kopa",
@@ -623,6 +668,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 50.4797,
         lng: 2.6647,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "luis-suarez",
@@ -633,6 +679,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 43.3711,
         lng: -8.3961,
         popularity: 0.8,
+        shot: "toepoke",
       },
       {
         id: "omar-sivori",
@@ -643,6 +690,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -33.3333,
         lng: -60.2167,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "josef-masopust",
@@ -653,6 +701,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 50.5317,
         lng: 13.6672,
         popularity: 0.1,
+        shot: "miss",
       },
       {
         id: "lev-yashin",
@@ -663,6 +712,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.7506,
         lng: 37.6175,
         popularity: 0.3,
+        shot: "tapin",
       },
       {
         id: "denis-law",
@@ -673,6 +723,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 57.1497,
         lng: -2.0943,
         popularity: 0.3,
+        shot: "tapin",
       },
       {
         id: "eusebio",
@@ -683,6 +734,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -25.95,
         lng: 32.572,
         popularity: 0.5,
+        shot: "tapin",
       },
       {
         id: "bobby-charlton",
@@ -693,6 +745,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.181,
         lng: -1.568,
         popularity: 0.7,
+        shot: "toepoke",
       },
       {
         id: "florian-albert",
@@ -703,6 +756,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 45.95,
         lng: 18.9333,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "george-best",
@@ -713,6 +767,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 54.5967,
         lng: -5.93,
         popularity: 0.9,
+        shot: "toepoke",
       },
       {
         id: "gianni-rivera",
@@ -723,6 +778,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 44.9133,
         lng: 8.62,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "gerd-muller",
@@ -733,6 +789,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.8511,
         lng: 10.4883,
         popularity: 0.4,
+        shot: "tapin",
       },
       {
         id: "johan-cruyff",
@@ -743,6 +800,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.3728,
         lng: 4.8936,
         popularity: 2,
+        shot: "trivela",
       },
       {
         id: "franz-beckenbauer",
@@ -753,6 +811,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.1111,
         lng: 11.5944,
         popularity: 0.9,
+        shot: "toepoke",
       },
       {
         id: "oleg-blokhin",
@@ -763,6 +822,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 50.45,
         lng: 30.5236,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "allan-simonsen",
@@ -773,6 +833,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.7083,
         lng: 9.5333,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "kevin-keegan",
@@ -783,6 +844,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.5352,
         lng: -1.0522,
         popularity: 0.3,
+        shot: "tapin",
       },
       {
         id: "karl-heinz-rummenigge",
@@ -793,6 +855,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.6736,
         lng: 8.3448,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "paolo-rossi",
@@ -803,6 +866,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 43.8808,
         lng: 11.0966,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "michel-platini",
@@ -813,6 +877,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 49.2297,
         lng: 6.0089,
         popularity: 1,
+        shot: "toepoke",
       },
       {
         id: "igor-belanov",
@@ -823,6 +888,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 46.4842,
         lng: 30.7325,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "ruud-gullit",
@@ -833,6 +899,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.3728,
         lng: 4.8936,
         popularity: 0.4,
+        shot: "tapin",
       },
       {
         id: "marco-van-basten",
@@ -843,6 +910,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.0908,
         lng: 5.1217,
         popularity: 1.1,
+        shot: "trivela",
       },
       {
         id: "lothar-matthaus",
@@ -853,6 +921,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 49.5925,
         lng: 11.005,
         popularity: 0.3,
+        shot: "tapin",
       },
       {
         id: "jean-pierre-papin",
@@ -863,6 +932,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 50.7256,
         lng: 1.6139,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "roberto-baggio",
@@ -873,6 +943,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 45.6118,
         lng: 11.5076,
         popularity: 0.4,
+        shot: "tapin",
       },
       {
         id: "hristo-stoichkov",
@@ -883,6 +954,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 42.1421,
         lng: 24.7415,
         popularity: 0.3,
+        shot: "tapin",
       },
       {
         id: "george-weah",
@@ -893,6 +965,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 6.3333,
         lng: -10.8,
         popularity: 0.5,
+        shot: "tapin",
       },
       {
         id: "matthias-sammer",
@@ -903,6 +976,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.0493,
         lng: 13.7381,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "ronaldo-nazario",
@@ -927,6 +1001,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -22.9111,
         lng: -43.2056,
         popularity: 4.5,
+        shot: "golazo",
       },
       {
         id: "zinedine-zidane",
@@ -937,6 +1012,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 43.367,
         lng: 5.342,
         popularity: 3.8,
+        shot: "golazo",
       },
       {
         id: "rivaldo",
@@ -947,6 +1023,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -8.0539,
         lng: -34.8808,
         popularity: 0.5,
+        shot: "tapin",
       },
       {
         id: "luis-figo",
@@ -957,6 +1034,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 38.6803,
         lng: -9.1583,
         popularity: 0.8,
+        shot: "toepoke",
       },
       {
         id: "michael-owen",
@@ -967,6 +1045,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.1905,
         lng: -2.8919,
         popularity: 0.9,
+        shot: "toepoke",
       },
       {
         id: "pavel-nedved",
@@ -977,6 +1056,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 50.0798,
         lng: 12.374,
         popularity: 0.4,
+        shot: "tapin",
       },
       {
         id: "andriy-shevchenko",
@@ -987,6 +1067,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 50.26,
         lng: 31.88,
         popularity: 0.7,
+        shot: "toepoke",
       },
       {
         id: "ronaldinho",
@@ -1002,6 +1083,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -30.0328,
         lng: -51.23,
         popularity: 4,
+        shot: "golazo",
       },
       {
         id: "fabio-cannavaro",
@@ -1012,6 +1094,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 40.8358,
         lng: 14.2486,
         popularity: 0.4,
+        shot: "tapin",
       },
       {
         id: "kaka",
@@ -1022,6 +1105,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -16.0194,
         lng: -48.0669,
         popularity: 2.6,
+        shot: "trivela",
       },
       {
         id: "cristiano-ronaldo",
@@ -1038,6 +1122,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 32.65,
         lng: -16.9083,
         popularity: 24.7,
+        shot: "worldie",
       },
       {
         id: "lionel-messi",
@@ -1048,6 +1133,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -32.9575,
         lng: -60.6394,
         popularity: 32,
+        shot: "worldie",
       },
       {
         id: "luka-modric",
@@ -1058,6 +1144,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 44.1142,
         lng: 15.2275,
         popularity: 3,
+        shot: "trivela",
       },
       {
         id: "karim-benzema",
@@ -1068,6 +1155,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 45.7675,
         lng: 4.835,
         popularity: 2.2,
+        shot: "trivela",
       },
       {
         id: "rodri",
@@ -1083,6 +1171,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 40.4169,
         lng: -3.7033,
         popularity: 1.5,
+        shot: "trivela",
       },
       {
         id: "ousmane-dembele",
@@ -1093,6 +1182,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 49.0917,
         lng: 1.485,
         popularity: 1.3,
+        shot: "trivela",
       },
       {
         id: "harry-kane",
@@ -1103,6 +1193,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.584,
         lng: -0.021,
         popularity: 2.5,
+        shot: "trivela",
       },
     ],
   },
@@ -1123,6 +1214,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -15.794,
         lng: -47.883,
         popularity: 29,
+        shot: "worldie",
       },
       {
         id: "germany",
@@ -1133,6 +1225,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.52,
         lng: 13.405,
         popularity: 15,
+        shot: "golazo",
       },
       {
         id: "italy",
@@ -1143,6 +1236,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.893,
         lng: 12.483,
         popularity: 8,
+        shot: "toepoke",
       },
       {
         id: "argentina",
@@ -1153,6 +1247,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -34.604,
         lng: -58.381,
         popularity: 19,
+        shot: "golazo",
       },
       {
         id: "france",
@@ -1163,6 +1258,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.857,
         lng: 2.352,
         popularity: 12,
+        shot: "trivela",
       },
       {
         id: "uruguay",
@@ -1173,6 +1269,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -34.906,
         lng: -56.184,
         popularity: 2,
+        shot: "miss",
       },
       {
         id: "spain",
@@ -1183,6 +1280,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 40.417,
         lng: -3.703,
         popularity: 10,
+        shot: "toepoke",
       },
       {
         id: "england",
@@ -1193,6 +1291,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.507,
         lng: -0.128,
         popularity: 5,
+        shot: "tapin",
       },
     ],
   },
@@ -1213,6 +1312,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.6059,
         lng: -0.0151,
         popularity: 0.7,
+        shot: "tapin",
       },
       {
         id: "andy-cole",
@@ -1223,6 +1323,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.955,
         lng: -1.1492,
         popularity: 1.6,
+        shot: "toepoke",
       },
       {
         id: "alan-shearer",
@@ -1233,6 +1334,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.005,
         lng: -1.62,
         popularity: 10,
+        shot: "golazo",
       },
       {
         id: "chris-sutton",
@@ -1243,6 +1345,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.955,
         lng: -1.1492,
         popularity: 0.3,
+        shot: "miss",
       },
       {
         id: "dion-dublin",
@@ -1253,6 +1356,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.6361,
         lng: -1.1331,
         popularity: 0.4,
+        shot: "miss",
       },
       {
         id: "michael-owen",
@@ -1263,6 +1367,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.1905,
         lng: -2.8919,
         popularity: 2,
+        shot: "toepoke",
       },
       {
         id: "jimmy-floyd-hasselbaink",
@@ -1273,6 +1378,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 5.852,
         lng: -55.2038,
         popularity: 0.6,
+        shot: "miss",
       },
       {
         id: "dwight-yorke",
@@ -1283,6 +1389,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 11.15,
         lng: -60.817,
         popularity: 0.4,
+        shot: "miss",
       },
       {
         id: "kevin-phillips",
@@ -1293,6 +1400,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.947,
         lng: -0.283,
         popularity: 0.5,
+        shot: "miss",
       },
       {
         id: "thierry-henry",
@@ -1303,6 +1411,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.6822,
         lng: 2.1675,
         popularity: 11.4,
+        shot: "worldie",
       },
       {
         id: "ruud-van-nistelrooy",
@@ -1318,6 +1427,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.765,
         lng: 5.518,
         popularity: 2.4,
+        shot: "toepoke",
       },
       {
         id: "didier-drogba",
@@ -1328,6 +1438,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 5.3364,
         lng: -4.0267,
         popularity: 4,
+        shot: "trivela",
       },
       {
         id: "cristiano-ronaldo",
@@ -1338,6 +1449,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 32.65,
         lng: -16.9083,
         popularity: 6,
+        shot: "golazo",
       },
       {
         id: "nicolas-anelka",
@@ -1348,6 +1460,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.8203,
         lng: 2.1303,
         popularity: 0.9,
+        shot: "tapin",
       },
       {
         id: "carlos-tevez",
@@ -1358,6 +1471,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -34.6333,
         lng: -58.5333,
         popularity: 1,
+        shot: "tapin",
       },
       {
         id: "dimitar-berbatov",
@@ -1368,6 +1482,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 42.0119,
         lng: 23.0897,
         popularity: 0.8,
+        shot: "tapin",
       },
       {
         id: "robin-van-persie",
@@ -1378,6 +1493,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.9225,
         lng: 4.4792,
         popularity: 3.5,
+        shot: "trivela",
       },
       {
         id: "luis-suarez",
@@ -1388,6 +1504,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -31.3883,
         lng: -57.9606,
         popularity: 3.3,
+        shot: "trivela",
       },
       {
         id: "sergio-aguero",
@@ -1398,6 +1515,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: -34.6037,
         lng: -58.3816,
         popularity: 5,
+        shot: "trivela",
       },
       {
         id: "harry-kane",
@@ -1408,6 +1526,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.584,
         lng: -0.021,
         popularity: 9,
+        shot: "golazo",
       },
       {
         id: "mohamed-salah",
@@ -1418,6 +1537,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 30.9725,
         lng: 30.8669,
         popularity: 13.8,
+        shot: "worldie",
       },
       {
         id: "pierre-emerick-aubameyang",
@@ -1428,6 +1548,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.0728,
         lng: -0.77,
         popularity: 1.4,
+        shot: "tapin",
       },
       {
         id: "sadio-mane",
@@ -1438,6 +1559,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 12.6042,
         lng: -15.6614,
         popularity: 1.2,
+        shot: "tapin",
       },
       {
         id: "jamie-vardy",
@@ -1448,6 +1570,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.3808,
         lng: -1.4703,
         popularity: 2.6,
+        shot: "toepoke",
       },
       {
         id: "son-heung-min",
@@ -1458,6 +1581,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 37.8747,
         lng: 127.7342,
         popularity: 2.2,
+        shot: "toepoke",
       },
       {
         id: "erling-haaland",
@@ -1468,6 +1592,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.7975,
         lng: -1.5436,
         popularity: 15,
+        shot: "worldie",
       },
     ],
   },
@@ -1488,6 +1613,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 40.4531,
         lng: -3.6883,
         popularity: 24,
+        shot: "worldie",
       },
       {
         id: "ac-milan",
@@ -1498,6 +1624,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 45.4781,
         lng: 9.1239,
         popularity: 7,
+        shot: "golazo",
       },
       {
         id: "bayern-munich",
@@ -1515,6 +1642,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.2188,
         lng: 11.6247,
         popularity: 8,
+        shot: "golazo",
       },
       {
         id: "liverpool",
@@ -1525,6 +1653,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.4308,
         lng: -2.9608,
         popularity: 11,
+        shot: "golazo",
       },
       {
         id: "barcelona",
@@ -1535,6 +1664,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.3809,
         lng: 2.1228,
         popularity: 12.5,
+        shot: "worldie",
       },
       {
         id: "ajax",
@@ -1545,6 +1675,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.3142,
         lng: 4.9419,
         popularity: 2.5,
+        shot: "toepoke",
       },
       {
         id: "inter-milan",
@@ -1562,6 +1693,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 45.4781,
         lng: 9.1239,
         popularity: 3.2,
+        shot: "trivela",
       },
       {
         id: "manchester-united",
@@ -1580,6 +1712,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.4631,
         lng: -2.2914,
         popularity: 9,
+        shot: "golazo",
       },
       {
         id: "juventus",
@@ -1590,6 +1723,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 45.1096,
         lng: 7.6413,
         popularity: 3,
+        shot: "toepoke",
       },
       {
         id: "benfica",
@@ -1600,6 +1734,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 38.7527,
         lng: -9.1847,
         popularity: 0.7,
+        shot: "tapin",
       },
       {
         id: "nottingham-forest",
@@ -1615,6 +1750,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.94,
         lng: -1.1328,
         popularity: 1.5,
+        shot: "toepoke",
       },
       {
         id: "porto",
@@ -1625,6 +1761,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 41.1618,
         lng: -8.5839,
         popularity: 1.6,
+        shot: "toepoke",
       },
       {
         id: "chelsea",
@@ -1635,6 +1772,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.4817,
         lng: -0.191,
         popularity: 4,
+        shot: "trivela",
       },
       {
         id: "paris-saint-germain",
@@ -1645,6 +1783,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 48.8414,
         lng: 2.253,
         popularity: 3.1,
+        shot: "trivela",
       },
       {
         id: "celtic",
@@ -1655,6 +1794,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 55.8497,
         lng: -4.2056,
         popularity: 1,
+        shot: "tapin",
       },
       {
         id: "feyenoord",
@@ -1665,6 +1805,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.8939,
         lng: 4.5231,
         popularity: 0.3,
+        shot: "miss",
       },
       {
         id: "aston-villa",
@@ -1675,6 +1816,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 52.5092,
         lng: -1.8847,
         popularity: 0.9,
+        shot: "tapin",
       },
       {
         id: "hamburg",
@@ -1685,6 +1827,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.5872,
         lng: 9.8986,
         popularity: 0.3,
+        shot: "miss",
       },
       {
         id: "steaua-bucuresti",
@@ -1701,6 +1844,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 44.4372,
         lng: 26.1525,
         popularity: 0.2,
+        shot: "miss",
       },
       {
         id: "psv-eindhoven",
@@ -1711,6 +1855,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.4417,
         lng: 5.4675,
         popularity: 0.3,
+        shot: "miss",
       },
       {
         id: "red-star-belgrade",
@@ -1727,6 +1872,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 44.7832,
         lng: 20.4649,
         popularity: 0.4,
+        shot: "miss",
       },
       {
         id: "marseille",
@@ -1742,6 +1888,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 43.2698,
         lng: 5.3959,
         popularity: 0.5,
+        shot: "tapin",
       },
       {
         id: "borussia-dortmund",
@@ -1752,6 +1899,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 51.4926,
         lng: 7.4519,
         popularity: 0.8,
+        shot: "tapin",
       },
       {
         id: "manchester-city",
@@ -1762,6 +1910,7 @@ export const HOME_QUESTIONS: Question[] = [
         lat: 53.4831,
         lng: -2.2004,
         popularity: 4.2,
+        shot: "trivela",
       },
     ],
   },

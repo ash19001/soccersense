@@ -55,9 +55,10 @@ describe("the game in progress", () => {
     expect(back).not.toBeNull();
     expect(back?.phase).toBe("asking");
     expect(back?.index).toBe(1);
-    // Liverpool: third most common of the seven Premier League winners.
-    expect(back?.total).toBe(67);
+    // Liverpool: third most common of the seven Premier League winners, a trivela.
+    expect(back?.total).toBe(60);
     expect(back?.turns[0].share).toBe(17);
+    expect(back?.turns[0].grade).toBe("trivela");
     expect(back?.startedAt).toBe(3000);
     expect(back?.deadline).toBe(33000);
     expect(back?.questions).toBe(HOME_QUESTIONS);
@@ -111,6 +112,21 @@ describe("the game in progress", () => {
       turns: Record<string, unknown>[];
     };
     for (const turn of saved.turns) delete turn.share;
+    store.setItem(key, JSON.stringify(saved));
+    expect(loadLive(context, store)).toBeNull();
+  });
+
+  test("a game begun before the six shots is not carried on", () => {
+    const store = memory();
+    let s = started();
+    s = reduce(s, { type: "submit", input: "Liverpool", now: 2000 });
+    saveLive(s, store);
+    expect(loadLive(context, store)).not.toBeNull();
+    const key = liveKey("2026-11-10", "home");
+    const saved = JSON.parse(store.map.get(key) ?? "{}") as {
+      turns: Record<string, unknown>[];
+    };
+    saved.turns[0].grade = "goal";
     store.setItem(key, JSON.stringify(saved));
     expect(loadLive(context, store)).toBeNull();
   });

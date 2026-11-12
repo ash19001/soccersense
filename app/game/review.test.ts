@@ -19,10 +19,11 @@ import {
   utcDayKey,
 } from "./day";
 import { formatDistance, usesMiles } from "./geo";
-import { gradeFor, rankAnswers, tableExcerpt } from "./scoring";
+import { rankAnswers, tableExcerpt } from "./scoring";
 import { createSession, reduce } from "./session";
 import type { Action, Session, Turn } from "./session";
 import { GRADE_SYMBOLS } from "./share";
+import { SHOT_POINTS } from "./shots";
 import {
   loadDay,
   loadGame,
@@ -172,7 +173,7 @@ describe("storage", () => {
     questionId: "q",
     input: "x",
     answerId: "x",
-    grade: "goal",
+    grade: "trivela",
     points,
     km: 10,
     share: 12.5,
@@ -284,10 +285,11 @@ describe("share", () => {
     const points = (text: string) =>
       [...text].map((ch) => ch.codePointAt(0)?.toString(16));
     expect(points(GRADE_SYMBOLS.worldie)).toEqual(["1f31f"]);
-    expect(points(GRADE_SYMBOLS.topbins)).toEqual(["1f3af"]);
-    expect(points(GRADE_SYMBOLS.goal)).toEqual(["26bd"]);
-    expect(points(GRADE_SYMBOLS.ontarget)).toEqual(["1f9e4"]);
-    expect(points(GRADE_SYMBOLS.wide)).toEqual(["274c"]);
+    expect(points(GRADE_SYMBOLS.golazo)).toEqual(["1f3af"]);
+    expect(points(GRADE_SYMBOLS.trivela)).toEqual(["1f4a5"]);
+    expect(points(GRADE_SYMBOLS.toepoke)).toEqual(["1f308"]);
+    expect(points(GRADE_SYMBOLS.tapin)).toEqual(["26bd"]);
+    expect(points(GRADE_SYMBOLS.miss)).toEqual(["274c"]);
     expect(points(GRADE_SYMBOLS.timeup)).toEqual(["23f1", "fe0f"]);
     expect(points(GRADE_SYMBOLS.skipped)).toEqual(["2796"]);
   });
@@ -310,7 +312,7 @@ describe("small guards", () => {
     expect(formatDistance(283, "en-GB")).toBe("176 miles");
   });
 
-  it("every table row carries its grade, and only the best is a worldie", () => {
+  it("every table row carries its shot as its grade, best first", () => {
     const q = question(
       "q",
       Array.from({ length: 12 }, (_, i) => east(`Answer ${i}`, i + 1)),
@@ -318,10 +320,12 @@ describe("small guards", () => {
     const table = rankAnswers(q, ORIGIN, "closest");
     const rows = tableExcerpt(table, "answer-4", Infinity);
     expect(rows).toHaveLength(12);
-    for (const row of rows) expect(row.grade).toBe(gradeFor(row.points));
-    expect(rows.filter((row) => row.grade === "worldie")).toHaveLength(1);
+    for (const row of rows) {
+      expect(row.grade).toBe(row.shot);
+      expect(row.points).toBe(SHOT_POINTS[row.shot]);
+    }
     expect(rows[0].grade).toBe("worldie");
-    expect(rows[11].grade).toBe("wide");
+    expect(rows[11].grade).toBe("miss");
     expect(rows.find((row) => row.isPlayer)?.answer.id).toBe("answer-4");
   });
 

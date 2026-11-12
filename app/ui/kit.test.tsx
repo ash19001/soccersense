@@ -22,6 +22,7 @@ import {
   IconButton,
   LeagueTable,
   type LeagueEntry,
+  type LeagueRow,
   LedNumber,
   MenuCaptions,
   PixelGlyph,
@@ -56,10 +57,9 @@ const tableLabels = {
 describe("Board", () => {
   const base = {
     mode: "home" as const,
-    stadiumName: "ANFIELD",
     questionNumber: 3,
     questionCount: 7,
-    results: ["goal" as const, "topbins" as const],
+    results: ["trivela" as const, "golazo" as const],
     total: 152,
     tierName: "SUNDAY LEAGUE",
     tierProgress: 0.69,
@@ -92,6 +92,10 @@ describe("Board", () => {
     expect(
       within(board).getByRole("img", { name: "Question 3 of 7" }).children,
     ).toHaveLength(7);
+    // The mode's badge, and no stadium beside it.
+    const head = board.querySelector(".ss-board__head") as HTMLElement;
+    expect(within(head).getByText("HOME")).toBeInTheDocument();
+    expect(head.querySelector(".ss-board__stadium")).toBeNull();
   });
 
   test("compact keeps the question and the instruction, and drops the measure line and the clock", () => {
@@ -203,6 +207,47 @@ describe("LeagueTable", () => {
     );
     expect(container.querySelector(".is-pinned")).toBeNull();
   });
+
+  test("with a SHOT heading, tags each row with its shot in the shot's colour", () => {
+    const shots: LeagueEntry[] = [
+      { ...(rows[0] as LeagueRow), grade: "worldie", shot: "WORLDIE" },
+      { gap: true },
+      { ...(rows[2] as LeagueRow), grade: "tapin", shot: "TAP IN", points: 10 },
+      {
+        ...(rows[3] as LeagueRow),
+        grade: "worldie",
+        shot: "WORLDIE",
+        best: false,
+      },
+    ];
+    render(
+      <LeagueTable rows={shots} labels={{ ...tableLabels, shot: "SHOT" }} />,
+    );
+    const table = screen.getByRole("table", { name: "The table" });
+    expect(
+      within(table).getByRole("columnheader", { name: "SHOT" }),
+    ).toBeInTheDocument();
+    const body = within(table).getAllByRole("row").slice(1);
+    expect(body[0]).toHaveAttribute("data-grade", "worldie");
+    expect(body[0]).toHaveClass("is-best");
+    expect(within(body[0] as HTMLElement).getByText("WORLDIE")).toHaveClass(
+      "ss-table__tag",
+    );
+    expect(body[1].querySelector("td")).toHaveAttribute("colspan", "5");
+    expect(body[2]).toHaveAttribute("data-grade", "tapin");
+    expect(body[2]).not.toHaveClass("is-best");
+    // `best` still wins over the grade.
+    expect(body[3]).not.toHaveClass("is-best");
+  });
+
+  test("without a grade, the 100-point row is the best", () => {
+    render(<LeagueTable rows={rows} labels={tableLabels} />);
+    const table = screen.getByRole("table", { name: "The table" });
+    expect(
+      within(table).queryByRole("columnheader", { name: "SHOT" }),
+    ).toBeNull();
+    expect(table.querySelector(".ss-table__tag")).toBeNull();
+  });
 });
 
 describe("TimerStrip", () => {
@@ -297,10 +342,10 @@ describe("RevealSheet", () => {
     const onNext = vi.fn();
     render(
       <RevealSheet
-        grade="goal"
+        grade="trivela"
         mode="home"
-        gradeLabel="GOAL!"
-        pointsLabel="+61"
+        gradeLabel="TRIVELA"
+        pointsLabel="+60"
         sentence="Hakan Çalhanoğlu was born in Mannheim: 540 miles from Anfield."
         rows={[
           {
@@ -310,13 +355,12 @@ describe("RevealSheet", () => {
             distance: "0 miles",
             points: 100,
           },
-          { gap: true },
           {
             rank: 10,
             name: "Hakan Çalhanoğlu",
             place: "Mannheim",
             distance: "540 miles",
-            points: 61,
+            points: 60,
             you: true,
           },
         ]}
@@ -325,8 +369,10 @@ describe("RevealSheet", () => {
         onNext={onNext}
       />,
     );
-    expect(screen.getByRole("heading", { name: "GOAL!" })).toBeInTheDocument();
-    expect(screen.getByText("+61")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "TRIVELA" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("+60")).toBeInTheDocument();
     const table = screen.getByRole("table", { name: "The table" });
     const you = within(table).getByRole("row", { name: /Hakan Çalhanoğlu/ });
     expect(you).toHaveClass("is-you");
@@ -334,13 +380,67 @@ describe("RevealSheet", () => {
     expect(within(table).getByRole("row", { name: /Liverpool/ })).toHaveClass(
       "is-best",
     );
-    expect(within(table).getByText("Rows left out")).toBeInTheDocument();
+    // A scoring answer is a row: no line of its own above the table.
+    expect(document.querySelector(".ss-sheet__yours")).toBeNull();
     // The summary is announced politely once the sheet is on screen.
-    expect(screen.getByRole("status")).toHaveTextContent("GOAL!. +61.");
+    expect(screen.getByRole("status")).toHaveTextContent("TRIVELA. +60.");
     const next = screen.getByRole("button", { name: "NEXT QUESTION" });
     expect(next).toHaveFocus();
     fireEvent.click(next);
     expect(onNext).toHaveBeenCalledTimes(1);
+  });
+
+  test("shows an answer that is not a row above the table, in the miss colour", () => {
+    render(
+      <RevealSheet
+        grade="miss"
+        mode="home"
+        gradeLabel="MISS"
+        sentence="Blackburn Rovers: only 2% of players said the same."
+        rows={[
+          {
+            rank: 1,
+            name: "Manchester United",
+            place: "",
+            distance: "30%",
+            points: 100,
+            grade: "worldie",
+            shot: "WORLDIE",
+          },
+        ]}
+        tableLabels={{ ...tableLabels, shot: "SHOT" }}
+        yours={{
+          you: "YOU",
+          name: "Blackburn Rovers",
+          picked: "2%",
+          shot: "MISS",
+          points: 0,
+          spoken:
+            "Your answer: Blackburn Rovers, picked by 2%. MISS, 0 points.",
+        }}
+        nextLabel="NEXT QUESTION"
+        onNext={() => {}}
+      />,
+    );
+    const line = document.querySelector(".ss-sheet__yours");
+    expect(line).toHaveAttribute("data-grade", "miss");
+    expect(line).toHaveTextContent("YOUBlackburn Rovers2%MISS0");
+    // Read out as one sentence; the pieces are for the eye only.
+    expect(
+      screen.getByText(
+        "Your answer: Blackburn Rovers, picked by 2%. MISS, 0 points.",
+      ),
+    ).toHaveClass("ss-sr");
+    for (const piece of line?.querySelectorAll("span:not(.ss-sr)") ?? []) {
+      expect(piece).toHaveAttribute("aria-hidden", "true");
+    }
+    // Above the table, and not one of its rows.
+    const table = screen.getByRole("table", { name: "The table" });
+    expect(line?.compareDocumentPosition(table) ?? 0).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    expect(within(table).queryByText("Blackburn Rovers")).toBeNull();
+    expect(within(table).getAllByRole("row")).toHaveLength(2);
   });
 });
 
@@ -357,10 +457,13 @@ describe("FullTimeCard", () => {
         maxTotal={700}
         totalSpoken="478 out of 700"
         careerTitle="INTERNATIONAL"
+        earnedTitle="KNOWS ALL THE CHANTS"
+        earnedTitleSpoken="Your title"
         results={Array.from({ length: 7 }, (_, i) => ({
-          grade: "goal" as const,
-          points: 60 + i,
+          grade: "trivela" as const,
+          points: 60,
           answer: `Answer ${i + 1}`,
+          label: i === 0 ? "TRIVELA" : undefined,
         }))}
         shareLabel="SHARE"
         onShare={onShare}
@@ -378,6 +481,12 @@ describe("FullTimeCard", () => {
       screen.getByRole("img", { name: "478 out of 700" }),
     ).toBeInTheDocument();
     expect(screen.getAllByRole("listitem")).toHaveLength(7);
+    // The title the total earned, big under the score, and read out as a title.
+    const title = document.querySelector(".ss-full__title");
+    expect(title).toHaveTextContent("Your title: KNOWS ALL THE CHANTS");
+    // A shot's name sits beside its points; no label, no name.
+    expect(screen.getAllByText("TRIVELA")).toHaveLength(1);
+    expect(screen.getByText("TRIVELA")).toHaveClass("ss-full__shot");
     fireEvent.click(screen.getByRole("button", { name: "SHARE" }));
     fireEvent.click(screen.getByRole("button", { name: "PLAY AWAY" }));
     fireEvent.click(screen.getByRole("button", { name: "MENU" }));
@@ -583,7 +692,9 @@ describe("MenuCaptions", () => {
     expect(side[0]?.childNodes).toHaveLength(1);
     expect(side[0]).toHaveTextContent("DAY 12");
     expect(side[1]).toHaveClass("ss-btn", "ss-btn--icon");
-    expect(side).toHaveLength(2);
+    // And the sound switch right beside the "?".
+    expect(side[2]).toHaveAttribute("role", "switch");
+    expect(side).toHaveLength(3);
   });
 });
 

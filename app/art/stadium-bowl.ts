@@ -20,6 +20,7 @@
 
 import { Surface, hash2, luma, shade, type Color } from "~/pixel";
 import { P } from "~/art/palette";
+import { DEFAULT_SCHEME, type ClubScheme } from "~/art/stadium-club";
 import { A, ZC, project, type View } from "~/art/stadium-view";
 
 export const PITCH_X = 68;
@@ -108,22 +109,29 @@ export interface BowlTones {
   lightsOn: boolean;
   /** The sun casts the roof's shadow into the bowl. */
   sunny: boolean;
+  /** The day's club colours (stadium-club.ts): the second colour's trims and scarves. */
+  club?: ClubScheme;
+  /** The club's swap for colours drawn raw (the boards' lamps at night). */
+  raw?: (c: Color) => Color;
 }
 
-const FANS_HOME: readonly Color[] = [
-  P.home,
-  P.home,
-  P.home,
-  P.home,
-  P.homeLight,
-  P.homeLight,
-  P.homeDark,
-  P.chalk,
-  P.chalk,
-  P.home,
-  P.gold,
-  P.brickDark,
-];
+/** The home crowd: mostly the club's main colour, scarves and shirts in its second. */
+function fansHome(club: ClubScheme): readonly Color[] {
+  return [
+    P.home,
+    P.home,
+    P.home,
+    P.home,
+    P.homeLight,
+    P.homeLight,
+    P.homeDark,
+    club.second.base,
+    club.second.base,
+    P.home,
+    club.second.light,
+    P.slate,
+  ];
+}
 const FANS_AWAY: readonly Color[] = [
   P.away,
   P.away,
@@ -148,6 +156,9 @@ const BOARDS: readonly Color[] = [
 /** Paint the stadium for this view. Colours are final (already graded). */
 export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
   const { k, cx, yc } = view;
+  const club = tones.club ?? DEFAULT_SCHEME;
+  const raw = tones.raw ?? ((c: Color): Color => c);
+  const FANS_HOME = fansHome(club);
   // The screen box: the roof's far edge to the wall's foot, the widest part either side.
   const top = Math.floor(project(view, 0, OUT_B * ROOF_OUT, HR).y) - 1;
   const bottom = Math.ceil(project(view, 0, -OUT_B, 0).y) + 2;
@@ -285,10 +296,12 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
   const rimLamps: { x: number; y: number }[] = [];
   const data = layer.data;
   const dark = new Map<Color, Color>();
+  // A shaded colour is no longer one of the palette's, so `lit` cannot swap it into the
+  // day's club colours: the swap comes first (else the crowd under the roof stays red).
   const shaded = (c: Color): Color => {
     let o = dark.get(c);
     if (o === undefined) {
-      o = shade(c, -0.3);
+      o = shade(raw(c), -0.3);
       dark.set(c, o);
     }
     return o;
@@ -358,7 +371,7 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
         const facing = Math.cos(a);
         const body =
           facing < -0.42 ? P.homeLight : facing < 0.5 ? P.home : P.homeDark;
-        if (hh >= 12.4) c = lit(P.brickDark);
+        if (hh >= 12.4) c = lit(P.homeDark);
         else if (pillar) c = lit(facing < 0.5 ? P.chalk : P.steelHi);
         else if (hh < 3.4) {
           // the foot: concrete, with a gate in every third bay
@@ -369,7 +382,7 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
               ? P.goldLight
               : lit(P.slate)
             : lit(facing < 0.5 ? P.concreteLight : P.concrete);
-        } else if (hh < 4.4) c = lit(P.chalk);
+        } else if (hh < 4.4) c = lit(club.second.base);
         else if (hh > 7.3 && hh < 9.6) {
           // the ribbon of glass round the concourse
           c = tones.lightsOn
@@ -420,7 +433,7 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
                   ? P.awayLight
                   : P.white
                 : hash2(seat, row, seed + 9) < 0.4
-                  ? P.goldLight
+                  ? club.second.light
                   : hash2(seat, row, seed + 9) < 0.7
                     ? P.homeLight
                     : P.white,
@@ -430,7 +443,7 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
       } else if (z === ZONE_BOARD) {
         const cell = Math.floor(((a + Math.PI) / TWO_PI) * 56);
         const b = BOARDS[Math.floor(hash2(cell, 1, seed) * BOARDS.length)];
-        c = tones.lightsOn ? b : lit(b);
+        c = tones.lightsOn ? raw(b) : lit(b);
       } else if (z === ZONE_SURROUND) {
         c = lit(shadow[at] ? P.grassDeep : P.grassDark);
       } else {

@@ -3,9 +3,17 @@
  *
  * The footballer juggles in front of a goal on the ground of his tier (`~/art/grounds`),
  * with his team-mates, two opponents, the keeper and (from tier 2) the referee around him
- * (`~/art/characters`). Every answer is a shot (`playShot`, section 4), every promotion
- * builds the next ground around him in a cloud of builders' dust (`promote`, section 5),
- * and full time is a tableau: the trophy lift at tier 7, the match ball held up below it.
+ * (`~/art/characters`). Every answer is one of six shots, or none (`playShot`, section 4):
+ * a worldie (the bicycle kick), a golazo (the curler), a trivela (the outside of the boot),
+ * a toe poke, a tap in or a miss; time up and a pass strike nothing. Every promotion sweeps
+ * a cloud of smoke over the ground; a hole opens in it onto a close-up of the ball driven
+ * into the back of a net; when the smoke clears, the next ground is there (`promote`, section 5). Full time is a tableau: the
+ * trophy lift at tier 7, the match ball held up below it.
+ *
+ * Sound: the scene says what is to be heard through `onSound` (the juggle's touches, the
+ * kicks, the wind of a hard shot, the result's sting, the crowd, the referee, fireworks,
+ * the World Cup's vuvuzelas, the promotion's sweep, the opening) and gives the bed of its
+ * tier through `ambience()` (the World Cup's beds, tiers 6 and 7, hum with vuvuzelas).
  *
  * Timings the page relies on (held by `career.test.ts`):
  * - `playShot(grade, onDone)`: `SHOT_SECONDS` (2.4 s; 0.4 s with reduced motion), then
@@ -15,20 +23,29 @@
  *   tier changes, and `onDone` at once, synchronously, if it does not.
  * - A shot or promotion asked for while another plays finishes that one first (its
  *   `onDone`), then starts. `showFullTime` ends whatever plays.
- * - The scene starts on ink and opens out over `ARRIVAL_SECONDS` (the home screen's
- *   kick-off ends on ink).
+ * - The scene starts on ink and an iris opens out of it over `ARRIVAL_SECONDS` (the home
+ *   screen's kick-off ends on ink). The picture is built as soon as the scene has its size
+ *   and light, before any time passes, and stays on ink for `OPEN_HOLD` frames more (the
+ *   browser shows the frame after a long one late); then the iris opens, its clock moving
+ *   at most `ARRIVAL_STEP` in any one frame.
  *
  * Time only moves in `update`; `draw` paints from the clocks and allocates nothing once
  * warm. Nothing here reads a clock, the DOM or `Math.random`.
  */
 
 import {
-  KICK_STRIKE_FRAME,
+  PLAYER_ANIMS,
+  SHOT_ANIMS,
+  STRIKE_FRAME,
   drawKeeper,
   drawMatchBall,
   drawPlayer,
   drawPuff,
   drawTrophy,
+  type KeeperAnim,
+  type Kit,
+  type PlayerAnim,
+  type ShotAnim,
 } from "~/art/characters";
 import {
   CareerGround,
@@ -39,6 +56,7 @@ import {
 import { careerLayout, type CareerLayout } from "~/art/layout";
 import { type Lighting, lightingFor } from "~/art/lighting";
 import { MODE_COLORS, P } from "~/art/palette";
+import { BEDS, GAME, JUGGLE } from "~/audio/mix";
 import { type Grade, type Mode, tierFor } from "~/game";
 import {
   Surface,
@@ -49,11 +67,12 @@ import {
   lerp,
 } from "~/pixel";
 import {
+  BIKE_X,
+  BIKE_Y,
   CAST,
   EXTRA_A,
   EXTRA_B,
   HERO,
-  HOLD,
   JUGGLE_X,
   JUGGLE_Y,
   KEEPER,
@@ -77,16 +96,19 @@ import {
 import {
   BUILD,
   buildColors,
+  closeUpSize,
   drawBuild,
   drawConfetti,
   drawGoalFireworks,
   drawGoldBurst,
+  drawIris,
   drawWhistle,
+  fireworkStart,
   shadowRow,
   type BuildArea,
   type BuildColors,
 } from "./career-fx";
-import type { Scene } from "./scene";
+import type { Ambience, Scene, ScoreShot, SoundCue } from "./scene";
 
 /** Words the ground paints on its boards and banners (from `app/i18n`). */
 export interface CareerLabels {
@@ -107,64 +129,258 @@ export interface CareerSceneOptions {
 export const SHOT_SECONDS = 2.4;
 /** How long a promotion takes when the tier changes. */
 export const PROMOTION_SECONDS = 1.5;
-/** The arrival: from ink to the picture. */
-export const ARRIVAL_SECONDS = 0.5;
+/** The arrival: from ink to the whole picture (the home screen's closing, the other way). */
+export const ARRIVAL_SECONDS = 0.63;
+/** However long a frame was, the opening moves on at most this much in it. */
+export const ARRIVAL_STEP = 1 / 30;
+/**
+ * Frames with time the picture stays on ink after it is built, before the opening starts:
+ * the build is a long frame (the ground's layers, about 20 ms in Chrome at 480 x 270), and
+ * the browser shows the frame after it late, so that one is ink too, not the opening's first.
+ */
+export const OPEN_HOLD = 2;
 const SHOT_REDUCED_SECONDS = 0.4;
 const PROMOTION_REDUCED_SECONDS = 0.25;
+/**
+ * The opening: out of nothing and slowing as it passes a ring round the stage (the hero,
+ * the keeper, the goal) at this time, then on out past the corners, easing to the end. It
+ * never stops on the ring: it passes it at `RING_SPEED` of its average speed from there.
+ */
+const ARRIVAL_RING = 0.19;
+const RING_SPEED = 0.3;
 
 // The beats of a shot, in seconds from `playShot` (CAREER_SCENE.md section 4).
 /** The set: he stops juggling and the ball drops to his feet. */
 const SET_END = 0.3;
-/** The kick's wind-up starts; the strike is `KICK_STRIKE_FRAME` frames later at 10 fps. */
+/** Ground shots: his strike animation starts here (the boot meets the ball at 0.5). */
 const KICK_AT = 0.3;
-const STRIKE = KICK_AT + KICK_STRIKE_FRAME / 10;
-/** How long the ball flies, by grade (to the line; `wide` to where it drops from view). */
-const FLIGHT: Record<Grade, number> = {
-  worldie: 0.42,
-  topbins: 0.62,
-  goal: 0.5,
-  ontarget: 0.5,
-  wide: 1.1,
-  timeup: 0,
-  skipped: 0.6,
-};
+/** The tap in: he dribbles in from the set, round the keeper; then the tap in itself. */
+const TAP_AT = 0.95;
+/** He goes round the keeper on the near side: this many rows nearer the camera. */
+const TAP_DY = 6;
+/** The toe poke: a heavy touch at the set, he chases it, and lunges from here. */
+const POKE_AT = 0.75;
+/** The worldie: he hooks the ball out to team-mate A, who lofts it straight back. */
+const BIKE_PASS = 0.4;
+/** The cross reaches his chest: bicycle frame 0, his back to the goal. */
+const BIKE_CROSS = 0.85;
+/** How long a miss dragged wide rolls, from the strike until it stops. */
+const WIDE_ROLL = 1.2;
 /** When everyone heads back and he gets a new ball. */
 const RETURN = SHOT_SECONDS + 0.6;
 /** The flick from his feet back up into the juggle. */
 const FLICK = 0.22;
-/** How the net's bulge fades. */
+/** How the net's bulge fades (the worldie's lasts longer). */
 const BULGE_SECONDS = 0.4;
-/** The worldie's knee slide: the run, then the slide, from these times. */
-const RUN_AT = 0.72;
-const SLIDE_AT = 1.0;
-const SLIDE_END = 1.55;
-/** With reduced motion a shot shows this moment of itself, still, until it is over. */
+const BULGE_WORLDIE = 0.6;
+/** How fast he runs back to his place, in pixels a second on the 130 px stage. */
+const RUN_BACK = 70;
+/** People caught away from their places by a new shot or full time get there over this. */
+const CARRY = 0.3;
+/** With reduced motion a shot shows its settled moment, still, until it is over. */
 const REDUCED_VIEW = 2.3;
 const REDUCED_HOLD = 1.8;
+/**
+ * The vuvuzelas' blast for a goal at the World Cup (tiers WORLD_CUP and up, never below),
+ * this long after it goes in, as big as the cheer.
+ */
+const HORN_AFTER = 0.35;
+const WORLD_CUP = 6;
+/** Full time: the long whistle at once, the crowd this long after. */
+const FULL_CHEER = 0.8;
 
 /** Tiers 6 and 7 are always played at night, whatever the player's sky (the ground's). */
 const DAY = lightingFor({ elevation: 40, morning: false });
 
 /** The team-mates who jump round him at full time. */
 const FULL_MATES = [MATE_A, MATE_B, EXTRA_A, EXTRA_B] as const;
-/** The worldie's 2 px shake, a step every 0.04 s. */
-const WORLDIE_SHAKE = [2, -2, 1, -1, 0] as const;
+/** The worldie's 2 px shake as it hits the net, a step every 0.04 s. */
+const BIG_SHAKE = [2, -2, 1, -1, 0] as const;
 
 const GOLD = { gold: true } as const;
 
-const GOALS: ReadonlySet<Grade> = new Set(["worldie", "topbins", "goal"]);
-const MOODS: Record<Grade, CrowdMood> = {
-  worldie: "roar",
-  topbins: "cheer",
-  goal: "cheer",
-  ontarget: "ooh",
-  wide: "groan",
-  timeup: "hush",
-  skipped: "idle",
+/** How many people make the bed of sound at each tier (`ambience`), 0 to 1 (mix.ts, BEDS). */
+const CROWD: readonly number[] = [
+  BEDS.places.park.crowd,
+  BEDS.places.sunday.crowd,
+  BEDS.places.nonleague.crowd,
+  BEDS.places.lower.crowd,
+  BEDS.places.top.crowd,
+  BEDS.places.international.crowd,
+  BEDS.places.final.crowd,
+  BEDS.places.winners.crowd,
+];
+
+// The cues that carry nothing that changes.
+const TOUCH: SoundCue = { kind: "touch" };
+/** The juggle while the player types: very quiet, every other touch (mix.ts, JUGGLE). */
+const JUGGLE_TOUCH: SoundCue = { kind: "touch", level: JUGGLE.touch };
+const GROAN: SoundCue = { kind: "groan" };
+const OOH: SoundCue = { kind: "ooh" };
+const WHISTLE: SoundCue = { kind: "whistle" };
+const FULL_WHISTLE: SoundCue = { kind: "whistle", long: true };
+const SWEEP: SoundCue = { kind: "sweep" };
+const NET: SoundCue = { kind: "net" };
+const FIREWORK: SoundCue = { kind: "firework", distant: true };
+const OPENING: SoundCue = { kind: "transition", opening: true };
+
+/** How each grade plays (section 4). */
+interface Plan {
+  /** His animation and when it starts; the boot meets the ball `STRIKE_FRAME` frames in. */
+  anim: PlayerAnim;
+  at: number;
+  /** From the strike to the goal line (a miss: to out of view, or until it stops). */
+  flight: number;
+  mood: CrowdMood;
+  goal: boolean;
+  /** The net's bulge at its peak, 0 to 1. */
+  bulge: number;
+  /** Fireworks over the stand at tiers 4 to 7: how many and how big (0 to 1). */
+  bursts: number;
+  size: number;
+  /** A 1 px shake and a puff of grass as he strikes it. */
+  thump: boolean;
+  /** Sound: the strike's power, the crowd's cheer and the wind of the flight, 0 to 1. */
+  power: number;
+  cheer: number;
+  wind: number;
+}
+
+/** A grade's sounds, as mix.ts has them (GAME.shots): its kick, cheer and wind. */
+const sounds = (grade: Grade): readonly [number, number, number] => {
+  const shot = GAME.shots[grade];
+  return [shot.kick, shot.cheer, shot.wind];
 };
+
+const plan = (
+  anim: PlayerAnim,
+  at: number,
+  flight: number,
+  mood: CrowdMood,
+  sound: readonly [power: number, cheer: number, wind: number],
+  bulge = 0,
+  bursts = 0,
+  size = 0,
+  thump = true,
+): Plan => ({
+  anim,
+  at,
+  flight,
+  mood,
+  goal: bulge > 0,
+  bulge,
+  bursts,
+  size,
+  thump,
+  power: sound[0],
+  cheer: sound[1],
+  wind: sound[2],
+});
+
+const PLANS: Readonly<Record<Grade, Plan>> = {
+  worldie: plan("bicycle", BIKE_CROSS, 0.3, "roar", sounds("worldie"), 1, 7, 1),
+  golazo: plan(
+    "finesse",
+    KICK_AT,
+    0.62,
+    "cheer",
+    sounds("golazo"),
+    0.8,
+    5,
+    0.65,
+  ),
+  trivela: plan(
+    "trivela",
+    KICK_AT,
+    0.44,
+    "cheer",
+    sounds("trivela"),
+    0.85,
+    4,
+    0.4,
+  ),
+  toepoke: plan(
+    "toepoke",
+    POKE_AT,
+    0.27,
+    "cheer",
+    sounds("toepoke"),
+    0.4,
+    3,
+    0.2,
+    false,
+  ),
+  tapin: plan(
+    "tapin",
+    TAP_AT,
+    0.55,
+    "cheer",
+    sounds("tapin"),
+    0.3,
+    2,
+    0,
+    false,
+  ),
+  miss: plan("kick", KICK_AT, 1.1, "groan", sounds("miss")),
+  timeup: plan("kick", KICK_AT, 0, "hush", sounds("timeup"), 0, 0, 0, false),
+  skipped: plan(
+    "kick",
+    KICK_AT,
+    0.6,
+    "idle",
+    sounds("skipped"),
+    0,
+    0,
+    0,
+    false,
+  ),
+};
+
+/** The light touches of each shot's build-up (the set's trap, the dribble, the chest). */
+const TAP_TOUCHES: readonly number[] = [
+  SET_END,
+  SET_END + (TAP_AT - SET_END) / 3,
+  SET_END + (2 * (TAP_AT - SET_END)) / 3,
+];
+const SET_TOUCH: readonly number[] = [SET_END];
+const TOUCHES: Readonly<Record<Grade, readonly number[]>> = {
+  worldie: [BIKE_CROSS],
+  golazo: SET_TOUCH,
+  trivela: SET_TOUCH,
+  toepoke: SET_TOUCH,
+  tapin: TAP_TOUCHES,
+  miss: SET_TOUCH,
+  timeup: SET_TOUCH,
+  skipped: SET_TOUCH,
+};
+
+/** The result's sting, for the shots that have one. */
+const SCORE: Readonly<Partial<Record<Grade, SoundCue>>> = (() => {
+  const out: Partial<Record<Grade, SoundCue>> = {};
+  const shots: ScoreShot[] = [
+    "worldie",
+    "golazo",
+    "trivela",
+    "toepoke",
+    "tapin",
+    "miss",
+  ];
+  for (const shot of shots) out[shot] = { kind: "score", shot };
+  return out;
+})();
+
+// Which of a shot's one-off sounds have been sent (`Story.sent`).
+const S_HOOK = 1;
+const S_CROSS = 2;
+const S_STRIKE = 4;
+const S_RESULT = 8;
+const S_HORN = 16;
+const S_BACK = 32;
+const S_FLICK = 64;
 
 interface Story {
   grade: Grade;
+  plan: Plan;
   goal: boolean;
   /** Seconds since `playShot`. */
   st: number;
@@ -179,19 +395,30 @@ interface Story {
   /** Where the ball was when the shot was asked for, from his feet. */
   fromDX: number;
   fromDY: number;
-  /** The ball arrives (at the line, the keeper, the team-mate). */
+  /** The boot meets the ball, and how long it flies (`Plan.flight`, or the roll wide). */
+  strike: number;
+  flight: number;
+  /** The ball arrives (at the line, past the post, at the team-mate). */
   ta: number;
   /** It hits the back of the net (goals with a net), or -1. */
   th: number;
-  /** The keeper's leap for a top-corner goal, and the size it was worked out for. */
+  /** A miss dragged wide past the near post, rather than skied over the bar. */
+  low: boolean;
+  /** The keeper's leap for the golazo, and the size it was worked out for. */
   lift: number;
   liftFor: number;
-  /** He has run back (the worldie's slide) and the new ball starts its way to him. */
+  /** He is back in his place and the new ball starts its way to him. */
   deliverAt: number;
   deliverFor: number;
   /** The new ball is at his feet: the flick, then juggling again. */
   flickAt: number;
   end: number;
+  /** With reduced motion: the settled moment shown. */
+  still: number;
+  /** Sound: the one-off cues sent (`S_*`), the touches and fireworks heard so far. */
+  sent: number;
+  touched: number;
+  fired: number;
 }
 
 interface Promotion {
@@ -200,7 +427,10 @@ interface Promotion {
   length: number;
   onDone: (() => void) | undefined;
   swapped: boolean;
-  thudded: boolean;
+  /** Heard: the sweep, the ball in the close-up hitting the net, the new ground's cheer. */
+  swept: boolean;
+  netted: boolean;
+  cheered: boolean;
   area: BuildArea;
   colors: BuildColors | null;
 }
@@ -225,13 +455,52 @@ const newBall = (): Ball => ({
   spin: 0,
 });
 
+/** The balls, after the cast in the draw order. */
+const SHOT = CAST;
+const GIVEN = CAST + 1;
+const HELD = CAST + 2;
+const REST_NET = CAST + 3;
+const REST_WIDE = CAST + 4;
+const BALLS = 5;
+
 /** Keep a tier in range. */
 function tierOf(total: number): Tier {
   const t = tierFor(Number.isFinite(total) ? Math.max(0, total) : 0);
   return Math.max(0, Math.min(7, t)) as Tier;
 }
 
+/** A grade the scene knows; anything else plays as a pass. */
+function gradeOf(shot: string): Grade {
+  return Object.prototype.hasOwnProperty.call(PLANS, shot)
+    ? (shot as Grade)
+    : "skipped";
+}
+
+/** The fraction past the last whole number. */
+const frac = (v: number): number => v - Math.floor(v);
+
+/** A cubic from `p0` to `p1` over `u` 0 to 1, leaving at slope `m0` and arriving at `m1`. */
+function hermite(
+  u: number,
+  p0: number,
+  p1: number,
+  m0: number,
+  m1: number,
+): number {
+  const u2 = u * u;
+  const u3 = u2 * u;
+  return (
+    (2 * u3 - 3 * u2 + 1) * p0 +
+    (u3 - 2 * u2 + u) * m0 +
+    (3 * u2 - 2 * u3) * p1 +
+    (u3 - u2) * m1
+  );
+}
+
 export class CareerScene implements Scene {
+  /** Set by the host: what is to be heard (`docs/API_SCENES.md`, "Sound"). */
+  onSound: ((cue: SoundCue) => void) | null = null;
+
   private readonly seed: number;
   private readonly mode: Mode;
   private readonly ground: CareerGround;
@@ -240,29 +509,55 @@ export class CareerScene implements Scene {
   private L: CareerLayout = careerLayout(130, 281);
   private readonly homes = newHomes();
   private reduced = false;
+  private light: Lighting | null = null;
   /** Scene time: everything ambient runs on it. */
   private t = 0;
+  /** The opening's clock; it starts with the first update that has time in it. */
   private arrival = 0;
+  /** The opening has been heard; the referee has started play. */
+  private opened = false;
+  /** Frames with time still to hold on ink after a build before the opening starts. */
+  private hold = 0;
+  private started = false;
+  /** The picture needs preparing (its layers built) before the next frame. */
+  private stale = true;
+  /** The sprites have all been built once. */
+  private warmed = 0;
   private tier: Tier;
   private story: Story | null = null;
   private promotion: Promotion | null = null;
-  /** Seconds since full time, or -1. */
+  /** Seconds since full time, or -1; and whether its whistle and crowd have been heard. */
   private fullT = -1;
-  /** The juggle's clock (7 touches a second, 8 frames a loop). */
+  private fullWhistle = false;
+  private fullCheer = false;
+  /** The juggle's clock (7 frames a second, 8 frames a loop, a touch every 2). */
   private jug = 1;
+  /** The juggle's touches so far, and whether he was juggling last frame. */
+  private touches = 0;
+  private juggling = false;
+  /** Misses so far: they are skied and dragged wide by turns. */
+  private misses = 0;
   /** The last goal's ball, left lying: 0 none, 1 in the net, 2 out past the jumpers. */
-  private rest = 0;
+  private restNet = 0;
+  /** The last miss dragged wide, left lying by the near touchline. */
+  private restWide = false;
+  /** Where everyone stood when a shot or full time cut in, and how long ago (or -1). */
+  private readonly fromX = new Int32Array(CAST);
+  private readonly fromY = new Int32Array(CAST);
+  private carry = -1;
 
   private readonly kits = newKits();
   private readonly poses: Pose[] = [];
-  private readonly order = new Int8Array(CAST + 3);
-  private readonly depths = new Float32Array(CAST + 3);
-  private readonly shot: Ball = newBall();
-  private readonly given: Ball = newBall();
-  private readonly held: Ball = newBall();
+  private readonly order = new Int8Array(CAST + BALLS);
+  private readonly depths = new Float32Array(CAST + BALLS);
+  private readonly balls: Ball[] = [];
   private readonly probe: Ball = newBall();
   private readonly bulge: NetBulge = { y: 0, amount: 0 };
   private buffer: Surface | null = null;
+  /** The flight's point (`fly`) and the runs' (`dribble`), reused. */
+  private fx = 0;
+  private frow = 0;
+  private fh = 0;
   /** The options handed to the sprite painters, reused. */
   private readonly keeperOpts = { flipX: false };
   private readonly playerOpts = { flipX: false, youth: false };
@@ -279,6 +574,7 @@ export class CareerScene implements Scene {
     });
     this.ground.setLighting(DAY);
     for (let i = 0; i < CAST; i++) this.poses.push(newPose());
+    for (let i = 0; i < BALLS; i++) this.balls.push(newBall());
     fillHomes(this.homes, this.L);
   }
 
@@ -297,49 +593,63 @@ export class CareerScene implements Scene {
   setTotal(total: number): void {
     this.setTier(tierOf(total));
     this.fullT = -1;
-    this.rest = 0;
+    this.restNet = 0;
+    this.restWide = false;
   }
 
-  playShot(grade: Grade, onDone?: () => void): void {
+  playShot(shot: Grade, onDone?: () => void): void {
+    const grade = gradeOf(shot);
+    const p = PLANS[grade];
+    // any sprite not built yet, now rather than in the middle of the shot
+    while (this.warmed < WARM_COUNT && this.w > 0) this.warmStep();
     this.finishShot();
     this.finishPromotion();
-    // the ball he has now, relative to his feet: the set drops it from there
+    // the ball he has now, relative to his feet: the set brings it from there
     const b = this.probe;
     this.heroBall(b);
-    let fromDX = b.on ? b.x - this.L.heroX : JUGGLE_X[0];
-    let fromDY = b.on ? b.y - this.heroY() : JUGGLE_Y[0];
-    if (Math.abs(fromDX) > 24 || fromDY < -40 || fromDY > 8) {
-      fromDX = KICK_DX;
-      fromDY = KICK_DY;
+    let fromDX = b.on ? b.x - this.L.heroX : KICK_DX;
+    let fromDY = b.on ? b.y - this.heroY() : KICK_DY;
+    const prev = this.story;
+    if (prev && !prev.reduced && this.view(prev) < prev.deliverAt) {
+      // cut in before his new ball came: the last one stays where it went, and a new
+      // one is thrown on from the near side for this shot
+      if (prev.goal) this.restNet = this.ground.goal.kind === "jumpers" ? 2 : 1;
+      if (prev.low) this.restWide = true;
+      if (prev.goal || prev.grade === "miss") {
+        fromDX = -Math.round(16 * this.L.stageScale);
+        fromDY = this.L.h + 4 - this.heroY();
+      }
     }
+    this.capture();
     this.story = null;
     this.fullT = -1;
-    this.rest = 0;
     const reduced = this.reduced;
-    const flight = FLIGHT[grade];
-    const ta =
-      grade === "timeup"
-        ? STRIKE
-        : grade === "wide"
-          ? STRIKE + flight * 0.72
-          : STRIKE + flight;
-    const goal = GOALS.has(grade);
-    const th = goal && this.ground.goal.kind !== "jumpers" ? ta + 0.05 : -1;
-    // the new ball: how long until it is at his feet
-    const back = grade === "worldie" ? this.slideBack() : 0;
+    const strike = p.at + strikeDelay(p.anim);
+    const low = grade === "miss" && (this.misses++ & 1) === 1;
+    const flight = low ? WIDE_ROLL : p.flight;
+    let ta = strike + flight;
+    if (grade === "timeup") ta = strike;
+    else if (grade === "miss")
+      ta = low ? strike + this.wideTime() : strike + flight * 0.72;
+    const net = p.goal && this.ground.goal.kind !== "jumpers";
+    const th = net ? ta + 0.05 : -1;
+    // the new ball: how long until he is back in his place and it is at his feet
+    const out = Math.abs(this.outDX(grade)) + Math.abs(this.outDY(grade));
+    const back = out > 0 ? out / (RUN_BACK * this.L.stageScale) : 0;
     const deliverAt = RETURN + back;
-    const deliverFor =
-      grade === "timeup"
-        ? 0.35
-        : grade === "ontarget"
-          ? 1.15
-          : grade === "skipped"
-            ? 0.9
-            : 0.9;
+    const deliverFor = grade === "timeup" ? 0.35 : 0.9;
     const flickAt = deliverAt + deliverFor;
+    const settle = p.goal
+      ? th >= 0
+        ? th + 0.65
+        : ta + 0.95
+      : low
+        ? strike + WIDE_ROLL + 0.05
+        : REDUCED_VIEW;
     this.story = {
       grade,
-      goal,
+      plan: p,
+      goal: p.goal,
       st: 0,
       reduced,
       onDone,
@@ -348,19 +658,26 @@ export class CareerScene implements Scene {
       moodAt: reduced
         ? 0
         : grade === "timeup" || grade === "skipped"
-          ? STRIKE
-          : ta + (goal ? 0.05 : 0),
+          ? strike
+          : ta + (net ? 0.05 : 0),
       moodSet: false,
       fromDX,
       fromDY,
+      strike,
+      flight,
       ta,
       th,
+      low,
       lift: 0,
       liftFor: -1,
       deliverAt,
       deliverFor,
       flickAt,
       end: reduced ? SHOT_REDUCED_SECONDS + REDUCED_HOLD : flickAt + FLICK,
+      still: Math.min(RETURN - 0.05, Math.max(REDUCED_VIEW, settle)),
+      sent: 0,
+      touched: 0,
+      fired: 0,
     };
     this.applyMood(this.story);
   }
@@ -375,32 +692,41 @@ export class CareerScene implements Scene {
     }
     const L = this.L;
     const tall = [16, 18, 30, 48, 82, 82, 82, 82][to];
-    this.promotion = {
+    const top = Math.max(2, L.farTouchY - tall);
+    const bottom = L.groundY + 9;
+    const p: Promotion = {
       to,
       t: 0,
       length: this.reduced ? PROMOTION_REDUCED_SECONDS : PROMOTION_SECONDS,
       onDone,
       swapped: false,
-      thudded: false,
+      swept: false,
+      netted: false,
+      cheered: false,
       area: {
-        top: Math.max(2, L.farTouchY - tall),
-        bottom: L.groundY + 9,
+        top,
+        bottom,
         w: L.w,
         cx: L.cx,
-        k: L.stageScale,
+        ...closeUpSize(L.w, L.actionTop, L.groundY),
       },
       colors: null,
     };
-    if (this.reduced) this.swapTier(this.promotion);
+    this.promotion = p;
+    if (this.reduced) this.swapTier(p);
   }
 
   showFullTime(total: number): void {
     this.finishShot();
     this.finishPromotion();
+    this.capture();
     this.story = null;
-    this.rest = 0;
+    this.restNet = 0;
+    this.restWide = false;
     this.setTier(tierOf(total));
     this.fullT = 0;
+    this.fullWhistle = false;
+    this.fullCheer = false;
     this.ground.setMood(this.tier === 7 ? "party" : "cheer", this.t);
   }
 
@@ -411,47 +737,113 @@ export class CareerScene implements Scene {
   resize(w: number, h: number): void {
     const W = Math.max(1, Math.round(Number.isFinite(w) ? w : 1));
     const H = Math.max(1, Math.round(Number.isFinite(h) ? h : 1));
+    if (W !== this.w || H !== this.h) this.stale = true;
     this.w = W;
     this.h = H;
     this.L = careerLayout(W, H);
     fillHomes(this.homes, this.L);
     this.ground.resize(W, H);
+    // built now, with the size and the light known, not in a frame that moves anything
+    if (this.stale && this.light) this.prepare();
   }
 
   setLighting(light: Lighting): void {
+    if (light !== this.light) this.stale = true;
+    this.light = light;
     this.ground.setLighting(light);
+    if (this.stale) this.prepare();
   }
 
   setReducedMotion(on: boolean): void {
     this.reduced = on;
   }
 
+  /** The bed of sound: the park at tiers 0 and 1, a ground at 2 and 3, then a stadium. */
+  ambience(): Ambience {
+    const tier = this.tier;
+    return {
+      venue: tier <= 1 ? "park" : tier <= 3 ? "ground" : "stadium",
+      crowd: CROWD[tier],
+      night: this.ground.light.phase === "night",
+      tier,
+    };
+  }
+
   update(dt: number): void {
     const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+    // A frame that has to build the picture is not part of the opening: its clock starts
+    // on the frame after, and never takes more than a frame's step, so a stall in the
+    // page's first frames shows as a moment's wait, never as a jump. (The picture is
+    // normally built already, by `setLighting`.)
+    const built = this.stale && this.prepare();
     this.t += step;
-    this.arrival += step;
-    if (this.fullT >= 0) this.fullT += step;
+    if (!built && this.w > 0 && step > 0) {
+      if (this.hold > 0 && this.arrival === 0) this.hold--;
+      else this.open(step);
+    }
+    // the shots' sprites, a set a frame, once the opening is over
+    if (this.arrival >= ARRIVAL_SECONDS) this.warmStep();
+    if (this.fullT >= 0) {
+      if (!this.fullWhistle) {
+        this.fullWhistle = true;
+        this.sound(FULL_WHISTLE);
+      }
+      this.fullT += step;
+      if (!this.fullCheer && this.fullT >= FULL_CHEER) {
+        this.fullCheer = true;
+        this.cheer(this.tier === 7 ? GAME.winnersCheer : GAME.fullTimeCheer);
+      }
+    }
+    if (this.carry >= 0) {
+      this.carry += step;
+      if (this.carry >= CARRY || this.reduced) this.carry = -1;
+    }
     if (!this.story) this.jug += step * (this.reduced ? 0.5 : 1);
 
     const story = this.story;
     if (story) {
       story.st += step;
       this.applyMood(story);
+      this.shotSounds(story);
       if (!story.called && story.st >= story.cbAt) this.callBack(story);
       if (this.story === story && story.st >= story.end) {
         this.story = null;
         this.jug = story.reduced ? 0 : 1;
-        if (story.goal) this.rest = this.ground.goal.kind === "jumpers" ? 2 : 1;
+        if (story.goal)
+          this.restNet = this.ground.goal.kind === "jumpers" ? 2 : 1;
+        if (story.low) this.restWide = true;
       }
     }
 
+    // the juggle's touches: a very quiet tap on every other one (the player is typing)
+    const juggling = !this.story && this.fullT < 0;
+    const touches = Math.floor(this.jug * 3.5);
+    if (
+      juggling &&
+      this.juggling &&
+      touches !== this.touches &&
+      (touches & 1) === 0
+    )
+      this.sound(JUGGLE_TOUCH);
+    this.juggling = juggling;
+    this.touches = touches;
+
     const p = this.promotion;
     if (p) {
+      if (!p.swept) {
+        p.swept = true;
+        if (!this.reduced) this.sound(SWEEP);
+      }
       p.t += step;
+      if (!p.netted && p.t >= BUILD.hit) {
+        p.netted = true;
+        if (!this.reduced) this.sound(NET);
+      }
       if (!p.swapped && p.t >= BUILD.swap) this.swapTier(p);
-      if (!p.thudded && p.t >= BUILD.thud && !this.reduced) {
-        p.thudded = true;
+      if (!p.cheered && (p.t >= BUILD.cheer || this.reduced)) {
+        p.cheered = true;
         this.ground.setMood("cheer", this.t);
+        this.cheer(0.45);
       }
       if (p.t >= p.length) this.finishPromotion();
     }
@@ -459,26 +851,26 @@ export class CareerScene implements Scene {
 
   draw(s: Surface): void {
     if (s.w !== this.w || s.h !== this.h) this.resize(s.w, s.h);
+    const opening = !this.reduced && this.arrival < ARRIVAL_SECONDS;
+    const r = opening ? Math.round(this.irisRadius()) : 0;
+    if (opening && r < 1) {
+      // shut: there is nothing to paint under it
+      s.clear(P.ink);
+      return;
+    }
     const dx = this.shakeX();
     const dy = this.shakeY();
     if (dx === 0 && dy === 0) {
       this.paint(s);
     } else {
-      let b = this.buffer;
-      if (!b || b.w !== s.w || b.h !== s.h)
-        b = this.buffer = new Surface(s.w, s.h);
+      const b = this.scratch(s.w, s.h);
       this.paint(b);
       s.copy(b, 0, 0);
       s.copy(b, dx, dy);
     }
-    // the arrival: the picture opens out from the middle in steps, over ink
-    if (!this.reduced && this.arrival < ARRIVAL_SECONDS) {
-      const w = s.w;
-      const stepOpen = Math.floor((this.arrival / ARRIVAL_SECONDS) * 6) / 6;
-      const open = Math.round((w / 2) * stepOpen);
-      const left = Math.round(w / 2) - open;
-      s.rect(0, 0, left, s.h, P.ink);
-      s.rect(left + open * 2, 0, w - left - open * 2, s.h, P.ink);
+    if (opening) {
+      const L = this.L;
+      drawIris(s, this.irisX(), L.groundY - 10, r, P.ink);
     }
   }
 
@@ -487,14 +879,29 @@ export class CareerScene implements Scene {
   // -------------------------------------------------------------------------
 
   private setTier(tier: Tier): void {
+    if (tier !== this.tier) this.stale = true;
     this.tier = tier;
     this.ground.setTier(tier);
+  }
+
+  /** The opening moves on: heard as it starts, the referee's whistle as it ends. */
+  private open(step: number): void {
+    if (this.arrival >= ARRIVAL_SECONDS) return;
+    if (!this.opened) {
+      this.opened = true;
+      this.sound(OPENING);
+    }
+    this.arrival += Math.min(step, ARRIVAL_STEP);
+    if (this.arrival >= ARRIVAL_SECONDS && !this.started) {
+      this.started = true;
+      if (this.fullT < 0) this.sound(WHISTLE);
+    }
   }
 
   private applyMood(story: Story): void {
     if (story.moodSet || story.st < story.moodAt) return;
     story.moodSet = true;
-    this.ground.setMood(MOODS[story.grade], this.t);
+    this.ground.setMood(story.plan.mood, this.t);
   }
 
   private callBack(story: Story): void {
@@ -515,7 +922,8 @@ export class CareerScene implements Scene {
     if (p.swapped) return;
     p.swapped = true;
     this.setTier(p.to);
-    this.rest = 0;
+    this.restNet = 0;
+    this.restWide = false;
   }
 
   private finishPromotion(): void {
@@ -524,6 +932,159 @@ export class CareerScene implements Scene {
     this.swapTier(p);
     this.promotion = null;
     p.onDone?.();
+  }
+
+  /** A surface the size of the canvas, kept for shakes and for preparing. */
+  private scratch(w: number, h: number): Surface {
+    let b = this.buffer;
+    if (!b || b.w !== w || b.h !== h) b = this.buffer = new Surface(w, h);
+    return b;
+  }
+
+  /**
+   * Build everything a frame needs (the ground's layers for this size, light and tier, the
+   * kits, the sprites of the picture as it stands) by painting a frame off screen. Called as
+   * soon as the size and the light are known (and from `update` after a new tier), so the
+   * frame that pays for it is never one the opening is counting. The sprites the shots use
+   * are built later, a set a frame once the opening is over (`warmStep`), so this frame is
+   * short too: a long one just before the opening holds its first frame. True if it did.
+   */
+  private prepare(): boolean {
+    if (this.w < 1 || this.h < 1) return false;
+    this.stale = false;
+    // the browser presents the frames after a long one late: hold those on ink
+    if (this.arrival === 0) this.hold = OPEN_HOLD;
+    this.paint(this.scratch(this.w, this.h));
+    return true;
+  }
+
+  /**
+   * Build the next set of sprites a shot uses, rather than in the middle of one: each shot
+   * move adult and youth, the reactions, the keeper's dives (`WARM_COUNT` sets in all).
+   */
+  private warmStep(): void {
+    const i = this.warmed;
+    if (i >= WARM_COUNT || this.w < 1) return;
+    this.warmed++;
+    const b = this.scratch(this.w, this.h);
+    const kits = this.kitsNow();
+    const S = SHOT_ANIMS.length * 2;
+    if (i < S) {
+      const opts = (i & 1) === 1 ? WARM_YOUTH : WARM_ADULT;
+      drawPlayer(b, SHOT_ANIMS[i >> 1], 0, 20, 30, kits[HERO], opts);
+    } else if (i < S + WARM_PLAYER.length) {
+      drawPlayer(b, WARM_PLAYER[i - S], 0, 20, 30, kits[HERO], WARM_ADULT);
+    } else {
+      const k = KEEPER_WARM[i - S - WARM_PLAYER.length];
+      drawKeeper(b, k, 0, 20, 30, kits[KEEPER], WARM_ADULT);
+    }
+  }
+
+  private kitsNow(): readonly Kit[] {
+    ensureKits(this.kits, this.tier, this.mode, this.ground.light);
+    return this.kits.list;
+  }
+
+  /** Where everyone is right now: a new shot or full time moves them on from here. */
+  private capture(): void {
+    if (this.reduced) return;
+    this.poseCast(this.L.heroX);
+    for (let i = 0; i < CAST; i++) {
+      this.fromX[i] = this.poses[i].x;
+      this.fromY[i] = this.poses[i].y;
+    }
+    this.carry = 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // Sound
+  // -------------------------------------------------------------------------
+
+  private sound(cue: SoundCue): void {
+    this.onSound?.(cue);
+  }
+
+  private kick(power: number): void {
+    this.onSound?.({ kind: "kick", power });
+  }
+
+  private cheer(size: number): void {
+    this.onSound?.({ kind: "cheer", size });
+  }
+
+  /** True once, the first time `when` holds for this cue of the shot. */
+  private due(story: Story, cue: number, when: boolean): boolean {
+    if (!when || (story.sent & cue) !== 0) return false;
+    story.sent |= cue;
+    return true;
+  }
+
+  /**
+   * A shot's sounds, as its moments come: the build-up's touches and passes, the strike,
+   * the wind of a hard shot in flight, the result (its sting and the crowd), the World
+   * Cup's horns for a goal, the fireworks, then the new ball. With reduced motion only the
+   * strike, the result and the horns, at once.
+   */
+  private shotSounds(story: Story): void {
+    const st = story.st;
+    const p = story.plan;
+    const g = story.grade;
+    const reduced = story.reduced;
+    if (!reduced) {
+      const touches = TOUCHES[g];
+      while (story.touched < touches.length && st >= touches[story.touched]) {
+        story.touched++;
+        this.sound(TOUCH);
+      }
+      if (g === "worldie") {
+        // hooked out to A, and A's first-time cross back
+        if (this.due(story, S_HOOK, st >= 0.03)) this.kick(GAME.hook);
+        if (this.due(story, S_CROSS, st >= BIKE_PASS)) this.kick(GAME.cross);
+      }
+    }
+    const power = g === "miss" && story.low ? GAME.lowMiss : p.power;
+    if (power > 0 && this.due(story, S_STRIKE, reduced || st >= story.strike))
+      this.kick(power);
+    if (
+      !reduced &&
+      p.wind > 0 &&
+      !story.low &&
+      st >= story.strike &&
+      st < story.ta
+    ) {
+      const v = (st - story.strike) / Math.max(0.01, story.ta - story.strike);
+      this.onSound?.({ kind: "wind", speed: p.wind * (1 - 0.35 * v) });
+    }
+    const resultAt = g === "timeup" ? story.moodAt - 0.05 : story.moodAt;
+    if (this.due(story, S_RESULT, st >= resultAt)) {
+      const sting = SCORE[g];
+      if (sting) this.sound(sting);
+      if (story.goal) this.cheer(p.cheer);
+      else if (g === "miss") this.sound(story.low ? OOH : GROAN);
+      else if (g === "timeup") this.sound(WHISTLE);
+    }
+    const stadium = this.tier >= 4;
+    if (
+      story.goal &&
+      this.tier >= WORLD_CUP &&
+      this.due(story, S_HORN, st >= story.moodAt + (reduced ? 0 : HORN_AFTER))
+    )
+      this.sound({ kind: "vuvuzela", size: p.cheer });
+    if (reduced) return;
+    if (story.goal && stadium) {
+      // each of the fireworks over the stand as it goes up (as `drawGoalFireworks` has it)
+      const age = Math.floor((st - story.ta - 0.1) * 15) / 15;
+      while (
+        story.fired < p.bursts &&
+        age >= fireworkStart(story.fired, p.size, this.seed)
+      ) {
+        story.fired++;
+        this.sound(FIREWORK);
+      }
+    }
+    if (g === "skipped" && this.due(story, S_BACK, st >= story.deliverAt + 0.2))
+      this.kick(GAME.knockBack);
+    if (this.due(story, S_FLICK, st >= story.flickAt)) this.sound(JUGGLE_TOUCH);
   }
 
   // -------------------------------------------------------------------------
@@ -540,19 +1101,107 @@ export class CareerScene implements Scene {
     return pd ? pd.top : this.L.groundY;
   }
 
-  /** The worldie's slide: how far, and how long the run back takes. */
+  /** The opening iris's centre: between him and the goal, the middle of the stage. */
+  private irisX(): number {
+    return Math.round((this.L.heroX + this.L.goalX) / 2);
+  }
+
+  /**
+   * How open the iris is: a radius in pixels, not yet rounded. Out of nothing, quick at
+   * first and slowing as it passes a ring round the stage (half the hero-to-goal distance
+   * plus 18 px) at `ARRIVAL_RING`, never stopping there, then on out past the farthest
+   * corner, easing to the end at `ARRIVAL_SECONDS`: the home screen's closing played the
+   * other way, without its stop on the ring. Two cubics that meet at the ring with the
+   * same speed, so it changes every frame and never jerks.
+   */
+  private irisRadius(): number {
+    const L = this.L;
+    const cx = this.irisX();
+    const cy = L.groundY - 10;
+    const ring = Math.round((L.goalX - L.heroX) / 2) + 18;
+    const far = Math.max(
+      ring,
+      Math.ceil(Math.hypot(Math.max(cx, L.w - cx), Math.max(cy, L.h - cy))) + 1,
+    );
+    const a = this.arrival;
+    if (a <= 0) return 0;
+    const out = ARRIVAL_SECONDS - ARRIVAL_RING;
+    // its speed as it passes the ring, in pixels a second
+    const pass = (RING_SPEED * (far - ring)) / out;
+    if (a < ARRIVAL_RING) {
+      return hermite(
+        a / ARRIVAL_RING,
+        0,
+        ring,
+        1.6 * ring,
+        pass * ARRIVAL_RING,
+      );
+    }
+    const u = clamp((a - ARRIVAL_RING) / out);
+    return hermite(u, ring, far, pass * out, 0);
+  }
+
+  /** The golazo's knee slide: how far towards the near corner. */
   private slideDX(): number {
     return Math.round(18 * this.L.stageScale);
   }
 
-  private slideBack(): number {
-    return (this.slideDX() + 5) / (70 * this.L.stageScale);
+  /** Where he taps it in from: just past where the keeper went down. */
+  private tapX(): number {
+    return this.L.keeperX - Math.round(8 * this.L.stageScale);
+  }
+
+  /** Where he lunges for the toe poke, the keeper rushing out at him. */
+  private pokeX(): number {
+    return this.L.keeperX - Math.round(41 * this.L.stageScale);
+  }
+
+  /** Where his reaction leaves him, from his place, when everyone heads back. */
+  private outDX(g: Grade): number {
+    if (g === "golazo") return this.slideDX();
+    if (g === "tapin") return this.tapX() - this.L.heroX;
+    if (g === "toepoke") return this.pokeX() + 2 - this.L.heroX;
+    return 0;
+  }
+
+  private outDY(g: Grade): number {
+    return g === "golazo" ? 5 : g === "tapin" ? TAP_DY : 0;
+  }
+
+  /** How far off his line the keeper comes (negative: towards the shooter). */
+  private keeperOut(g: Grade): number {
+    const k = this.L.stageScale;
+    if (g === "toepoke") return -Math.round(16 * k);
+    if (g === "tapin") return -Math.round(14 * k);
+    return 0;
+  }
+
+  /** Where a miss dragged wide comes to rest, by the near touchline past the goal. */
+  private wideEndX(): number {
+    const L = this.L;
+    return Math.min(
+      this.ground.goal.lineX + Math.round(18 * L.stageScale),
+      L.w - 3,
+    );
+  }
+
+  private wideEndRow(): number {
+    const L = this.L;
+    return Math.min(L.nearTouchY - 3, L.groundY + 12);
+  }
+
+  /** How long after the strike a miss dragged wide passes the goal line. */
+  private wideTime(): number {
+    const sx = this.L.heroX + KICK_DX;
+    const span = this.wideEndX() - sx;
+    const f = span > 0 ? clamp((this.ground.goal.lineX + 1 - sx) / span) : 1;
+    return WIDE_ROLL * (1 - Math.sqrt(1 - f));
   }
 
   /** The time a shot is drawn at (with reduced motion, its settled moment). */
   private view(story: Story): number {
     if (!story.reduced) return story.st;
-    return story.st < story.end ? REDUCED_VIEW : story.end;
+    return story.st < story.end ? story.still : story.end;
   }
 
   /** The ball the hero is playing with right now, wherever it is. */
@@ -600,6 +1249,66 @@ export class CareerScene implements Scene {
     b.spin = Math.floor(this.jug * 9);
   }
 
+  /**
+   * A goal's flight at `v` (0 at the strike, 1 on the goal line): its x, the row of its
+   * shadow and its height over that row, into `fx`, `frow`, `fh`.
+   */
+  private fly(story: Story, v: number): void {
+    const L = this.L;
+    const gy = L.groundY;
+    const goal = this.ground.goal;
+    const lx = goal.lineX + 1;
+    const top = Math.max(4, gy - goal.barY - 5);
+    const hy = this.heroY();
+    const x0 = L.heroX + KICK_DX;
+    switch (story.grade) {
+      case "worldie": {
+        // flat and a little downhill from over his head into the top corner
+        const o = this.youth() ? 9 : 4;
+        this.fx = lerp(L.heroX + BIKE_X[o], lx, v);
+        this.frow = lerp(hy, gy - 2, v);
+        this.fh = lerp(-BIKE_Y[o] - 2, top, v);
+        return;
+      }
+      case "golazo":
+        // bent out towards the camera and back in, rising under the bar at the far post
+        this.fx = lerp(x0, lx, v * (1.15 - 0.15 * v));
+        this.frow = lerp(hy, gy - 2, v) + 4 * arc(v);
+        this.fh = top * (1.9 * v - 0.9 * v * v);
+        return;
+      case "toepoke": {
+        // scuffed along the grass past the keeper's gloves, a pixel's bobble now and then
+        const tx = this.pokeX() + KICK_DX;
+        this.fx = lerp(tx, lx, v);
+        this.frow = lerp(hy, gy + 1, v);
+        this.fh = v > 0.15 && (Math.floor(v * 7) & 1) === 1 ? 1 : 0;
+        return;
+      }
+      case "tapin": {
+        // rolled in along the grass at walking pace
+        const tx = this.tapX() + KICK_DX;
+        this.fx = lerp(tx, lx, v * (1.3 - 0.3 * v));
+        this.frow = lerp(hy, gy, v);
+        this.fh = 0;
+        return;
+      }
+      default:
+        // the trivela, off the outside of the boot: up quickly, flattening and dipping
+        // late into the near corner, its shadow swinging away from the camera and back
+        this.fx = lerp(x0, lx, v * (0.9 + 0.1 * v));
+        this.frow = lerp(hy, gy + 1, v) - 4 * arc(v);
+        this.fh = top * v * (1.25 - 0.45 * v - 0.55 * v * v);
+        return;
+    }
+  }
+
+  /** The tap in's run in (`u` 0 to 1): his x and row into `fx`, `frow`. */
+  private dribble(u: number): void {
+    const e = u * u * (3 - 2 * u);
+    this.fx = this.L.heroX + (this.tapX() - this.L.heroX) * e;
+    this.frow = this.heroY() + TAP_DY * e;
+  }
+
   /** The shot's ball at `st` (section 4, by grade). */
   private shotBall(story: Story, st: number, b: Ball): void {
     const L = this.L;
@@ -607,13 +1316,17 @@ export class CareerScene implements Scene {
     const hx = L.heroX;
     const hy = this.heroY();
     const g = story.grade;
-    const left = g === "skipped";
-    const sx = hx + (left ? KICK_LEFT_DX : KICK_DX);
-    const sy = hy + KICK_DY;
     b.on = true;
     b.sy = hy;
     b.depth = hy + 0.5;
     b.spin = Math.floor(st * 18);
+    if (g === "worldie" && st < story.strike) {
+      this.bicycleBall(story, st, b);
+      return;
+    }
+    const left = g === "skipped";
+    const sx = hx + (left ? KICK_LEFT_DX : KICK_DX);
+    const sy = hy + KICK_DY;
     if (st < SET_END) {
       // the set: it drops to his feet
       const u = st / SET_END;
@@ -623,17 +1336,37 @@ export class CareerScene implements Scene {
     }
     b.x = sx;
     b.y = sy;
-    if (st < STRIKE) {
+    if (g === "tapin" && st < story.strike) {
+      // the run in: pushed ahead of him a touch at a time
+      const u = clamp((st - SET_END) / (TAP_AT - SET_END));
+      this.dribble(u);
+      const row = Math.round(this.frow);
+      const push = Math.round(3 * Math.sin(Math.PI * frac(u * 3)));
+      b.x = Math.round(this.fx) + KICK_DX + push;
+      b.y = row - 2;
+      b.sy = row;
+      b.depth = row + 0.5;
+      b.spin = Math.floor(st * 12);
+      return;
+    }
+    if (g === "toepoke" && st < story.strike) {
+      // a heavy touch: knocked on ahead of him, slowing, to where he stretches for it
+      const u = clamp((st - SET_END) / (story.strike - SET_END));
+      const e = 1 - (1 - u) * (1 - u);
+      b.x = Math.round(sx + (this.pokeX() - hx) * e);
+      b.spin = Math.floor(st * 14);
+      return;
+    }
+    if (st < story.strike) {
       b.spin = 0;
       return;
     }
     const goal = this.ground.goal;
     const lx = goal.lineX;
-    const flight = FLIGHT[g];
-    const v = flight > 0 ? (st - STRIKE) / flight : 1;
+    const v = story.flight > 0 ? (st - story.strike) / story.flight : 1;
     switch (g) {
       case "timeup": {
-        const u = clamp((st - STRIKE) / 0.45);
+        const u = clamp((st - story.strike) / 0.45);
         b.x = sx + Math.round(4 * easeOutCubic(u));
         if (u >= 1) b.spin = 0;
         return;
@@ -651,30 +1384,20 @@ export class CareerScene implements Scene {
         if (u >= 1) b.spin = 0;
         return;
       }
-      case "ontarget": {
-        const youth = this.youth();
-        const kx = L.keeperX + (youth ? -5 : HOLD.x);
-        const ky = gy + (youth ? -8 : HOLD.y);
-        if (v < 1) {
-          b.x = Math.round(lerp(sx, kx, v));
-          b.y = Math.round(lerp(sy, ky, v) - arc(v) * 2);
+      case "miss": {
+        if (story.low) {
+          // dragged wide: along the grass, outside the near post, rolling to a stop
+          const u = clamp(v);
+          const e = 1 - (1 - u) * (1 - u);
+          const row = Math.round(lerp(hy, this.wideEndRow(), e));
+          b.x = Math.round(lerp(sx, this.wideEndX(), e));
+          b.y = row - 2;
+          b.sy = row;
+          b.depth = row + 0.5;
+          b.spin = u >= 1 ? 0 : Math.floor(st * 18 * (1 - u));
           return;
         }
-        // in his hands (the child holds it up over his head)
-        if (youth) {
-          const f = Math.floor((st - story.ta) * 3) & 1;
-          b.x = L.keeperX - LIFT[4 + f * 2] - 1;
-          b.y = gy + LIFT[5 + f * 2] - 2;
-        } else {
-          b.x = kx;
-          b.y = ky;
-        }
-        b.sy = -1;
-        b.depth = gy + 0.6;
-        b.spin = 0;
-        return;
-      }
-      case "wide": {
+        // skied: over the bar and away, gone behind the far side as it comes down
         const ex = Math.min(lx + Math.round(24 * L.stageScale), L.w - 4);
         const ey = L.farTouchY - 6;
         const peak = Math.max(L.actionTop - 2, L.boardShrunkY + 8);
@@ -685,42 +1408,34 @@ export class CareerScene implements Scene {
         const row = Math.round(lerp(hy, L.farTouchY, u));
         b.sy = row >= L.farTouchY && u < 1 ? row : -1;
         b.depth = row + 0.5;
-        // over the bar and away: gone behind the far side as it comes down
         if (u >= 1 || (u > 0.5 && b.y >= L.farTouchY - 10)) b.on = false;
         return;
       }
       default:
         break;
     }
-    // the goals
-    const top = Math.max(4, gy - goal.barY - 5);
+    // the goals: in flight
     if (v < 1) {
-      let x: number;
-      let h: number;
-      if (g === "worldie") {
-        x = lerp(sx, lx + 1, v);
-        h = top * (0.75 * v + 0.25 * v * v);
-      } else if (g === "topbins") {
-        x = lerp(sx, lx + 1, v * (1.25 - 0.25 * v));
-        h = top * (v + 3.2 * v * (1 - v));
-      } else {
-        x = lerp(sx, lx + 1, v);
-        h = 1 - v;
-      }
-      b.x = Math.round(x);
-      b.y = Math.round(hy - 2 - h);
+      this.fly(story, v);
+      const row = Math.round(this.frow);
+      b.x = Math.round(this.fx);
+      b.y = Math.round(this.frow - 2 - this.fh);
+      b.sy = row;
+      b.depth = row + 0.5;
       return;
     }
-    const lineH = g === "goal" ? 0 : top;
-    const lineY = gy - 2 - lineH;
+    this.fly(story, 1);
+    const lineRow = this.frow;
+    const lineH = this.fh;
+    const lineY = Math.round(lineRow - 2 - lineH);
     if (goal.kind === "jumpers") {
       // no net: it runs on towards the hedge
       const u = clamp((st - story.ta) / 0.9);
       const e = easeOutCubic(u);
-      const row = Math.round(lerp(gy, L.farTouchY + 4, e));
+      const row = Math.round(lerp(lineRow, L.farTouchY + 4, e));
       const h =
         lineH * (1 - u) * (1 - u) * (1 - u) +
-        3 * arc(clamp((u - 0.3) / 0.3)) +
+        (lineH > 2 ? 3 : 1) * arc(clamp((u - 0.3) / 0.3)) +
         arc(clamp((u - 0.6) / 0.15));
       b.x = Math.round(lerp(lx + 1, lx + Math.round(26 * L.stageScale), e));
       b.y = Math.round(row - 2 - h);
@@ -733,6 +1448,7 @@ export class CareerScene implements Scene {
     const backX = lx + Math.max(3, goal.depth - 3);
     const th = story.th;
     b.depth = gy - 0.5;
+    b.sy = gy;
     if (st < th) {
       b.x = Math.round(lerp(lx + 1, backX, (st - story.ta) / (th - story.ta)));
       b.y = lineY;
@@ -746,9 +1462,68 @@ export class CareerScene implements Scene {
       const q = (since - 0.12) / 0.33;
       b.y = Math.round(lerp(lineY, gy - 2, q * q));
     } else {
-      b.y = gy - 2 - Math.round(arc(clamp((since - 0.45) / 0.16)) * 2);
+      const bounce = lineY < gy - 4 ? 2 : 0;
+      b.y = gy - 2 - Math.round(arc(clamp((since - 0.45) / 0.16)) * bounce);
       if (since > 0.61) b.spin = 0;
     }
+  }
+
+  /**
+   * The worldie's ball until the strike: hooked out to team-mate A, lofted straight back
+   * by him to the hero's chest, then on him through frames 0 to 4 (chested up, the top,
+   * dropping, over his head at his boot).
+   */
+  private bicycleBall(story: Story, st: number, b: Ball): void {
+    const L = this.L;
+    const hx = L.heroX;
+    const hy = this.heroY();
+    const o = this.youth() ? 5 : 0;
+    const ax = this.homes.x[MATE_A] + KICK_DX;
+    const arow = this.homes.y[MATE_A];
+    if (st < BIKE_CROSS) {
+      let x0: number;
+      let x1: number;
+      let r0: number;
+      let r1: number;
+      let h0: number;
+      let h1: number;
+      let loft: number;
+      let u: number;
+      if (st < BIKE_PASS) {
+        // out to A: from wherever it was, a loop down to his feet
+        u = st / BIKE_PASS;
+        x0 = hx + story.fromDX;
+        x1 = ax;
+        r0 = hy;
+        r1 = arow;
+        h0 = -story.fromDY - 2;
+        h1 = 0;
+        loft = 8;
+      } else {
+        // A's first-time cross, lofted back to his chest
+        u = (st - BIKE_PASS) / (BIKE_CROSS - BIKE_PASS);
+        x0 = ax;
+        x1 = hx + BIKE_X[o];
+        r0 = arow;
+        r1 = hy;
+        h0 = 0;
+        h1 = -BIKE_Y[o] - 2;
+        loft = 22;
+      }
+      const row = lerp(r0, r1, u);
+      b.x = Math.round(lerp(x0, x1, u));
+      b.y = Math.round(row - 2 - lerp(h0, h1, u) - loft * arc(u));
+      b.sy = Math.round(row);
+      b.depth = row + 0.5;
+      return;
+    }
+    // on him: between this frame's spot and the next
+    const f = Math.min(4, (st - BIKE_CROSS) * 10);
+    const i = Math.min(3, Math.floor(f));
+    const q = f - i;
+    b.x = Math.round(hx + lerp(BIKE_X[o + i], BIKE_X[o + i + 1], q));
+    b.y = Math.round(hy + lerp(BIKE_Y[o + i], BIKE_Y[o + i + 1], q));
+    b.spin = Math.floor(st * 10);
   }
 
   /** The new ball on its way to his feet (after the shot), then the flick up. */
@@ -789,22 +1564,6 @@ export class CareerScene implements Scene {
         (u * story.deliverFor - strike) / (story.deliverFor - strike),
       );
       e = 1 - (1 - w) * (1 - w);
-    } else if (g === "ontarget") {
-      // the keeper rolls it out: down from his hands, then along the grass
-      const youth = this.youth();
-      const kx = L.keeperX + (youth ? -5 : HOLD.x);
-      const ky = L.groundY + (youth ? -8 : HOLD.y);
-      const drop = 0.25 / story.deliverFor;
-      if (u < drop) {
-        const q = u / drop;
-        b.x = Math.round(lerp(kx, kx - 6, q));
-        b.y = Math.round(lerp(ky, L.groundY - 2, q * q));
-        b.sy = L.groundY;
-        return;
-      }
-      x0 = kx - 6;
-      row0 = L.groundY;
-      e = easeOutCubic((u - drop) / (1 - drop));
     } else {
       // thrown on from the near side, a bounce, then rolling to his feet
       x0 = hx - Math.round(16 * L.stageScale);
@@ -822,9 +1581,8 @@ export class CareerScene implements Scene {
   /** The net's bulge after a goal, 0 to 1. */
   private bulgeAmount(story: Story, st: number): number {
     if (story.th < 0 || st < story.th) return 0;
-    const peak =
-      story.grade === "worldie" ? 1 : story.grade === "topbins" ? 0.8 : 0.65;
-    return peak * clamp(1 - (st - story.th) / BULGE_SECONDS);
+    const fade = story.grade === "worldie" ? BULGE_WORLDIE : BULGE_SECONDS;
+    return story.plan.bulge * clamp(1 - (st - story.th) / fade);
   }
 
   // -------------------------------------------------------------------------
@@ -860,49 +1618,51 @@ export class CareerScene implements Scene {
     const hero = this.poses[HERO];
     hero.y = this.heroY();
     hero.depth = hero.y + 0.4;
+    const story = this.story;
     if (this.fullT >= 0) {
       this.poseFullTime();
-      return;
-    }
-    const story = this.story;
-    if (!story) {
+    } else if (!story) {
       hero.anim = "juggle";
       hero.frame = Math.floor(this.jug * 7);
-      return;
+    } else {
+      this.poseStory(story, this.view(story));
     }
-    this.poseStory(story, this.view(story));
+    if (this.carry >= 0) this.carryOn();
+  }
+
+  /** Those caught away from where they now belong run there (`CARRY` seconds). */
+  private carryOn(): void {
+    const u = clamp(this.carry / CARRY);
+    const e = u * u * (3 - 2 * u);
+    const k = this.L.stageScale;
+    for (let i = 0; i < CAST; i++) {
+      const p = this.poses[i];
+      if (!p.on) continue;
+      const dx = p.x - this.fromX[i];
+      const dy = p.y - this.fromY[i];
+      if (dx === 0 && dy === 0) continue;
+      p.x = Math.round(this.fromX[i] + dx * e);
+      p.y = Math.round(this.fromY[i] + dy * e);
+      p.depth = p.y + (i === HERO ? 0.4 : 0);
+      if (Math.abs(dx) + Math.abs(dy) > 3 * k && u < 1) {
+        if (p.keeper) {
+          p.kanim = "ready";
+          p.frame = Math.floor(this.t * 8);
+        } else {
+          p.anim = "run";
+          p.frame = Math.floor(this.t * 10);
+          p.flip = dx < 0;
+        }
+      }
+    }
   }
 
   private poseStory(story: Story, st: number): void {
-    const g = story.grade;
-    const ta = story.ta;
-    const k = this.L.stageScale;
     const P0 = this.poses;
     const hero = P0[HERO];
-    const keeper = P0[KEEPER];
-    const youth = this.youth();
     const hx = hero.x;
     const hy = hero.y;
-
-    // --- him: the set, the kick, the reaction, back for a new ball
-    const left = g === "skipped" && st >= 0.12 && st < 1.85;
-    hero.flip = left;
-    const dir = left ? -1 : 1;
-    if (st < KICK_AT) {
-      hero.anim = "idle";
-      hero.frame = 0;
-      if (st > 0.12) hero.x = hx - 2 * dir;
-    } else if (g === "timeup") {
-      hero.anim = st < 0.75 ? "idle" : "dejected";
-      hero.frame = st < 0.75 ? 0 : Math.floor((st - 0.75) * 1.5);
-    } else if (st < KICK_AT + 0.45) {
-      const f = Math.floor((st - KICK_AT) * 10);
-      hero.anim = "kick";
-      hero.frame = f;
-      hero.x = hx - dir * (f === 0 ? 2 : f === 1 ? 1 : 0);
-    } else {
-      this.poseReaction(story, st, hero);
-    }
+    this.poseHero(story, st, hero);
     if (story.flickAt <= st && !story.reduced) {
       hero.anim = "juggle";
       hero.frame = 0;
@@ -910,97 +1670,392 @@ export class CareerScene implements Scene {
       hero.x = hx;
       hero.y = hy;
     }
+    hero.depth = hero.y + 0.4;
+    if (this.youth()) this.poseChildKeeper(story, st, P0[KEEPER]);
+    else this.poseKeeper(story, st, P0[KEEPER]);
+    this.poseOthers(story, st);
+  }
 
-    // --- the keeper
-    const relaxed = g === "timeup" || g === "skipped" || g === "wide";
-    if (relaxed) keeper.frame = Math.floor(this.t * 1.2);
-    if (youth) {
-      if (story.goal && st >= ta + 0.3 && st < RETURN + 0.5) {
-        keeper.anim = "dejected";
-        keeper.frame = Math.floor((st - ta) * 1.5);
-      } else if (g === "ontarget" && st >= ta && st < RETURN) {
-        keeper.anim = "lift";
-        keeper.frame = Math.floor((st - ta) * 3);
-      }
-    } else {
-      this.poseKeeper(story, st, keeper);
+  /** Him: the set, his shot, the reaction, back to his place. */
+  private poseHero(story: Story, st: number, hero: Pose): void {
+    const g = story.grade;
+    const hx = hero.x;
+    const hy = hero.y;
+    const ta = story.ta;
+    hero.anim = "idle";
+    hero.frame = Math.floor(st * 2);
+    if (st >= RETURN) {
+      this.runBack(story, st, hero);
+      return;
     }
+    switch (g) {
+      case "skipped":
+        this.poseSkip(st, hero);
+        return;
+      case "worldie":
+        if (st < 0.32) {
+          // the hook out to A, then he turns his back to the goal for the cross
+          hero.anim = "kick";
+          hero.flip = true;
+          hero.frame = st < 0.1 ? 2 : st < 0.2 ? 3 : 4;
+        } else if (st < BIKE_CROSS) {
+          hero.flip = true;
+          hero.frame = 0;
+        } else if (st < ta + 0.2) {
+          hero.anim = "bicycle";
+          hero.frame = Math.min(7, Math.floor((st - BIKE_CROSS) * 10));
+        } else {
+          hero.anim = "celebrate";
+          hero.frame = Math.floor((st - ta - 0.2) * 6);
+        }
+        return;
+      case "tapin":
+        if (st < SET_END) {
+          hero.frame = 0;
+        } else if (st < TAP_AT) {
+          this.dribble((st - SET_END) / (TAP_AT - SET_END));
+          hero.anim = "run";
+          hero.frame = Math.floor(st * 10);
+          hero.x = Math.round(this.fx);
+          hero.y = Math.round(this.frow);
+        } else {
+          hero.x = this.tapX();
+          hero.y = hy + TAP_DY;
+          hero.anim = "tapin";
+          hero.frame = Math.min(3, Math.floor((st - TAP_AT) * 8));
+          if (st >= ta + 0.1 && st < ta + 0.9) {
+            // a modest goal: he points to whoever set him up
+            hero.anim = "finesse";
+            hero.frame = 4;
+          } else if (st >= ta + 0.9) {
+            hero.anim = "idle";
+            hero.frame = Math.floor(st * 2);
+          }
+        }
+        return;
+      case "toepoke":
+        this.posePoke(story, st, hero);
+        return;
+      default:
+        break;
+    }
+    // the set: he stops and steps back
+    if (st < KICK_AT) {
+      hero.frame = 0;
+      if (st > 0.12) hero.x = hx - 2;
+      return;
+    }
+    if (g === "timeup") {
+      hero.anim = st < 0.75 ? "idle" : "dejected";
+      hero.frame = st < 0.75 ? 0 : Math.floor((st - 0.75) * 1.5);
+      return;
+    }
+    // the strike, stepping into it, then the last frame held
+    const anim = story.plan.anim;
+    const info = PLAYER_ANIMS[anim];
+    const f = Math.floor((st - story.plan.at) * info.fps);
+    hero.anim = anim;
+    hero.frame = Math.min(f, info.frames - 1);
+    hero.x = hx - (f === 0 ? 2 : f === 1 ? 1 : 0);
+    switch (g) {
+      case "golazo": {
+        // off to the near corner and a knee slide
+        const run0 = ta + 0.1;
+        const slide0 = ta + 0.35;
+        const D = this.slideDX();
+        if (st >= run0 && st < slide0) {
+          const u = (st - run0) / (slide0 - run0);
+          hero.anim = "run";
+          hero.frame = Math.floor(st * 10);
+          hero.x = hx + Math.round(u * 0.45 * D);
+          hero.y = hy + Math.round(u * 0.4 * 5);
+        } else if (st >= slide0) {
+          const u = easeOutCubic(clamp((st - slide0) / 0.55));
+          hero.anim = "slide";
+          hero.frame = Math.floor((st - slide0) * 4);
+          hero.x = hx + Math.round((0.45 + 0.55 * u) * D);
+          hero.y = hy + Math.round((0.4 + 0.6 * u) * 5);
+        }
+        return;
+      }
+      case "trivela": {
+        // the flick of the follow-through held a moment, then arms open: he stands
+        // there and lets it come to him (a cool one)
+        const k = st - story.plan.at;
+        if (k >= 0.3) hero.frame = k < 0.5 ? 3 : k < 0.6 ? 4 : 5;
+        return;
+      }
+      case "miss":
+        if (st >= ta && st < ta + 0.7) {
+          // hands to his head
+          hero.anim = "lift";
+          hero.frame = 0;
+        } else if (st >= ta + 0.7) {
+          hero.anim = "dejected";
+          hero.frame = Math.floor((st - ta - 0.7) * 1.5);
+        }
+        return;
+      default:
+        return;
+    }
+  }
 
-    // --- team-mates, opponents
+  /**
+   * The toe poke: a heavy touch at the set runs away from him, he chases it, stretches
+   * and pokes it with his toe as the keeper comes out at him; a stumble, then a fist pump.
+   */
+  private posePoke(story: Story, st: number, hero: Pose): void {
+    const hx = hero.x;
+    if (st < SET_END) {
+      hero.frame = 0;
+      return;
+    }
+    const px = this.pokeX();
+    if (st < POKE_AT) {
+      const u = (st - SET_END) / (POKE_AT - SET_END);
+      hero.anim = "run";
+      hero.frame = Math.floor(st * 12);
+      hero.x = Math.round(hx + (px - hx) * u * u * (3 - 2 * u));
+      return;
+    }
+    const f = Math.floor((st - POKE_AT) * PLAYER_ANIMS.toepoke.fps);
+    hero.anim = "toepoke";
+    hero.frame = Math.min(4, f);
+    // the stumble carries him on a pixel or two
+    hero.x = px + (f >= 3 ? 2 : f >= 2 ? 1 : 0);
+    const ta = story.ta;
+    if (st >= ta + 0.15) {
+      hero.anim = "celebrate";
+      hero.frame = (Math.floor((st - ta - 0.15) * 4) & 1) * 2;
+    }
+  }
+
+  /** The pass: he turns and side-foots it to A, then shrugs and faces the goal again. */
+  private poseSkip(st: number, hero: Pose): void {
+    const hx = hero.x;
+    const left = st >= 0.12 && st < 1.85;
+    hero.flip = left;
+    const dir = left ? -1 : 1;
+    if (st < KICK_AT) {
+      hero.frame = 0;
+      if (st > 0.12) hero.x = hx - 2 * dir;
+    } else if (st < KICK_AT + 0.45) {
+      const f = Math.floor((st - KICK_AT) * 10);
+      hero.anim = "kick";
+      hero.frame = f;
+      hero.x = hx - dir * (f === 0 ? 2 : f === 1 ? 1 : 0);
+    } else if (st < KICK_AT + 0.5) {
+      hero.anim = "kick";
+      hero.frame = 4;
+    } else if (st >= 1.05 && st < 1.85) {
+      hero.anim = "shrug";
+      hero.frame = Math.floor((st - 1.05) * 2.5);
+    }
+  }
+
+  /** From `RETURN`: back from wherever his reaction took him, for the new ball. */
+  private runBack(story: Story, st: number, hero: Pose): void {
+    const ox = this.outDX(story.grade);
+    const oy = this.outDY(story.grade);
+    if (ox === 0 && oy === 0) return;
+    const back = Math.max(0.01, story.deliverAt - RETURN);
+    const u = clamp((st - RETURN) / back);
+    hero.x += Math.round((1 - u) * ox);
+    hero.y += Math.round((1 - u) * oy);
+    if (u < 1) {
+      hero.anim = "run";
+      hero.frame = Math.floor(st * 10);
+      hero.flip = ox > 0;
+    }
+  }
+
+  /**
+   * The keeper off his line and back (toe poke, tap in): out over `o0` to `o1`, back after
+   * the reaction. Moves him; true while he is on the move.
+   */
+  private keeperAway(
+    story: Story,
+    st: number,
+    keeper: Pose,
+    o0: number,
+    o1: number,
+  ): boolean {
+    const out = this.keeperOut(story.grade);
+    if (out === 0) return false;
+    const go = clamp((st - o0) / (o1 - o0));
+    const back = clamp((st - RETURN - 0.3) / 0.6);
+    const e = go * go * (3 - 2 * go) * (1 - back * back * (3 - 2 * back));
+    keeper.x = this.homes.x[KEEPER] + Math.round(out * e);
+    return (go > 0 && go < 1) || (back > 0 && back < 1);
+  }
+
+  private poseKeeper(story: Story, st: number, keeper: Pose): void {
+    const g = story.grade;
+    const ta = story.ta;
+    keeper.keeper = true;
+    const set = (anim: KeeperAnim, frame: number): void => {
+      keeper.kanim = anim;
+      keeper.frame = frame;
+    };
+    switch (g) {
+      case "worldie":
+        // frozen to the spot, then down on his knees
+        if (st >= story.strike && st < ta + 0.25) set("ready", 0);
+        else if (st >= ta + 0.25 && st < RETURN + 0.5) set("beaten", 0);
+        return;
+      case "golazo": {
+        // the leap at full stretch, a pixel short of it
+        const tl = ta - 0.3;
+        if (st < tl || st >= RETURN + 0.5) return;
+        if (st < tl + 0.08) {
+          set("leap", 0);
+        } else if (st < tl + 0.5) {
+          set("leap", st < tl + 0.2 ? 1 : 2);
+          const u = (st - tl - 0.08) / 0.42;
+          keeper.y -= Math.round(arc(u) * this.keeperLift(story));
+        } else if (st < tl + 0.62) {
+          set("ready", 0);
+        } else {
+          set("beaten", 0);
+        }
+        return;
+      }
+      case "trivela":
+        // a beat late: the dive goes where the ball was heading, and it bends away
+        if (st < ta - 0.13 || st >= RETURN + 0.5) return;
+        if (st < ta - 0.05) set("sprawl", 0);
+        else if (st < ta + 0.06) set("sprawl", 1);
+        else if (st < ta + 0.75) set("sprawl", 2);
+        else set("beaten", 0);
+        return;
+      case "toepoke":
+        // rushing out to close him down, diving at it a beat late, beaten on the ground
+        if (this.keeperAway(story, st, keeper, SET_END + 0.05, story.strike)) {
+          set(st < RETURN ? "stranded" : "ready", 0);
+          if (st >= RETURN) keeper.frame = Math.floor(st * 8);
+          return;
+        }
+        if (st < story.strike || st >= RETURN + 0.3) return;
+        if (st < story.strike + 0.06) set("stranded", 0);
+        else if (st < story.strike + 0.16) set("smother", 0);
+        else if (st < ta + 0.4) set("smother", 1);
+        else set("beaten", 0);
+        return;
+      case "tapin":
+        // out to meet him, down at his feet, and he walks round him
+        if (this.keeperAway(story, st, keeper, 0.3, 0.58)) {
+          set("ready", Math.floor(st * 8));
+          return;
+        }
+        if (st < 0.58 || st >= RETURN + 0.3) return;
+        if (st < 0.68) set("smother", 0);
+        else if (st < ta + 0.35) set("smother", 1);
+        else set("beaten", 0);
+        return;
+      default:
+        // nothing to do: he watches it go, relaxed
+        keeper.frame = Math.floor(this.t * 1.2);
+        return;
+    }
+  }
+
+  /** The child keeper of tiers 0 and 1 (the youth frames): no dives of his own. */
+  private poseChildKeeper(story: Story, st: number, keeper: Pose): void {
+    const g = story.grade;
+    const ta = story.ta;
+    if (g === "toepoke" || g === "tapin") {
+      const o0 = g === "toepoke" ? SET_END + 0.05 : 0.3;
+      const o1 = g === "toepoke" ? story.strike : 0.58;
+      if (this.keeperAway(story, st, keeper, o0, o1)) {
+        keeper.anim = "run";
+        keeper.frame = Math.floor(st * 10);
+        keeper.flip = st < RETURN;
+        return;
+      }
+      if (st >= o1 && st < ta + 0.3) {
+        // arms out, stranded
+        keeper.anim = "shrug";
+        keeper.frame = Math.floor((st - o1) * 2.5);
+        return;
+      }
+    }
+    if (story.goal && st >= ta + 0.3 && st < RETURN + 0.3) {
+      keeper.anim = "dejected";
+      keeper.frame = Math.floor((st - ta) * 1.5);
+    } else if (!story.goal) {
+      keeper.frame = Math.floor(this.t * 1.2);
+    }
+  }
+
+  /** Team-mates and opponents. */
+  private poseOthers(story: Story, st: number): void {
+    const g = story.grade;
+    const ta = story.ta;
+    const P0 = this.poses;
+    const k = this.L.stageScale;
     const mA = P0[MATE_A];
     const mB = P0[MATE_B];
-    const oA = P0[OPP_A];
-    const oB = P0[OPP_B];
+    if (g === "worldie" && st >= 0.2 && st < 0.7) {
+      // A volleys the cross back first time
+      mA.anim = "kick";
+      mA.flip = false;
+      mA.frame = Math.floor((st - 0.2) * 10);
+    }
     if (story.goal) {
-      const mob = g === "worldie";
       for (let j = 0; j < 2; j++) {
         const m = j === 0 ? mA : mB;
+        const who = j === 0 ? MATE_A : MATE_B;
         const at = ta + 0.2 + j * 0.12;
         if (st < at) continue;
-        if (mob) {
-          // they run to him on his knees and jump around him
+        if (
+          g === "worldie" ||
+          ((g === "golazo" || g === "trivela") && j === 1)
+        ) {
+          // they run to him and jump around him (the worldie: both, mobbing him; the
+          // golazo: B to his knee slide in the corner; the trivela: B to where he stands)
+          const slide = g === "golazo";
           const ex =
             this.homes.x[HERO] +
-            this.slideDX() +
-            (j === 0 ? -Math.round(11 * k) : Math.round(8 * k));
-          const ey = this.homes.y[HERO] + 5 + (j === 0 ? 3 : -3);
+            (slide ? this.slideDX() : 0) +
+            (j === 0 ? -1 : 1) * Math.round(9 * k);
+          const ey = this.homes.y[HERO] + (slide ? 2 : j === 0 ? 3 : -2);
           const go = clamp((st - at) / 0.45);
           const home = clamp((st - RETURN) / 0.45);
-          const p = go * (1 - home);
-          m.x = Math.round(
-            lerp(
-              this.homes.x[j === 0 ? MATE_A : MATE_B],
-              ex,
-              easeInOutCubic(p),
-            ),
-          );
-          m.y = Math.round(
-            lerp(
-              this.homes.y[j === 0 ? MATE_A : MATE_B],
-              ey,
-              easeInOutCubic(p),
-            ),
-          );
+          const p = easeInOutCubic(go * (1 - home));
+          m.x = Math.round(lerp(this.homes.x[who], ex, p));
+          m.y = Math.round(lerp(this.homes.y[who], ey, p));
           m.depth = m.y;
           if ((go > 0 && go < 1) || (home > 0 && home < 1)) {
             m.anim = "run";
             m.frame = Math.floor(st * 10);
-            m.flip = home > 0;
+            const toward = ex < this.homes.x[who];
+            m.flip = home > 0 ? !toward : toward;
           } else if (home <= 0) {
             m.anim = "celebrate";
             m.frame = Math.floor((st - at) * 6);
             m.flip = j === 1;
           }
-        } else if (st < RETURN + 0.4) {
+        } else if (st < (g === "tapin" ? ta + 1.0 : RETURN + 0.4)) {
           m.anim = "celebrate";
           m.frame = Math.floor((st - at) * 6);
         }
       }
       for (let j = 0; j < 2; j++) {
-        const o = j === 0 ? oA : oB;
+        const o = j === 0 ? P0[OPP_A] : P0[OPP_B];
         if (st >= ta + 0.35 + j * 0.1 && st < RETURN + 0.8) {
           o.anim = "dejected";
           o.frame = Math.floor((st - ta) * 1.5);
         }
       }
-    } else if (g === "ontarget") {
-      if (st >= ta + 0.2 && st < RETURN) {
-        mB.anim = "lift";
-        mB.frame = 0;
-      }
-      if (st >= ta + 0.25 && st < ta + 1.0) {
-        oB.anim = "celebrate";
-        oB.frame = Math.floor((st - ta) * 6);
-      }
-    } else if (g === "wide") {
-      if (st >= 1.3 && st < RETURN) {
+    } else if (g === "miss") {
+      if (st >= ta + 0.15 && st < RETURN) {
         mA.anim = "dejected";
         mB.anim = "dejected";
         mA.frame = mB.frame = Math.floor(st * 1.5);
       }
       for (let j = 0; j < 2; j++) {
-        const o = j === 0 ? oA : oB;
-        const at = 1.2 + j * 0.15;
+        const o = j === 0 ? P0[OPP_A] : P0[OPP_B];
+        const at = ta + 0.1 + j * 0.15;
         if (st >= at && st < at + 1.0) {
           o.anim = "celebrate";
           o.frame = Math.floor((st - at) * 6);
@@ -1016,152 +2071,7 @@ export class CareerScene implements Scene {
     }
   }
 
-  /** His reaction, from the follow-through on. */
-  private poseReaction(story: Story, st: number, hero: Pose): void {
-    const g = story.grade;
-    const ta = story.ta;
-    const hx = this.homes.x[HERO];
-    const hy = hero.y;
-    hero.anim = "idle";
-    hero.frame = Math.floor(st * 2);
-    // the end of the kick
-    if (st < KICK_AT + 0.5 && g !== "worldie") {
-      hero.anim = "kick";
-      hero.frame = 4;
-    }
-    switch (g) {
-      case "worldie": {
-        const D = this.slideDX();
-        const dy = 5;
-        if (st < RUN_AT) {
-          hero.anim = "kick";
-          hero.frame = 4;
-        } else if (st < SLIDE_AT) {
-          const u = (st - RUN_AT) / (SLIDE_AT - RUN_AT);
-          hero.anim = "run";
-          hero.frame = Math.floor(st * 10);
-          hero.x = hx + Math.round(u * 0.45 * D);
-          hero.y = hy + Math.round(u * 0.4 * dy);
-        } else if (st < RETURN) {
-          const u = easeOutCubic(
-            clamp((st - SLIDE_AT) / (SLIDE_END - SLIDE_AT)),
-          );
-          hero.anim = "slide";
-          hero.frame = Math.floor((st - SLIDE_AT) * 4);
-          hero.x = hx + Math.round((0.45 + 0.55 * u) * D);
-          hero.y = hy + Math.round((0.4 + 0.6 * u) * dy);
-        } else {
-          const back = Math.max(0.01, story.deliverAt - RETURN);
-          const u = clamp((st - RETURN) / back);
-          hero.x = hx + Math.round((1 - u) * D);
-          hero.y = hy + Math.round((1 - u) * dy);
-          if (u < 1) {
-            hero.anim = "run";
-            hero.frame = Math.floor(st * 10);
-            hero.flip = true;
-          }
-        }
-        hero.depth = hero.y + 0.4;
-        return;
-      }
-      case "topbins":
-        if (st >= ta + 0.08 && st < RETURN) {
-          hero.anim = "celebrate";
-          hero.frame = Math.floor((st - ta - 0.08) * 6);
-        }
-        return;
-      case "goal":
-        if (st >= ta + 0.08 && st < RETURN) {
-          // a fist pump: crouch, arms up
-          hero.anim = "celebrate";
-          hero.frame = (Math.floor((st - ta - 0.08) * 4) & 1) * 2;
-        }
-        return;
-      case "ontarget":
-        if (st >= ta + 0.15 && st < RETURN) {
-          // hands on his head
-          hero.anim = "lift";
-          hero.frame = 0;
-        }
-        return;
-      case "wide":
-        if (st >= 1.25 && st < RETURN) {
-          hero.anim = "dejected";
-          hero.frame = Math.floor((st - 1.25) * 1.5);
-        }
-        return;
-      case "skipped":
-        if (st >= 1.05 && st < 1.85) {
-          hero.anim = "shrug";
-          hero.frame = Math.floor((st - 1.05) * 2.5);
-        }
-        return;
-      default:
-        return;
-    }
-  }
-
-  private poseKeeper(story: Story, st: number, keeper: Pose): void {
-    const g = story.grade;
-    const ta = story.ta;
-    keeper.keeper = true;
-    switch (g) {
-      case "worldie":
-        if (st >= STRIKE && st < ta + 0.25) {
-          keeper.kanim = "ready";
-          keeper.frame = 0;
-        } else if (st >= ta + 0.25 && st < RETURN + 0.5) {
-          keeper.kanim = "beaten";
-        }
-        return;
-      case "topbins": {
-        const tl = ta - 0.3;
-        if (st < tl || st >= RETURN + 0.5) return;
-        if (st < tl + 0.08) {
-          keeper.kanim = "leap";
-          keeper.frame = 0;
-        } else if (st < tl + 0.5) {
-          keeper.kanim = "leap";
-          keeper.frame = st < tl + 0.2 ? 1 : 2;
-          const u = (st - tl - 0.08) / 0.42;
-          keeper.y -= Math.round(arc(u) * this.keeperLift(story));
-        } else if (st < tl + 0.62) {
-          keeper.kanim = "ready";
-          keeper.frame = 0;
-        } else {
-          keeper.kanim = "beaten";
-        }
-        return;
-      }
-      case "goal":
-        if (st >= ta - 0.05 && st < ta + 0.07) {
-          keeper.kanim = "smother";
-          keeper.frame = 0;
-        } else if (st >= ta + 0.07 && st < ta + 0.6) {
-          keeper.kanim = "smother";
-          keeper.frame = 1;
-        } else if (st >= ta + 0.6 && st < RETURN + 0.5) {
-          keeper.kanim = "beaten";
-        }
-        return;
-      case "ontarget":
-        if (st >= ta - 0.12 && st < ta) {
-          keeper.kanim = "leap";
-          keeper.frame = 0;
-        } else if (st >= ta && st < RETURN) {
-          keeper.kanim = "hold";
-          keeper.frame = 0;
-        } else if (st >= RETURN && st < RETURN + 0.3) {
-          keeper.kanim = "smother";
-          keeper.frame = 0;
-        }
-        return;
-      default:
-        return;
-    }
-  }
-
-  /** How high the keeper leaps for a top-corner goal: his gloves a pixel short of it. */
+  /** How high the keeper leaps for the golazo: his gloves a pixel short of it. */
   private keeperLift(story: Story): number {
     const L = this.L;
     // worked out once per shot and size
@@ -1172,7 +2082,7 @@ export class CareerScene implements Scene {
     const b = this.probe;
     let by = gloves;
     for (let i = 0; i <= 24; i++) {
-      this.shotBall(story, STRIKE + (FLIGHT[story.grade] * i) / 24, b);
+      this.shotBall(story, story.strike + (story.flight * i) / 24, b);
       by = b.y;
       if (b.x >= gx) break;
     }
@@ -1242,10 +2152,10 @@ export class CareerScene implements Scene {
   private shakeX(): number {
     if (this.reduced) return 0;
     const story = this.story;
-    if (story && story.grade === "worldie" && story.th >= 0) {
-      const a = story.st - story.th;
+    if (story && story.grade === "worldie") {
+      const a = story.st - (story.th >= 0 ? story.th : story.ta);
       if (a >= 0 && a < 0.2)
-        return WORLDIE_SHAKE[Math.min(4, Math.floor(a / 0.04))];
+        return BIG_SHAKE[Math.min(4, Math.floor(a / 0.04))];
     }
     return 0;
   }
@@ -1253,13 +2163,14 @@ export class CareerScene implements Scene {
   private shakeY(): number {
     if (this.reduced) return 0;
     const story = this.story;
-    if (story && story.grade !== "timeup") {
-      const a = story.st - STRIKE;
+    if (story && story.plan.thump) {
+      const a = story.st - story.strike;
       if (a >= 0 && a < 0.06) return 1;
     }
     const p = this.promotion;
     if (p) {
-      const a = p.t - BUILD.thud;
+      // the jolt as the ball in the close-up hits the net
+      const a = p.t - BUILD.hit;
       if (a >= 0 && a < 0.12) return Math.floor(a / 0.04) % 2 === 0 ? 1 : 0;
     }
     return 0;
@@ -1270,20 +2181,20 @@ export class CareerScene implements Scene {
     const L = this.L;
     const t = this.t;
     const light = ground.light;
-    ensureKits(this.kits, this.tier, this.mode, light);
+    const kits = this.kitsNow();
     ground.drawBack(s, t);
 
     const story = this.story;
     const st = story ? this.view(story) : 0;
+    const motion = story !== null && !story.reduced;
 
     // fireworks over the stand for a goal, at the stadium tiers
-    if (story && story.goal && this.tier >= 4 && !this.reduced) {
-      const big = story.grade === "worldie";
+    if (story && motion && story.goal && this.tier >= 4) {
       drawGoalFireworks(
         s,
         st - story.ta - 0.1,
-        big ? 6 : 3,
-        big,
+        story.plan.bursts,
+        story.plan.size,
         L.stageLeft - Math.round(30 * L.stageScale),
         L.stageRight + Math.round(30 * L.stageScale),
         L.farTouchY - 71,
@@ -1292,25 +2203,24 @@ export class CareerScene implements Scene {
       );
     }
 
-    // the balls: the shot's, the new one on its way, or the juggled one
-    const shot = this.shot;
-    const given = this.given;
-    const held = this.held;
-    shot.on = false;
-    given.on = false;
-    held.on = false;
+    // the balls: the shot's, the new one on its way, the juggled one, the ones left lying
+    const B = this.balls;
+    const shot = B[SHOT - CAST];
+    const given = B[GIVEN - CAST];
+    const held = B[HELD - CAST];
+    for (let i = 0; i < BALLS; i++) B[i].on = false;
     if (story) {
-      const delivering = !story.reduced && st >= story.deliverAt;
-      if (delivering) {
+      if (motion && st >= story.deliverAt) {
         this.givenBall(story, st, given);
-        if (story.goal) this.shotBall(story, st, shot);
+        if (story.goal || story.low) this.shotBall(story, st, shot);
       } else {
         this.shotBall(story, st, shot);
       }
     } else if (this.fullT < 0) {
       this.juggleBall(given);
     }
-    if (!story && this.rest > 0) this.restBall(shot);
+    if (this.restNet > 0) this.restBall(B[REST_NET - CAST], false);
+    if (this.restWide) this.restBall(B[REST_WIDE - CAST], true);
     const look = given.on ? given.x : shot.on ? shot.x : L.heroX;
     this.poseCast(look);
 
@@ -1338,18 +2248,21 @@ export class CareerScene implements Scene {
         shadowRow(s, p.x - half, p.x + half - 1, p.y);
       else shadowRow(s, p.x - half + 1, p.x + half - 2, this.homes.y[i]);
     }
-    if (shot.on && shot.sy >= 0) shadowRow(s, shot.x - 1, shot.x + 1, shot.sy);
-    if (given.on && given.sy >= 0)
-      shadowRow(s, given.x - 1, given.x + 1, given.sy);
+    for (let i = 0; i < BALLS; i++) {
+      const b = B[i];
+      if (b.on && b.sy >= 0) shadowRow(s, b.x - 1, b.x + 1, b.sy);
+    }
+
+    // a miss dragged wide passes outside the near post: drawn over the goal, not in it
+    const late =
+      story !== null && story.low && shot.on && shot.sy > L.groundY + 2;
 
     // the people and the balls, far to near
-    const n = this.sortCast(shot, given, held);
-    const kits = this.kits.list;
+    const n = this.sortCast(late);
     for (let j = 0; j < n; j++) {
       const i = this.order[j];
       if (i >= CAST) {
-        const b = i === CAST ? shot : i === CAST + 1 ? given : held;
-        this.paintBall(s, b, story, st);
+        this.paintBall(s, B[i - CAST], story, st);
         continue;
       }
       const p = this.poses[i];
@@ -1368,19 +2281,29 @@ export class CareerScene implements Scene {
       }
     }
 
-    // the puff at his standing foot as he strikes it
-    if (story && !story.reduced && story.grade !== "timeup") {
-      const a = st - STRIKE;
-      if (a >= 0 && a < 0.3) {
-        const left = story.grade === "skipped";
-        const grade = this.tier <= 1 ? light.env : light.lit;
-        drawPuff(
-          s,
-          L.heroX + (left ? 2 : -2),
-          this.heroY(),
-          Math.floor(a * 10),
-          grade(P.grassHi),
-        );
+    // puffs of grass: at his standing foot as he strikes it (at his toe for the toe
+    // poke), where he lands from the worldie, under the keeper as his dive lands
+    if (story && motion) {
+      const grass = (this.tier <= 1 ? light.env : light.lit)(P.grassHi);
+      const hy = this.heroY();
+      const a = st - story.strike;
+      const g = story.grade;
+      if (story.plan.thump && g !== "worldie" && a >= 0 && a < 0.3) {
+        const left = g === "skipped";
+        drawPuff(s, L.heroX + (left ? 2 : -2), hy, Math.floor(a * 10), grass);
+      }
+      if (g === "toepoke" && a >= 0 && a < 0.3)
+        drawPuff(s, this.pokeX() + 6, hy, Math.floor(a * 10), grass);
+      if (g === "worldie") {
+        const land = st - (BIKE_CROSS + 0.55);
+        if (land >= 0 && land < 0.3)
+          drawPuff(s, L.heroX - 4, hy, Math.floor(land * 10), grass);
+      }
+      if (g === "trivela" && !this.youth()) {
+        const k = this.poses[KEEPER];
+        const down = st - (story.ta + 0.06);
+        if (down >= 0 && down < 0.3)
+          drawPuff(s, k.x + 4, k.y, Math.floor(down * 10), grass);
       }
     }
 
@@ -1389,8 +2312,9 @@ export class CareerScene implements Scene {
     bulge.amount = story ? this.bulgeAmount(story, st) : 0;
     bulge.y = shot.y;
     ground.drawFront(s, t, bulge.amount > 0 ? bulge : null);
+    if (late) this.paintBall(s, shot, story, st);
 
-    if (story && !story.reduced) {
+    if (story && motion) {
       // the worldie's gold burst where it hits
       if (story.grade === "worldie") {
         const hit = story.th >= 0 ? story.th : story.ta;
@@ -1403,8 +2327,8 @@ export class CareerScene implements Scene {
       // time up: the whistle
       if (
         story.grade === "timeup" &&
-        st >= STRIKE - 0.05 &&
-        st < STRIKE + 1.4
+        st >= story.strike - 0.05 &&
+        st < story.strike + 1.4
       ) {
         const ref = this.tier >= 2 ? this.poses[REF] : this.poses[HERO];
         const tall = this.youth() ? 16 : 20;
@@ -1412,7 +2336,7 @@ export class CareerScene implements Scene {
           s,
           ref.x,
           ref.y - tall + 1,
-          st - STRIKE + 0.05,
+          st - story.strike + 0.05,
           light.lit(P.ink),
           light.lit(P.chalk),
           light.lit(P.steel),
@@ -1437,7 +2361,7 @@ export class CareerScene implements Scene {
       );
     }
 
-    // a promotion: the builders' dust
+    // a promotion: the smoke, and in it the close-up of the ball at the back of the net
     const p = this.promotion;
     if (p && !this.reduced) {
       if (!p.colors) p.colors = buildColors(p.to <= 1 ? light.env : light.lit);
@@ -1445,13 +2369,19 @@ export class CareerScene implements Scene {
     }
   }
 
-  /** The last goal's ball where it came to rest. */
-  private restBall(b: Ball): void {
+  /** A ball left lying: the last goal's (in the net, or by the hedge) or the last miss's. */
+  private restBall(b: Ball, wide: boolean): void {
     const L = this.L;
     const goal = this.ground.goal;
     b.on = true;
     b.spin = 0;
-    if (this.rest === 2 || goal.kind === "jumpers") {
+    if (wide) {
+      const row = this.wideEndRow();
+      b.x = this.wideEndX();
+      b.y = row - 2;
+      b.sy = row;
+      b.depth = row + 0.5;
+    } else if (this.restNet === 2 || goal.kind === "jumpers") {
       const row = L.farTouchY + 4;
       b.x = goal.lineX + Math.round(26 * L.stageScale);
       b.y = row - 2;
@@ -1474,21 +2404,21 @@ export class CareerScene implements Scene {
     if (!b.on) return;
     const light = this.ground.light;
     let gold = false;
-    // the worldie's gold trail behind it in flight: a streak, brightest nearest the ball
+    // the worldie's gold trail behind it in flight: a streak, brightest nearest it
     if (
-      b === this.shot &&
+      b === this.balls[SHOT - CAST] &&
       story &&
       story.grade === "worldie" &&
       !story.reduced
     ) {
-      const v = (st - STRIKE) / FLIGHT.worldie;
+      const v = (st - story.strike) / story.flight;
       if (v > 0 && v < 1.12) {
         gold = true;
         const q = this.probe;
         let px = b.x;
         let py = b.y;
         for (let j = 1; j <= 7; j++) {
-          this.shotBall(story, Math.max(STRIKE, st - j * 0.02), q);
+          this.shotBall(story, Math.max(story.strike, st - j * 0.02), q);
           const c = j <= 2 ? P.goldLight : j <= 5 ? P.gold : P.goldDark;
           s.line(px, py, q.x, q.y, c);
           if (j <= 4)
@@ -1508,15 +2438,17 @@ export class CareerScene implements Scene {
   }
 
   /** Far to near: people and balls by their depth (`order` gets the indices). */
-  private sortCast(shot: Ball, given: Ball, held: Ball): number {
+  private sortCast(late: boolean): number {
     let n = 0;
     for (let i = 0; i < CAST; i++) {
       const p = this.poses[i];
       if (p.on) n = this.insert(n, i, p.depth);
     }
-    if (shot.on) n = this.insert(n, CAST, shot.depth);
-    if (given.on) n = this.insert(n, CAST + 1, given.depth);
-    if (held.on) n = this.insert(n, CAST + 2, held.depth);
+    for (let i = 0; i < BALLS; i++) {
+      const b = this.balls[i];
+      if (!b.on || (late && i === SHOT - CAST)) continue;
+      n = this.insert(n, CAST + i, b.depth);
+    }
     return n;
   }
 
@@ -1535,3 +2467,33 @@ export class CareerScene implements Scene {
     return n + 1;
   }
 }
+
+/** Seconds from the start of a shot animation to the frame where the boot meets the ball. */
+function strikeDelay(anim: PlayerAnim): number {
+  const f = Object.prototype.hasOwnProperty.call(STRIKE_FRAME, anim)
+    ? STRIKE_FRAME[anim as ShotAnim]
+    : 0;
+  return f / PLAYER_ANIMS[anim].fps;
+}
+
+/** The keeper's animations, built once before the first shot needs them. */
+const KEEPER_WARM: readonly KeeperAnim[] = [
+  "ready",
+  "leap",
+  "smother",
+  "beaten",
+  "stranded",
+  "sprawl",
+];
+/** His reactions, built the same way. */
+const WARM_PLAYER: readonly PlayerAnim[] = [
+  "run",
+  "celebrate",
+  "dejected",
+  "lift",
+  "slide",
+];
+const WARM_COUNT =
+  SHOT_ANIMS.length * 2 + WARM_PLAYER.length + KEEPER_WARM.length;
+const WARM_ADULT = { flipX: false, youth: false } as const;
+const WARM_YOUTH = { flipX: false, youth: true } as const;

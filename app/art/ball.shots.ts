@@ -42,6 +42,8 @@ const PATCHES: BallPatches = {
   bottom: { label: "RETRO", icon: "rewind", locked: true },
   backRight: { label: "CLOSEST", icon: "pin", locked: true },
   backLeft: { label: "FURTHEST", icon: "globe", locked: true },
+  rimLeft: { label: "GUESS WHO", icon: "shirt", locked: true },
+  rimRight: { label: "SHOOTOUT", icon: "goal", locked: true },
 };
 
 const SCORED: BallPatches = {
@@ -218,7 +220,8 @@ export const shots: ShotMap = {
     ),
 
   // Every patch in the pose that shows it: the menu pose, half a turn (CLOSEST and
-  // FURTHEST), NEXT-GEN and RETRO straight on, and a locked patch under the pointer.
+  // FURTHEST), NEXT-GEN, RETRO, GUESS WHO and SHOOTOUT straight on, and a locked patch
+  // under the pointer.
   "ball/modes": (ctx) =>
     sheet(
       ctx,
@@ -239,6 +242,14 @@ export const shots: ShotMap = {
           ...ballShowPose("bottom"),
           hovered: "bottom",
         },
+        { r: 45, name: "GUESS WHO", ...ballShowPose("rimLeft") },
+        { r: 45, name: "SHOOTOUT", ...ballShowPose("rimRight") },
+        {
+          r: 45,
+          name: "SHOOTOUT HOVERED",
+          ...ballShowPose("rimRight"),
+          hovered: "rimRight",
+        },
       ],
       3,
     ),
@@ -247,18 +258,30 @@ export const shots: ShotMap = {
   "ball/modes-fit": (ctx) =>
     sheet(
       ctx,
-      (["backLeft", "top", "bottom"] as const).flatMap((slot) =>
-        [37, 45, 51, 59].map((r, n) => {
-          const pose = ballShowPose(slot);
-          return {
-            r,
-            name: `R ${r}`,
-            ...pose,
-            yaw: pose.yaw + (n % 2 === 0 ? -0.12 : 0.12),
-          };
-        }),
+      (["backLeft", "top", "bottom", "rimLeft", "rimRight"] as const).flatMap(
+        (slot) =>
+          [37, 45, 51, 59].map((r, n) => {
+            const pose = ballShowPose(slot);
+            return {
+              r,
+              name: `R ${r}`,
+              ...pose,
+              yaw: pose.yaw + (n % 2 === 0 ? -0.12 : 0.12),
+            };
+          }),
       ),
       4,
+    ),
+
+  // GUESS WHO and SHOOTOUT on the menu's ball, big, straight on.
+  "ball/rim": (ctx) =>
+    sheet(
+      ctx,
+      [
+        { r: 52, name: "GUESS WHO", ...ballShowPose("rimLeft") },
+        { r: 52, name: "SHOOTOUT", ...ballShowPose("rimRight") },
+      ],
+      2,
     ),
 
   // A slow turn about each axis, to check the solid and the masking.

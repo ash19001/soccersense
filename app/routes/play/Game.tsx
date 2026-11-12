@@ -16,13 +16,14 @@ import {
   type Grade,
   MAX_TOTAL,
   type Mode,
+  type RevealRow,
   type RevealView,
-  type TableRow,
   QUESTION_MS,
   clockView,
   dayKeyFor,
   formatShare,
   isPerfect,
+  isShot,
   pips,
   progressFor,
   questionView,
@@ -39,10 +40,16 @@ import {
   type LeagueEntry,
   PixelStage,
   RevealSheet,
+  type RevealYours,
   useArrivalFocus,
   useDeviceSky,
 } from "~/ui";
-import { GameController, type GameView, tierName } from "./controller";
+import {
+  GameController,
+  type GameView,
+  tierName,
+  titleName,
+} from "./controller";
 
 const text = strings.play;
 
@@ -109,13 +116,17 @@ function nothing(): null {
   return null;
 }
 
-/** The reveal's one plain sentence: how many players gave the answer. */
+/**
+ * The reveal's one plain sentence: how many players gave the answer, and what kind of shot
+ * that made it, in the mode's tone.
+ */
 export function revealSentence(reveal: RevealView, mode: Mode): string {
   const { answer, row, best, turn } = reveal;
   if (answer && row) {
-    const say = text.sentence[mode];
-    const tone = row.share < LONELY_SHARE ? say.lonely : say.crowd;
-    return tone(answer.name, formatShare(row.share));
+    const { picked } = text.sentence;
+    const share = formatShare(row.share);
+    const said = row.share < LONELY_SHARE ? picked.lonely : picked.crowd;
+    return text.sentence[mode][row.shot](answer.name, said(share));
   }
   const missed = turn.grade === "timeup" ? "timeup" : "skipped";
   if (!best) return text.grades[missed];
@@ -127,7 +138,7 @@ export function revealSentence(reveal: RevealView, mode: Mode): string {
  * stadium. Nothing when it would say nothing: for a country (it would repeat its own name),
  * or when every answer to the question shares one country (the Premier League's clubs).
  */
-function tablePlace(reveal: RevealView, row: TableRow): string {
+function tablePlace(reveal: RevealView, row: RevealRow): string {
   const { question } = reveal;
   if (question.measure === "capital") return "";
   const country = row.answer.country;
@@ -136,22 +147,53 @@ function tablePlace(reveal: RevealView, row: TableRow): string {
     : country;
 }
 
-/** The reveal's table, as the kit's league table takes it: the third column is the share. */
+/**
+ * The reveal's table, as the kit's league table takes it: one row for each shot that scores
+ * (`revealFor(...).rows`), the third column the share, then each answer's shot and its
+ * points.
+ */
 export function tableRows(reveal: RevealView): LeagueEntry[] {
-  const rows: LeagueEntry[] = [];
-  for (const row of reveal.rows) {
-    if (row.gapBefore) rows.push({ gap: true });
-    rows.push({
-      rank: row.rank,
-      name: row.answer.name,
-      place: tablePlace(reveal, row),
-      distance: formatShare(row.share),
+  return reveal.rows.map((row) => ({
+    rank: row.rank,
+    name: row.answer.name,
+    place: tablePlace(reveal, row),
+    distance: formatShare(row.share),
+    grade: row.shot,
+    shot: text.shots[row.shot],
+    points: row.points,
+    you: row.isPlayer,
+    id: row.answer.id,
+  }));
+}
+
+/**
+ * The player's answer above the table, when it did not score and so is not a row: a listed
+ * miss with its share, or no answer after a pass or a time-up. Undefined when it is a row.
+ */
+export function yoursLine(reveal: RevealView): RevealYours | undefined {
+  if (reveal.playerInRows) return undefined;
+  const { answer, row, turn } = reveal;
+  const you = text.table.you;
+  if (answer && row) {
+    const picked = formatShare(row.share);
+    const shot = text.shots[row.shot];
+    return {
+      you,
+      name: answer.name,
+      picked,
+      shot,
       points: row.points,
-      you: row.isPlayer,
-      id: row.answer.id,
-    });
+      spoken: text.yours.spoken(answer.name, picked, shot, row.points),
+    };
   }
-  return rows;
+  const shot = turn.grade === "timeup" ? text.yours.timeup : text.yours.skipped;
+  return {
+    you,
+    name: text.yours.none,
+    shot,
+    points: turn.points,
+    spoken: text.yours.spokenNone(shot, turn.points),
+  };
 }
 
 export function Game({ mode }: { mode: Mode }) {
@@ -216,13 +258,11 @@ export function Game({ mode }: { mode: Mode }) {
     const career = resolving ? progress.before : progress.after;
     const lamps: (Grade | null)[] = pips(session);
     if (resolving) lamps[session.index] = null;
-    const stadiumName = session.stadium.name.toUpperCase();
 
     if (session.phase !== "done") {
       top = (
         <Board
           mode={mode}
-          stadiumName={stadiumName}
           questionNumber={question.number}
           questionCount={question.count}
           results={lamps}
@@ -289,10 +329,15 @@ export function Game({ mode }: { mode: Mode }) {
             grade={turn.grade}
             mode={mode}
             gradeLabel={text.grades[turn.grade]}
-            pointsLabel={answered ? text.gained(turn.points) : undefined}
+            pointsLabel={
+              answered && turn.grade !== "miss"
+                ? text.gained(turn.points)
+                : undefined
+            }
             sentence={revealSentence(reveal, mode)}
             rows={tableRows(reveal)}
             tableLabels={text.table}
+            yours={yoursLine(reveal)}
             nextLabel={reveal.isLast ? text.toFullTime : text.next}
             onNext={game.next}
           />
@@ -315,10 +360,15 @@ export function Game({ mode }: { mode: Mode }) {
           maxTotal={MAX_TOTAL}
           totalSpoken={full.totalSpoken(session.total, MAX_TOTAL)}
           careerTitle={tierName(session.total)}
+          earnedTitle={titleName(mode, session.total)}
+          earnedTitleSpoken={full.titleSpoken}
           perfectLine={isPerfect(session.total) ? full.perfect : undefined}
           results={results(session).map((line) => ({
             grade: line.turn.grade,
             points: line.turn.points,
+            label: isShot(line.turn.grade)
+              ? text.shots[line.turn.grade]
+              : undefined,
             answer:
               line.answer?.name ??
               (line.turn.grade === "timeup" ? full.timeup : full.skipped),
@@ -348,6 +398,8 @@ export function Game({ mode }: { mode: Mode }) {
         }
         top={top}
         bottom={bottom}
+        // The board (and its sound switch) is gone at full time, but the crowd plays on.
+        sound={phase === "done"}
       >
         {/* The scoreboard says the rest; these are for screen readers. */}
         <h1 ref={heading} tabIndex={-1} className="ss-sr">

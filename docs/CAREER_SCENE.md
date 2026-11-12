@@ -105,38 +105,79 @@ where it is and to make the net move.
 From the moment an answer is accepted to the moment the reveal sheet may slide up: about 2.4
 seconds. With reduced motion: the result pose and the ball's final place are shown at once.
 
-1. **Set** (0.3 s). He stops juggling, the ball drops to his feet, he steps back.
-2. **Strike** (frame of the kick animation where the boot meets the ball). A puff at his
-   standing foot and a 1 px shake.
-3. **Flight** (0.45 to 0.7 s). The 3 x 3 ball spins and its shadow runs along the grass.
-4. **Outcome and reaction** (about 1 s). Then he gets a new ball and goes back to juggling.
+Every answer is one of six shots (`docs/GAME_DESIGN.md` section 4), each with its own move
+(`~/art/characters`: `bicycle` for the worldie, `finesse` for the golazo, `trivela`, `toepoke`,
+`tapin`, and `kick` for the miss); time up and a pass strike nothing. (`power` and `chip` are
+spare moves now.)
 
-| grade      | the ball                                                                                                | the keeper                  | him                                           | crowd   |
-| ---------- | ------------------------------------------------------------------------------------------------------- | --------------------------- | --------------------------------------------- | ------- |
-| `worldie`  | a rocket with a gold trail into the top corner; gold burst, the net nearly leaves its frame, 2 px shake | frozen, then turns to look  | knee slide or arms wide, mobbed by team-mates | `roar`  |
-| `topbins`  | curls up and dips under the bar into the top corner                                                     | full stretch, a pixel short | leaping celebration                           | `cheer` |
-| `goal`     | low and hard along the grass into the bottom corner                                                     | down late                   | fist pump                                     | `cheer` |
-| `ontarget` | chest height, straight at the keeper                                                                    | dives and holds it          | hands on head                                 | `ooh`   |
-| `wide`     | skied over the bar, up into the far side (tier 0: over the hedge)                                       | watches it go               | head down                                     | `groan` |
-| `timeup`   | never struck: it rolls a few pixels and stops; a whistle sign                                           | relaxes                     | hands on hips                                 | `hush`  |
-| `skipped`  | side-footed back to team-mate A                                                                         | relaxes                     | shrug, back to idle                           | `idle`  |
+1. **Set** (0 to 0.3 s). He stops juggling, the ball drops to his feet, he steps back. (The
+   worldie, the toe poke and the tap in have their own build-up instead: see the table.)
+2. **Strike**: the frame of his move where the boot meets the ball (`STRIKE_FRAME`), at 0.5 s
+   for the golazo, the trivela and the miss. A puff at his standing foot and a 1 px shake for
+   the hard ones.
+3. **Flight** (0.27 to 0.62 s by shot). The 3 x 3 ball spins and its shadow runs along the
+   grass.
+4. **Outcome and reaction**, the crowd's mood as the ball gets there. The reveal may come up at
+   2.4 s; the reaction plays on to 3.0 s, then everyone heads back (he runs back from wherever
+   his celebration took him), a new ball is thrown on, and he juggles again.
 
-The grade's name and the points are shown by the DOM reveal sheet, not painted in the scene.
+| shot (id)            | build-up and the ball (times from the answer)                                                                                                                                                                                                                                                                                  | the keeper                                                                                                     | him; the others                                                                                      | crowd   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------- |
+| WORLDIE (`worldie`)  | the showpiece: he hooks it out to team-mate A (to 0.4), who lofts a cross straight back to his chest (0.85); his back to the goal, he chests it up, leaps and scissors it overhead (strike 1.25). Flat and a little downhill into the top corner with a gold trail (1.55); a gold burst, the net bulges its most, a 2 px shake | `ready`, frozen to the spot, then `beaten`                                                                     | lands on his back and sits up (1.55), springs up to celebrate (1.75); A and B run over and mob him   | `roar`  |
+| GOLAZO (`golazo`)    | the curler: inside of the foot, its shadow bending out towards the camera and back in, the ball rising into the far top corner round the keeper's dive (strike 0.5, line 1.12)                                                                                                                                                 | the leap at full stretch, his gloves a pixel short, then `beaten`                                              | the point, then a run to the near corner and a knee slide (1.22 to 2.0); B runs over to him; A jumps | `cheer` |
+| TRIVELA (`trivela`)  | struck with the outside of the boot (strike 0.5): it rises quickly, flattens and dips late, bending away from the keeper into the corner, its shadow swinging away from the camera and back (line 0.94)                                                                                                                        | `sprawl` a beat late: he dives where it was heading and it bends past his leading glove; a puff where he lands | a cool one: the flick of the follow-through held, then arms open; he stands and lets B come to him   | `cheer` |
+| TOE POKE (`toepoke`) | scrappy: a heavy touch at the set runs away from him, he chases it as the keeper rushes out (16 px), stretches and toe-pokes it (strike 0.85, a puff of turf at his toe); scuffed along the grass past the gloves, a pixel's bobble now and then (line 1.12)                                                                   | rushing out, `stranded`, then `smother` a beat late with the ball squeezing past, `beaten` on the ground       | the stumble carries him on a pixel or two, then a fist pump                                          | `cheer` |
+| TAP IN (`tapin`)     | set up close: he dribbles in (0.3 to 0.95) round the keeper on the near side and walks it in at walking pace past a keeper already on the ground (prod 1.075, line 1.63); a small bulge                                                                                                                                        | rushes out (14 px) and goes down at his feet (`smother` without the ball), beaten on the ground                | a modest goal: he points to whoever set him up; team-mates one jump                                  | `cheer` |
+| MISS (`miss`)        | by turns, skied over the bar into the far side (tier 0: over the hedge), and dragged wide along the grass outside the near post, where it is left lying                                                                                                                                                                        | `ready`: he watches it go                                                                                      | hands on his head (`lift` 0), then `dejected`; team-mates slump, opponents celebrate                 | `groan` |
+| TIME UP (`timeup`)   | never struck: it rolls a few pixels and stops; a whistle sign over the referee                                                                                                                                                                                                                                                 | relaxes                                                                                                        | hands on hips                                                                                        | `hush`  |
+| PASSED (`skipped`)   | side-footed back to team-mate A, who knocks it back after                                                                                                                                                                                                                                                                      | relaxes                                                                                                        | shrug, back to idle                                                                                  | `idle`  |
 
-At the stadium tiers (4 to 7), every goal (`worldie`, `topbins`, `goal`) also sets off a few
-small fireworks over the stand, bigger for a worldie (the product owner asked for this on
-2026-11-11). Tiers 6 and 7 are at night, where they show best.
+Opponents slump after every goal. The child keeper of tiers 0 and 1 has no dives: he runs out
+for the toe poke and the tap in, holds his arms out, and is `dejected` after a goal. The
+shot's name and the points are shown by the DOM reveal sheet, not painted in the scene.
+
+At the stadium tiers (4 to 7), every goal also sets off small fireworks over the stand, more
+and bigger for the better shots: a tap in 2, a toe poke 3, a trivela 4, a golazo 5, a worldie
+7, the biggest and highest (the product owner asked for this on 2026-11-11). Tiers 6 and 7 are
+at night, where they show best.
+
+A goal's ball stays in the net (by the hedge at tier 0), and a miss dragged wide stays where it
+stopped, until the ground changes. A shot asked for while the last one's reaction is still
+playing does not cut: everyone runs from where they are to where the new shot needs them (0.3
+s), and he gets a new ball thrown on.
+
+**Sound** (through `onSound`, `docs/API_SCENES.md`): a soft touch at the set and on each of the
+tap in's dribbles, a kick at every strike with the power of the shot (a tap in 0.2, a toe poke
+0.35, a golazo 0.75, a trivela 0.85, a worldie 1; the worldie's hook and cross 0.2 and 0.35, a
+pass 0.15 and the ball knocked back 0.15), the wind while a hard shot is in the air, the shot's
+`score` sting as it goes in or misses, a cheer sized by the shot (a tap in 0.2 up to a worldie
+1; the engine sizes it to the ground), a groan for a skied miss and an ooh for one dragged
+wide, the referee's whistle at time up, a faint far `firework` for each firework, one
+vuvuzela 0.35 s after a worldie at the stadium tiers and never otherwise. While the player
+types, the juggle is very quiet: every other touch, at level 0.15. As the page opens, the
+`transition` (opening) as the iris starts and the referee's whistle as it is fully open; at
+full time the long whistle, then the crowd. The bed (`ambience()`) is the park at tiers 0 and
+1, a ground at 2 and 3, a stadium from 4, the crowd growing with the tier, night from the
+light, and the tier itself.
 
 ## 5. Promotion
 
 When the total crosses a tier line, he goes up: after the reveal, when the player presses the
 next button, and before the next question appears (the clock does not run meanwhile).
 
-- **HOME: the ground is built around him.** A wall of builders' dust sweeps across the far
-  side, with a girder or two and a crane arm showing through it, the new stands are there when
-  it clears, and they land with a thud (a 1 px shake) and a ripple of new crowd. About 1.5 s.
+- **HOME: the ball at the back of the net.** A wall of smoke sweeps across the far side and
+  the pitch (0 to 0.5 s), with a big cloud in the middle of the screen. A hole opens in the
+  cloud (0.24 to 0.34) onto a close-up of the back of a goal's net, the ground out of focus
+  behind it, and the ball is driven in at us out of the goal (0.27 to 0.36): the net takes it
+  in a pocket, the mesh stretched over its front and gathered round it in shadow, the diamonds
+  around it pulled long and narrow towards it, the net giving and springing back while the
+  ball still turns. A 1 px jolt as it hits. The smoke rolls back over it (0.72 to 0.86), the
+  new ground goes in under cover (0.7), and the smoke clears in clumps (0.85 to 1.35) onto the
+  new ground with a ripple of new crowd (1.12). About 1.5 s. (It was a crane and girders in
+  builders' dust, then a goal with a ball spinning in it; the product owner asked for this
+  close-up on 2026-11-12, after a photograph of a ball at the back of the net.)
 - **AWAY: he travels** (a later milestone: a coach, a ferry, a plane crossing the screen). Until
-  then AWAY uses the same build.
+  then AWAY uses the same.
 - Crossing two tiers at once plays one transition straight to the higher tier.
 - With reduced motion the ground simply changes.
 

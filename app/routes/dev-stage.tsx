@@ -217,7 +217,7 @@ class TestScene implements Scene {
     if (m && m.type !== "leave") {
       const x = Math.floor(m.x);
       const y = Math.floor(m.y);
-      const arm = m.touch ? P.gradeTopbins : P.gold;
+      const arm = m.touch ? P.gradeGolazo : P.gold;
       if (m.down) {
         s.rect(x - 4, y - 4, 9, 9, P.away);
         s.frame(x - 4, y - 4, 9, 9, P.ink);

@@ -6,18 +6,22 @@
  *
  *   ./node_modules/.bin/tsx tools/snap.ts career/idle --size 480x270 --scale 1
  *   ./node_modules/.bin/tsx tools/snap.ts career/idle-t4 --size 480x270 --time night --scale 2
- *   ./node_modules/.bin/tsx tools/snap.ts career/shot-worldie --size 480x270 --strip 8 --dt 0.15 --crop 150,70,200,90 --scale 2
- *   ./node_modules/.bin/tsx tools/snap.ts career/shot-goal-t0 --size 480x270 --strip 8 --dt 0.15 --crop 150,90,200,70 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/shot-worldie --size 480x270 --strip 9 --dt 0.2 --crop 150,70,200,90 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/shot-tapin-t0 --size 480x270 --strip 8 --dt 0.25 --crop 150,90,200,70 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/arrival --size 480x270 --strip 8 --dt 0.08 --scale 1
  *   ./node_modules/.bin/tsx tools/snap.ts career/promote --size 480x270 --strip 8 --dt 0.2 --scale 1
  *   ./node_modules/.bin/tsx tools/snap.ts career/fulltime --size 480x270 --t 1 --scale 2
  *   ./node_modules/.bin/tsx tools/snap.ts career/after-goal --size 480x270 --strip 8 --dt 0.25 --crop 150,70,200,110 --scale 2
  *
  * Shots: `career/idle` (all eight tiers), `career/idle-t0` to `idle-t7`, `career/away`,
- * `career/shot-<grade>` (tier 4) and `career/shot-<grade>-t0` (the park) for every grade,
- * `career/after-<grade>` (the same, from the call back on: the new ball and back to
- * juggling), `career/promote` (2 to 3), `promote-t0` (0 to 1), `promote-t1` (1 to 2), `promote-t3` (3 to 4),
- * `career/fulltime` (tier 7), `fulltime-t3`, `fulltime-t0`, `career/reduced` (a goal with
- * reduced motion).
+ * `career/shot-<grade>` (tier 4) and `career/shot-<grade>-t0` (the park) for all eight
+ * grades (worldie, golazo, trivela, toepoke, tapin, miss, timeup, skipped), `career/shot-miss-wide`
+ * (and `-t0`: the second miss of a game, dragged wide rather than skied), `career/after-<grade>`
+ * (the same, from the call back on: the new ball and back to juggling), `career/arrival` (the
+ * opening out of ink, `ctx.t` from the first frame), `career/interrupt` (a shot asked for in
+ * the middle of the last one's reaction), `career/promote` (2 to 3), `promote-t0` (0 to 1),
+ * `promote-t1` (1 to 2), `promote-t3` (3 to 4), `career/fulltime` (tier 7), `fulltime-t3`,
+ * `fulltime-t0`, `career/reduced` (a worldie with reduced motion).
  */
 
 import type { Grade, Mode } from "~/game";
@@ -37,10 +41,11 @@ const STEP = 1 / 60;
 const TOTALS = [0, 100, 200, 300, 400, 500, 600, 680];
 const GRADES: Grade[] = [
   "worldie",
-  "topbins",
-  "goal",
-  "ontarget",
-  "wide",
+  "golazo",
+  "trivela",
+  "toepoke",
+  "tapin",
+  "miss",
   "timeup",
   "skipped",
 ];
@@ -92,8 +97,13 @@ function shot(
   grade: Grade,
   total: number,
   from = 0,
+  before: Grade[] = [],
 ): Surface {
   const scene = make(ctx, total);
+  for (const g of before) {
+    scene.playShot(g);
+    advance(scene, 6);
+  }
   scene.playShot(grade);
   advance(scene, from + ctx.t);
   return frame(ctx, scene);
@@ -117,6 +127,29 @@ const shots: ShotMap = {
     return out;
   },
   "career/away": (ctx) => idle(ctx, 4, "away"),
+  "career/arrival": (ctx) => {
+    // no head start: the frame the page sees `ctx.t` after its first
+    const scene = new CareerScene({
+      seed: ctx.seed,
+      mode: "home",
+      total: 400,
+      labels: LABELS,
+    });
+    scene.resize(ctx.w, ctx.h);
+    scene.setLighting(lightingFor(ctx.sun));
+    scene.update(0);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+  "career/interrupt": (ctx) => {
+    // a golazo, and a toe poke asked for while he is still on his knees in the corner
+    const scene = make(ctx, 400);
+    scene.playShot("golazo");
+    advance(scene, 2.8);
+    scene.playShot("toepoke");
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
   "career/promote": (ctx) => {
     const scene = make(ctx, 200);
     scene.promote(300);
@@ -175,5 +208,7 @@ for (const grade of GRADES) {
   shots[`career/shot-${grade}-t0`] = (ctx) => shot(ctx, grade, 0);
   shots[`career/after-${grade}`] = (ctx) => shot(ctx, grade, 400, 2.4);
 }
+shots["career/shot-miss-wide"] = (ctx) => shot(ctx, "miss", 400, 0, ["miss"]);
+shots["career/shot-miss-wide-t0"] = (ctx) => shot(ctx, "miss", 0, 0, ["miss"]);
 
 export { shots };

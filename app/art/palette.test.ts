@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 import { toHex } from "~/pixel";
 import type { Grade } from "~/game/types";
@@ -71,10 +75,11 @@ const BIBLE: Record<string, string> = {
   ledGreen: "#6dff7a",
   ledRed: "#ff5a4d",
   gradeWorldie: "#ffc928",
-  gradeTopbins: "#8fe35c",
-  gradeGoal: "#2fb36b",
-  gradeOntarget: "#4aa6e8",
-  gradeWide: "#e9584a",
+  gradeGolazo: "#8fe35c",
+  gradeTrivela: "#2fb36b",
+  gradeToepoke: "#4aa6e8",
+  gradeTapin: "#a66bea",
+  gradeMiss: "#e9584a",
   gradeTimeup: "#7b86a3",
 };
 
@@ -116,8 +121,31 @@ describe("palette", () => {
     expect(Object.isFrozen(PALETTE_HEX)).toBe(true);
   });
 
-  it("makes the worldie grade gold", () => {
+  it("makes the worldie gold", () => {
     expect(P.gradeWorldie).toBe(P.gold);
+  });
+
+  it("is the same in the interface's tokens.css, for every colour", () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(here, "../ui/tokens.css"), "utf8");
+    const kebab = (name: string) =>
+      name.replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`);
+    const missing: string[] = [];
+    // The sky's extras (ADDED) are only for painters; everything in the bible's table is CSS.
+    for (const name of PALETTE_NAMES.filter((n) => n in BIBLE)) {
+      const found = new RegExp(`--c-${kebab(name)}: *(#[0-9a-fA-F]{6})`).exec(
+        css,
+      );
+      if (found?.[1].toLowerCase() !== PALETTE_HEX[name]) missing.push(name);
+    }
+    expect(missing).toEqual([]);
+    // And no grade colour in the CSS that the palette does not have.
+    const grades = [...css.matchAll(/--c-grade-([a-z]+):/g)].map((m) => m[1]);
+    expect(grades.sort()).toEqual(
+      PALETTE_NAMES.filter((n) => n.startsWith("grade"))
+        .map((n) => n.slice(5).toLowerCase())
+        .sort(),
+    );
   });
 });
 
@@ -140,19 +168,21 @@ describe("GRADE_COLORS", () => {
   it("has a colour for every grade", () => {
     const grades: Grade[] = [
       "worldie",
-      "topbins",
-      "goal",
-      "ontarget",
-      "wide",
+      "golazo",
+      "trivela",
+      "toepoke",
+      "tapin",
+      "miss",
       "timeup",
       "skipped",
     ];
     expect(Object.keys(GRADE_COLORS).sort()).toEqual([...grades].sort());
     expect(GRADE_COLORS.worldie).toBe(P.gold);
-    expect(GRADE_COLORS.topbins).toBe(P.gradeTopbins);
-    expect(GRADE_COLORS.goal).toBe(P.gradeGoal);
-    expect(GRADE_COLORS.ontarget).toBe(P.gradeOntarget);
-    expect(GRADE_COLORS.wide).toBe(P.gradeWide);
+    expect(GRADE_COLORS.golazo).toBe(P.gradeGolazo);
+    expect(GRADE_COLORS.trivela).toBe(P.gradeTrivela);
+    expect(GRADE_COLORS.toepoke).toBe(P.gradeToepoke);
+    expect(GRADE_COLORS.tapin).toBe(P.gradeTapin);
+    expect(GRADE_COLORS.miss).toBe(P.gradeMiss);
   });
 
   it("uses the time-up grey for both timeup and skipped", () => {

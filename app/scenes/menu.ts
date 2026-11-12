@@ -28,8 +28,9 @@
  * own.
  *
  * The backdrop. The scene knows the stadium only through `MenuBackdrop`'s contract
- * (resize, setLighting, setSign, setMoonPhase, target, setRoar, draw, and
- * airshipAt and pokeAirship, which hand the airship the pointer) and
+ * (resize, setLighting, setSign, setMoonPhase, target, setRoar, draw, airshipAt and
+ * pokeAirship, which hand the airship the pointer, mascotAt and pokeMascot, which hand it
+ * the mascot, and cuesBetween, what is heard of it) and
  * takes from `menuLayout` only `cx`, `ballR`, `ballCy` and `logo`. The kick-offs are
  * placed by the ball's own spot, the backdrop's `target()` (the centre spot of the pitch),
  * the logo zone (always clear sky) with the wordmark in it, which neither flight crosses,
@@ -54,6 +55,18 @@
  * springs back into its pose. Meanwhile it is no menu: nothing hovers or chooses from the
  * pointer, and a mode chosen from the captions brings it round quickly before the strike.
  * The constants under "Spinning the ball by hand" give the feel.
+ *
+ * Sound. The scene says what is to be heard through `onSound` (see "Sound" below): a soft
+ * kick on a press of the ball (a pointer passing over it is silent), wind while it spins,
+ * the strike and the flight, HOME's landing and its small bounce, AWAY's twinkle in the
+ * sky, the transition as the iris starts to close, the airship's
+ * squeak and pop, and the picture's own cues (`backdrop.cuesBetween`: the mascot, the
+ * airship's landing, and the match far off, a faint cheer and distant rockets at its goal),
+ * forwarded as they are. No horns: the home page is quiet under a distant murmur of the town.
+ *
+ * Wind is seen as well as heard: while the hand's turn moves the ball, streaks of air run
+ * round it just outside its rim the way it turns (see "The wind round the spinning ball"),
+ * and the struck ball leaves a rush of them behind it while it is still big.
  */
 
 import {
@@ -71,6 +84,8 @@ import { lightingFor, type Lighting } from "~/art/lighting";
 import { drawLogo, logoSize, type LogoOptions } from "~/art/logo";
 import { MODE_COLORS, P } from "~/art/palette";
 import { MenuBackdrop } from "~/art/stadium";
+import { schemeForDay } from "~/art/stadium-club";
+import { BEDS, HOME_PAGE } from "~/audio/mix";
 import type { Mode } from "~/game";
 import {
   Surface,
@@ -81,7 +96,13 @@ import {
   smoothstep,
   type Color,
 } from "~/pixel";
-import type { PointerInfo, Scene, SceneCursor } from "./scene";
+import type {
+  Ambience,
+  PointerInfo,
+  Scene,
+  SceneCursor,
+  SoundCue,
+} from "./scene";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -91,15 +112,20 @@ import type { PointerInfo, Scene, SceneCursor } from "./scene";
  * The modes that are not open yet. Each has a patch of its own on the ball: NEXT-GEN on
  * the top patch and RETRO on the bottom one, CLOSEST and FURTHEST on the back, directly
  * behind AWAY and HOME, so that half a turn of the ball brings CLOSEST round to where HOME
- * was and FURTHEST to where AWAY was.
+ * was and FURTHEST to where AWAY was, and GUESS WHO and SHOOTOUT on the rim out past HOME
+ * and AWAY, a quarter turn round (a drag to the right brings GUESS WHO to the front, a
+ * drag to the left SHOOTOUT).
  */
-export type LockedMode = "nextgen" | "retro" | "closest" | "furthest";
+export type LockedMode =
+  "nextgen" | "retro" | "closest" | "furthest" | "guesswho" | "shootout";
 
 export const LOCKED_MODES: readonly LockedMode[] = [
   "nextgen",
   "retro",
   "closest",
   "furthest",
+  "guesswho",
+  "shootout",
 ];
 
 /** Which patch each mode is on. */
@@ -110,6 +136,8 @@ export const MODE_SLOTS: Readonly<Record<Mode | LockedMode, BallSlot>> = {
   retro: "bottom",
   closest: "backRight",
   furthest: "backLeft",
+  guesswho: "rimLeft",
+  shootout: "rimRight",
 };
 
 export interface MenuLabels {
@@ -122,6 +150,8 @@ export interface MenuLabels {
   retro: string;
   closest: string;
   furthest: string;
+  guesswho: string;
+  shootout: string;
   /** The first line of the airship's sign, over the fact, for example "DID YOU KNOW?". */
   header: string;
   /** Under the logo when there is room, for example "DAILY FOOTBALL TRIVIA". */
@@ -129,6 +159,7 @@ export interface MenuLabels {
 }
 
 export interface MenuSceneOptions {
+  /** The day number: it seeds the picture and picks the stadium's club colours. */
   seed: number;
   /** The fact of the day, on the airship's sign. Any case: the sign shows capitals. */
   fact: string;
@@ -225,8 +256,8 @@ const STILL = 0.5;
 /**
  * The kick-off, from the moment a mode is chosen. The patch flashes until K_HIT, the ball
  * is struck and squashed until K_FLY, it flies for HOME_FLIGHT or AWAY_FLIGHT seconds, the
- * iris starts at K_IRIS, has closed to a ring by K_HOLD, shuts from K_SHUT, the screen is
- * ink at K_INK and the scene is "done" at K_END.
+ * iris starts at K_IRIS, slows onto a ring at K_RING and goes straight on to shut, the
+ * screen is ink at K_INK and the scene is "done" at K_END (see `irisRadius`).
  */
 const K_HIT = 0.22;
 const K_FLY = K_HIT + 0.07;
@@ -241,20 +272,18 @@ const STRIKE_FRAMES = 6;
  * erupt before the iris closes on it. */
 const HOME_FLIGHT = 0.6;
 const AWAY_FLIGHT = 0.68;
-const K_IRIS = K_FLY + AWAY_FLIGHT + 0.17;
-const K_HOLD = K_IRIS + 0.2;
-const K_SHUT = K_HOLD + 0.1;
-const K_INK = K_SHUT + 0.07;
-const K_END = K_INK + 0.06;
+const K_IRIS = K_FLY + AWAY_FLIGHT + 0.16;
+const K_RING = K_IRIS + 0.44;
+const K_INK = K_RING + 0.19;
+const K_END = K_INK + 0.05;
 /** With reduced motion the kick-off is a cut: the patch lights for this long, then ink. */
 const K_REDUCED = 0.15;
 /** The screen shake of the strike, one entry a thirtieth of a second. */
 const SHAKE: readonly number[] = [2, -2, 1, -1];
 /** HOME: the ground starts to roar this long before the ball is down, and is at full voice
- * ROAR_RAMP later. */
+ * ROAR_RAMP later, swelling a little every frame. */
 const ROAR_LEAD = 0.05;
 const ROAR_RAMP = 0.18;
-const ROAR_STEPS = 6;
 
 /**
  * A ball time at which a chosen patch shows its mode's light colour and holds it (the
@@ -307,11 +336,90 @@ const SNAP = 0.24;
 const SPIN_STEP = 1 / 120;
 const SPIN_GIVE_UP = 10;
 
+// ---------------------------------------------------------------------------
+// Sound
+// ---------------------------------------------------------------------------
+
+/** A press on the ball is heard at most once every PRESS_GAP seconds. */
+const PRESS_GAP = 0.1;
+/** Wind is heard while the ball turns faster than this share of SPIN_MAX. */
+const WIND_MIN = 0.01;
+/**
+ * The struck ball's wind: WIND_STRIKE as it leaves the boot, falling to HOME_WIND_END of
+ * that by the time HOME's ball is down and AWAY_WIND_END of it as AWAY's vanishes, after
+ * which AWAY's dies away over WIND_TAIL seconds. The levels are mix.ts's (HOME_PAGE).
+ */
+const WIND_STRIKE = HOME_PAGE.strikeWind;
+const HOME_WIND_END = HOME_PAGE.homeWindEnd;
+const AWAY_WIND_END = HOME_PAGE.awayWindEnd;
+const WIND_TAIL = 0.35;
+/** The home screen's bed: a town, with a stadium in the distance (mix.ts, BEDS). */
+const CROWD = BEDS.places.town.crowd;
+
+// What the ball sends, at mix.ts's powers (HOME_PAGE).
+const PRESS: SoundCue = { kind: "kick", power: HOME_PAGE.press };
+const STRIKE: SoundCue = { kind: "kick", power: HOME_PAGE.strike };
+/** HOME's ball dropping onto the centre spot, and its one small bounce. */
+const LAND: SoundCue = { kind: "land", power: HOME_PAGE.land };
+const LAND_HOP: SoundCue = { kind: "land", power: HOME_PAGE.hop };
+/** AWAY's last twinkle. */
+const SPARKLE: SoundCue = { kind: "sparkle" };
+/**
+ * AWAY's sparkle rises to its brightest SPARKLE_RISE seconds after it starts (the recording's
+ * second, brighter chime), and the twinkle flares TWINKLE_FLARE seconds after the ball
+ * vanishes (frame 2 of TWINKLE at 20 a second): it is sent early by the difference, so the
+ * two meet. Its tail rings on under the iris's whoosh.
+ */
+const SPARKLE_RISE = 0.12;
+const TWINKLE_FLARE = 0.1;
+const CLOSING: SoundCue = { kind: "transition", opening: false };
+const SQUEAK: SoundCue = { kind: "squeak" };
+const POP: SoundCue = { kind: "pop" };
+
 /**
  * What the hand has done to the ball. "still": nothing, the ball is the menu. "rest": it
  * has come to rest showing a locked patch, and is a menu there too.
  */
 type Spin = "still" | "drag" | "coast" | "rest" | "home" | "snap";
+
+// ---------------------------------------------------------------------------
+// The wind round the spinning ball
+// ---------------------------------------------------------------------------
+
+/**
+ * While the hand's turn moves, streaks of air go round the ball just outside its rim, the
+ * way its near side turns: each is born at a point of the rim, runs along it and breaks up.
+ * WIND_SLOTS of them at most: WIND_CALM at full speed, the rest only in the gust of a flick.
+ */
+const WIND_SLOTS = 18;
+const WIND_CALM = 12;
+/** How long a streak lives, and how long its tail lags its head (seconds). */
+const WIND_LIFE = 0.36;
+const WIND_LAG = 0.16;
+/** The streaks run at this share of the rim's speed, and never faster than WIND_FAST px/s. */
+const WIND_PACE = 0.45;
+const WIND_FAST = 230;
+/** They move on in steps, WIND_FPS a second. */
+const WIND_FPS = 24;
+/** Below this speed (a share of SPIN_MAX) there is no wind to see. */
+const WIND_SHOW = 0.05;
+/** A streak is born only where the rim's air is at least this share of its fastest. */
+const WIND_WHERE = 0.4;
+/** How far outside the rim they run: from WIND_GAP pixels, WIND_SPREAD more at most. */
+const WIND_GAP = 3;
+const WIND_SPREAD = 0.16;
+/** The gust as the ball is flicked: GUST seconds of more streaks, and longer ones. */
+const GUST = 0.35;
+/**
+ * The struck ball's rush of air, while it is big: a streak off its trailing side at each
+ * of these offsets across its way (shares of its radius), as long as the way it came in the
+ * last RUSH_BACK seconds and RUSH_MAX radii at most.
+ */
+const RUSH_LINES: readonly number[] = [-0.75, -0.35, 0.05, 0.45, 0.8];
+const RUSH_BACK = 0.08;
+const RUSH_MAX = 1.6;
+/** Only while the ball is at least this share of its size: near, and fast. */
+const RUSH_FROM = 0.35;
 
 // ---------------------------------------------------------------------------
 // The kick-off: where things go
@@ -403,7 +511,7 @@ const AWAY_EDGE = 6;
 const AWAY_SWING = 1.6;
 const AWAY_SWING_Y = 0.15;
 
-/** The ring the iris closes to and holds, in ball radii: HOME's shows the pitch and the
+/** The ring the iris slows onto, in ball radii: HOME's shows the pitch and the
  * crowd round it, AWAY's a little sky. */
 const HOME_RING = 0.75;
 const AWAY_RING = 0.22;
@@ -460,6 +568,25 @@ function shiftCols(s: Surface, dx: number): void {
       data.fill(data[end - k - 1], end - k, end);
     }
   }
+}
+
+/**
+ * How open the iris is `kt` seconds into the kick-off: a radius in logical pixels, not yet
+ * rounded, from `far` (beyond the farthest corner of the screen) down to `ring` and on to
+ * 0. It closes from rest, quickest in the middle and slowing onto the ring, which it
+ * reaches at K_RING with no speed left: the beat that shows where the ball went. It does
+ * not stop there: it shuts at once, slowly at first and quicker to the end, to nothing at
+ * K_INK. (A dead hold on the ring read as a stop-start.) A smooth function of time:
+ * rounded only when drawn, it moves every frame.
+ */
+function irisRadius(kt: number, far: number, ring: number): number {
+  if (kt < K_IRIS) return far;
+  if (kt < K_RING) {
+    const u = (kt - K_IRIS) / (K_RING - K_IRIS);
+    return lerp(far, ring, u * u * (3 - 2 * u));
+  }
+  const u = clamp((kt - K_RING) / (K_INK - K_RING));
+  return ring * (1 - u * u);
 }
 
 /** The iris: everything further than `r` from (cx, cy) becomes `ink`. */
@@ -817,6 +944,55 @@ function drawTinyBall(
 // The scene
 // ---------------------------------------------------------------------------
 
+/**
+ * A streak of air: the arc of the circle of radius `rho` round (cx, cy) from angle `a0`
+ * (its tail) to `a1` (its head), a pixel at a time. Bright at the head, airier down to the
+ * tail; `broken`, it is breaking up: every other pixel, and the head gone dim.
+ */
+function drawArc(
+  s: Surface,
+  cx: number,
+  cy: number,
+  rho: number,
+  a0: number,
+  a1: number,
+  broken: boolean,
+  head: Color,
+  body: Color,
+  tail: Color,
+): void {
+  const span = a1 - a0;
+  const steps = Math.ceil((Math.abs(span) * rho) / 0.7);
+  if (!(steps >= 1) || steps > 4000) return;
+  let lx = Number.NaN;
+  let ly = Number.NaN;
+  let n = 0;
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    const a = a0 + span * f;
+    const x = Math.round(cx + rho * Math.cos(a));
+    const y = Math.round(cy + rho * Math.sin(a));
+    if (x === lx && y === ly) continue;
+    lx = x;
+    ly = y;
+    n++;
+    if (broken && n % 2 === 0) continue;
+    const c = f >= 0.7 ? (broken ? body : head) : f >= 0.35 ? body : tail;
+    s.px(x, y, c);
+    // the head is two pixels thick, the second just outside
+    if (!broken && f >= 0.7) {
+      const a2 = Math.atan2(y - cy, x - cx);
+      const ex = Math.cos(a2);
+      const ey = Math.sin(a2);
+      s.px(
+        x + (Math.abs(ex) >= Math.abs(ey) ? Math.sign(ex) : 0),
+        y + (Math.abs(ey) > Math.abs(ex) ? Math.sign(ey) : 0),
+        body,
+      );
+    }
+  }
+}
+
 function slotOf(mode: Mode | null): BallSlot | null {
   return mode === "home" ? "left" : mode === "away" ? "right" : null;
 }
@@ -858,6 +1034,8 @@ export class MenuScene implements Scene {
   onChoose: ((mode: Mode) => void) | null = null;
   /** A locked patch was pressed and released: which mode it is. */
   onLocked: ((mode: LockedMode) => void) | null = null;
+  /** Something to be heard (the Scene contract): set by the host. */
+  onSound: ((cue: SoundCue) => void) | null = null;
 
   private readonly seed: number;
   private readonly backdrop: MenuBackdrop;
@@ -904,6 +1082,14 @@ export class MenuScene implements Scene {
   private clock = 0;
   /** The ambient time the kick-off began at: the struck ball hangs where it was then. */
   private kickClock = 0;
+  /** Real time, reduced motion or not: what the sounds are timed by. */
+  private realT = 0;
+  /** When a press on the ball was last heard. */
+  private lastPress = -Infinity;
+  /** When the hand last flicked the ball (real time): the gust of wind round it. */
+  private flickT = -Infinity;
+  /** The iris's sound has been sent for this kick-off. */
+  private closing = false;
 
   private state: MenuPhase;
   /** Seconds into the entrance or the kick-off. */
@@ -926,16 +1112,18 @@ export class MenuScene implements Scene {
   private pointerHover: Mode | null = null;
   private domHover: Mode | null = null;
   private pressed: BallSlot | null = null;
-  /** What the pointer went down on, while it is down: the ball, the airship or nothing. */
-  private press: "ball" | "ship" | null = null;
+  /** What the pointer went down on, while it is down: the ball, the airship, the mascot or
+   * nothing. */
+  private press: "ball" | "ship" | "mascot" | null = null;
   private downX = 0;
   private downY = 0;
   /** Where the pointer was when the drag last turned the ball. */
   private handX = 0;
   private handY = 0;
-  /** The pointer is over the ball's disc, or over the airship, as of the last look. */
+  /** The pointer is over the ball's disc, the airship or the mascot, as of the last look. */
   private overBall = false;
   private overShip = false;
+  private overMascot = false;
 
   // The hand's turn of the ball: a rotation in view space, applied on top of the hover's
   // pose. `q*` is it as a unit quaternion, `w*` how fast it turns (radians a second),
@@ -995,6 +1183,8 @@ export class MenuScene implements Scene {
       seed: opts.seed,
       sign: { header: this.header, text: this.fact },
     });
+    // The stadium wears the day's club colours (the seed is the day number).
+    this.backdrop.setScheme(schemeForDay(opts.seed).id);
     this.patches = {
       left: { label: "", icon: "home", accent: MODE_COLORS.home },
       right: { label: "", icon: "away", accent: MODE_COLORS.away },
@@ -1002,6 +1192,8 @@ export class MenuScene implements Scene {
       bottom: { label: "", icon: "rewind", locked: true },
       backRight: { label: "", icon: "pin", locked: true },
       backLeft: { label: "", icon: "globe", locked: true },
+      rimLeft: { label: "", icon: "shirt", locked: true },
+      rimRight: { label: "", icon: "goal", locked: true },
     };
     this.state = opts.intro === false ? "idle" : "intro";
     this.setLabels(opts.labels);
@@ -1058,7 +1250,15 @@ export class MenuScene implements Scene {
 
   update(dt: number): void {
     const d = dt > 0 ? Math.min(dt, MAX_DT) : 0;
+    this.realT += d;
+    const was = this.clock;
     this.clock += d * (this.reduced ? REDUCED_SPEED : 1);
+    // what is heard of the picture, on the clock it is drawn with
+    if (this.onSound && this.state !== "done" && this.clock > was) {
+      for (const cue of this.backdrop.cuesBetween(was, this.clock)) {
+        this.onSound(cue);
+      }
+    }
     if (this.noT >= 0) {
       this.noT += d;
       if (this.noT >= NO_LEN) this.noT = -1;
@@ -1070,7 +1270,9 @@ export class MenuScene implements Scene {
         this.strikeQueued();
       }
     } else if (this.state === "kickoff") {
+      const before = this.phaseT;
       this.phaseT += d;
+      this.kickSounds(before, this.phaseT);
       if (this.phaseT >= (this.reduced ? K_REDUCED : K_END)) {
         this.state = "done";
         const mode = this.mode;
@@ -1080,6 +1282,8 @@ export class MenuScene implements Scene {
     } else if (this.state === "idle" && this.spin !== "still") {
       // the hand's turn of the ball runs in real time, reduced motion or not
       this.stepSpin(d);
+      const speed = this.spinSpeed();
+      if (speed > WIND_MIN) this.sound({ kind: "wind", speed });
     }
     // the ball moves under a pointer that is keeping still
     if (this.pointerIn) this.refreshHover();
@@ -1104,7 +1308,9 @@ export class MenuScene implements Scene {
     let roar = 0;
     if (home && kt >= land - ROAR_LEAD) {
       const u = (kt - (land - ROAR_LEAD)) / ROAR_RAMP;
-      roar = Math.min(1, Math.ceil(u * ROAR_STEPS + 1e-9) / ROAR_STEPS);
+      // swelling fast and settling at full voice
+      const k = 1 - clamp(u);
+      roar = 1 - k * k;
     }
     this.setRoar(roar);
     this.backdrop.draw(s, this.clock);
@@ -1112,13 +1318,12 @@ export class MenuScene implements Scene {
     if (this.aimStale) this.aim();
     this.compose();
 
-    if (
-      kt >= K_FLY &&
-      kt < land &&
-      this.ballOn &&
-      this.ball.r < TRAIL_BELOW_R
-    ) {
-      this.drawTrail(s, kt, accent.light, accent.base);
+    if (kt >= K_FLY && kt < land && this.ballOn) {
+      if (this.ball.r < TRAIL_BELOW_R) {
+        this.drawTrail(s, kt, accent.light, accent.base);
+      } else if (this.ball.r >= this.R * RUSH_FROM) {
+        this.drawRush(s, kt);
+      }
     }
     // HOME: the mark of the landing, under the ball
     if (home && kt >= land) {
@@ -1153,6 +1358,8 @@ export class MenuScene implements Scene {
         );
       }
     }
+    // the air the turning ball drags round with it, just outside its rim
+    if (this.state === "idle") this.drawWind(s);
     if (this.ballOn) this.drawBallNow(s);
 
     // in front of the ball
@@ -1206,17 +1413,9 @@ export class MenuScene implements Scene {
         Math.ceil(
           Math.hypot(Math.max(fx, this.w - fx), Math.max(fy, this.h - fy)),
         ) + 1;
-      let r: number;
-      if (kt < K_HOLD) {
-        const u = Math.floor((kt - K_IRIS) * 30) / ((K_HOLD - K_IRIS) * 30);
-        r = Math.round(lerp(far, hold, clamp(u * (2 - u))));
-      } else if (kt < K_SHUT) {
-        r = hold;
-      } else {
-        const u = Math.floor((kt - K_SHUT) * 30) / ((K_INK - K_SHUT) * 30);
-        r = Math.round(lerp(hold, 0, clamp(u))) - 1;
-      }
-      iris(s, fx, fy, r, P.ink);
+      // whole pixels only now; under one pixel it is shut
+      const r = Math.round(irisRadius(kt, far, hold));
+      iris(s, fx, fy, r >= 1 ? r : -1, P.ink);
     }
   }
 
@@ -1235,6 +1434,7 @@ export class MenuScene implements Scene {
     this.pointerX = Number.isFinite(p.x) ? p.x : -1;
     this.pointerY = Number.isFinite(p.y) ? p.y : -1;
     if (p.type === "move") {
+      // silent: only a press on the ball is heard
       this.follow();
       this.refreshHover();
       return;
@@ -1250,11 +1450,14 @@ export class MenuScene implements Scene {
       this.handY = this.pointerY;
       if (this.state === "idle" && this.overBall) {
         this.press = "ball";
+        this.pressBall();
         // a turning ball is caught: it is held, and a press on it never chooses
         if (this.isMenu()) this.pressed = this.over;
         else this.grab();
       } else if (this.overShip) {
         this.press = "ship";
+      } else if (this.overMascot) {
+        this.press = "mascot";
       }
       return;
     }
@@ -1265,6 +1468,7 @@ export class MenuScene implements Scene {
     this.press = null;
     const slot = this.over;
     const onShip = this.overShip;
+    const onMascot = this.overMascot;
     const was = this.pressed;
     this.pressed = null;
     // a finger that has lifted is not hovering
@@ -1275,7 +1479,15 @@ export class MenuScene implements Scene {
     }
     if (press === "ship") {
       // the same clock the backdrop is drawn with
-      if (onShip) this.backdrop.pokeAirship(this.clock);
+      if (!onShip) return;
+      const poke = this.backdrop.pokeAirship(this.clock);
+      if (poke === "wobble") this.sound(SQUEAK);
+      else if (poke === "pop") this.sound(POP);
+      return;
+    }
+    if (press === "mascot") {
+      // he does a trick (his touches are the picture's own cues)
+      if (onMascot) this.backdrop.pokeMascot(this.clock);
       return;
     }
     if (was === null || slot !== was || this.state !== "idle") return;
@@ -1321,8 +1533,17 @@ export class MenuScene implements Scene {
     if (this.pointerHover !== null) return "pointer";
     if (this.over !== null && this.state === "idle") return "pointer";
     if (this.overBall && this.state === "idle") return "grab";
-    if (this.overShip) return "pointer";
+    if (this.overShip || this.overMascot) return "pointer";
     return "default";
+  }
+
+  /** A town with a stadium in the distance, by day or by night. */
+  ambience(): Ambience {
+    return {
+      venue: "town",
+      crowd: CROWD,
+      night: this.light.phase === "night",
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -1430,6 +1651,7 @@ export class MenuScene implements Scene {
     let slot: BallSlot | null = null;
     let onBall = false;
     let onShip = false;
+    let onMascot = false;
     if (this.pointerIn && (this.state === "intro" || this.state === "idle")) {
       this.compose();
       const b = this.ball;
@@ -1461,10 +1683,14 @@ export class MenuScene implements Scene {
           this.pointerY,
           this.clock,
         );
+        onMascot =
+          !onShip &&
+          this.backdrop.mascotAt(this.pointerX, this.pointerY, this.clock);
       }
     }
     this.overBall = onBall || slot !== null;
     this.overShip = onShip;
+    this.overMascot = onMascot;
     this.over = slot;
     const next = modeOf(slot);
     if (next === this.pointerHover) return;
@@ -1478,6 +1704,7 @@ export class MenuScene implements Scene {
     this.over = null;
     this.overBall = false;
     this.overShip = false;
+    this.overMascot = false;
     if (this.pointerHover === null) return;
     this.pointerHover = null;
     if (this.onHover) this.onHover(null);
@@ -1495,6 +1722,7 @@ export class MenuScene implements Scene {
   private kickOff(mode: Mode, told = false): void {
     this.state = "kickoff";
     this.phaseT = 0;
+    this.closing = false;
     this.kickClock = this.clock;
     this.mode = mode;
     this.noT = -1;
@@ -1504,6 +1732,7 @@ export class MenuScene implements Scene {
     this.over = null;
     this.overBall = false;
     this.overShip = false;
+    this.overMascot = false;
     // the ball is struck in its pose (it is there already: this only makes sure)
     this.spin = "still";
     this.resetTurn();
@@ -1515,6 +1744,104 @@ export class MenuScene implements Scene {
   }
 
   // -------------------------------------------------------------------------
+  // Sound
+  // -------------------------------------------------------------------------
+
+  private sound(cue: SoundCue): void {
+    if (this.onSound) this.onSound(cue);
+  }
+
+  /**
+   * The pointer pressed the ball (a click, or the start of a drag): a soft kick, unless one
+   * was heard a moment ago. A pointer that only passes over it is not heard.
+   */
+  private pressBall(): void {
+    if (this.realT - this.lastPress < PRESS_GAP) return;
+    this.lastPress = this.realT;
+    this.sound(PRESS);
+  }
+
+  /**
+   * How fast the hand's turn of the ball is going: 0 at rest, 1 at the hardest flick. A
+   * ball brought round for a chosen mode turns as fast as its tween.
+   */
+  private spinSpeed(): number {
+    this.omega();
+    const w = Math.hypot(this.ox, this.oy, this.oz);
+    return Number.isFinite(w) ? clamp(w / SPIN_MAX) : 0;
+  }
+
+  // What `omega` works out: how the hand's turn is turning the ball now, as an angular
+  // velocity in view space (radians a second; x right, y down, z towards the viewer).
+  private ox = 0;
+  private oy = 0;
+  private oz = 0;
+
+  /** The ball's angular velocity now: the hand's, or the snap's tween's. */
+  private omega(): void {
+    this.ox = this.oy = this.oz = 0;
+    if (this.spin === "still") return;
+    if (this.spin === "snap") {
+      // what is left of the way is (1 - u)^3 of it, going back
+      const u = clamp(this.snapT / SNAP);
+      const k = (-3 * (1 - u) * (1 - u)) / SNAP;
+      this.ox = this.snapX * k;
+      this.oy = this.snapY * k;
+      this.oz = this.snapZ * k;
+      return;
+    }
+    this.ox = this.wx;
+    this.oy = this.wy;
+    this.oz = this.wz;
+  }
+
+  /**
+   * The kick-off's sounds for the step from `before` to `after` seconds into it: the
+   * strike, the wind of the flight, falling as HOME's ball drops in and dying away after
+   * AWAY's vanishes, HOME's landing (a thump as it drops onto the spot and a softer one as
+   * its bounce comes down) or AWAY's sparkle as it twinkles out, and the transition as the
+   * iris starts to close. No cheer and no horns. Each is heard once, however long the step.
+   * With reduced motion there is no flight, and so no landing and no twinkle.
+   */
+  private kickSounds(before: number, after: number): void {
+    const at = (t: number): boolean => before <= t && t < after;
+    const home = this.mode === "home";
+    if (this.reduced) {
+      // a cut: the strike as it starts, and the page closing on it
+      if (at(0)) {
+        this.sound(STRIKE);
+        this.closeSound();
+      }
+      return;
+    }
+    if (at(K_HIT)) this.sound(STRIKE);
+    if (at(K_IRIS)) this.closeSound();
+    const len = home ? HOME_FLIGHT : AWAY_FLIGHT;
+    const land = K_FLY + len;
+    if (home) {
+      if (at(land)) this.sound(LAND);
+      if (at(land + HOME_HOP_AT + HOME_HOP_LEN)) this.sound(LAND_HOP);
+    } else if (at(land + TWINKLE_FLARE - SPARKLE_RISE)) {
+      this.sound(SPARKLE);
+    }
+    let speed = 0;
+    if (after >= K_FLY && after < land) {
+      const u = (after - K_FLY) / len;
+      speed = WIND_STRIKE * lerp(1, home ? HOME_WIND_END : AWAY_WIND_END, u);
+    } else if (!home && after >= land && after < land + WIND_TAIL) {
+      speed = WIND_STRIKE * AWAY_WIND_END * (1 - (after - land) / WIND_TAIL);
+    }
+    if (speed > 0) this.sound({ kind: "wind", speed });
+  }
+
+  /** The iris starts to close on the home page: heard once a kick-off. */
+  private closeSound(): void {
+    if (this.closing) return;
+    this.closing = true;
+    this.sound(CLOSING);
+  }
+
+  // -------------------------------------------------------------------------
   // The hand's turn of the ball
   // -------------------------------------------------------------------------
 
@@ -1523,7 +1850,7 @@ export class MenuScene implements Scene {
     const far =
       Math.abs(this.pointerX - this.downX) > DRAG ||
       Math.abs(this.pointerY - this.downY) > DRAG;
-    if (this.press === "ship") {
+    if (this.press === "ship" || this.press === "mascot") {
       if (far) this.press = null;
       return;
     }
@@ -1566,6 +1893,7 @@ export class MenuScene implements Scene {
       this.wz *= k;
     }
     this.spin = "coast";
+    this.flickT = this.realT;
   }
 
   /** The ball is the menu again, exactly in its pose. */
@@ -2184,6 +2512,115 @@ export class MenuScene implements Scene {
       px = x;
       py = y;
     }
+  }
+
+  /**
+   * The wind round the ball while the hand's turn moves it: streaks just outside the rim,
+   * running the way the rim's air goes. At a point of the rim at angle `a` (screen, y down)
+   * that is the roll plus the near side's motion carried round to there: `R (oz - oy sin a
+   * - ox cos a)` pixels a second, clockwise when positive. More of them and longer the
+   * faster it turns, a gust of them as it is flicked, none at all with reduced motion.
+   * They never come into the logo's sky, and the ball covers the rest of each.
+   */
+  private drawWind(s: Surface): void {
+    if (this.reduced || this.spin === "still" || !this.ballOn) return;
+    const speed = this.spinSpeed();
+    if (!(speed > WIND_SHOW)) return;
+    const { ox, oy, oz } = this;
+    const b = this.ball;
+    const R = b.r;
+    const across = Math.hypot(ox, oy);
+    const fastest = R * (Math.abs(oz) + across);
+    if (!(fastest > 0) || !Number.isFinite(fastest)) return;
+    const since = this.realT - this.flickT;
+    const gust = since >= 0 && since < GUST ? 1 - since / GUST : 0;
+    // how many: the calm ones fade out one by one as it slows, the gust's on top
+    const count =
+      ((speed - WIND_SHOW) / (1 - WIND_SHOW)) * WIND_CALM +
+      gust * (WIND_SLOTS - WIND_CALM);
+    const lag = WIND_LAG * (1 + gust * 0.6);
+    const t = Math.floor(this.realT * WIND_FPS) / WIND_FPS;
+    const day = !this.light.lightsOn;
+    const head = P.white;
+    const body = day ? P.skyMid : P.skyLow;
+    const tail = day ? P.skyLow : P.mist;
+    const spread = Math.max(2, Math.round(R * WIND_SPREAD));
+    s.pushClip(0, this.logoH, s.w, s.h - this.logoH);
+    for (let k = 0; k < WIND_SLOTS; k++) {
+      const strength = clamp(count - k);
+      if (strength <= 0) break;
+      // each slot lives its lives out of step with the others
+      const life = t / WIND_LIFE + ((k * 0.618) % 1);
+      const n = Math.floor(life);
+      const age = (life - n) * WIND_LIFE;
+      // born at the best of three points of the rim
+      let a = 0;
+      let v = 0;
+      for (let j = 0; j < 3; j++) {
+        const aj = hash2(k * 3 + j, n, this.seed) * TAU;
+        const vj = R * (oz - oy * Math.sin(aj) - ox * Math.cos(aj));
+        if (Math.abs(vj) > Math.abs(v)) {
+          a = aj;
+          v = vj;
+        }
+      }
+      if (Math.abs(v) < WIND_WHERE * fastest) continue;
+      const rho =
+        R + WIND_GAP + Math.floor(hash2(k, n, this.seed + 1) * spread);
+      const pace =
+        Math.sign(v) * Math.min(Math.abs(v) * WIND_PACE, WIND_FAST) * strength;
+      const a1 = a + (pace * age) / rho;
+      const a0 = a + (pace * Math.max(0, age - lag)) / rho;
+      // the last third of its life it breaks up
+      const broken = age > WIND_LIFE * 0.66;
+      drawArc(s, b.cx, b.cy, rho, a0, a1, broken, head, body, tail);
+    }
+    s.popClip();
+  }
+
+  /**
+   * The air the struck ball leaves behind while it is still big: RUSH_LINES straight
+   * streaks off its trailing side, the way it has come, in the wind's colours. (A far ball
+   * has `drawTrail` instead.)
+   */
+  private drawRush(s: Surface, kt: number): void {
+    const b = this.ball;
+    const x = b.cx;
+    const y = b.cy;
+    const r = b.r;
+    const len = this.mode === "home" ? HOME_FLIGHT : AWAY_FLIGHT;
+    const u = (kt - K_FLY) / len;
+    const back = (kt - RUSH_BACK - K_FLY) / len;
+    if (!(u > 0)) return;
+    this.flightAt(clamp(back));
+    let dx = x - this.fx;
+    let dy = y - this.fy;
+    this.flightAt(clamp(u));
+    const d = Math.hypot(dx, dy);
+    if (!(d >= 2)) return;
+    dx /= d;
+    dy /= d;
+    const day = !this.light.lightsOn;
+    const near = P.white;
+    const far = day ? P.skyMid : P.skyLow;
+    // as long as the way it came in the last RUSH_BACK seconds, at most RUSH_MAX radii
+    const long = Math.min(d, r * RUSH_MAX);
+    s.pushClip(0, this.logoH, s.w, s.h - this.logoH);
+    for (let i = 0; i < RUSH_LINES.length; i++) {
+      const o = RUSH_LINES[i];
+      // from the rim on the trailing side, across the way it goes by `o` of its radius
+      const along = Math.sqrt(1 - o * o) * r;
+      const x0 = Math.round(x - dx * along - dy * o * r);
+      const y0 = Math.round(y - dy * along + dx * o * r);
+      const l = long * (i % 2 === 0 ? 1 - Math.abs(o) * 0.4 : 0.6);
+      const xm = Math.round(x0 - dx * l * 0.4);
+      const ym = Math.round(y0 - dy * l * 0.4);
+      const x1 = Math.round(x0 - dx * l);
+      const y1 = Math.round(y0 - dy * l);
+      s.line(xm, ym, x1, y1, far);
+      s.line(x0, y0, xm, ym, near);
+    }
+    s.popClip();
   }
 
   private drawBallNow(s: Surface): void {

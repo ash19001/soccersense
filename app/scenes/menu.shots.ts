@@ -15,12 +15,15 @@
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-home --size 480x270 --t 0.6 --strip 10 --dt 0.0333 --crop 180,60,120,110 --scale 4    (the drop and the landing)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-away --size 480x270 --t 0.3 --strip 12 --dt 0.06 --crop 300,30,180,180 --scale 2    (over the town)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-away --size 130x281 --strip 12 --dt 0.1 --scale 2    (round the sign on a phone)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-home --size 480x270 --t 1.16 --strip 10 --dt 0.06 --scale 1    (the iris)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-away --size 480x270 --t 1.5 --strip 8 --dt 0.0333 --crop 385,25,60,60 --scale 5    (onto the ring and shut)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/locked --strip 8 --dt 0.05 --scale 2
  *   ./node_modules/.bin/tsx tools/snap.ts menu/reduced --strip 4 --dt 0.06 --scale 2
  *   ./node_modules/.bin/tsx tools/snap.ts menu/drag --size 480x270 --strip 8 --dt 0.1 --scale 2    (turned by hand)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/spin --size 480x270 --strip 12 --dt 0.25 --scale 2    (a flick, and home)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/spin --size 480x270 --t 1.6 --strip 12 --dt 0.0833 --scale 2    (the settle)
- *   ./node_modules/.bin/tsx tools/snap.ts menu/rest --size 480x270 --t 1 --scale 2    (the locked patches, shown)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/wind --size 480x270 --strip 8 --dt 0.1 --scale 2    (the wind round it)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/rest--size 480x270 --t 1 --scale 2    (the locked patches, shown)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/half-turn --size 480x270 --t 1 --scale 2    (CLOSEST and FURTHEST)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/half-turn --size 480x270 --strip 8 --dt 0.75 --scale 1    (the rest, and home)
  */
@@ -39,6 +42,8 @@ const LABELS: MenuLabels = {
   retro: "RETRO",
   closest: "CLOSEST",
   furthest: "FURTHEST",
+  guesswho: "GUESS WHO",
+  shootout: "SHOOTOUT",
   header: "DID YOU KNOW?",
   tagline: "DAILY FOOTBALL TRIVIA",
 };
@@ -73,9 +78,9 @@ function frame(ctx: ShotContext, scene: MenuScene): Surface {
 }
 
 /** The ball close up, with its spot marked as in "menu/float". */
-function closeUp(ctx: ShotContext, scene: MenuScene): Surface {
+function closeUp(ctx: ShotContext, scene: MenuScene, room = 10): Surface {
   const m = menuLayout(ctx.w, ctx.h);
-  const pad = m.ballR + 10;
+  const pad = m.ballR + room;
   const out = new Surface(pad * 2 + 1, pad * 2 + 1);
   out.blit(frame(ctx, scene), pad - m.cx, pad - m.ballCy);
   out.hline(0, pad, 4, P.gold);
@@ -128,26 +133,35 @@ function shown(
   const scene = make(ctx);
   advance(scene, 1);
   const m = menuLayout(ctx.w, ctx.h);
-  const reach = Math.round(m.ballR * 0.85);
-  const vertical = slot === "top" || slot === "bottom";
-  const from = vertical
-    ? patchAt(ctx, slot)
-    : { x: m.cx - reach, y: m.ballCy + 6 };
-  const to = vertical
-    ? { x: m.cx, y: m.ballCy }
-    : { x: m.cx + reach, y: m.ballCy + 6 };
-  scene.pointer({ type: "down", x: from.x, y: from.y });
-  for (let i = 1; i <= 20; i++) {
-    scene.pointer({
-      type: "move",
-      x: from.x + ((to.x - from.x) * i) / 20,
-      y: from.y + ((to.y - from.y) * i) / 20,
-    });
-    scene.update(STEP);
+  /** A drag across the middle, from `a` to `b` of the radius. */
+  const across = (a: number, b: number) =>
+    [
+      { x: m.cx + Math.round(m.ballR * a), y: m.ballCy + 6 },
+      { x: m.cx + Math.round(m.ballR * b), y: m.ballCy + 6 },
+    ] as const;
+  const drags =
+    slot === "top" || slot === "bottom"
+      ? [[patchAt(ctx, slot), { x: m.cx, y: m.ballCy }] as const]
+      : slot === "rimLeft"
+        ? [across(-0.9, 0.6)]
+        : slot === "rimRight"
+          ? [across(0.9, -0.6)]
+          : // most of half a turn, and a little more
+            [across(-0.85, 0.85), across(-0.4, 0.4)];
+  for (const [from, to] of drags) {
+    scene.pointer({ type: "down", x: from.x, y: from.y });
+    for (let i = 1; i <= 20; i++) {
+      scene.pointer({
+        type: "move",
+        x: from.x + ((to.x - from.x) * i) / 20,
+        y: from.y + ((to.y - from.y) * i) / 20,
+      });
+      scene.update(STEP);
+    }
+    advance(scene, 1 / 3);
+    scene.pointer({ type: "up", x: to.x, y: to.y });
+    scene.pointer({ type: "leave", x: 0, y: 0 });
   }
-  advance(scene, 1 / 3);
-  scene.pointer({ type: "up", x: to.x, y: to.y });
-  scene.pointer({ type: "leave", x: 0, y: 0 });
   if (hover) {
     const at = ballSlotCenter(
       {
@@ -284,19 +298,27 @@ export const shots: ShotMap = {
   // Held and dragged slowly right and a little down for `t` seconds (the pointer is
   // still down): --strip 8 --dt 0.1.
   // The ball at rest showing each locked patch, close up: NEXT-GEN, RETRO, half a turn
-  // (CLOSEST where HOME was, FURTHEST where AWAY was) and CLOSEST under the pointer.
+  // (CLOSEST where HOME was, FURTHEST where AWAY was), CLOSEST under the pointer, and a
+  // quarter turn each way (GUESS WHO, and SHOOTOUT under the pointer).
   "menu/rest": (ctx) => {
     const cells = [
       shown(ctx, "top", ctx.t),
       shown(ctx, "bottom", ctx.t),
       shown(ctx, "backLeft", ctx.t),
       shown(ctx, "backLeft", ctx.t, "backRight"),
+      shown(ctx, "rimLeft", ctx.t),
+      shown(ctx, "rimRight", ctx.t, "rimRight"),
     ].map((scene) => closeUp(ctx, scene));
     const w = cells[0].w;
-    const out = new Surface(w * 4 + 6, cells[0].h);
+    const out = new Surface(w * 6 + 10, cells[0].h);
     cells.forEach((c, i) => out.blit(c, i * (w + 2), 0));
     return out;
   },
+
+  // The whole screen after a quarter turn by hand to the right (GUESS WHO) or to the left
+  // (SHOOTOUT): --t is the time since it was let go.
+  "menu/guesswho": (ctx) => frame(ctx, shown(ctx, "rimLeft", ctx.t)),
+  "menu/shootout": (ctx) => frame(ctx, shown(ctx, "rimRight", ctx.t)),
 
   // The whole screen after half a turn by hand: --t is the time since it was let go.
   "menu/half-turn": (ctx) => frame(ctx, shown(ctx, "backLeft", ctx.t)),
@@ -307,6 +329,14 @@ export const shots: ShotMap = {
   // Flicked right at t = 0 (a tenth of a second of a fast drag, let go while moving): it
   // spins, slows and comes home with a little settle. --strip 12 --dt 0.25.
   "menu/spin": (ctx) => closeUp(ctx, dragged(ctx, 0.1, 12, ctx.t)),
+
+  // The wind round the ball: the same flick, with room round it for the streaks.
+  // --strip 8 --dt 0.1 (and --time night).
+  "menu/wind": (ctx) => closeUp(ctx, dragged(ctx, 0.1, 12, ctx.t), 22),
+
+  // The wind of a slow drag, held: --t is how long it has been dragged.
+  "menu/wind-drag": (ctx) =>
+    closeUp(ctx, dragged(ctx, Math.max(STEP, ctx.t), 3, -1), 22),
 
   // The HOME kick-off with reduced motion: a lit patch, then ink. --strip 4 --dt 0.06.
   "menu/reduced": (ctx) => {

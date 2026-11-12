@@ -147,7 +147,83 @@ picture still shows the old ground until NEXT; in the game scene the players sit
 the near crowd fills 30 to 40% of the screen from tier 3, and tiers 0 and 1 have a lot of empty
 grass; the how-to-play and 404 pages are phone-sized on a monitor and the rules are one
 paragraph; the home page's title and description still say "one stadium a day"; AWAY uses the
-HOME grounds until Milestone C. Not yet committed since `0db2e54`.
+HOME grounds until Milestone C. All of this is committed and pushed as `cd66274`.
+
+Done since about 20:00 on 2026-11-11 (run `w10-shots-board-iris.js`, stopped before its last
+two steps when new requests came in): six shot categories replace rank-based points (the rule
+is `shotsFor` in `app/game/shots.ts`; every answer is stored in one category); the footballer
+has a move for each; a mock daily leaderboard on the home screen (a panel over the park on a
+monitor, a sheet on a phone; `app/data/leaderboard.ts`); a smooth iris when a mode is chosen.
+
+Done between about 22:20 on 2026-11-11 and 02:00 on 2026-11-12 (runs
+`w11-names-sound-mascot.js`, `w12a-home-quiet.js`, `w12b-menu-ui.js`, `w13-recordings.js`),
+the product owner's next eleven requests and three rounds of listening feedback:
+
+- The shots renamed: miss 0, tap in 10, toe poke 30, trivela 60, golazo 80, worldie 100 (ids
+  `miss`, `tapin`, `toepoke`, `trivela`, `golazo`, `worldie`; a finished game saved under the
+  old ids still loads). The footballer has a move for each.
+- "Uncommon" instead of "niche" everywhere a player reads it (`en.test.ts` enforces it; the
+  rule id in code is still `niche`).
+- A title on the full-time screen earned by the total, ten per mode (`app/game/titles.ts`).
+- No stadium name on the game's board (screen readers still hear it).
+- The stadium's colours change each day: twelve schemes in `app/art/stadium-club.ts`, none
+  pairing blue with white (a test holds this). The menu scene sets the day's scheme.
+- A clickable owl mascot on the lawn left of the stadium with tricks, scaled to the people
+  (8 px tall against their 5) and well inside the lawn. Phones have no lawn, so no mascot.
+- Two more locked patches on the ball: GUESS WHO and SHOOTOUT.
+- Sound (`app/audio`, `docs/AUDIO.md`): synthesised in the browser and replaceable by
+  recordings in `public/sounds`. The product owner's five recordings (kick, ball tap, button
+  click, firework, ball into net) are cut by `tools/sounds.mjs` from `sounds-src/`, with taps
+  played round-robin and the net under every goal. Background ambience is matched to each
+  career tier, and the home page's bed is quiet: no horns, only a faint cheer and distant pops
+  when its match scores. A click sounds only on a press of the menu ball, never on hover. Every
+  button clicks, and a whoosh plays at both ends of the iris. The referee's whistle sounds as a
+  mode starts, a kick goes with every shot, each shot has its own sting and the cheer is sized
+  to the venue. The idle juggling is very quiet. The mute switch sits next to "?" (in the
+  board's corner in the game, and on the full-time screen).
+- Wind streaks round the spinning ball; a pixel click burst wherever the pointer clicks; the
+  leaderboard collapses to a tab at the right edge (and remembers it).
+- The career scene: the promotion's smoke opens on a close-up of the ball driven into the back
+  of the net (after the product owner's reference photo), and a smooth opening from black (every
+  frame 16.4 to 16.9 ms in Chrome).
+
+The final review (2026-11-12, about 01:40) played whole HOME and AWAY games on a monitor and a
+phone and found and fixed four defects: the stadium never changed colour (the scheme was never
+set), the far upper stand kept its red crowd, the full-time screen had no mute switch, and the
+game page's opening whoosh was always dropped. Weak points it left: one 33 ms frame at the page
+change, while the screen is all ink; the net close-up is centred, where the reference has the
+ball off to one side; the near stands still change abruptly under the promotion's smoke; a
+fourth quick poke on the airship is silent; the source and licence of the product owner's five
+recordings are still to be recorded in `public/sounds/CREDITS.md`.
+
+Done on the morning of 2026-11-12 (runs `soccersense-sounds-board-help-shadows`,
+`soccersense-reveal-five`, `soccersense-help-copy`), the product owner's next requests,
+checked by a final review in a real browser:
+
+- Their new recordings: every clap in the game now comes from `clapping` (layered from one in
+  the park to nine at the final); `star_sparkle` plays as the AWAY ball twinkles away into the
+  sky; a landing thud cut from `ball_sound` plays as the HOME ball lands on the stadium (and a
+  softer one for its bounce); `vuvuzela` plays only at the World Cup stage (tiers 6 and 7): a
+  low hum in the crowd plus a blast with each goal (the worldie's horn at tiers 4 and 5 is
+  gone). The background fireworks are 2 dB louder.
+- Every volume is in one commented file, `app/audio/mix.ts`, and the sound board at
+  `/dev/sound` plays every sound with a slider for each level and copies the changed lines.
+  `docs/AUDIO.md` opens with "Changing the volumes".
+- The leaderboard slides every frame (eased, on whole device pixels) instead of in four steps,
+  on a monitor and as the phone's sheet; the captions and trophy leave the same way at the
+  kick-off. The sound engine now prepares itself while the page is idle, so the first press no
+  longer stalls a frame.
+- How to play is a pop-up over the home screen (a sheet sized to its content on a phone), cut
+  down at the product owner's request to one line, the points and the career ladder, with no
+  mention of HOME or AWAY (more modes are coming). `/how-to-play` still works for old links.
+- Car shadows go through the same depth mask as the cars, so a car behind a tree or a roof no
+  longer leaves its shadow on top (and walkers no longer vanish in a tree's shadow).
+- The reveal shows exactly five answers, one per scoring shot, best first: the player's own
+  in its row when it scored (or on its own line when it did not), and for the other shots the
+  best answer in each (the most picked in HOME, the least picked in AWAY). Every question now
+  has an answer in each scoring shot (a test holds it).
+- One background bird, a long trill sliding down in pitch, was removed: the product owner
+  heard it as something falling.
 
 ## Milestone C: the AWAY journey and polish
 
@@ -167,13 +243,17 @@ answer-judge decoys for near-miss names, whole-game visual checks on phone and d
 - The interface kit has only been checked in Chrome.
 - Words painted into the stadium (banners and hoardings) are fixed English art, not text from
   `app/i18n`.
+- Sound: record the source and licence of the product owner's recordings in
+  `public/sounds/CREDITS.md`. If the idle juggling still sounds too present, lower
+  `JUGGLE_TOUCH` in `app/scenes/career.ts` from 0.15 to 0.08 (about 5.5 dB quieter).
 
 ## Working notes
 
 - The machine's C: drive runs nearly full. Check free space before a multi-agent round, and
   write only inside the repository.
 - The code is on GitHub (`origin`, branch `main`). First commit `0db2e54` on 2026-11-11, at the
-  end of Milestone A. Commit and push only when the product owner asks.
+  end of Milestone A; then `cd66274` the same evening (the playable game, the new HOME and AWAY
+  rules, the home screen changes). Commit and push only when the product owner asks.
 - The losing attempts from the art round (two balls, three stadiums) are in scratch folders on
   D: (`D:\ss-ball-a-tmp`, `D:\tmp\soccersense-ball-b`, `D:\claude-scratch`,
   `D:\claude-scratch-stadium-b`, `D:\soccersense-stadium-c-scratch`, `D:\soccersense-logo-scratch`).

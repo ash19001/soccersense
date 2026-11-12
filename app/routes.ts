@@ -10,6 +10,7 @@ export default [
   // The interface gallery: every component in every state. A development aid, not a page
   // players are sent to (it asks search engines not to index it).
   route("dev/ui", "routes/dev-ui.tsx"),
+  route("dev/sound", "routes/dev-sound.tsx"), // the sound board (docs/AUDIO.md): every sound and its level
   // The canvas host's test card: PixelStage running a test scene. Also a development aid.
   route("dev/stage", "routes/dev-stage.tsx"),
 ] satisfies RouteConfig;

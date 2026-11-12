@@ -20,9 +20,12 @@ import {
   type ButtonVariant,
   FullTimeCard,
   GameLayout,
+  HowToPlay,
+  HowToPlayCard,
   IconButton,
   type IconName,
   type LeagueEntry,
+  type LeagueRow,
   LeagueTable,
   type LeagueTableLabels,
   LedNumber,
@@ -33,6 +36,7 @@ import {
   Pips,
   PixelRoot,
   RevealSheet,
+  type RevealYours,
   TierBar,
   TimerStrip,
   UI_GRADES,
@@ -41,6 +45,7 @@ import {
 } from "~/ui";
 import "~/ui/dev-gallery.css";
 import type { Route } from "./+types/dev-ui";
+import { howToPlayContent } from "./how-to-play-card";
 
 export const meta: Route.MetaFunction = () => [
   { title: "Interface gallery · soccersense" },
@@ -53,13 +58,31 @@ const MODE_LABEL: Record<UiMode, string> = { home: "HOME", away: "AWAY" };
 
 const GRADE_LABEL: Record<UiGrade, string> = {
   worldie: "WORLDIE!",
-  topbins: "TOP BINS",
-  goal: "GOAL!",
-  ontarget: "ON TARGET",
-  wide: "OFF TARGET",
+  golazo: "GOLAZO",
+  trivela: "TRIVELA",
+  toepoke: "TOE POKE",
+  tapin: "TAP IN",
+  miss: "MISS",
   timeup: "TIME'S UP",
   skipped: "PASSED",
 };
+
+/** A shot's name in the table and on the full-time card. */
+const SHOT_LABEL: Record<UiGrade, string> = {
+  worldie: "WORLDIE",
+  golazo: "GOLAZO",
+  trivela: "TRIVELA",
+  toepoke: "TOE POKE",
+  tapin: "TAP IN",
+  miss: "MISS",
+  timeup: "",
+  skipped: "",
+};
+
+/** A table row's shot: its grade, its name and its points. */
+function shot(grade: UiGrade, points: number) {
+  return { grade, shot: SHOT_LABEL[grade], points };
+}
 
 const ANSWER_LABELS: AnswerBarLabels = {
   input: "Your answer",
@@ -71,7 +94,8 @@ const TABLE_LABELS: LeagueTableLabels = {
   caption: "The table",
   rank: "#",
   answer: "ANSWER",
-  distance: "DIST",
+  distance: "PICKED",
+  shot: "SHOT",
   points: "PTS",
   you: "YOU",
   gap: "Rows left out",
@@ -111,8 +135,8 @@ const ASK_HOME: AskSample = {
   mode: "home",
   stadium: "ANFIELD",
   n: 3,
-  results: ["topbins", "goal", null, null, null, null, null],
-  total: 152,
+  results: ["golazo", "trivela", null, null, null, null, null],
+  total: 140,
   tier: "SUNDAY LEAGUE",
   tierProgress: 0.69,
   question: "Name a club that has won the European Cup or Champions League",
@@ -126,8 +150,8 @@ const ASK_AWAY: AskSample = {
   mode: "away",
   stadium: "ANFIELD",
   n: 5,
-  results: ["worldie", "ontarget", "wide", "goal", null, null, null],
-  total: 262,
+  results: ["worldie", "toepoke", "miss", "trivela", null, null, null],
+  total: 190,
   tier: "NON-LEAGUE",
   tierProgress: 0.91,
   question: "Name a player who has scored a Premier League goal",
@@ -141,8 +165,8 @@ const ASK_AWAY: AskSample = {
 const ASK_REJECT: AskSample = {
   ...ASK_HOME,
   n: 2,
-  results: ["topbins", null, null, null, null, null, null],
-  total: 87,
+  results: ["golazo", null, null, null, null, null, null],
+  total: 80,
   tier: "PARK KICKABOUT",
   tierProgress: 0.97,
   question: "Name a manager who has won the Premier League",
@@ -202,108 +226,120 @@ const ASK_LONG: AskSample = {
   canPass: true,
 };
 
-const HOME_ROWS: readonly LeagueEntry[] = [
+/**
+ * The reveal's five rows, one for each shot that scores, with the best answer of each (the
+ * first of its shot in the full table: the most picked in HOME, the least picked in AWAY, so
+ * the worldie row is #1): HOME from the European Cup winners, AWAY from the World Cup's top
+ * scorers.
+ */
+const HOME_ROWS: readonly LeagueRow[] = [
   {
     rank: 1,
-    name: "Liverpool",
-    place: "Anfield, Liverpool",
-    distance: "0 miles",
-    points: 100,
-  },
-  {
-    rank: 2,
-    name: "Manchester United",
-    place: "Old Trafford, Manchester",
-    distance: "29 miles",
-    points: 95,
+    name: "Real Madrid",
+    place: "Spain",
+    distance: "24%",
+    ...shot("worldie", 100),
   },
   {
     rank: 3,
+    name: "Liverpool",
+    place: "England",
+    distance: "11%",
+    ...shot("golazo", 80),
+  },
+  {
+    rank: 7,
     name: "Manchester City",
-    place: "Etihad Stadium, Manchester",
-    distance: "33 miles",
-    points: 91,
-  },
-  { gap: true },
-  {
-    rank: 9,
-    name: "Borussia Dortmund",
-    place: "Westfalenstadion, Dortmund",
-    distance: "487 miles",
-    points: 64,
-  },
-  {
-    rank: 10,
-    name: "Hakan Çalhanoğlu",
-    place: "Mannheim, Baden-Württemberg",
-    distance: "540 miles",
-    points: 61,
-    you: true,
+    place: "England",
+    distance: "4.2%",
+    ...shot("trivela", 60),
   },
   {
     rank: 11,
-    name: "Olympique de Marseille",
-    place: "Stade Vélodrome, Marseille",
-    distance: "745 miles",
-    points: 55,
+    name: "Juventus",
+    place: "Italy",
+    distance: "3%",
+    ...shot("toepoke", 30),
   },
-  { gap: true },
   {
-    rank: 23,
-    name: "Steaua București",
-    place: "Stadionul Steaua, Bucharest",
-    distance: "1,412 miles",
-    points: 0,
+    rank: 15,
+    name: "Celtic",
+    place: "Scotland",
+    distance: "1%",
+    ...shot("tapin", 10),
   },
 ];
 
-const AWAY_ROWS: readonly LeagueEntry[] = [
+const AWAY_ROWS: readonly LeagueRow[] = [
   {
     rank: 1,
-    name: "Chris Wood",
-    place: "Auckland, New Zealand",
-    distance: "11,589 miles",
-    points: 100,
+    name: "Dražan Jerković",
+    place: "Croatia",
+    distance: "0.2%",
+    ...shot("worldie", 100),
   },
   {
-    rank: 2,
-    name: "Tim Cahill",
-    place: "Sydney, New South Wales",
-    distance: "10,573 miles",
-    points: 99,
+    rank: 4,
+    name: "Flórián Albert",
+    place: "Hungary",
+    distance: "0.5%",
+    ...shot("golazo", 80),
   },
   {
-    rank: 3,
-    name: "Son Heung-min",
-    place: "Chuncheon, South Korea",
-    distance: "5,540 miles",
-    points: 97,
-  },
-  { gap: true },
-  {
-    rank: 211,
-    name: "Steven Gerrard",
-    place: "Whiston, Merseyside",
-    distance: "7 miles",
-    points: 2,
+    rank: 8,
+    name: "Guillermo Stábile",
+    place: "Argentina",
+    distance: "0.9%",
+    ...shot("trivela", 60),
   },
   {
-    rank: 212,
-    name: "Trent Alexander-Arnold",
-    place: "West Derby, Liverpool",
-    distance: "2 miles",
-    points: 0,
+    rank: 13,
+    name: "Vavá",
+    place: "Brazil",
+    distance: "1.2%",
+    ...shot("toepoke", 30),
+  },
+  {
+    rank: 18,
+    name: "Davor Šuker",
+    place: "Croatia",
+    distance: "2.4%",
+    ...shot("tapin", 10),
   },
 ];
 
+/** The five rows with the player's answer in its own shot's row (or in none of them). */
 function withYou(
-  rows: readonly LeagueEntry[],
-  name: string | null,
+  rows: readonly LeagueRow[],
+  you: LeagueRow | null,
 ): LeagueEntry[] {
   return rows.map((row) =>
-    "gap" in row ? row : { ...row, you: row.name === name },
+    you && row.grade === you.grade ? { ...you, you: true } : row,
   );
 }
+
+/** The player's answer above the table, when it did not score. */
+function yoursLine(
+  name: string | null,
+  tag: string,
+  picked?: string,
+): RevealYours {
+  return {
+    you: "YOU",
+    name: name ?? "NO ANSWER",
+    picked,
+    shot: tag,
+    points: 0,
+    spoken: name
+      ? `Your answer: ${name}, picked by ${picked}. ${tag}, 0 points.`
+      : `No answer: ${tag}, 0 points.`,
+  };
+}
+
+const AWAY_REVEAL_ASK: AskSample = {
+  ...ASK_AWAY,
+  question: "Name a men's World Cup top scorer (Golden Boot winner)",
+};
 
 interface RevealSample {
   mode: UiMode;
@@ -311,6 +347,7 @@ interface RevealSample {
   points?: string;
   sentence: string;
   rows: LeagueEntry[];
+  yours?: RevealYours;
   next: string;
   ask: AskSample;
   total: number;
@@ -324,62 +361,105 @@ const REVEALS: Record<UiGrade, RevealSample> = {
     grade: "worldie",
     points: "+100",
     sentence:
-      "Chris Wood was born in Auckland, New Zealand: 11,589 miles from Anfield.",
-    rows: withYou(AWAY_ROWS, "Chris Wood"),
+      "Dražan Jerković: only 0.2% of players went for that one. Nobody saw it coming. Worldie!",
+    rows: withYou(AWAY_ROWS, {
+      rank: 1,
+      name: "Dražan Jerković",
+      place: "Croatia",
+      distance: "0.2%",
+      ...shot("worldie", 100),
+    }),
     next: "NEXT QUESTION",
-    ask: ASK_AWAY,
+    ask: AWAY_REVEAL_ASK,
     total: 362,
     tier: "TOP FLIGHT",
     tierProgress: 0.02,
   },
-  topbins: {
+  golazo: {
     mode: "home",
-    grade: "topbins",
-    points: "+95",
+    grade: "golazo",
+    points: "+80",
     sentence:
-      "Manchester United play at Old Trafford, Manchester: 29 miles from Anfield.",
-    rows: withYou(HOME_ROWS, "Manchester United"),
+      "Bayern Munich: about 8% of players said the same. Near the top of the crowd's list.",
+    rows: withYou(HOME_ROWS, {
+      rank: 5,
+      name: "Bayern Munich",
+      place: "Germany",
+      distance: "8%",
+      ...shot("golazo", 80),
+    }),
     next: "NEXT QUESTION",
     ask: ASK_HOME,
     total: 247,
     tier: "NON-LEAGUE",
     tierProgress: 0.74,
   },
-  goal: {
+  trivela: {
     mode: "home",
-    grade: "goal",
-    points: "+61",
+    grade: "trivela",
+    points: "+60",
     sentence:
-      "Hakan Çalhanoğlu was born in Mannheim, Baden-Württemberg: 540 miles from Anfield.",
-    rows: withYou(HOME_ROWS, "Hakan Çalhanoğlu"),
+      "Inter Milan: about 3.2% of players said the same. A good crowd pick.",
+    rows: withYou(HOME_ROWS, {
+      rank: 9,
+      name: "Inter Milan",
+      place: "Italy",
+      distance: "3.2%",
+      ...shot("trivela", 60),
+    }),
     next: "NEXT QUESTION",
     ask: ASK_HOME,
     total: 213,
     tier: "NON-LEAGUE",
     tierProgress: 0.37,
   },
-  ontarget: {
+  toepoke: {
     mode: "home",
-    grade: "ontarget",
-    points: "+55",
+    grade: "toepoke",
+    points: "+30",
     sentence:
-      "Olympique de Marseille play at the Stade Vélodrome, Marseille: 745 miles from Anfield.",
-    rows: withYou(HOME_ROWS, "Olympique de Marseille"),
+      "Nottingham Forest: only 1.5% of players said the same. Some of the crowd were with you.",
+    rows: withYou(HOME_ROWS, {
+      rank: 14,
+      name: "Nottingham Forest",
+      place: "England",
+      distance: "1.5%",
+      ...shot("toepoke", 30),
+    }),
     next: "NEXT QUESTION",
     ask: ASK_HOME,
     total: 207,
     tier: "NON-LEAGUE",
     tierProgress: 0.3,
   },
-  wide: {
+  tapin: {
     mode: "away",
-    grade: "wide",
-    points: "+0",
+    grade: "tapin",
+    points: "+10",
     sentence:
-      "Trent Alexander-Arnold was born in West Derby, Liverpool: 2 miles from Anfield.",
-    rows: withYou(AWAY_ROWS, "Trent Alexander-Arnold"),
+      "Just Fontaine: about 2.6% of players went for that one. Plenty got there first.",
+    rows: withYou(AWAY_ROWS, {
+      rank: 19,
+      name: "Just Fontaine",
+      place: "Morocco",
+      distance: "2.6%",
+      ...shot("tapin", 10),
+    }),
+    next: "NEXT QUESTION",
+    ask: AWAY_REVEAL_ASK,
+    total: 200,
+    tier: "NON-LEAGUE",
+    tierProgress: 0.22,
+  },
+  miss: {
+    mode: "away",
+    grade: "miss",
+    sentence:
+      "Ronaldo: about 12% of players said the same. Right answer, but busy round here!",
+    rows: withYou(AWAY_ROWS, null),
+    yours: yoursLine("Ronaldo", "MISS", "12%"),
     next: "FULL TIME",
-    ask: { ...ASK_AWAY, n: 7 },
+    ask: { ...AWAY_REVEAL_ASK, n: 7 },
     total: 262,
     tier: "NON-LEAGUE",
     tierProgress: 0.91,
@@ -387,10 +467,10 @@ const REVEALS: Record<UiGrade, RevealSample> = {
   timeup: {
     mode: "home",
     grade: "timeup",
-    points: "+0",
     sentence:
-      "The whistle beat you to it. Liverpool, at Anfield, was the answer on the doorstep.",
+      "The whistle went. The crowd's favourite was Real Madrid: about 24% of players said it.",
     rows: withYou(HOME_ROWS, null),
+    yours: yoursLine(null, "TIME'S UP"),
     next: "NEXT QUESTION",
     ask: ASK_HOME,
     total: 152,
@@ -400,12 +480,12 @@ const REVEALS: Record<UiGrade, RevealSample> = {
   skipped: {
     mode: "away",
     grade: "skipped",
-    points: "+0",
     sentence:
-      "You let that one go. Chris Wood, born in Auckland, was 11,589 miles away.",
+      "Passed. The deepest cut was Dražan Jerković: only 0.2% of players said it.",
     rows: withYou(AWAY_ROWS, null),
+    yours: yoursLine(null, "PASSED"),
     next: "NEXT QUESTION",
-    ask: ASK_AWAY,
+    ask: AWAY_REVEAL_ASK,
     total: 262,
     tier: "NON-LEAGUE",
     tierProgress: 0.91,
@@ -443,7 +523,6 @@ function AskScreen({
       top={
         <Board
           mode={sample.mode}
-          stadiumName={sample.stadium}
           questionNumber={sample.n}
           questionCount={7}
           results={sample.results}
@@ -494,7 +573,6 @@ function RevealScreen({
         <Board
           compact
           mode={sample.mode}
-          stadiumName={ask.stadium}
           questionNumber={ask.n}
           questionCount={7}
           results={results}
@@ -518,6 +596,7 @@ function RevealScreen({
           sentence={sample.sentence}
           rows={sample.rows}
           tableLabels={TABLE_LABELS}
+          yours={sample.yours}
           nextLabel={sample.next}
           onNext={() => {}}
           focusNext={!contained}
@@ -547,41 +626,46 @@ function FullTimeScreen({
           maxTotal={700}
           totalSpoken={perfect ? "700 out of 700" : "478 out of 700"}
           careerTitle={perfect ? "WORLD CUP WINNER" : "INTERNATIONAL"}
+          earnedTitle={perfect ? "THE HIVE MIND" : "SEASON TICKET HOLDER"}
+          earnedTitleSpoken="Your title"
           perfectLine={perfect ? "PERFECT GAME" : undefined}
-          results={
-            perfect
-              ? [
-                  { grade: "worldie", points: 100, answer: "Liverpool" },
-                  { grade: "worldie", points: 100, answer: "Kenny Dalglish" },
-                  {
-                    grade: "worldie",
-                    points: 100,
-                    answer: "Trent Alexander-Arnold",
-                  },
-                  { grade: "worldie", points: 100, answer: "Anfield" },
-                  { grade: "worldie", points: 100, answer: "Steven Gerrard" },
-                  { grade: "worldie", points: 100, answer: "Everton" },
-                  { grade: "worldie", points: 100, answer: "England" },
-                ]
-              : [
-                  { grade: "topbins", points: 95, answer: "Manchester United" },
-                  { grade: "goal", points: 61, answer: "Hakan Çalhanoğlu" },
-                  {
-                    grade: "worldie",
-                    points: 100,
-                    answer: "Trent Alexander-Arnold",
-                  },
-                  { grade: "timeup", points: 0, answer: "Time's up" },
-                  {
-                    grade: "ontarget",
-                    points: 55,
-                    answer: "Olympique de Marseille",
-                  },
-                  { grade: "wide", points: 12, answer: "Steaua București" },
-                  { grade: "topbins", points: 97, answer: "Sir Alex Ferguson" },
-                  // 95 + 61 + 100 + 0 + 55 + 12 + 97 = 420; the sample total is only for looks.
-                ]
-          }
+          results={(perfect
+            ? [
+                { grade: "worldie", points: 100, answer: "Liverpool" },
+                { grade: "worldie", points: 100, answer: "Kenny Dalglish" },
+                {
+                  grade: "worldie",
+                  points: 100,
+                  answer: "Trent Alexander-Arnold",
+                },
+                { grade: "worldie", points: 100, answer: "Anfield" },
+                { grade: "worldie", points: 100, answer: "Steven Gerrard" },
+                { grade: "worldie", points: 100, answer: "Everton" },
+                { grade: "worldie", points: 100, answer: "England" },
+              ]
+            : [
+                { grade: "golazo", points: 80, answer: "Manchester United" },
+                { grade: "trivela", points: 60, answer: "Hakan Çalhanoğlu" },
+                {
+                  grade: "worldie",
+                  points: 100,
+                  answer: "Trent Alexander-Arnold",
+                },
+                { grade: "timeup", points: 0, answer: "Time's up" },
+                {
+                  grade: "toepoke",
+                  points: 30,
+                  answer: "Olympique de Marseille",
+                },
+                { grade: "tapin", points: 10, answer: "Steaua București" },
+                { grade: "golazo", points: 80, answer: "Sir Alex Ferguson" },
+                // 80 + 60 + 100 + 0 + 30 + 10 + 80 = 360; the sample total is only for looks.
+              ]
+          ).map((result) => ({
+            ...result,
+            grade: result.grade as UiGrade,
+            label: SHOT_LABEL[result.grade as UiGrade] || undefined,
+          }))}
           shareLabel={shared ? "COPIED!" : "SHARE"}
           onShare={() => setShared(true)}
           otherLabel="PLAY AWAY"
@@ -633,6 +717,53 @@ function MenuScreen({
         />
       }
     />
+  );
+}
+
+/**
+ * How to play, with the game's own words. Full-screen it is the pop-up over the menu
+ * captions (close it and the "?" opens it again); in the overview's frames, where a modal
+ * dialog would take over the whole gallery, it is the card alone.
+ */
+function HelpScreen({ contained }: { contained: boolean }) {
+  const [open, setOpen] = useState(true);
+  const [card] = useState(howToPlayContent);
+  if (contained) {
+    return (
+      <GameLayout contained canvas={<Backdrop kind="menu" />}>
+        <HowToPlayCard {...card} />
+      </GameLayout>
+    );
+  }
+  return (
+    <GameLayout
+      canvas={<Backdrop kind="menu" />}
+      bottom={
+        <MenuCaptions
+          modes={[
+            {
+              mode: "home",
+              label: "HOME",
+              line: "The most common answer wins",
+            },
+            {
+              mode: "away",
+              label: "AWAY",
+              line: "The most uncommon answer wins",
+            },
+          ]}
+          onSelect={() => {}}
+          howToPlay={{
+            label: "How to play",
+            onClick: () => setOpen(true),
+            open,
+          }}
+          dayLabel="DAY 12"
+        />
+      }
+    >
+      <HowToPlay {...card} open={open} onClose={() => setOpen(false)} />
+    </GameLayout>
   );
 }
 
@@ -707,6 +838,11 @@ const COMPOSITIONS: readonly Composition[] = [
     name: "menu-notice",
     title: "Menu captions, a notice up and AWAY lit",
     render: (c) => <MenuScreen contained={c} notice />,
+  },
+  {
+    name: "help",
+    title: "How to play, over the menu",
+    render: (c) => <HelpScreen contained={c} />,
   },
 ];
 
@@ -842,7 +978,7 @@ function Parts() {
         </div>
         <div className="dev-row">
           <Pips
-            results={["worldie", "topbins", "goal", null, null, null, null]}
+            results={["worldie", "golazo", "trivela", null, null, null, null]}
             current={3}
             label="Question 4 of 7"
           />
@@ -850,12 +986,12 @@ function Parts() {
         <div className="dev-row">
           <Pips
             results={[
-              "ontarget",
-              "wide",
+              "toepoke",
+              "tapin",
+              "miss",
               "timeup",
               "skipped",
-              "goal",
-              "topbins",
+              "golazo",
               "worldie",
             ]}
             label="All answered"
@@ -974,14 +1110,14 @@ function Parts() {
       <Block title="League table">
         <div className="dev-table" data-mode="home">
           <LeagueTable
-            rows={withYou(HOME_ROWS, "Hakan Çalhanoğlu")}
+            rows={withYou(HOME_ROWS, HOME_ROWS[2])}
             labels={TABLE_LABELS}
             followYou={false}
           />
         </div>
         <div className="dev-table" data-mode="away">
           <LeagueTable
-            rows={withYou(AWAY_ROWS, "Chris Wood")}
+            rows={withYou(AWAY_ROWS, AWAY_ROWS[0])}
             labels={TABLE_LABELS}
             followYou={false}
           />

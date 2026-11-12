@@ -93,9 +93,10 @@
 
   /* grades */
   --c-grade-worldie: #ffc928;
-  --c-grade-topbins: #8fe35c;
-  --c-grade-goal: #2fb36b;
-  --c-grade-ontarget: #4aa6e8;
-  --c-grade-wide: #e9584a;
+  --c-grade-golazo: #8fe35c;
+  --c-grade-trivela: #2fb36b;
+  --c-grade-toepoke: #4aa6e8;
+  --c-grade-tapin: #a66bea;
+  --c-grade-miss: #e9584a;
   --c-grade-timeup: #7b86a3;
 }

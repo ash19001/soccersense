@@ -1,11 +1,13 @@
 /**
- * Property checks for the scorer over seeded random tables: the rules of GAME_DESIGN 4.1
- * must hold for any list, any stadium and both modes, not just for the worked examples.
+ * Property checks for the scorer over seeded random tables: the distance rules of the locked
+ * modes CLOSEST and FURTHEST (GAME_DESIGN 4) must hold for any list and any stadium, not just
+ * for the worked examples.
  */
 import { describe, expect, it } from "vitest";
 
 import { distanceKm } from "./geo";
-import { gradeFor, rankAnswers, tableExcerpt } from "./scoring";
+import { rankAnswers, tableExcerpt } from "./scoring";
+import { SHOT_POINTS, shotForStanding, shotIndex } from "./shots";
 import { answer, question } from "./test-fixtures";
 import type { Answer, LatLng, Rule, Question, RankedAnswer } from "./types";
 
@@ -94,20 +96,24 @@ describe("rankAnswers on random tables", () => {
     }
   });
 
-  it.each(DISTANCE_RULES)("gives the best answer 100, always (%s)", (mode) => {
-    for (const s of SAMPLES) {
-      const table = rankAnswers(s.question, s.stadium, mode);
-      expect(table[0].points, `seed ${s.seed}`).toBe(100);
-      expect(table[0].rank).toBe(1);
-      const bestKm = table[0].km;
-      for (const row of table) {
-        expect(better(mode, row.km, bestKm), `seed ${s.seed}`).toBe(false);
+  it.each(DISTANCE_RULES)(
+    "makes the best answer a worldie, always (%s)",
+    (mode) => {
+      for (const s of SAMPLES) {
+        const table = rankAnswers(s.question, s.stadium, mode);
+        expect(table[0].shot, `seed ${s.seed}`).toBe("worldie");
+        expect(table[0].points, `seed ${s.seed}`).toBe(100);
+        expect(table[0].rank).toBe(1);
+        const bestKm = table[0].km;
+        for (const row of table) {
+          expect(better(mode, row.km, bestKm), `seed ${s.seed}`).toBe(false);
+        }
       }
-    }
-  });
+    },
+  );
 
   it.each(DISTANCE_RULES)(
-    "gives the worst answer 0 when there are two distinct distances (%s)",
+    "makes the worst answer a miss when there are two distinct distances (%s)",
     (mode) => {
       let checked = 0;
       for (const s of SAMPLES) {
@@ -115,11 +121,11 @@ describe("rankAnswers on random tables", () => {
         const distinct = new Set(table.map((r) => r.km)).size;
         const last = table[table.length - 1];
         if (distinct >= 2) {
-          expect(last.points, `seed ${s.seed}`).toBe(0);
+          expect(last.shot, `seed ${s.seed}`).toBe("miss");
           checked++;
         } else {
           // Everything tied: everyone is the best.
-          for (const row of table) expect(row.points).toBe(100);
+          for (const row of table) expect(row.shot).toBe("worldie");
         }
       }
       expect(checked).toBeGreaterThan(200);
@@ -127,7 +133,7 @@ describe("rankAnswers on random tables", () => {
   );
 
   it.each(DISTANCE_RULES)(
-    "never gives more points to a worse answer, and ties are equal (%s)",
+    "never gives a better shot to a worse answer, and ties are equal (%s)",
     (mode) => {
       for (const s of SAMPLES) {
         const table = rankAnswers(s.question, s.stadium, mode);
@@ -138,10 +144,12 @@ describe("rankAnswers on random tables", () => {
           // Table order: best first.
           expect(better(mode, row.km, above.km), label).toBe(false);
           if (row.km === above.km) {
-            expect(row.points, label).toBe(above.points);
+            expect(row.shot, label).toBe(above.shot);
             expect(row.rank, label).toBe(above.rank);
           } else {
-            expect(row.points, label).toBeLessThanOrEqual(above.points);
+            expect(shotIndex(row.shot), label).toBeGreaterThanOrEqual(
+              shotIndex(above.shot),
+            );
             expect(row.rank, label).toBe(i + 1);
           }
         }
@@ -149,7 +157,7 @@ describe("rankAnswers on random tables", () => {
         for (const x of table) {
           for (const y of table) {
             if (better(mode, x.km, y.km)) {
-              expect(x.points).toBeGreaterThanOrEqual(y.points);
+              expect(shotIndex(x.shot)).toBeLessThanOrEqual(shotIndex(y.shot));
               expect(x.rank).toBeLessThan(y.rank);
             }
           }
@@ -158,21 +166,22 @@ describe("rankAnswers on random tables", () => {
     },
   );
 
-  it.each(DISTANCE_RULES)("follows the formula to the letter (%s)", (mode) => {
+  it.each(DISTANCE_RULES)("follows the rule to the letter (%s)", (mode) => {
     for (const s of SAMPLES) {
       const table = rankAnswers(s.question, s.stadium, mode);
+      const kms = table.map((r) => r.km);
+      const best = mode === "closest" ? Math.min(...kms) : Math.max(...kms);
+      const worst = mode === "closest" ? Math.max(...kms) : Math.min(...kms);
       for (const row of table) {
         const ahead = table.filter((r) => better(mode, r.km, row.km)).length;
         const behind = table.filter((r) => better(mode, row.km, r.km)).length;
-        const expected =
-          ahead + behind === 0
-            ? 100
-            : Math.round((100 * behind) / (ahead + behind));
-        expect(row.points, `seed ${s.seed}`).toBe(expected);
+        const place = ahead + behind === 0 ? 0 : ahead / (ahead + behind);
+        const gap =
+          best === worst ? 0 : Math.abs(row.km - best) / Math.abs(worst - best);
+        const expected = shotForStanding((place + gap) / 2);
+        expect(row.shot, `seed ${s.seed}`).toBe(expected);
+        expect(row.points).toBe(SHOT_POINTS[expected]);
         expect(row.rank).toBe(ahead + 1);
-        expect(Number.isInteger(row.points)).toBe(true);
-        expect(row.points).toBeGreaterThanOrEqual(0);
-        expect(row.points).toBeLessThanOrEqual(100);
       }
     }
   });
@@ -198,10 +207,12 @@ describe("rankAnswers on random tables", () => {
         // The answers ahead in one mode are the answers behind in the other.
         expect(w.rank - 1, label).toBe(home.length - tiedWith - (h.rank - 1));
         if (groups === 1) {
-          expect(h.points + w.points).toBe(200);
-        } else {
-          // Rounding half up in both modes can make the pair add up to 101.
-          expect([100, 101], label).toContain(h.points + w.points);
+          expect([h.shot, w.shot]).toEqual(["worldie", "worldie"]);
+        } else if (h.km === home[0].km) {
+          // The best of one is the worst of the other.
+          expect(w.shot, label).toBe("miss");
+        } else if (h.km === home[home.length - 1].km) {
+          expect(w.shot, label).toBe("worldie");
         }
       }
       // Inside a group of ties both modes use the same name order.
@@ -229,13 +240,12 @@ describe("rankAnswers on random tables", () => {
     }
   });
 
-  it("grades exactly one distance as a worldie", () => {
+  it("makes the answers at the best distance worldies", () => {
     for (const s of SAMPLES) {
       for (const mode of DISTANCE_RULES) {
         const table = rankAnswers(s.question, s.stadium, mode);
-        const worldies = table.filter((r) => gradeFor(r.points) === "worldie");
+        const worldies = table.filter((r) => r.shot === "worldie");
         expect(worldies.length).toBeGreaterThanOrEqual(1);
-        expect(new Set(worldies.map((r) => r.km)).size).toBe(1);
         expect(worldies[0].km).toBe(table[0].km);
       }
     }
@@ -250,18 +260,16 @@ describe("rankAnswers at the extremes", () => {
     );
   const pin = { lat: 0, lng: 0 };
 
-  it("keeps 100 for the best alone in a list of 1000", () => {
+  it("uses every shot, best to worst, in a list of 1000", () => {
     for (const mode of DISTANCE_RULES) {
       const table = rankAnswers(line(1000), pin, mode);
-      expect(table.filter((r) => r.points === 100)).toHaveLength(
-        table.filter((r) => r.km === table[0].km).length,
-      );
-      expect(table[1].km === table[0].km || table[1].points < 100).toBe(true);
-      expect(table[table.length - 1].points).toBe(0);
+      expect(table[0].shot).toBe("worldie");
+      expect(table[table.length - 1].shot).toBe("miss");
+      expect(new Set(table.map((r) => r.shot)).size).toBe(6);
     }
   });
 
-  it("two answers score 100 and 0", () => {
+  it("two answers are a worldie and a miss", () => {
     for (const mode of DISTANCE_RULES) {
       const table = rankAnswers(
         question("two", [answer("Near", 0, 1), answer("Far", 0, 50)]),
@@ -273,7 +281,7 @@ describe("rankAnswers at the extremes", () => {
     }
   });
 
-  it("three answers score 100, 50 and 0", () => {
+  it("three evenly spaced answers are a worldie, a toe poke and a miss", () => {
     const q = question("three", [
       answer("A", 0, 1),
       answer("B", 0, 2),
@@ -281,7 +289,7 @@ describe("rankAnswers at the extremes", () => {
     ]);
     for (const mode of DISTANCE_RULES) {
       expect(rankAnswers(q, pin, mode).map((r) => r.points)).toEqual([
-        100, 50, 0,
+        100, 30, 0,
       ]);
     }
   });
@@ -311,32 +319,6 @@ describe("rankAnswers at the extremes", () => {
     expect(fromFiji[1].km).toBeGreaterThan(900);
     expect(fromFiji[1].km).toBeLessThan(1300);
     for (const row of fromFiji) expect(Number.isFinite(row.km)).toBe(true);
-  });
-});
-
-describe("gradeFor at every point", () => {
-  it("matches the table in GAME_DESIGN 4.2 for 0 to 100", () => {
-    for (let points = 0; points <= 100; points++) {
-      const expected =
-        points === 100
-          ? "worldie"
-          : points >= 80
-            ? "topbins"
-            : points >= 55
-              ? "goal"
-              : points >= 30
-                ? "ontarget"
-                : "wide";
-      expect(gradeFor(points), String(points)).toBe(expected);
-    }
-  });
-
-  it("never returns timeup or skipped", () => {
-    for (const points of [-5, 0, 29.9, 54.5, 79.99, 99.9, 100, 250, NaN]) {
-      expect(["timeup", "skipped"]).not.toContain(gradeFor(points));
-    }
-    expect(gradeFor(NaN)).toBe("wide");
-    expect(gradeFor(-1)).toBe("wide");
   });
 });
 

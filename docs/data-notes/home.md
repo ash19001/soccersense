@@ -55,6 +55,9 @@ The judge accepts any trailing words of a name as a "surname". So:
   Etihad Stadium, King Power Stadium, Anfield. None has changed; not individually re-searched.
 - Liverpool's coordinates equal the Anfield pin in `app/data/stadiums.ts`, so Liverpool is 0 km
   on the Anfield day.
+- Shots (2026-11-12): Chelsea is a toe poke, as the rule files its 12%, no longer moved up to a
+  trivela by eye, so the question has an answer in each of the five shots that score (the
+  reveal shows one of each; see `shots.md`). No fact or estimate changed.
 - Left out: nothing.
 
 ## 2. pl-winning-managers (13 answers)

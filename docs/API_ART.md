@@ -17,11 +17,12 @@ Look at any of it without a browser:
   never write hex.
 - `PALETTE_HEX` (the same as `"#rrggbb"`), `PALETTE_NAMES`, `type PaletteName`.
 - `MODE_COLORS[mode]`: `{ dark, base, light }`. HOME is warm red-orange, AWAY is teal.
-- `GRADE_COLORS[grade]`: worldie, topbins, goal, ontarget, wide, timeup, skipped.
+- `GRADE_COLORS[grade]`: worldie, golazo, trivela, toepoke, tapin, miss, timeup, skipped.
 - The values are the art bible's table and match `app/ui/tokens.css` (a test compares them).
   Seven colours exist only here: `nightGlow`, `cloudLight`, `cloud`, `cloudShade`, `sun`,
-  `moon`, `moonShade`. The grades are named `gradeWorldie`, `gradeTopbins`, `gradeGoal`,
-  `gradeOntarget`, `gradeWide`, `gradeTimeup`.
+  `moon`, `moonShade`. The grades are named `gradeWorldie`, `gradeGolazo`, `gradeTrivela`,
+  `gradeToepoke`, `gradeTapin`, `gradeMiss`, `gradeTimeup` (renamed on 2026-11-11 with the six
+  shots; `gradeTapin` is new).
 
 ## Lighting (`~/art/lighting`)
 
@@ -120,9 +121,11 @@ to `sheetY`. If a number matters to more than one painter, it goes in this file.
 ## The menu ball (`~/art/ball`)
 
 ```ts
-type BallSlot = "left" | "right" | "top" | "bottom" | "backLeft" | "backRight";
-const BALL_SLOTS: readonly BallSlot[];      // all six, in that order
-type BallIcon = "home" | "away" | "forward" | "rewind" | "pin" | "globe" | "lock" | "none";
+type BallSlot = "left" | "right" | "top" | "bottom" | "backLeft" | "backRight"
+              | "rimLeft" | "rimRight";
+const BALL_SLOTS: readonly BallSlot[];      // all eight, in that order
+type BallIcon = "home" | "away" | "forward" | "rewind" | "pin" | "globe" | "shirt" | "goal"
+              | "lock" | "none";
 interface BallPatch { label: string; icon: BallIcon;
                       accent?: { dark; base; light }; locked?: boolean; badge?: string }
 interface BallState { cx; cy; r; yaw; pitch; roll?; hovered; pressed; chosen; t }
@@ -137,17 +140,22 @@ drawBallShadow(s, state, groundY, light)   // a shadow on a ground line, for a b
 
 The slots, and what the menu puts on them:
 
-| slot        | where (yaw 0, pitch 0)                      | menu             | icon      | shown by `ballShowPose`          |
-| ----------- | ------------------------------------------- | ---------------- | --------- | -------------------------------- |
-| `left`      | level, 31.7 degrees left of the middle      | HOME, red-orange | `home`    | the menu pose                    |
-| `right`     | level, 31.7 degrees right                   | AWAY, teal       | `away`    | the menu pose                    |
-| `top`       | 58.3 degrees above the middle               | NEXT-GEN, locked | `forward` | pitch -58.3 degrees: straight on |
-| `bottom`    | 58.3 degrees below                          | RETRO, locked    | `rewind`  | pitch +58.3 degrees: straight on |
-| `backRight` | on the back, directly behind `right` (AWAY) | CLOSEST, locked  | `pin`     | yaw pi: where `left` (HOME) was  |
-| `backLeft`  | on the back, directly behind `left` (HOME)  | FURTHEST, locked | `globe`   | yaw pi: where `right` (AWAY) was |
+| slot        | where (yaw 0, pitch 0)                      | menu              | icon      | shown by `ballShowPose`             |
+| ----------- | ------------------------------------------- | ----------------- | --------- | ----------------------------------- |
+| `left`      | level, 31.7 degrees left of the middle      | HOME, red-orange  | `home`    | the menu pose                       |
+| `right`     | level, 31.7 degrees right                   | AWAY, teal        | `away`    | the menu pose                       |
+| `top`       | 58.3 degrees above the middle               | NEXT-GEN, locked  | `forward` | pitch -58.3 degrees: straight on    |
+| `bottom`    | 58.3 degrees below                          | RETRO, locked     | `rewind`  | pitch +58.3 degrees: straight on    |
+| `backRight` | on the back, directly behind `right` (AWAY) | CLOSEST, locked   | `pin`     | yaw pi: where `left` (HOME) was     |
+| `backLeft`  | on the back, directly behind `left` (HOME)  | FURTHEST, locked  | `globe`   | yaw pi: where `right` (AWAY) was    |
+| `rimLeft`   | on the rim out past HOME, 31.7 degrees up   | GUESS WHO, locked | `shirt`   | yaw +pi/2, pitch -31.7: straight on |
+| `rimRight`  | on the rim out past AWAY, 31.7 degrees up   | SHOOTOUT, locked  | `goal`    | yaw -pi/2, pitch -31.7: straight on |
 
-The other six pentagons (four on the rim, two on the back, top and bottom) carry nothing and
-never hit-test.
+A quarter turn by hand brings a rim slot round: a drag to the right `rimLeft`, to the left
+`rimRight` (it faces the viewer most from about 69 to 148 degrees of turn; past that the back
+slot does). The other four pentagons (two on the lower rim, two on the back, top and bottom)
+carry nothing and never hit-test. `shirt` is the back of a shirt with a number cut out of
+it, `goal` a goal with its net and a ball on the spot.
 
 - The menu's ball floats in front of the picture and has no ground under it, so the menu scene
   draws **no shadow**: it calls `drawBall` and `ballSlotAt` and nothing else here.
@@ -168,9 +176,10 @@ never hit-test.
   alone; below r = 30 a locked patch shows only the padlock, below 26 nothing.
 - **Nothing on a locked patch flickers.** What it carries (picture or not, word bare or on a
   tag) is decided by the radius alone, from room measured once per size at both ends of the
-  rock and of a deep nod (0.065 rad): top and bottom straight on, the others in a side place
-  (where CLOSEST and FURTHEST rest after half a turn), and the squashed top and bottom of the
-  menu pose. A test holds every shown pose to it.
+  rock and of a deep nod (0.065 rad): top, bottom and the two rim slots straight on (the rim
+  ones rolled by the nod too, which is what the hover's nod becomes a quarter turn round),
+  the back ones in a side place (where CLOSEST and FURTHEST rest after half a turn), and the
+  squashed top and bottom of the menu pose. A test holds every shown pose to it.
 - `hovered`, `pressed` and `chosen` are slots or `null`. `chosen` flashes at 8 Hz off `t`.
   A bar of light crosses HOME then AWAY every five seconds off `t` (off at `t = 0`). There is
   no reduced-motion input: hold `t` still.
@@ -182,7 +191,7 @@ never hit-test.
 - The menu rocks the ball by 0.12 rad of yaw; the label fit is measured for that.
 - Shots: `ball/menu`, `states`, `states-small`, `rock`, `sizes`, `flight`, `spin`, `badge`,
   `shine`, `fit`, `modes` (every patch in the pose that shows it), `modes-fit` (those poses at
-  r 37 to 59, at both ends of the rock).
+  r 37 to 59, at both ends of the rock), `rim` (GUESS WHO and SHOOTOUT straight on, big).
 
 ## The home-screen stadium (`~/art/stadium`, `~/art/led`)
 
@@ -202,8 +211,66 @@ class MenuBackdrop {
   draw(s: Surface, t: number): void; // covers the whole surface, sky included
   airshipAt(x: number, y: number, t: number): boolean; // on the airship at scene time t (false while it is down)
   pokeAirship(t: number): "wobble" | "pop" | "none"; // a click on it at scene time t
+  setScheme(id: string): void; // the day's club colours: schemeForDay(day).id (unknown id: red and white)
+  schemeId(): string;
+  mascotSpot(): { x: number; y: number } | null; // the point between his feet; null: no lawn (phones)
+  mascotAt(x: number, y: number, t: number): boolean; // on the mascot (a generous box round him)
+  pokeMascot(t: number): "trick" | "busy"; // a click on him: his next trick, or busy with one (or absent)
+  cuesBetween(t0: number, t1: number): SoundCue[]; // what is heard of the picture in (t0, t1]
 }
+// ~/art/stadium-club
+schemeForDay(day: number): ClubScheme; // from the game's day number; never the same two days running
+SCHEMES: readonly ClubScheme[]; schemeById(id): ClubScheme; DEFAULT_SCHEME // red and white
 ```
+
+**The day's colours** (`stadium-club.ts`). The stadium wears a different club's colours each
+day: its outer walls and their trim band, most of the crowd and their scarves, the flags, the
+home side's kit in the match, the supporters' shirts, the airship's fins, and the bunting,
+awnings and painted cars round the town. The menu ball's HOME and AWAY never change. Twelve
+schemes, in the order the days take them (`dayNumber % 12`): 0 red and white (the stadium as it
+was), 1 purple and gold, 2 yellow and green, 3 black and white, 4 claret and sky blue, 5 orange
+and black, 6 green and white, 7 pink and black, 8 white and red, 9 yellow and blue, 10 red and
+black, 11 purple and white. The new ramps are `CLUB` in `palette.ts` (kept apart from `P`, the
+bible's table). The product owner's rule, held by a test: never dark blue and white; no
+scheme pairs any blue with white at all, and blue is never a main colour (inside the pale roof
+ring a blue bowl would read blue, white, blue). The visitors (their kit, their end, their
+coaches) stay teal unless that is within 0.15 (OKLab) of a home colour, then lilac, orange or
+crimson. The home kit is never white (the ball is the only white thing moving) nor grass green.
+It is a palette swap: the painters still paint the club in the HOME ramp and the visitors in
+the AWAY ramp, and `clubLight(light, scheme)` wraps the lighting so `env` and `lit` grade them
+in the scheme; colours drawn raw ask `clubRaw(light)`, the second colour `clubOf(light)`. A
+change of scheme repaints (like a change of light). Shots: `stadium/schemes` (all twelve), and
+`stadium/composed --seed N` wears day N's colours.
+
+**The mascot** (`stadium-mascot.ts`): a friendly owl in a big costume, in the club's shirt
+(collar in the second colour, shorts in the second colour, white gloves, black boots), with a
+2 x 2 ball at his feet, out on the lawn left of the stadium among the people walking there.
+Drawn at their scale: a walker is 5 px tall and 3 wide, he is 8 px tall (ear tufts to boots)
+and 7 wide with his gloves, no outline: a little taller and much wider than a person, not a
+giant. Front, side, back and sitting views. Idle (a nine-second loop): bounces on his toes,
+waves, juggles four touches, blinks, throws his arms up. A click plays the next trick in turn,
+each simple enough to read at this size: a juggle (right foot, left foot, right foot, head,
+trap), a flick over his own head, a spin (pops it up high and turns all the way round under
+it, twice), and a tumble (hoofs it sky-high, topples onto his bottom, it lands on his head and
+he sees stars); then idle again from the top of its loop. His spot (`findMascotSpot`) is the
+deepest open grass left of the ball: every pixel's distance to anything that is not open lawn
+(a path, the road, a tree, a building, the frame, and the ways people walk, traced from
+`life.people` over three minutes, when the lawn has room to keep off them) is measured and
+the farthest wins, up to 16 px, then nearest the middle of the lawn; at least 7 px all round
+or no mascot (480 x 270: (50, 192); 640 x 360: (66, 255)). It is chosen once per size, like the crash site, and the
+crash site and the pilot keep clear of him (`findCrashSite(..., avoid)`). `MASCOT_BOX`, his
+click box, is 12 x 14 px round the point between his boots (him, his ball at rest and a
+little more). Phones have no lawn: no mascot. The state is the trick history (`MascotPokes`);
+`draw` is a pure function of it and `t`. Shot: `stadium/mascot`.
+
+**Sound** (`cuesBetween`, `SoundCue` from `app/scenes/scene.ts`): the airship's landing
+(`thud`, or `splash` in the pond, `FALL` after the pop), the mascot's `touch`es, `kick`s and
+the `thud` of his tumble, and the match far off, as faint background: `{ kind: "cheer", size:
+0.1 }` as the home side scores (`GOAL_AT` into each `MATCH_PERIOD`) and `{ kind: "firework",
+distant: true }` as each of the goal's rockets goes up (`life.launches`; none on a phone, none
+while the roar is over 0.45). Never a horn. Pure; spans that meet never repeat a cue; only the last
+second of a longer span is heard. The pop and the pokes of the airship are the scene's to play
+(it knows from `pokeAirship`'s answer).
 
 This class is the **backdrop contract**: the menu scene uses nothing else of the backdrop, and
 of `menuLayout` only `cx`, `ballR`, `ballCy` and `logo` (a test in `app/scenes/menu.test.ts`
@@ -389,7 +456,12 @@ kept as reference in `stadium-inside.ts` (`InsideBackdrop`, with its frozen layo
 `stadium-inside-layout.ts` and its shots as `inside/*`): it is not used by the game.
 
 - The static picture is painted once per size and light and cached (the land, the skyline, the
-  airship, a depth mask that lets moving things pass behind trees and lamp posts). A frame is the
+  airship, a depth mask that lets moving things pass behind trees and lamp posts). A shadow is
+  not in the mask: ground that only the static painter's shadows darkened is bare ground (a
+  `ShadowLog` tells it apart while the mask is noted), so a walker or a car crossing a tree's
+  shadow stays in sight. A moving car's shadow goes through the mask like the car
+  (`shadowBlob(s, cx, cy, rx, ry, depth, V)`): it never darkens a tree or a roof that stands in
+  front of the car. A frame is the
   sky, two copies and the moving things: 0.2 to 0.5 ms at 480 x 270 (0.9 ms at 720 x 360); the first frame after a change of size or
   light costs 15 to 35 ms on a phone, about 45 ms at 480 x 270 and 90 ms at 720 x 360.
 - Those figures are from Node with the code warm. In Chrome at 1920 x 1080 (480 x 270) a whole
@@ -457,14 +529,23 @@ makeKit(base, opts?: { look?: 0 | 1 | 2; variant?: number }): Kit
 HERO_LOOK: 0 | 1 | 2            // 1: skinB, dark hair. The hero's look at every tier.
 litKit(kit, light): Kit         // every slot through light.lit; do it once per light, not per frame
 
-type PlayerAnim = "idle" | "run" | "kick" | "juggle" | "celebrate" | "dejected" | "lift" | "shrug" | "slide";
+type ShotAnim = "kick" | "tapin" | "toepoke" | "trivela" | "chip" | "power" | "finesse" | "bicycle";
+// one per grade: kick = miss, tapin = tap in, toepoke = toe poke, trivela, finesse = golazo,
+// bicycle = worldie. chip (a lob) and power (a rocket) are spares for variety.
+type PlayerAnim = "idle" | "run" | "kick" | "juggle" | "celebrate" | "dejected" | "lift" | "shrug" | "slide"
+                | ShotAnim;
 PLAYER_ANIMS: Record<PlayerAnim, { frames; fps; loop }>
 KICK_STRIKE_FRAME = 2
+STRIKE_FRAME: Record<ShotAnim, number>   // kick 2, tapin 1, toepoke 1, trivela 2, chip 2, power 2, finesse 2, bicycle 4
+SHOT_ANIMS: readonly ShotAnim[]
+interface Cell { cellW; cellH }
+playerCell(anim, youth?): Cell  // PLAYER / YOUTH, except the bicycle: BICYCLE_CELL 24 x 28, BICYCLE_YOUTH_CELL 20 x 22
+keeperCell(anim): Cell          // KEEPER, except the sprawl: SPRAWL_CELL 24 x 20
 drawPlayer(s, anim, frame, x, y, kit, opts?: { flipX?; youth? }): void
 ballSpot(anim, frame, opts?: { flipX?; youth? }): { x; y } | null
 handsSpot(anim, frame, opts?: { flipX?; youth? }): { x; y } | null
 
-type KeeperAnim = "ready" | "leap" | "smother" | "hold" | "beaten";
+type KeeperAnim = "ready" | "leap" | "smother" | "hold" | "beaten" | "stranded" | "sprawl";
 KEEPER_ANIMS: Record<KeeperAnim, { frames; fps; loop }>
 drawKeeper(s, anim, frame, x, y, kit, opts?: { flipX? }): void
 keeperHands(anim, frame, opts?: { flipX? }): { x; y } | null
@@ -476,9 +557,14 @@ drawPuff(s, x, y, frame, color): void                          // (x, y) the gro
 
 - **Anchor.** `(x, y)` is the ground point under the standing feet: the soles' outline is row
   `y - 1`, the cell's left edge `x - floor(cellW / 2)`. Adult 12 x 18 in 16 x 20, youth 10 x 14
-  in 14 x 16 (`PLAYER`, `YOUTH`, `KEEPER` in `~/art/layout`). Nothing draws outside the cell.
-  Everyone faces right; `flipX` faces left. Spots are offsets from `(x, y)`; a flipped spot is
-  `-dx - 1` (the exact mirror of the pixels), and the functions already do this.
+  in 14 x 16 (`PLAYER`, `YOUTH`, `KEEPER` in `~/art/layout`). Two animations need more room
+  and have their own cell, with the same anchor rule (`playerCell`, `keeperCell`): the
+  bicycle kick, 24 x 28 adult (anchor column 12, soles' outline row 27) and 20 x 22 youth
+  (column 10, row 21), and the keeper's sprawl, 24 x 20 (column 12, row 19). Swapping to them
+  from a 16-wide frame at the same `(x, y)` keeps his feet where they were. Nothing draws
+  outside the cell. Everyone faces right; `flipX` faces left. Spots are offsets from
+  `(x, y)`; a flipped spot is `-dx - 1` (the exact mirror of the pixels), and the functions
+  already do this.
 - **Frames.** `frame` is a running counter: looping animations wrap, one-shots hold their last
   frame. Pick it with `frameAt(t, fps, frames)` (loops) or `min(floor(t * fps), frames - 1)`.
 - **Light.** Draw with `litKit(kit, light)`, and pass `light` to the ball and trophy. The
@@ -505,16 +591,33 @@ drawPuff(s, x, y, frame, color): void                          // (x, y) the gro
 | lift      | 2 @ 3        | yes  | both arms up holding the trophy over his head; the second pumps it up 1 px    |
 | shrug     | 2 @ 2.5      | no   | palms out and shoulders up, then back to rest                                 |
 | slide     | 2 @ 4        | yes  | on his knees, leaning back, fists up; move him along the grass yourself       |
+| tapin     | 4 @ 8        | no   | walking step, **prod with the side of the foot (1)**, step on, stand          |
+| toepoke   | 5 @ 10       | no   | lunge, **full stretch, toe end on it (1)**, lurch on one foot, hop, stand     |
+| trivela   | 6 @ 10       | no   | stride, cock the leg, **outside of the boot (2)**, flick, land, arms open     |
+| chip      | 5 @ 10       | no   | spare: last stride, plant, arms out, **stab under it (2)**, scoop, watch      |
+| power     | 6 @ 10       | no   | spare: stride, wind-up, **laces (2)**, off his feet, land, stance             |
+| finesse   | 5 @ 10       | no   | stride, plant, arm up, **instep (2)**, arms-wide balance, point               |
+| bicycle   | 8 @ 10       | no   | own cell; chest, crouch, take-off, flat, **scissor (4)**, fall, back, sit     |
 | ready     | 2 @ 2        | yes  | keeper: crouched, gloves forward, bobbing                                     |
 | leap      | 3 @ 8        | no   | keeper: crouch, full stretch up and back, hang                                |
 | smother   | 2 @ 8        | no   | keeper: diving down forward, then lying on the ball                           |
 | hold      | 1            | yes  | keeper: standing, ball to his chest                                           |
 | beaten    | 1            | yes  | keeper: on his knees; drawn looking back over his goal line                   |
+| stranded  | 3 @ 6        | no   | keeper: off his line, arms out; reaching up and back, too late; turned        |
+| sprawl    | 3 @ 8        | no   | keeper, own cell: push off, full-length dive toward his goal, flat            |
 
 Spots (adult, then youth; `x` right, `y` up is negative):
 
 - `ballSpot("kick", 0..2)`: the ball at rest in front of him, `(7, -2)` (youth too). Draw it
   there from the set until the strike frame, then fly it from that point. `null` on 3 and 4.
+- The ground shots (`tapin`, `toepoke`, `trivela`, `chip`, `power`, `finesse`, adult and
+  youth) work the same way:
+  `(7, -2)` from frame 0 up to `STRIKE_FRAME[anim]`, `null` after it.
+- `ballSpot("bicycle", 0..4)`: the ball is his for the first five frames. Adult `(-5,-10)`
+  (on his chest; he is facing away from the goal), `(-3,-22)` (popped up), `(1,-26)` (top),
+  `(4,-25)` (dropping), `(7,-23)` (**the strike**, over his head, at his boot). Youth
+  `(-5,-7) (-3,-17) (0,-20) (3,-19) (4,-18)`. `null` on 5 to 7. Draw it at the spot, or
+  `arc()` between this frame's spot and the next for a smoother hang.
 - `ballSpot("juggle", f)` on every frame. Adult: `(4,-7) (6,-12) (4,-11) (6,-16)` then
   `(4,-7) (3,-22) (1,-20) (6,-12)`. Youth: `(4,-6) (5,-10) (3,-9) (5,-13)` then
   `(4,-6) (3,-18) (1,-17) (5,-9)`. Even frames are touches; odd frames are the top of the
@@ -522,8 +625,48 @@ Spots (adult, then youth; `x` right, `y` up is negative):
 - `handsSpot("lift", f)`: adult `(0,-17) (0,-18)`, youth `(0,-13) (0,-14)`:
   `drawTrophy(s, x + h.x, y + h.y, light, glint)` puts the cup on his raised hands.
 - `keeperHands`: ready `(4,-8) (4,-7)`, leap `(-6,-8) (-5,-18) (-6,-18)`, smother
-  `(5,-5) (2,-3)`, hold `(3,-10)`, beaten `null`. For hold and smother 1 it is where the
+  `(5,-5) (2,-3)`, hold `(3,-10)`, beaten `null`, stranded `(4,-7) (-6,-17) (3,-6)`, sprawl
+  `(-8,-7) (-10,-7) (-10,-5)` (the leading glove). For hold and smother 1 it is where the
   ball goes: draw the ball there after him.
+
+**Staging the shots** (the hero at `heroX`, facing right; the strike is
+`STRIKE_FRAME[anim] / fps` seconds after the shot starts; fly the ball from
+`ballSpot(anim, STRIKE_FRAME[anim])`):
+
+- **miss**: `kick`, the ball sent wide or over; keeper `ready` (he watches it go).
+- **tapin**: run him close first, then `tapin`; the ball rolls along the ground (`y - 2`) at
+  walking pace. Keeper: `smother` 0 then 1 without the ball, then `beaten`, or caught
+  flat-footed in `ready`.
+- **toepoke** (TOE POKE): he gets there just before the keeper, so stage it close: the keeper
+  off his line a few pixels nearer than usual. The strike is only 0.1 s in, so the ball can
+  arrive rolling (bring it in along `y - 2` to `(7, -2)` by the strike) or sit there from
+  frame 0. It leaves fast and scuffed along the ground (`y - 2`, a 1 px bobble now and then),
+  quicker than the tap in. A `drawPuff` of turf under his toe (`(6, 0)`) on the strike. Keeper:
+  `stranded` 0 rushing out as he lunges, then `smother` 0 diving at it a beat late, the ball
+  squeezing past his gloves, then `beaten`. Frames 2 and 3 are the stumble: nudge him 1 to
+  2 px forward over them if you like, then hold 4 and cut to `celebrate`.
+- **trivela** (TRIVELA): struck with the outside of the boot, so it bends away from his
+  kicking side: rising off the grass on a curve the other way to the finesse's (in profile:
+  up quickly, then flattening and dipping late; on screen a sideways bend that starts at
+  the keeper and swings away from him). Keeper: `sprawl` a beat late, frame 1 diving where
+  the ball was going, the ball bending a few pixels outside the leading glove, holding 2 as
+  it goes in; or `ready` until late then `leap` the wrong side. Frame 3 is the showy flick
+  (hold it a moment), 5 the arms-open pose; cut to `celebrate` from there.
+- **finesse** (GOLAZO): a curling ball into the far top corner (bend it on a sideways arc).
+  Keeper: the `leap` at full stretch, the ball a pixel past his gloves, then `beaten`.
+- **chip** and **power** are spares, no longer tied to a grade; use them for variety (a
+  golazo that is a rocket or a lob). chip: a high, slow arc over the keeper. Keeper:
+  `stranded` 0 as it is struck, 1 as it passes over his gloves (`keeperHands("stranded", 1)`
+  plus a pixel or two), 2 as it drops in. power: a flat, fast ball, a few pixels off the
+  grass. Keeper: `sprawl`, frame 1 timed so the ball passes just beyond the leading glove,
+  holding 2 while it hits the net. Add a `drawPuff` under his boot on the strike and under
+  the keeper on sprawl 2.
+- **bicycle**: he faces away from the goal on frame 0, so bring the ball in to his chest (a
+  team-mate's cross, or flick it up from a juggle, then cut to frame 0). Frames 0 to 4 carry
+  the ball (spots above); from the strike it flies flat and slightly down toward goal. Lift
+  the frames by nothing: the cell already puts him in the air. He ends sitting up facing the
+  goal; cut to `celebrate` from there. Keeper: `ready` frame 0 frozen (he never moves), then
+  `beaten`. Worth a `drawMatchBall(..., { gold: true })` trail.
 
 **Using the keeper** (he stands at `keeperX` with `flipX: true`, facing the shooter; keep the
 same `flipX` for every frame, the beaten frame already looks back at the goal):
@@ -551,12 +694,14 @@ draw nothing.
 Shots: `people/sheet`, `youth-sheet`, `keeper-sheet`, `kits`, `props`, `in-context` (a strip
 of pitch at 480 x 90), `park`, and the motion shots `people/run`, `kick`, `juggle`,
 `celebrate`, `lift`, `leap`, `smother`, `youth-run`, `youth-kick`, `youth-juggle` (use
-`--strip 8 --dt 0.1`).
+`--strip 8 --dt 0.1`), and the shots `people/tapin`, `toepoke`, `trivela`, `chip`, `power`,
+`finesse`, `bicycle`, their `people/youth-*` twins and the keeper's `people/stranded`, `sprawl` (each
+plays the shot with a stand-in ball flight; `--strip 11 --dt 0.1` shows a whole bicycle).
 
 Files: `kit.ts` (kits), `figure.ts` (fill-only art outlined at load, the shared legend),
-`adult.ts`, `youth.ts`, `keeper.ts` (the frames as text), `people.ts` (tables, spots,
-drawing), `props.ts`, `index.ts`. Sprites are built once, on first use; drawing allocates
-nothing.
+`adult.ts`, `youth.ts`, `keeper.ts` (the frames as text), `adult-shots.ts`, `youth-shots.ts`
+(the seven shots), `people.ts` (tables, cells, spots, drawing), `props.ts`, `index.ts`.
+Sprites are built once per animation, on first use; drawing allocates nothing.
 
 ## Grounds (`~/art/grounds`)
 

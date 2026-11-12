@@ -177,9 +177,26 @@ for (let f = 0; f < 2; f++) {
   LIFT[4 + f * 2 + 1] = y.y;
 }
 
+/**
+ * The bicycle kick's ball while he has it, frames 0 (on his chest, his back to the goal)
+ * to 4 (the strike, over his head): adult x then youth x, and the same for y.
+ */
+export const BIKE_X = new Int8Array(10);
+export const BIKE_Y = new Int8Array(10);
+for (let f = 0; f < 5; f++) {
+  const a = ballSpot("bicycle", f) ?? { x: 7, y: -23 };
+  const y = ballSpot("bicycle", f, { youth: true }) ?? { x: 4, y: -18 };
+  BIKE_X[f] = a.x;
+  BIKE_Y[f] = a.y;
+  BIKE_X[5 + f] = y.x;
+  BIKE_Y[5 + f] = y.y;
+}
+
 /** The keeper's gloves, facing left as he always does. */
 const hands = (anim: KeeperAnim, f: number): { x: number; y: number } =>
   keeperHands(anim, f, { flipX: true }) ?? { x: -4, y: -9 };
 export const HOLD = hands("hold", 0);
 export const LEAP_TOP = hands("leap", 1);
 export const SMOTHER = hands("smother", 1);
+/** Stranded off his line, reaching up and back for the chip. */
+export const STRANDED_UP = hands("stranded", 1);

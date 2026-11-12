@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { StrictMode } from "react";
 import { renderToString } from "react-dom/server";
 import {
@@ -21,6 +21,7 @@ import {
 import { menuLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
 import { factForDay } from "~/data/facts";
+import { leaderboardFor } from "~/data/leaderboard";
 import { dayKeyFor, storageKey } from "~/game";
 import { FONT_3x5, Surface } from "~/pixel";
 import { strings } from "~/i18n";
@@ -126,7 +127,7 @@ function saveGame(day: number, mode: "home" | "away", points: number[]): void {
     questionId: `q${i}`,
     input: "x",
     answerId: "a",
-    grade: "goal",
+    grade: "power",
     points: p,
     km: 10,
     rank: 2,
@@ -173,13 +174,16 @@ describe("home page: at build time", () => {
       vi.unstubAllGlobals();
     }
 
-    // The name, the two modes and the way to the rules are in the page from the start.
+    // The name, the two modes and the "?" button are in the page from the start; the
+    // rules' dialog is not (it is only ever opened by the button).
     expect(html).toContain(
       `<h1 tabindex="-1" class="ss-sr">${strings.siteName}</h1>`,
     );
     expect(html).toContain(strings.home.modes.home.line);
     expect(html).toContain(strings.home.modes.away.line);
-    expect(html).toContain('href="/how-to-play"');
+    expect(html).toContain(`aria-label="${strings.howToPlay.title}"`);
+    expect(html).toContain('aria-haspopup="dialog"');
+    expect(html).not.toContain("<dialog");
     expect(html).toContain("<canvas");
     // With no script there is no picture: the page still says what it is.
     expect(html).toMatch(
@@ -230,10 +234,10 @@ describe("home page: in the browser", () => {
       "Fact of the day: The penalty kick was the idea of William McCrum, a goalkeeper from County Armagh, and arrived in 1891.",
     );
     expect(screen.getByText(strings.home.day(1))).toBeInTheDocument();
-    // The way to the rules, with the address's query carried along.
+    // The way to the rules: a button that opens them over the menu.
     expect(
-      screen.getByRole("link", { name: strings.howToPlay.title }),
-    ).toHaveAttribute("href", "/how-to-play?day=1");
+      screen.getByRole("button", { name: strings.howToPlay.title }),
+    ).toHaveAttribute("aria-expanded", "false");
     // Nothing sits in the top slot: the logo is in the picture.
     expect(document.querySelector(".ss-game__top")).toBeEmptyDOMElement();
     expect(document.querySelector(".ss-game__canvas canvas")).not.toBeNull();
@@ -267,13 +271,61 @@ describe("home page: in the browser", () => {
       screen.getByText(strings.home.fact(factForDay(5).text)),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Cairo/)).toBeNull();
-    // and it is carried on to the rules page (and the game)
+  });
+
+  test("the ? button opens the rules over the menu, and they close back to it", () => {
+    mount();
+    const help = screen.getByRole("button", { name: strings.howToPlay.title });
+    expect(help).toHaveAttribute("aria-haspopup", "dialog");
+    act(() => help.focus());
+    fireEvent.click(help);
+    // A modal dialog named by its heading, over the menu (the scene is still there).
+    const dialog = screen.getByRole("dialog", {
+      name: strings.howToPlay.heading,
+    });
+    expect(dialog).toHaveAttribute("open");
+    expect(help).toHaveAttribute("aria-expanded", "true");
+    expect(scenes()).toHaveLength(1);
+    // The day in a line, the six shots and the career; nothing on the modes.
     expect(
-      screen.getByRole("link", { name: strings.howToPlay.title }),
-    ).toHaveAttribute(
-      "href",
-      "/how-to-play?day=5&stadium=cairo-international-stadium",
-    );
+      within(dialog).getByText(strings.howToPlay.intro),
+    ).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleDescription(strings.howToPlay.intro);
+    expect(dialog.textContent).not.toMatch(/\b(HOME|AWAY)\b/);
+    for (const shot of [
+      "worldie",
+      "golazo",
+      "trivela",
+      "toepoke",
+      "tapin",
+      "miss",
+    ] as const) {
+      expect(
+        within(dialog).getByText(strings.play.shots[shot]).closest("li"),
+      ).toHaveAttribute("data-grade", shot);
+    }
+    expect(
+      within(dialog).getByText(strings.play.tiers.park),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(strings.play.tiers.winner),
+    ).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/niche/i);
+    // The focus is in it; closing puts it back on the "?" button.
+    const close = within(dialog).getByRole("button", {
+      name: strings.howToPlay.close,
+    });
+    expect(close).toHaveFocus();
+    fireEvent.click(close);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(help).toHaveFocus();
+    expect(help).toHaveAttribute("aria-expanded", "false");
+    // Escape closes it too. The page never left the menu for the old rules page.
+    fireEvent.click(help);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(help).toHaveFocus();
+    expect(screen.queryByText("the rules")).toBeNull();
   });
 
   test("the sign's header is in the small font", () => {
@@ -309,6 +361,74 @@ describe("home page: in the browser", () => {
     expect(scenes()).toHaveLength(1);
     expect(made).toHaveBeenLastCalledWith({ home: null, away: 70 });
     expect(screen.getByText("70")).toHaveClass("ss-menu__score");
+  });
+});
+
+describe("home page: today's leaderboard", () => {
+  const text = strings.home.leaderboard;
+
+  test("is not in the build-time page: it needs the day", () => {
+    vi.stubGlobal("window", undefined);
+    vi.stubGlobal("document", undefined);
+    vi.stubGlobal("localStorage", undefined);
+    let html: string;
+    try {
+      html = renderToString(
+        <MemoryRouter>
+          <Home />
+        </MemoryRouter>,
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(html).not.toContain(text.heading);
+    expect(html).not.toContain("ss-lb");
+  });
+
+  test("opens from the trophy (the test window is not a monitor) with the day's top ten", () => {
+    mount();
+    const trophy = screen.getByRole("button", { name: text.open });
+    fireEvent.click(trophy);
+    const sheet = screen.getByRole("dialog", { name: text.heading });
+    const table = within(sheet).getByRole("table", {
+      name: text.caption(strings.home.modes.home.label),
+    });
+    // Ten players and the header row; nobody is YOU before playing.
+    expect(within(table).getAllByRole("row")).toHaveLength(11);
+    expect(within(table).queryByText(text.you)).toBeNull();
+    const board = leaderboardFor(1, "home");
+    expect(within(sheet).getByText(text.played(board.total))).toBeTruthy();
+    expect(
+      within(table).getByRole("rowheader", { name: board.rows[0]!.name }),
+    ).toBeTruthy();
+  });
+
+  test("a mode played today puts the player in its table, at their rank", () => {
+    saveGame(1, "away", [100, 100, 100, 100, 80, 0, 0]);
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: text.open }));
+    // Only AWAY was played, so the sheet opens on AWAY.
+    const sheet = screen.getByRole("dialog");
+    expect(
+      within(sheet).getByRole("tab", { name: strings.home.modes.away.label }),
+    ).toHaveAttribute("aria-selected", "true");
+    const board = leaderboardFor(1, "away", 480);
+    const rank = board.yourRank ?? 0;
+    expect(rank).toBeGreaterThan(10);
+    const you = within(sheet).getByRole("rowheader", {
+      name: text.youSpoken(rank, board.total),
+    });
+    expect(you.closest("tr")).toHaveTextContent(`${rank}${text.you}`);
+    expect(you.closest("tr")?.lastElementChild).toHaveTextContent("480");
+    expect(within(sheet).getByText(text.played(board.total))).toBeTruthy();
+  });
+
+  test("the trophy steps aside with the captions when a mode is chosen", () => {
+    mount();
+    fireEvent.click(card(/^HOME/));
+    expect(
+      screen.getByRole("button", { name: text.open, hidden: true }),
+    ).toHaveClass("is-stowed");
   });
 });
 

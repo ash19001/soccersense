@@ -18,7 +18,7 @@ import jersey10Latin from "@fontsource/jersey-10/files/jersey-10-latin-400-norma
 import jersey15Latin from "@fontsource/jersey-15/files/jersey-15-latin-400-normal.woff2?url";
 
 import { strings } from "~/i18n";
-import { Panel, PixelRoot } from "~/ui";
+import { ClickBurst, Panel, PixelRoot } from "~/ui";
 import type { Route } from "./+types/root";
 import "./app.css";
 
@@ -56,6 +56,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
+        {/* A burst of pixels at every press, on every page (nothing at build time). */}
+        <ClickBurst />
         <ScrollRestoration />
         <Scripts />
       </body>

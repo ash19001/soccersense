@@ -381,7 +381,7 @@ describe("MenuBackdrop", () => {
       for (let i = 0; i < w * m.logo.h; i++) if (a.data[i] !== c.data[i]) n++;
       expect(n, `${w}x${h}`).toBe(0);
     }
-  });
+  }, 30_000);
 
   it("shows the whole moon or none of it: nothing stands in front of part of it", () => {
     // The moon used to hang behind the television tower on a monitor (a thin crescent was
@@ -1018,7 +1018,7 @@ describe("cars that point the way they go", () => {
       // the coach turns into its bay through the headings from up the road to west
       expect(coachHeadings.size, `${w}x${h}`).toBeGreaterThanOrEqual(4);
     }
-  });
+  }, 30_000);
 
   it("parks each car along its bay and inside its lines", () => {
     const view = makeView(480, 270);

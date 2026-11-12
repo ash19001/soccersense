@@ -83,35 +83,88 @@ export function spans(
   }
 }
 
+/**
+ * What the static painter's shadows darkened while it notes the depth mask
+ * (stadium-town.ts): for each pixel of `s`, the colour the first shadow of a pass found
+ * there, the colour the last one left, and the pass. A shadow is not a thing standing on
+ * the ground, so a pixel only shadows changed must not hide what moves behind it.
+ */
+export class ShadowLog {
+  readonly under: Uint32Array;
+  readonly left: Uint32Array;
+  readonly pass: Int32Array;
+  /** The pass now being painted: bump it for each one. */
+  now = 1;
+  constructor(readonly s: Surface) {
+    const n = s.w * s.h;
+    this.under = new Uint32Array(n);
+    this.left = new Uint32Array(n);
+    this.pass = new Int32Array(n);
+  }
+
+  /** Whether pixel `i` holds nothing but the shadows of this pass over `before`. */
+  onlyShadow(i: number, before: number): boolean {
+    return (
+      this.pass[i] === this.now &&
+      this.under[i] === before &&
+      this.left[i] === this.s.data[i]
+    );
+  }
+}
+
+let shadowLog: ShadowLog | null = null;
+/** Note every shadow cast on the log's surface in it (null: stop). */
+export function logShadows(log: ShadowLog | null): void {
+  shadowLog = log;
+}
+
+/** Darken pixel `i` of `s`, noting it when `s` is the logged surface. */
+function darken(s: Surface, i: number): void {
+  const c = s.data[i] as Color;
+  if (c === 0) return;
+  const o = darkOf(c);
+  s.data[i] = o;
+  const log = shadowLog;
+  if (log === null || log.s !== s) return;
+  if (log.pass[i] !== log.now) {
+    log.pass[i] = log.now;
+    log.under[i] = c;
+  }
+  log.left[i] = o;
+}
+
 /** Put a polygon of the ground into cast shadow. */
 export function shadowPoly(s: Surface, pts: ReadonlyArray<Point>): void {
-  const d = s.data;
   spans(pts, s.w, s.h, (y, x0, x1) => {
     const row = y * s.w;
-    for (let x = x0; x <= x1; x++) {
-      const c = d[row + x] as Color;
-      if (c !== 0) d[row + x] = darkOf(c);
-    }
+    for (let x = x0; x <= x1; x++) darken(s, row + x);
   });
 }
 
-/** A small round shadow on the ground. */
+/**
+ * A small round shadow on the ground. With a depth mask (`depth`, one entry for each pixel
+ * of `s`: stadium-town.ts) it darkens only where nothing nearer than `V` stands, the rule
+ * a moving thing is drawn by (stadium-life.ts): a car behind a tree or a roof leaves its
+ * shadow behind it too.
+ */
 export function shadowBlob(
   s: Surface,
   cx: number,
   cy: number,
   rx: number,
   ry: number,
+  depth?: Float32Array,
+  V = 0,
 ): void {
-  const d = s.data;
   for (let y = Math.ceil(cy - ry); y <= Math.floor(cy + ry); y++) {
     if (y < 0 || y >= s.h) continue;
     const t = ry <= 0 ? 0 : (y - cy) / ry;
     const half = rx * Math.sqrt(Math.max(0, 1 - t * t));
     for (let x = Math.ceil(cx - half); x <= Math.floor(cx + half); x++) {
       if (x < 0 || x >= s.w) continue;
-      const c = d[y * s.w + x] as Color;
-      if (c !== 0) d[y * s.w + x] = darkOf(c);
+      const i = y * s.w + x;
+      if (depth !== undefined && !(depth[i] >= V)) continue;
+      darken(s, i);
     }
   }
 }

@@ -21,7 +21,7 @@ import {
   toRgb,
   type Color,
 } from "~/pixel";
-import { menuLayout } from "~/art/layout";
+import { menuLayout, type Zone } from "~/art/layout";
 import type { Lighting } from "~/art/lighting";
 import { P } from "~/art/palette";
 import {
@@ -70,7 +70,8 @@ const WET = new Set<number>([WATER, WATER_HI, WATER_LO]);
 /**
  * Where the falling airship lands for this view: open grass or water that nothing stands
  * on, clear of the ball and the captions. `land` is the painted town (its first row is
- * screen row `landTop`) and `depth` its depth mask.
+ * screen row `landTop`) and `depth` its depth mask. `avoid`: places on screen the wreck
+ * and the pilot keep well clear of (the mascot).
  */
 export function findCrashSite(
   view: View,
@@ -79,9 +80,12 @@ export function findCrashSite(
   depth: Float32Array,
   seed: number,
   shipX: number,
+  avoid: readonly Zone[] = [],
 ): CrashSite {
   const { w, h, hy } = view;
   const m = menuLayout(w, h);
+  const near = (x0: number, y0: number, x1: number, y1: number): boolean =>
+    avoid.some((z) => x0 < z.x + z.w && z.x < x1 && y0 < z.y + z.h && z.y < y1);
   // nothing nearer than the ground itself stands there (a tuft or a flower bed lying on
   // it is fine: its depth is the ground's)
   const open = (x: number, y: number, V: number): boolean =>
@@ -110,6 +114,8 @@ export function findCrashSite(
       const by = y - m.ballCy;
       if (bx * bx + by * by < (m.ballR + 10) ** 2) continue;
       if (y > m.caption.y - 6 && Math.abs(bx) < 80) continue;
+      // the wreck, its dust and its splash
+      if (near(x - 16, y - 18, x + 17, y + 5)) continue;
       // well inside the grass (or the water), with nothing standing on it: room for the
       // wreck, which lies on it and stands a dozen pixels up from it
       let clear = true;
@@ -160,6 +166,7 @@ export function findCrashSite(
   let pilotCost = Infinity;
   for (const p of spots) {
     if (p.water) continue;
+    if (near(p.x - 6, p.y - 14, p.x + 7, p.y + 3)) continue;
     const dx = Math.abs(p.x - best.x);
     const c = Math.abs(dx - 14) + Math.abs(p.y - best.y) * 1.5;
     if (dx >= 8 && c < pilotCost) {
@@ -167,7 +174,10 @@ export function findCrashSite(
       pilotCost = c;
     }
   }
-  const side = best.x < w / 2 ? 1 : -1;
+  let side = best.x < w / 2 ? 1 : -1;
+  const pilotNear = (x: number, y: number): boolean =>
+    near(x - 6, y - 14, x + 7, y + 3);
+  if (pilotNear(best.x + side * 12, best.y + 2)) side = -side;
   return {
     x: best.x,
     y: best.y,

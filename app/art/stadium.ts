@@ -50,15 +50,40 @@ import {
 import {
   ARRIVE,
   AirshipPokes,
+  FALL,
   RETURN,
   poseAt,
   type Pose,
 } from "~/art/stadium-airship-poke";
-import { makeLife, type Life } from "~/art/stadium-life";
+import {
+  DEFAULT_SCHEME,
+  clubLight,
+  schemeById,
+  type ClubScheme,
+} from "~/art/stadium-club";
+import { FIREWORKS, makeLife, type Life } from "~/art/stadium-life";
+import { GOAL_AT, MATCH_PERIOD } from "~/art/stadium-match";
+import {
+  MascotPokes,
+  drawMascot,
+  findMascotSpot,
+  mascotCues,
+  mascotFrame,
+  mascotWork,
+  mascotZone,
+} from "~/art/stadium-mascot";
+import { HOME_PAGE } from "~/audio/mix";
+import type { SoundCue } from "~/scenes/scene";
 import { paintTown, type Town } from "~/art/stadium-town";
 import { makeView, project, type View } from "~/art/stadium-view";
 
 /** What the airship's sign says: a short header over the fact of the day. */
+/** What is heard of the match on the pitch, far off: the goal's cheer and its rockets. */
+const GOAL_CHEER: SoundCue = { kind: "cheer", size: HOME_PAGE.pictureCheer };
+const FAR_FIREWORK: SoundCue = { kind: "firework", distant: true };
+/** Over this much roar the goal's rockets are not drawn (stadium-life.ts), nor heard. */
+const ROCKETS_ROAR = 0.45;
+
 export interface MenuSign {
   /** The first line, for example "DID YOU KNOW?". Short: it does not scroll. */
   header: string;
@@ -73,10 +98,26 @@ function signText(sign: MenuSign): SignText {
   return { header: line(sign.header), text: line(sign.text) };
 }
 
+/**
+ * Where the people on foot walk, on screen: their feet every half second over three minutes,
+ * which traces every way they take. The mascot keeps off them.
+ */
+function trodden(view: View, life: Life): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = [];
+  for (let t = 0; t < 180; t += 0.5) {
+    life.people(t, (X, V) => {
+      const p = project(view, X, V);
+      out.push({ x: p.x, y: p.y });
+    });
+  }
+  return out;
+}
+
 export class MenuBackdrop {
   private readonly seed: number;
   private sign: SignText;
   private light: Lighting = lightingFor({ elevation: 45, morning: false });
+  private scheme: ClubScheme = DEFAULT_SCHEME;
   private moonPhase: number | undefined = undefined;
   private roar = 0;
   private w = 0;
@@ -91,6 +132,11 @@ export class MenuBackdrop {
   private site: CrashSite | null = null;
   private readonly sites = new Map<string, CrashSite>();
   private readonly pokes = new AirshipPokes();
+  /** Where the mascot stands, per size (null: no lawn, no mascot). */
+  private spot: { x: number; y: number } | null = null;
+  private readonly spots = new Map<string, { x: number; y: number } | null>();
+  private readonly mascot = new MascotPokes();
+  private readonly mascotWork = mascotWork();
   /** The last point airshipAt found on the airship: a poke at the same moment dents it there. */
   private hit = { x: 0, y: 0, t: Number.NaN };
 
@@ -113,6 +159,27 @@ export class MenuBackdrop {
     if (light === this.light) return;
     this.light = light;
     this.dirty = true;
+  }
+
+  /**
+   * The day's club colours (stadium-club.ts: `schemeForDay(day).id`). An unknown id is the
+   * default, red and white. The menu ball's HOME and AWAY colours never change.
+   */
+  setScheme(id: string): void {
+    const scheme = schemeById(id);
+    if (scheme === this.scheme) return;
+    this.scheme = scheme;
+    this.dirty = true;
+  }
+
+  /** The id of the colours it wears. */
+  schemeId(): string {
+    return this.scheme.id;
+  }
+
+  /** The light the stadium is painted in: the sky's, in the club's colours. */
+  private clubbed(): Lighting {
+    return clubLight(this.light, this.scheme);
   }
 
   /** What the sign says. It is drawn in capitals. */
@@ -161,6 +228,72 @@ export class MenuBackdrop {
     );
   }
 
+  /** Where the mascot stands (the point between his feet), or null when there is no lawn for him. */
+  mascotSpot(): { x: number; y: number } | null {
+    if (this.w === 0 || this.h === 0) return null;
+    this.paint();
+    return this.spot ? { ...this.spot } : null;
+  }
+
+  /** Is (x, y) on the mascot at scene time t? For the cursor and for clicks. False on a phone (no lawn, no mascot). */
+  mascotAt(x: number, y: number, t: number): boolean {
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(t)) {
+      return false;
+    }
+    if (this.w === 0 || this.h === 0) return false;
+    this.paint();
+    if (!this.spot) return false;
+    const z = mascotZone(this.spot);
+    return x >= z.x && x < z.x + z.w && y >= z.y && y < z.y + z.h;
+  }
+
+  /** A click on the mascot at scene time t: he does his next trick, or is "busy" with one (or absent). */
+  pokeMascot(t: number): "trick" | "busy" {
+    if (this.w === 0 || this.h === 0) return "busy";
+    this.paint();
+    if (!this.spot) return "busy";
+    return this.mascot.poke(t);
+  }
+
+  /**
+   * What is heard of the picture in the span (t0, t1] of scene time: the airship's landing
+   * (a thud, or a splash in the pond), the mascot's touches and kicks, and the match far
+   * off: as the home side scores, a very small cheer (`size` 0.1) and, as each of the goal's
+   * rockets goes up, a distant firework (none while the roar sends up its own). Never a
+   * horn: it is background. Pure: the same span gives the same cues, and spans that meet
+   * never repeat one.
+   * Only the last second of a longer span is heard (a tab coming back does not get a minute
+   * of noise at once).
+   */
+  cuesBetween(t0: number, t1: number): SoundCue[] {
+    const out: SoundCue[] = [];
+    if (!Number.isFinite(t0) || !Number.isFinite(t1) || !(t1 > t0)) return out;
+    const from = Math.max(t0, t1 - 1);
+    const at = (time: number): boolean => time > from && time <= t1;
+    // the airship comes down
+    const pop = this.pokes.poppedAt(t1 - FALL);
+    if (Number.isFinite(pop) && at(pop + FALL)) {
+      const water = this.w > 0 && this.h > 0 && this.paint().site.water;
+      out.push(water ? { kind: "splash" } : { kind: "thud" });
+    }
+    mascotCues(this.mascot, from, t1, out);
+    // the match far off: the goal, and its rockets (they go up for FIREWORKS seconds)
+    if (this.w > 0 && this.h > 0) {
+      const launches = this.paint().life.launches;
+      const first = Math.floor((from - FIREWORKS - GOAL_AT) / MATCH_PERIOD);
+      const last = Math.ceil((t1 - GOAL_AT) / MATCH_PERIOD);
+      for (let k = first; k <= last; k++) {
+        const goal = GOAL_AT + k * MATCH_PERIOD;
+        if (at(goal)) out.push(GOAL_CHEER);
+        if (this.roar > ROCKETS_ROAR) continue;
+        for (const launch of launches) {
+          if (at(goal + launch)) out.push(FAR_FIREWORK);
+        }
+      }
+    }
+    return out;
+  }
+
   /**
    * The marquee's clock at t: the scene's time until the first pop. A fallen airship's sign
    * stands still at the start of the fact, and the new one's does until it is in its place.
@@ -202,11 +335,12 @@ export class MenuBackdrop {
       !this.kit ||
       !this.site
     ) {
-      this.town = paintTown(this.view, this.light, this.seed);
-      this.ship = paintAirship(signPlace(this.view), this.light);
+      const light = this.clubbed();
+      this.town = paintTown(this.view, light, this.seed);
+      this.ship = paintAirship(signPlace(this.view), light);
       // the goal's fireworks keep clear of the airship (it drifts and lurches a little)
       const ship = this.ship;
-      this.life = makeLife(this.view, this.light, this.seed, this.town, [
+      this.life = makeLife(this.view, light, this.seed, this.town, [
         {
           x: ship.x - 4,
           y: ship.y - 4,
@@ -216,8 +350,24 @@ export class MenuBackdrop {
       ]);
       this.work = new Surface(this.ship.layer.w, this.ship.layer.h);
       this.kit = buildFallKit(this.ship);
-      // chosen once per size, so a change of light never moves a wreck
+      // chosen once per size, so a change of light never moves a wreck or the mascot
       const key = `${this.w}x${this.h}`;
+      if (!this.spots.has(key)) {
+        if (this.spots.size > 8) this.spots.clear();
+        this.spots.set(
+          key,
+          findMascotSpot(
+            this.view,
+            this.town.land,
+            this.town.top,
+            this.town.depth,
+            this.seed,
+            [{ x: ship.x, y: ship.y, w: ship.layer.w, h: ship.layer.h }],
+            trodden(this.view, this.life),
+          ),
+        );
+      }
+      this.spot = this.spots.get(key) ?? null;
       let site = this.sites.get(key);
       if (!site) {
         site = findCrashSite(
@@ -227,6 +377,7 @@ export class MenuBackdrop {
           this.town.depth,
           this.seed,
           this.ship.x + this.ship.centre.x,
+          this.spot ? [mascotZone(this.spot)] : [],
         );
         if (this.sites.size > 8) this.sites.clear();
         this.sites.set(key, site);
@@ -264,37 +415,38 @@ export class MenuBackdrop {
     s.blit(town.skyline, 0, town.skylineY);
     s.copy(town.land, 0, town.top);
     life.draw(s, time, this.roar);
+    const light = this.clubbed();
+    if (this.spot) {
+      drawMascot(
+        s,
+        this.spot.x,
+        this.spot.y,
+        mascotFrame(this.mascot, time),
+        light,
+        this.mascotWork,
+      );
+    }
     const text = this.sign;
     const phase = this.pokes.phase(time);
     if (phase.kind === "down") {
-      drawDown(
-        s,
-        ship,
-        kit,
-        site,
-        text,
-        this.light,
-        time,
-        phase.since,
-        town.depth,
-      );
+      drawDown(s, ship, kit, site, text, light, time, phase.since, town.depth);
       return;
     }
     const pose = this.poseOf(ship, time);
     if (!pose) {
-      drawAirship(s, ship, text, this.light, time, this.signTime(time));
+      drawAirship(s, ship, text, light, time, this.signTime(time));
       return;
     }
     drawAirshipPosed(
       s,
       ship,
       text,
-      this.light,
+      light,
       time,
       pose,
       work,
       this.signTime(time),
     );
-    drawPuffs(s, ship, this.pokes, pose, this.light, time);
+    drawPuffs(s, ship, this.pokes, pose, light, time);
   }
 }

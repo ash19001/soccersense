@@ -186,12 +186,12 @@ describe("clockView", () => {
 describe("revealFor", () => {
   it("is null until the question is decided", () => {
     expect(revealFor(start())).toBeNull();
-    expect(revealFor(start(), 5, 1)).toBeNull();
-    expect(revealFor(start(), 5, 99)).toBeNull();
-    expect(revealFor(start(), 5, -1)).toBeNull();
+    expect(revealFor(start(), 1)).toBeNull();
+    expect(revealFor(start(), 99)).toBeNull();
+    expect(revealFor(start(), -1)).toBeNull();
   });
 
-  it("has the turn, the answer, its row, the best row and the whole table", () => {
+  it("has the turn, the answer, its row, the best row and one row for each shot that scores", () => {
     const s = run(start(), {
       type: "submit",
       input: "answer 3",
@@ -205,7 +205,7 @@ describe("revealFor", () => {
     expect(reveal.turn).toBe(s.turns[0]);
     expect(reveal.answer).toBe(LONG.answers[3]);
     expect(reveal.row).toMatchObject({
-      points: 67,
+      points: 60,
       rank: 4,
       km: 445,
       share: 176,
@@ -214,20 +214,23 @@ describe("revealFor", () => {
     expect(reveal.best?.points).toBe(100);
     expect(reveal.tableSize).toBe(10);
     expect(reveal.isLast).toBe(false);
-    expect(reveal.rows).toHaveLength(10);
+    // HOME, the shots of the ten: worldie, golazo x2, trivela, toe poke x2, tap in x2,
+    // miss x2. Each shot the player did not get shows its most popular answer.
+    expect(reveal.rows.map((r) => [r.shot, r.answer.name, r.index])).toEqual([
+      ["worldie", "Answer 0", 0],
+      ["golazo", "Answer 1", 1],
+      ["trivela", "Answer 3", 3],
+      ["toepoke", "Answer 4", 4],
+      ["tapin", "Answer 6", 6],
+    ]);
     expect(reveal.rows.map((r) => r.isPlayer)).toEqual([
-      false,
       false,
       false,
       true,
       false,
       false,
-      false,
-      false,
-      false,
-      false,
     ]);
-    expect(reveal.rows.every((r) => !r.gapBefore)).toBe(true);
+    expect(reveal.playerInRows).toBe(true);
     // The turn and the highlighted row always agree.
     const mine = reveal.rows.find((r) => r.isPlayer);
     expect(mine).toMatchObject({
@@ -238,7 +241,25 @@ describe("revealFor", () => {
     });
   });
 
-  it("ranks HOME by the most common answer and AWAY by the most niche", () => {
+  it("puts the player's answer in its shot's row, in place of that shot's best answer", () => {
+    const s = run(start(), {
+      type: "submit",
+      input: "answer 2",
+      now: T0 + 2000,
+    });
+    const reveal = revealFor(s);
+    expect(reveal?.rows.map((r) => r.answer.name)).toEqual([
+      "Answer 0",
+      "Answer 2",
+      "Answer 3",
+      "Answer 4",
+      "Answer 6",
+    ]);
+    expect(reveal?.rows[1].isPlayer).toBe(true);
+    expect(reveal?.rows.filter((r) => r.isPlayer)).toHaveLength(1);
+  });
+
+  it("ranks HOME by the most common answer and AWAY by the most uncommon", () => {
     // Popularity runs against distance here: the nearest answer is the rarest.
     const crowd = question("crowd", [
       { ...popular("Rare", 0.4), lat: 0, lng: 1 },
@@ -265,10 +286,10 @@ describe("revealFor", () => {
       share: 87.1,
       km: 334,
     });
+    // Three answers in three shots, one of them a miss: two rows.
     expect(revealFor(home)?.rows.map((r) => r.answer.name)).toEqual([
       "Everyone",
       "Middling",
-      "Rare",
     ]);
     const away = run(game("away"), {
       type: "submit",
@@ -276,43 +297,47 @@ describe("revealFor", () => {
       now: T0 + 1,
     });
     expect(questionView(away).rule).toBe("niche");
-    expect(revealFor(away)?.turn).toMatchObject({ grade: "wide", points: 0 });
+    expect(revealFor(away)?.turn).toMatchObject({ grade: "miss", points: 0 });
     expect(revealFor(away)?.best?.answer.name).toBe("Rare");
     expect(revealFor(away)?.best?.share).toBe(0.4);
+    expect(revealFor(away)?.rows.map((r) => r.answer.name)).toEqual([
+      "Rare",
+      "Middling",
+    ]);
+    expect(revealFor(away)?.playerInRows).toBe(false);
   });
 
-  it("trims a long table but keeps the best, the player's and the worst rows", () => {
+  it("leaves a listed miss out of the rows, and still knows its row in the table", () => {
     const s = run(start(), {
       type: "submit",
-      input: "answer 6",
+      input: "answer 8",
       now: T0 + 2000,
     });
-    const reveal = revealFor(s, 4);
-    expect(reveal?.rows.map((r) => r.index)).toEqual([0, 3, 6, 9]);
-    expect(reveal?.rows.map((r) => r.isPlayer)).toEqual([
-      false,
-      false,
-      true,
-      false,
+    const reveal = revealFor(s);
+    expect(reveal?.turn).toMatchObject({ grade: "miss", points: 0 });
+    expect(reveal?.row).toMatchObject({ shot: "miss", rank: 9, share: 171 });
+    expect(reveal?.answer).toBe(LONG.answers[8]);
+    expect(reveal?.rows.map((r) => r.shot)).toEqual([
+      "worldie",
+      "golazo",
+      "trivela",
+      "toepoke",
+      "tapin",
     ]);
-    expect(reveal?.rows.map((r) => r.gapBefore)).toEqual([
-      false,
-      true,
-      true,
-      true,
-    ]);
-    expect(reveal?.tableSize).toBe(10);
+    expect(reveal?.rows.some((r) => r.isPlayer)).toBe(false);
+    expect(reveal?.playerInRows).toBe(false);
   });
 
-  it("marks no row for a pass or a time-up, and still shows the table", () => {
+  it("marks no row for a pass or a time-up, and still shows one answer for each shot", () => {
     const passed = run(start(), { type: "pass", now: T0 + 9000 });
     const timedOut = run(start(), { type: "tick", now: T0 + QUESTION_MS });
     for (const s of [passed, timedOut]) {
-      const reveal = revealFor(s, 5);
+      const reveal = revealFor(s);
       expect(reveal?.answer).toBeNull();
       expect(reveal?.row).toBeNull();
       expect(reveal?.rows).toHaveLength(5);
       expect(reveal?.rows.some((r) => r.isPlayer)).toBe(false);
+      expect(reveal?.playerInRows).toBe(false);
       expect(reveal?.best?.answer).toBe(LONG.answers[0]);
     }
     expect(revealFor(passed)?.turn.grade).toBe("skipped");
@@ -329,6 +354,15 @@ describe("revealFor", () => {
     expect(reveal?.best?.answer).toBe(LONG.answers[9]);
     expect(reveal?.turn).toMatchObject({ grade: "worldie", points: 100 });
     expect(reveal?.rows[0].isPlayer).toBe(true);
+    // AWAY shows each shot's best answer: the least picked in it, which is the first of its
+    // shot in an AWAY table (Answer 8, 171, over Answer 7, 172).
+    expect(reveal?.rows.map((r) => r.answer.name)).toEqual([
+      "Answer 9",
+      "Answer 8",
+      "Answer 6",
+      "Answer 5",
+      "Answer 3",
+    ]);
   });
 
   it("can look back at any decided question, and knows the last one", () => {
@@ -342,14 +376,16 @@ describe("revealFor", () => {
       { type: "next", now: T0 + 4 },
       { type: "submit", input: "only", now: T0 + 5 },
     );
-    expect(revealFor(s, 3, 0)?.answer).toBe(LONG.answers[0]);
-    expect(revealFor(s, 3, 1)).toMatchObject({
+    expect(revealFor(s, 0)?.answer).toBe(LONG.answers[0]);
+    expect(revealFor(s, 1)).toMatchObject({
       index: 1,
       question: SHORT,
       isLast: false,
       tableSize: 2,
+      playerInRows: false,
     });
-    expect(revealFor(s, 3, 1)?.turn.points).toBe(0);
+    expect(revealFor(s, 1)?.turn.points).toBe(0);
+    expect(revealFor(s, 1)?.rows.map((r) => r.answer.name)).toEqual(["Near"]);
     expect(revealFor(s)).toMatchObject({ index: 2, isLast: true });
     expect(revealFor(s)?.rows).toHaveLength(1);
     expect(revealFor(s)?.turn.points).toBe(100);
@@ -357,7 +393,7 @@ describe("revealFor", () => {
 
   it("returns the same row objects' data every call", () => {
     const s = run(start(), { type: "submit", input: "answer 2", now: T0 + 1 });
-    expect(revealFor(s, 4)).toEqual(revealFor(s, 4));
+    expect(revealFor(s)).toEqual(revealFor(s));
   });
 });
 
@@ -462,7 +498,7 @@ describe("pips, results and the share text", () => {
 
   it("pips has one slot per question, filled as the game goes", () => {
     expect(pips(start())).toEqual([null, null, null]);
-    expect(pips(played)).toEqual(["topbins", "skipped", null]);
+    expect(pips(played)).toEqual(["golazo", "skipped", null]);
   });
 
   it("results pairs each decided question with the answer given", () => {
@@ -484,13 +520,24 @@ describe("pips, results and the share text", () => {
       dayNumber: 12,
       mode: "home",
       stadiumName: "ORIGIN",
-      total: 89,
+      total: 80,
       tierName: "SUNDAY LEAGUE",
-      grades: ["topbins", "skipped"],
+      grades: ["golazo", "skipped"],
     });
     expect(buildShareText(input).split("\n").slice(0, 2)).toEqual([
       "soccersense #12 · HOME · ORIGIN",
-      "89/700 · SUNDAY LEAGUE",
+      "80/700 · SUNDAY LEAGUE",
+    ]);
+    const titled = shareInputFor(
+      played,
+      "SUNDAY LEAGUE",
+      "STILL FINDING A SEAT",
+    );
+    expect(titled.title).toBe("STILL FINDING A SEAT");
+    expect(buildShareText(titled).split("\n").slice(0, 3)).toEqual([
+      "soccersense #12 · HOME · ORIGIN",
+      "STILL FINDING A SEAT",
+      "80/700 · SUNDAY LEAGUE",
     ]);
   });
 });

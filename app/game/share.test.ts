@@ -6,7 +6,8 @@ import type { Grade } from "./types";
 const STAR = "\u{1F31F}";
 const TARGET = "\u{1F3AF}";
 const BALL = "⚽";
-const GLOVES = "\u{1F9E4}";
+const BANG = "\u{1F4A5}";
+const RAINBOW = "\u{1F308}";
 const CROSS = "❌";
 const STOPWATCH = "⏱️";
 const MINUS = "➖";
@@ -15,10 +16,11 @@ describe("GRADE_SYMBOLS", () => {
   it("has the agreed symbol for every grade", () => {
     expect(GRADE_SYMBOLS).toEqual({
       worldie: STAR,
-      topbins: TARGET,
-      goal: BALL,
-      ontarget: GLOVES,
-      wide: CROSS,
+      golazo: TARGET,
+      trivela: BANG,
+      toepoke: RAINBOW,
+      tapin: BALL,
+      miss: CROSS,
       timeup: STOPWATCH,
       skipped: MINUS,
     });
@@ -28,10 +30,11 @@ describe("GRADE_SYMBOLS", () => {
     const codePoints = (s: string) =>
       [...s].map((ch) => ch.codePointAt(0)?.toString(16).toUpperCase());
     expect(codePoints(GRADE_SYMBOLS.worldie)).toEqual(["1F31F"]);
-    expect(codePoints(GRADE_SYMBOLS.topbins)).toEqual(["1F3AF"]);
-    expect(codePoints(GRADE_SYMBOLS.goal)).toEqual(["26BD"]);
-    expect(codePoints(GRADE_SYMBOLS.ontarget)).toEqual(["1F9E4"]);
-    expect(codePoints(GRADE_SYMBOLS.wide)).toEqual(["274C"]);
+    expect(codePoints(GRADE_SYMBOLS.golazo)).toEqual(["1F3AF"]);
+    expect(codePoints(GRADE_SYMBOLS.trivela)).toEqual(["1F4A5"]);
+    expect(codePoints(GRADE_SYMBOLS.toepoke)).toEqual(["1F308"]);
+    expect(codePoints(GRADE_SYMBOLS.tapin)).toEqual(["26BD"]);
+    expect(codePoints(GRADE_SYMBOLS.miss)).toEqual(["274C"]);
     // The stopwatch is followed by the emoji presentation selector.
     expect(codePoints(GRADE_SYMBOLS.timeup)).toEqual(["23F1", "FE0F"]);
     expect(codePoints(GRADE_SYMBOLS.skipped)).toEqual(["2796"]);
@@ -48,18 +51,36 @@ describe("buildShareText", () => {
       tierName: "TOP FLIGHT",
       grades: [
         "worldie",
-        "topbins",
-        "goal",
-        "ontarget",
-        "wide",
+        "golazo",
+        "trivela",
+        "toepoke",
+        "tapin",
+        "miss",
         "timeup",
-        "skipped",
       ],
     });
     expect(text.split("\n")).toEqual([
       "soccersense #12 · HOME · Anfield",
       "512/700 · TOP FLIGHT",
-      STAR + TARGET + BALL + GLOVES + CROSS + STOPWATCH + MINUS,
+      STAR + TARGET + BANG + RAINBOW + BALL + CROSS + STOPWATCH,
+    ]);
+  });
+
+  it("puts the title the total earned on its own line, under the first", () => {
+    const text = buildShareText({
+      dayNumber: 12,
+      mode: "away",
+      stadiumName: "Anfield",
+      total: 640,
+      tierName: "WORLD CUP FINAL",
+      title: "DEEP CUT SPECIALIST",
+      grades: ["worldie", "golazo"],
+    });
+    expect(text.split("\n")).toEqual([
+      "soccersense #12 · AWAY · Anfield",
+      "DEEP CUT SPECIALIST",
+      "640/700 · WORLD CUP FINAL",
+      STAR + TARGET,
     ]);
   });
 
@@ -84,7 +105,7 @@ describe("buildShareText", () => {
       stadiumName: "Hampden Park",
       total: 0,
       tierName: "PARK KICKABOUT",
-      grades: ["timeup", "skipped", "wide"],
+      grades: ["timeup", "skipped", "miss"],
     });
     const lines = text.split("\n");
     expect(lines).toHaveLength(3);
@@ -115,7 +136,7 @@ describe("buildShareText", () => {
       stadiumName: "Anfield",
       total: 512,
       tierName: "TOP FLIGHT",
-      grades: ["worldie", "goal"],
+      grades: ["worldie", "tapin"],
     });
     expect(text).not.toMatch(/[a-z]{3,}.*\d+ (km|miles)/);
     expect(text.split("\n")[2]).toBe(STAR + BALL);

@@ -1,5 +1,6 @@
 import { distanceKm } from "./geo";
 import { normalise } from "./judge";
+import { SHOT_ORDER, SHOT_POINTS, shotsFor } from "./shots";
 import type {
   Grade,
   LatLng,
@@ -7,6 +8,7 @@ import type {
   Question,
   RankedAnswer,
   Rule,
+  Shot,
 } from "./types";
 
 /** Every rule, the two played today first. */
@@ -59,18 +61,39 @@ function byName(a: RankedAnswer, b: RankedAnswer): number {
 }
 
 /**
+ * The shot of every answer of a question under a rule, in the question's answer order. Under
+ * the question's own rule (`ruleFor(question.mode)`) these are the shots filed in the data
+ * (`Answer.shot`). Under any other rule they are worked out by `shotsFor`: from the shares
+ * for `common` and `niche`, from the whole kilometres to the stadium for `closest` and
+ * `furthest`.
+ */
+export function shotsOf(
+  question: Question,
+  stadium: LatLng,
+  rule: Rule,
+): Shot[] {
+  if (rule === ruleFor(question.mode)) {
+    return question.answers.map((answer) => answer.shot);
+  }
+  const values = isDistanceRule(rule)
+    ? question.answers.map((answer) => Math.round(distanceKm(stadium, answer)))
+    : question.answers.map((answer) => answer.popularity);
+  return shotsFor(values, rule);
+}
+
+/**
  * The table for one question under one rule: every answer with its share, its distance from
- * the stadium in whole kilometres, its points and its rank, best first (ties in name order).
+ * the stadium in whole kilometres, its shot, its points and its rank, best first.
  *
+ * Answers are ranked by their shot, worldies first (`SHOT_ORDER`), and within a shot by
+ * the rule:
  * - `common` (HOME): the higher the share, the better.
  * - `niche` (AWAY): the lower the share, the better.
  * - `closest`: nearer the stadium is better. `furthest`: further is better.
  *
- * Answers with the same key (the same share to a tenth of a percent, or the same rounded
- * distance) are tied: they share points and rank (1, 2, 2, 4).
- * `points = round(100 * worse / (better + worse))`, counting the answers strictly better and
- * strictly worse. The best answer scores 100 and the worst 0. Only the best can score 100: in
- * a list long enough for second place to round up to 100 (over 200 answers), it is held at 99.
+ * Then by name. The shots are `shotsOf`, and an answer's points are its shot's
+ * (`SHOT_POINTS`). Answers with the same shot and the same key (the same share to a tenth of
+ * a percent, or the same whole kilometres) are tied: they share a rank (1, 2, 2, 4).
  * The stadium is only used by the distance rules, but every row carries its distance.
  */
 export function rankAnswers(
@@ -78,45 +101,27 @@ export function rankAnswers(
   stadium: LatLng,
   rule: Rule,
 ): RankedAnswer[] {
-  const rows: RankedAnswer[] = question.answers.map((answer) => ({
+  const shots = shotsOf(question, stadium, rule);
+  const rows: RankedAnswer[] = question.answers.map((answer, i) => ({
     answer,
     km: Math.round(distanceKm(stadium, answer)),
     share: answer.popularity,
-    points: 0,
+    shot: shots[i],
+    points: SHOT_POINTS[shots[i]],
     rank: 0,
   }));
   const keys = new Map(rows.map((row) => [row, keyFor(rule, row)]));
   const key = (row: RankedAnswer) => keys.get(row) ?? 0;
-  rows.sort((a, b) => key(a) - key(b) || byName(a, b));
+  const order = (row: RankedAnswer) => SHOT_ORDER.indexOf(row.shot);
+  const same = (a: RankedAnswer, b: RankedAnswer) =>
+    order(a) === order(b) && key(a) === key(b);
+  rows.sort((a, b) => order(a) - order(b) || key(a) - key(b) || byName(a, b));
 
-  const n = rows.length;
-  let start = 0;
-  while (start < n) {
-    let end = start + 1;
-    while (end < n && key(rows[end]) === key(rows[start])) end++;
-    const better = start;
-    const worse = n - end;
-    let points = 100;
-    if (better + worse > 0) {
-      points = Math.round((100 * worse) / (better + worse));
-      if (better > 0) points = Math.min(points, 99);
-    }
-    for (let i = start; i < end; i++) {
-      rows[i].points = points;
-      rows[i].rank = better + 1;
-    }
-    start = end;
+  for (let i = 0; i < rows.length; i++) {
+    rows[i].rank =
+      i > 0 && same(rows[i], rows[i - 1]) ? rows[i - 1].rank : i + 1;
   }
   return rows;
-}
-
-/** The grade of a valid answer worth this many points. Never "timeup" or "skipped". */
-export function gradeFor(points: number): Grade {
-  if (points >= 100) return "worldie";
-  if (points >= 80) return "topbins";
-  if (points >= 55) return "goal";
-  if (points >= 30) return "ontarget";
-  return "wide";
 }
 
 /** The table row of one answer, or null when the id is not in the table. */
@@ -130,7 +135,7 @@ export function rankedFor(
 
 /** A table row chosen for the reveal sheet. */
 export interface TableRow extends RankedAnswer {
-  /** The grade these points earn. Only the best answer (and any tied with it) is "worldie". */
+  /** The row's shot as a grade (the same value as `shot`), for `data-grade`. */
   grade: Grade;
   /** The answer the player gave. */
   isPlayer: boolean;
@@ -180,7 +185,7 @@ export function tableExcerpt(
   }
   return picked.map((index, i) => ({
     ...table[index],
-    grade: gradeFor(table[index].points),
+    grade: table[index].shot,
     isPlayer: index === player,
     index,
     gapBefore: index > 0 && (i === 0 || picked[i - 1] !== index - 1),

@@ -1,8 +1,11 @@
 import { type ReactNode, useEffect, useRef, useSyncExternalStore } from "react";
 
+import { strings } from "~/i18n";
+
 import { cx } from "./cx";
 import { PixelRoot } from "./PixelRoot";
 import { isWide, usePixelScale } from "./scale";
+import { SoundToggle, type SoundToggleLabels } from "./SoundToggle";
 
 export interface GameLayoutProps {
   /** Full-bleed layer behind everything: the canvas stage. */
@@ -18,6 +21,13 @@ export interface GameLayoutProps {
    * the gallery; the real game leaves it off.
    */
   contained?: boolean;
+  /**
+   * A sound switch in the top right corner of the free space: `true` (with `strings.sound`)
+   * or its words. Off by default: the switch lives beside the "?" in the menu captions and
+   * in the board's head, so there is only ever one. Ask for it only on a screen that has
+   * neither (the full-time card, say).
+   */
+  sound?: SoundToggleLabels | boolean;
   className?: string;
 }
 
@@ -46,6 +56,11 @@ const atBuildTime = () => false;
  * there they leave the column and lie in one row across the foot of the picture. A
  * contained layout is never wide: it is a phone-sized frame, whatever the window is.
  *
+ * The sound switch (SoundToggle) normally lives beside the "?" in the menu captions and in
+ * the board's head. Asked for with `sound`, it sits in the top right corner of the middle
+ * slot, the free space between the two, clear of the board, the bar, the sheet and the
+ * captions at every size.
+ *
  * The root carries `data-live` once the page is running in a browser. The build-time HTML
  * does not have it: that HTML is laid out for a phone (the screen is not known yet), and
  * ui.css holds the menu captions back on a landscape screen until the real scale is in,
@@ -57,8 +72,11 @@ export function GameLayout({
   bottom,
   children,
   contained = false,
+  sound = false,
   className,
 }: GameLayoutProps) {
+  const soundLabels =
+    sound === false ? null : sound === true ? strings.sound : sound;
   const rootRef = useRef<HTMLDivElement | null>(null);
   // The same store as the PixelRoot below, so the two always agree.
   const wide = isWide(usePixelScale()) && !contained;
@@ -105,7 +123,10 @@ export function GameLayout({
       <div className="ss-game__canvas">{canvas}</div>
       <div className="ss-game__col">
         <div className="ss-game__top">{top}</div>
-        <div className="ss-game__mid">{children}</div>
+        <div className="ss-game__mid">
+          {soundLabels && <SoundToggle labels={soundLabels} />}
+          {children}
+        </div>
         <div className="ss-game__bottom">{bottom}</div>
       </div>
     </PixelRoot>

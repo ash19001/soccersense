@@ -102,6 +102,30 @@ function next(): void {
   );
 }
 
+/** The table row of an answer on the reveal. */
+function tableRow(name: RegExp): HTMLElement {
+  return screen.getByRole("rowheader", { name }).parentElement as HTMLElement;
+}
+
+/** The shots of the reveal's rows, top to bottom. */
+function rowShots(): (string | null)[] {
+  return [...document.querySelectorAll(".ss-table tbody tr")].map((row) =>
+    row.getAttribute("data-grade"),
+  );
+}
+
+/** One row for each shot that scores, best first: every reveal's table. */
+const FIVE_SHOTS = ["worldie", "golazo", "trivela", "toepoke", "tapin"];
+
+/** The player's own answer above the table, there when it did not score. */
+function yours(): HTMLElement | null {
+  return document.querySelector(".ss-sheet__yours");
+}
+
+/** What the reveal says, with the shares as the page formats them. */
+const crowd = text.sentence.picked.crowd;
+const lonely = text.sentence.picked.lonely;
+
 function questionLamps(): string {
   return (
     screen
@@ -169,8 +193,11 @@ describe("the game page", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(text.board.instruction.home)).toBeVisible();
     expect(screen.getByText(text.board.measure.home)).toBeInTheDocument();
-    // Today's stadium is still the day's venue: the board names it.
-    expect(screen.getByText("ANFIELD")).toBeInTheDocument();
+    // The board does not name the day's stadium (it is only read out, above).
+    expect(screen.queryByText("ANFIELD")).toBeNull();
+    expect(document.querySelector(".ss-board")).not.toHaveTextContent(
+      /anfield/i,
+    );
     expect(document.activeElement).toBe(field());
     expect(screen.getByLabelText(text.board.timeLeft(30))).toBeInTheDocument();
     wait(3000);
@@ -189,26 +216,48 @@ describe("the game page", () => {
       screen.getByLabelText(text.board.totalSpoken(0)),
     ).toBeInTheDocument();
     play(2.5);
+    // The most common answer: a worldie.
     expect(
       screen.getByRole("heading", { name: text.grades.worldie }),
     ).toBeInTheDocument();
     expect(screen.getByText("+100")).toBeInTheDocument();
     expect(
-      screen.getByText(text.sentence.home.crowd("Manchester United", "30%")),
+      screen.getByText(
+        text.sentence.home.worldie("Manchester United", crowd("30%")),
+      ),
     ).toBeInTheDocument();
-    // The table: each answer's share of players, the most common first.
+    // The table: one answer for each shot that scores, the player's in its own shot's row,
+    // each with its share of players and its shot.
     expect(
       screen.getByRole("columnheader", { name: text.table.distance }),
     ).toBeInTheDocument();
-    const firstRow = screen.getByRole("rowheader", {
-      name: /Manchester United/,
-    }).parentElement as HTMLElement;
+    expect(
+      screen.getByRole("columnheader", { name: text.table.shot }),
+    ).toBeInTheDocument();
+    const firstRow = tableRow(/Manchester United/);
     expect(firstRow).toHaveTextContent("30%");
+    expect(firstRow).toHaveTextContent(text.shots.worldie);
+    expect(firstRow).toHaveAttribute("data-grade", "worldie");
+    expect(firstRow).toHaveClass("is-you", "is-best");
     // Every Premier League winner is English: no country under the names.
     expect(firstRow).not.toHaveTextContent("England");
+    // The other shots: the answer most players picked in each.
+    expect(tableRow(/Manchester City/)).toHaveTextContent(text.shots.golazo);
+    expect(tableRow(/Liverpool/)).toHaveTextContent(text.shots.trivela);
+    expect(tableRow(/Liverpool/)).toHaveTextContent("17%");
+    expect(tableRow(/Chelsea/)).toHaveTextContent(text.shots.toepoke);
+    const last = tableRow(/Leicester City/);
+    expect(last).toHaveTextContent("4%");
+    expect(last).toHaveTextContent(text.shots.tapin);
+    expect(last).toHaveTextContent(/10$/);
+    expect(rowShots()).toEqual(FIVE_SHOTS);
+    // No miss, and no other answers: Arsenal shares the trivelas with Liverpool.
+    expect(screen.queryByRole("rowheader", { name: /Blackburn/ })).toBeNull();
+    expect(screen.queryByRole("rowheader", { name: /Arsenal/ })).toBeNull();
+    expect(yours()).toBeNull();
     expect(
-      screen.getByRole("rowheader", { name: /Blackburn Rovers/ }).parentElement,
-    ).toHaveTextContent("2%");
+      screen.getByRole("table", { name: text.table.caption }),
+    ).toBeInTheDocument();
     expect(
       screen.getByLabelText(text.board.totalSpoken(100)),
     ).toBeInTheDocument();
@@ -256,6 +305,15 @@ describe("the game page", () => {
       screen.getByRole("rowheader", { name: /Sir Alex Ferguson/ })
         .parentElement,
     ).toHaveTextContent("Scotland");
+    // No answer: five rows, none of them the player's, and the 0 above them.
+    expect(rowShots()).toEqual(FIVE_SHOTS);
+    expect(document.querySelector(".ss-table tr.is-you")).toBeNull();
+    expect(yours()).toHaveTextContent(text.yours.none);
+    expect(yours()).toHaveTextContent(text.yours.skipped);
+    expect(yours()).toHaveTextContent(/0$/);
+    expect(
+      screen.getByText(text.yours.spokenNone(text.yours.skipped, 0)),
+    ).toHaveClass("ss-sr");
     next();
 
     // Question 3: the clock runs out. Here the scene never reports back (the tab could be
@@ -268,57 +326,153 @@ describe("the game page", () => {
     expect(
       screen.getByRole("heading", { name: text.grades.timeup }),
     ).toBeInTheDocument();
+    expect(rowShots()).toEqual(FIVE_SHOTS);
+    expect(yours()).toHaveTextContent(text.yours.timeup);
     next();
 
-    // Question 4: a lonely answer is no good at HOME, and the reveal says so.
+    // Question 4: a lonely answer is no good at HOME: a miss, with no points to show.
     answer("Simonsen");
+    expect(shots).toHaveBeenLastCalledWith("miss", expect.any(Function));
     play(2.5);
     expect(
-      screen.getByText(text.sentence.home.lonely("Allan Simonsen", "0.2%")),
+      screen.getByRole("heading", { name: text.grades.miss }),
     ).toBeInTheDocument();
-    expect(screen.getByText("+3")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        text.sentence.home.miss("Allan Simonsen", lonely("0.2%")),
+      ),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".ss-sheet__points")).toBeNull();
+    // A miss is not a row: the answer and its 0 stand above the five, in the miss colour.
+    expect(
+      screen.queryByRole("rowheader", { name: /Allan Simonsen/ }),
+    ).toBeNull();
+    expect(rowShots()).toEqual(FIVE_SHOTS);
+    expect(document.querySelector(".ss-table tr.is-you")).toBeNull();
+    expect(yours()).toHaveAttribute("data-grade", "miss");
+    expect(yours()).toHaveTextContent(
+      `${text.table.you}Allan Simonsen0.2%${text.shots.miss}0`,
+    );
+    expect(
+      screen.getByText(
+        text.yours.spoken("Allan Simonsen", "0.2%", text.shots.miss, 0),
+      ),
+    ).toHaveClass("ss-sr");
+    next();
+
+    // Question 5: England have won it, but few say them first: a tap-in.
+    answer("England");
+    expect(shots).toHaveBeenLastCalledWith("tapin", expect.any(Function));
+    play(2.5);
+    expect(
+      screen.getByRole("heading", { name: text.grades.tapin }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("+10")).toBeInTheDocument();
+    expect(
+      screen.getByText(text.sentence.home.tapin("England", crowd("5%"))),
+    ).toBeInTheDocument();
+    next();
+
+    // Question 6: Shearer, near the top of the crowd's list: a golazo.
+    answer("Shearer");
+    play(2.5);
+    expect(
+      screen.getByRole("heading", { name: text.grades.golazo }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("+80")).toBeInTheDocument();
+    expect(
+      screen.getByText(text.sentence.home.golazo("Alan Shearer", crowd("10%"))),
+    ).toBeInTheDocument();
     next();
     play(1.6);
 
-    // Questions 5 to 7.
-    for (const typed of ["Brazil", "Shearer", "Real Madrid"]) {
-      answer(typed);
-      play(2.5);
-      next();
-      play(1.6);
-    }
+    // Question 7: Chelsea, a solid crowd pick: a trivela.
+    answer("Chelsea");
+    play(2.5);
+    expect(
+      screen.getByRole("heading", { name: text.grades.trivela }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("+60")).toBeInTheDocument();
+    expect(
+      screen.getByText(text.sentence.home.trivela("Chelsea", crowd("4%"))),
+    ).toBeInTheDocument();
+    next();
+    play(1.6);
 
-    // Full time.
+    // Full time: 100 + 0 + 0 + 0 + 10 + 80 + 60.
     expect(
       screen.getByRole("heading", { name: text.fullTime.heading }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(
-      screen.getByRole("img", { name: text.fullTime.totalSpoken(391, 700) }),
+      screen.getByRole("img", { name: text.fullTime.totalSpoken(250, 700) }),
     ).toBeInTheDocument();
-    expect(screen.getByText(text.tiers.topflight)).toBeInTheDocument();
+    expect(screen.getByText(text.tiers.nonleague)).toBeInTheDocument();
+    // 250 in HOME earns the title from 220 up, shown big with the total.
+    expect(document.querySelector(".ss-full__title")).toHaveTextContent(
+      `${text.fullTime.titleSpoken}: ${text.titles.home.piequeue}`,
+    );
+    expect(
+      screen.getByText(
+        text.fullTime.spoken(
+          250,
+          700,
+          text.titles.home.piequeue,
+          text.tiers.nonleague,
+        ),
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(text.fullTime.skipped)).toBeInTheDocument();
     expect(screen.getByText(text.fullTime.timeup)).toBeInTheDocument();
+    // The board and its sound switch have gone, but the crowd plays on: one switch remains.
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    // Each answer with its shot: the card's list, in the shot's colour.
+    const card = document.querySelector(".ss-full__list") as HTMLElement;
+    expect(
+      [...card.querySelectorAll(".ss-full__row")].map((row) =>
+        row.getAttribute("data-grade"),
+      ),
+    ).toEqual([
+      "worldie",
+      "skipped",
+      "timeup",
+      "miss",
+      "tapin",
+      "golazo",
+      "trivela",
+    ]);
+    expect(
+      [...card.querySelectorAll(".ss-full__shot")].map((s) => s.textContent),
+    ).toEqual([
+      text.shots.worldie,
+      text.shots.miss,
+      text.shots.tapin,
+      text.shots.golazo,
+      text.shots.trivela,
+    ]);
     expect(document.activeElement).toHaveTextContent(text.fullTime.share);
     const saved = loadGame(DAY_KEY, "home");
-    expect(saved?.total).toBe(391);
+    expect(saved?.total).toBe(250);
     expect(saved?.turns.map((t) => t.grade)).toEqual([
       "worldie",
       "skipped",
       "timeup",
-      "wide",
-      "worldie",
-      "topbins",
-      "worldie",
+      "miss",
+      "tapin",
+      "golazo",
+      "trivela",
+    ]);
+    expect(saved?.turns.map((t) => t.points)).toEqual([
+      100, 0, 0, 0, 10, 80, 60,
     ]);
     expect(saved?.turns.map((t) => t.share)).toEqual([
       30,
       null,
       null,
       0.2,
-      29,
+      5,
       10,
-      24,
+      4,
     ]);
     expect(window.localStorage.getItem(liveKey(DAY_KEY, "home"))).toBeNull();
 
@@ -336,8 +490,9 @@ describe("the game page", () => {
         dayNumber: 1,
         mode: "home",
         stadiumName: "Anfield",
-        total: 391,
-        tierName: text.tiers.topflight,
+        total: 250,
+        tierName: text.tiers.nonleague,
+        title: text.titles.home.piequeue,
         grades: saved?.turns.map((t) => t.grade) ?? [],
       }),
     );
@@ -362,23 +517,30 @@ describe("the game page", () => {
     expect(screen.getByText(text.board.measure.away)).toBeInTheDocument();
   });
 
-  test("a whole AWAY game: the most niche answer wins, and a deep cut is cheered", () => {
+  test("a whole AWAY game: the most uncommon answer wins, and every shot is played", () => {
     site({ pathname: "/play/away", search: "?day=1" });
     expect(screen.getByText(text.board.instruction.away)).toBeVisible();
 
     // The fewest players said Chile: a worldie, and the reveal cheers the deep cut.
     answer("Chile");
+    expect(shots).toHaveBeenLastCalledWith("worldie", expect.any(Function));
     play(2.5);
     expect(
       screen.getByRole("heading", { name: text.grades.worldie }),
     ).toBeInTheDocument();
+    expect(screen.getByText("+100")).toBeInTheDocument();
     expect(
-      screen.getByText(text.sentence.away.lonely("Chile", "0.9%")),
+      screen.getByText(text.sentence.away.worldie("Chile", lonely("0.9%"))),
     ).toBeInTheDocument();
     // A country answer has no line under its name: it would only repeat itself.
-    expect(
-      screen.getByRole("rowheader", { name: "Chile" }).parentElement,
-    ).toHaveTextContent("0.9%");
+    expect(tableRow(/^Chile/)).toHaveTextContent("0.9%");
+    // AWAY's table runs the other way: Chile, the rarest, on top and the player's; Brazil,
+    // the most common, is a miss and not shown.
+    const rows = [...document.querySelectorAll(".ss-table tbody tr")];
+    expect(rows[0]).toHaveTextContent("Chile");
+    expect(rows[0]).toHaveClass("is-you");
+    expect(rowShots()).toEqual(FIVE_SHOTS);
+    expect(screen.queryByRole("rowheader", { name: /^Brazil/ })).toBeNull();
     next();
     play(1.6);
 
@@ -394,35 +556,79 @@ describe("the game page", () => {
     next();
     play(1.6);
 
-    for (const typed of ["Goethals", "Once Caldas", "Jerkovic", "Sudan"]) {
+    // One answer of each shot, best to worst.
+    const played: [string, string, string, string, string][] = [
+      ["Capello", "Fabio Capello", "golazo", "+80", "1%"],
+      ["Racing Club", "Racing Club", "trivela", "+60", "1.5%"],
+      ["Schillaci", "Salvatore Schillaci", "toepoke", "+30", "2.1%"],
+      ["Ghana", "Ghana", "tapin", "+10", "9%"],
+    ];
+    for (const [typed, name, grade, gained, share] of played) {
       answer(typed);
+      expect(shots).toHaveBeenLastCalledWith(grade, expect.any(Function));
       play(2.5);
+      const shot = grade as "golazo" | "trivela" | "toepoke" | "tapin";
+      expect(
+        screen.getByRole("heading", { name: text.grades[shot] }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(gained)).toBeInTheDocument();
+      const said = parseFloat(share) < 2 ? lonely(share) : crowd(share);
+      expect(
+        screen.getByText(text.sentence.away[shot](name, said)),
+      ).toBeInTheDocument();
+      expect(tableRow(new RegExp(name))).toHaveTextContent(text.shots[shot]);
+      expect(tableRow(new RegExp(name))).toHaveClass("is-you");
+      expect(rowShots()).toEqual(FIVE_SHOTS);
+      expect(yours()).toBeNull();
       next();
       play(1.6);
     }
 
-    // The most common answer is the worst one AWAY.
+    // The most common answer is the worst one AWAY: a miss.
     answer("Sevilla");
+    expect(shots).toHaveBeenLastCalledWith("miss", expect.any(Function));
     play(2.5);
     expect(
-      screen.getByRole("heading", { name: text.grades.wide }),
+      screen.getByRole("heading", { name: text.grades.miss }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(text.sentence.away.crowd("Sevilla", "16%")),
+      screen.getByText(text.sentence.away.miss("Sevilla", crowd("16%"))),
     ).toBeInTheDocument();
+    expect(document.querySelector(".ss-sheet__points")).toBeNull();
+    expect(rowShots()).toEqual(FIVE_SHOTS);
+    expect(yours()).toHaveTextContent("Sevilla");
+    expect(yours()).toHaveTextContent("16%");
     next();
 
+    // 100 + 0 + 80 + 60 + 30 + 10 + 0.
     expect(
-      screen.getByRole("img", { name: text.fullTime.totalSpoken(500, 700) }),
+      screen.getByRole("img", { name: text.fullTime.totalSpoken(280, 700) }),
     ).toBeInTheDocument();
+    expect(screen.getByText(text.tiers.lower)).toBeInTheDocument();
+    expect(document.querySelector(".ss-full__title")).toHaveTextContent(
+      text.titles.away.retroshirt,
+    );
     expect(loadGame(DAY_KEY, "away")?.turns.map((t) => t.grade)).toEqual([
       "worldie",
       "skipped",
+      "golazo",
+      "trivela",
+      "toepoke",
+      "tapin",
+      "miss",
+    ]);
+    expect(
+      [...document.querySelectorAll(".ss-pip")].map((pip) =>
+        pip.getAttribute("data-grade"),
+      ),
+    ).toEqual([
       "worldie",
-      "worldie",
-      "worldie",
-      "worldie",
-      "wide",
+      "skipped",
+      "golazo",
+      "trivela",
+      "toepoke",
+      "tapin",
+      "miss",
     ]);
   });
 

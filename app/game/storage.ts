@@ -1,5 +1,6 @@
 import { dayKeyFor } from "./day";
 import type { Session, Turn } from "./session";
+import { SHOT_ORDER } from "./shots";
 import type { Grade, Mode } from "./types";
 
 /**
@@ -49,15 +50,29 @@ function resolveStorage(
   return null;
 }
 
-const GRADES: readonly Grade[] = [
-  "worldie",
-  "topbins",
-  "goal",
-  "ontarget",
-  "wide",
-  "timeup",
-  "skipped",
-];
+/** Every grade. A game saved before the six shots (with the old grades) reads as nothing. */
+const GRADES: readonly Grade[] = [...SHOT_ORDER, "timeup", "skipped"];
+
+/**
+ * The six shots' first names (2026-11-11), for a game saved under them: read as the shot of
+ * the same points.
+ */
+const RENAMED: Readonly<Record<string, Grade>> = {
+  bicycle: "worldie",
+  finesse: "golazo",
+  power: "trivela",
+  chip: "toepoke",
+};
+
+/** A saved turn with any of the shots' first names read as its shot today. */
+function renamed(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  const t = value as Record<string, unknown>;
+  if (typeof t.grade !== "string" || !Object.hasOwn(RENAMED, t.grade)) {
+    return value;
+  }
+  return { ...t, grade: RENAMED[t.grade] };
+}
 
 function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -147,7 +162,12 @@ export function loadGame(
     if (!store) return null;
     const raw = store.getItem(storageKey(dayKey, mode));
     if (raw === null) return null;
-    const parsed: unknown = JSON.parse(raw);
+    let parsed: unknown = JSON.parse(raw);
+    if (typeof parsed === "object" && parsed !== null) {
+      const g = parsed as Record<string, unknown>;
+      if (Array.isArray(g.turns))
+        parsed = { ...g, turns: g.turns.map(renamed) };
+    }
     if (!isStoredGame(parsed)) return null;
     return {
       total: parsed.total,

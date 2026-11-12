@@ -10,10 +10,12 @@
 import { drawSprite, type Sprite, type Surface } from "~/pixel";
 import { KEEPER, PLAYER, YOUTH } from "../layout";
 import * as ADULT from "./adult";
+import * as ADULT_SHOTS from "./adult-shots";
 import { figure } from "./figure";
 import * as KEEP from "./keeper";
 import { kitColors, type Kit } from "./kit";
 import * as KID from "./youth";
+import * as KID_SHOTS from "./youth-shots";
 
 export type PlayerAnim =
   | "idle"
@@ -24,7 +26,23 @@ export type PlayerAnim =
   | "dejected"
   | "lift"
   | "shrug"
-  | "slide";
+  | "slide"
+  | ShotAnim;
+
+/**
+ * The shots, all one-shots. One per answer grade: "kick" (the miss: the scene sends the
+ * ball wide), "tapin" (tap in), "toepoke" (toe poke), "trivela", "finesse" (golazo) and
+ * "bicycle" (worldie). "power" (a rocket) and "chip" (a lob) are spares, for variety.
+ */
+export type ShotAnim =
+  | "kick"
+  | "tapin"
+  | "toepoke"
+  | "trivela"
+  | "chip"
+  | "power"
+  | "finesse"
+  | "bicycle";
 
 export interface AnimInfo {
   readonly frames: number;
@@ -42,6 +60,13 @@ export const PLAYER_ANIMS: Readonly<Record<PlayerAnim, AnimInfo>> = {
   lift: { frames: 2, fps: 3, loop: true },
   shrug: { frames: 2, fps: 2.5, loop: false },
   slide: { frames: 2, fps: 4, loop: true },
+  tapin: { frames: 4, fps: 8, loop: false },
+  toepoke: { frames: 5, fps: 10, loop: false },
+  trivela: { frames: 6, fps: 10, loop: false },
+  chip: { frames: 5, fps: 10, loop: false },
+  power: { frames: 6, fps: 10, loop: false },
+  finesse: { frames: 5, fps: 10, loop: false },
+  bicycle: { frames: 8, fps: 10, loop: false },
 };
 
 export const PLAYER_ANIM_NAMES = Object.keys(PLAYER_ANIMS) as PlayerAnim[];
@@ -49,7 +74,43 @@ export const PLAYER_ANIM_NAMES = Object.keys(PLAYER_ANIMS) as PlayerAnim[];
 /** The frame of "kick" where the boot meets the ball. */
 export const KICK_STRIKE_FRAME = 2;
 
-export type KeeperAnim = "ready" | "leap" | "smother" | "hold" | "beaten";
+/** The frame of each shot where his boot meets the ball (adult and youth alike). */
+export const STRIKE_FRAME: Readonly<Record<ShotAnim, number>> = {
+  kick: KICK_STRIKE_FRAME,
+  tapin: 1,
+  toepoke: 1,
+  trivela: 2,
+  chip: 2,
+  power: 2,
+  finesse: 2,
+  bicycle: 4,
+};
+
+export const SHOT_ANIMS: readonly ShotAnim[] = [
+  "kick",
+  "tapin",
+  "toepoke",
+  "trivela",
+  "chip",
+  "power",
+  "finesse",
+  "bicycle",
+];
+
+/** A sprite cell. Anchor rule for every cell: left edge x - cellW / 2, soles outline on y - 1. */
+export interface Cell {
+  readonly cellW: number;
+  readonly cellH: number;
+}
+
+/** The bicycle kick needs room over his head: anchor column 12 (youth 10). */
+export const BICYCLE_CELL: Cell = { cellW: 24, cellH: 28 };
+export const BICYCLE_YOUTH_CELL: Cell = { cellW: 20, cellH: 22 };
+/** The keeper's sprawl is a full-length dive: anchor column 12. */
+export const SPRAWL_CELL: Cell = { cellW: 24, cellH: 20 };
+
+export type KeeperAnim =
+  "ready" | "leap" | "smother" | "hold" | "beaten" | "stranded" | "sprawl";
 
 export const KEEPER_ANIMS: Readonly<Record<KeeperAnim, AnimInfo>> = {
   ready: { frames: 2, fps: 2, loop: true },
@@ -57,6 +118,8 @@ export const KEEPER_ANIMS: Readonly<Record<KeeperAnim, AnimInfo>> = {
   smother: { frames: 2, fps: 8, loop: false },
   hold: { frames: 1, fps: 1, loop: true },
   beaten: { frames: 1, fps: 1, loop: true },
+  stranded: { frames: 3, fps: 6, loop: false },
+  sprawl: { frames: 3, fps: 8, loop: false },
 };
 
 export const KEEPER_ANIM_NAMES = Object.keys(KEEPER_ANIMS) as KeeperAnim[];
@@ -74,19 +137,27 @@ const ART_KEY: Record<PlayerAnim, string> = {
   lift: "LIFT",
   shrug: "SHRUG",
   slide: "SLIDE",
+  tapin: "TAPIN",
+  toepoke: "TOEPOKE",
+  trivela: "TRIVELA",
+  chip: "CHIP",
+  power: "POWER",
+  finesse: "FINESSE",
+  bicycle: "BICYCLE",
 };
 
-function build<A extends string>(
-  names: readonly A[],
-  art: (a: A) => string,
-  cellW: number,
-  cellH: number,
-  tag: string,
-): Record<A, Sprite> {
-  const out = {} as Record<A, Sprite>;
-  for (const a of names) out[a] = figure(art(a), cellW, cellH, `${tag} ${a}`);
-  return out;
+/** The cell an animation is drawn in (most share the layout's `PLAYER` / `YOUTH` cell). */
+export function playerCell(anim: PlayerAnim, youth = false): Cell {
+  if (anim === "bicycle") return youth ? BICYCLE_YOUTH_CELL : BICYCLE_CELL;
+  return youth ? YOUTH : PLAYER;
 }
+
+export function keeperCell(anim: KeeperAnim): Cell {
+  return anim === "sprawl" ? SPRAWL_CELL : KEEPER;
+}
+
+const ADULT_ART: Record<string, unknown> = { ...ADULT, ...ADULT_SHOTS };
+const KID_ART: Record<string, unknown> = { ...KID, ...KID_SHOTS };
 
 const artOf = (set: Record<string, unknown>, prefix: string, key: string) => {
   const v = set[`${prefix}_${key}`];
@@ -94,49 +165,41 @@ const artOf = (set: Record<string, unknown>, prefix: string, key: string) => {
   return v;
 };
 
-let adultSprites: Record<PlayerAnim, Sprite> | undefined;
-let youthSprites: Record<PlayerAnim, Sprite> | undefined;
-let keeperSprites: Record<KeeperAnim, Sprite> | undefined;
+// Built once per animation, on first use.
+const adultSprites: Partial<Record<PlayerAnim, Sprite>> = {};
+const youthSprites: Partial<Record<PlayerAnim, Sprite>> = {};
+const keeperSprites: Partial<Record<KeeperAnim, Sprite>> = {};
 
-function sprites(youth: boolean): Record<PlayerAnim, Sprite> {
-  if (youth) {
-    youthSprites ??= build(
-      PLAYER_ANIM_NAMES,
-      (a) => artOf(KID, "YOUTH", ART_KEY[a]),
-      YOUTH.cellW,
-      YOUTH.cellH,
-      "youth",
-    );
-    return youthSprites;
-  }
-  adultSprites ??= build(
-    PLAYER_ANIM_NAMES,
-    (a) => artOf(ADULT, "ADULT", ART_KEY[a]),
-    PLAYER.cellW,
-    PLAYER.cellH,
-    "adult",
-  );
-  return adultSprites;
+function playerSpriteOf(anim: PlayerAnim, youth: boolean): Sprite {
+  const cache = youth ? youthSprites : adultSprites;
+  const cell = playerCell(anim, youth);
+  return (cache[anim] ??= figure(
+    youth
+      ? artOf(KID_ART, "YOUTH", ART_KEY[anim])
+      : artOf(ADULT_ART, "ADULT", ART_KEY[anim]),
+    cell.cellW,
+    cell.cellH,
+    `${youth ? "youth" : "adult"} ${anim}`,
+  ));
 }
 
-function keeperSet(): Record<KeeperAnim, Sprite> {
-  keeperSprites ??= build(
-    KEEPER_ANIM_NAMES,
-    (a) => artOf(KEEP, "KEEPER", a.toUpperCase()),
-    KEEPER.cellW,
-    KEEPER.cellH,
-    "keeper",
-  );
-  return keeperSprites;
+function keeperSpriteOf(anim: KeeperAnim): Sprite {
+  const cell = keeperCell(anim);
+  return (keeperSprites[anim] ??= figure(
+    artOf(KEEP, "KEEPER", anim.toUpperCase()),
+    cell.cellW,
+    cell.cellH,
+    `keeper ${anim}`,
+  ));
 }
 
 /** The sprite behind an animation (for tests and sheets). */
 export function playerSprite(anim: PlayerAnim, youth = false): Sprite {
-  return sprites(youth)[anim];
+  return playerSpriteOf(anim, youth);
 }
 
 export function keeperSprite(anim: KeeperAnim): Sprite {
-  return keeperSet()[anim];
+  return keeperSpriteOf(anim);
 }
 
 function frameIndex(frame: number, count: number, loop: boolean): number {
@@ -163,7 +226,7 @@ export function drawPlayer(
   opts?: { flipX?: boolean; youth?: boolean },
 ): void {
   const info = PLAYER_ANIMS[anim];
-  const sp = sprites(opts?.youth === true)[anim];
+  const sp = playerSpriteOf(anim, opts?.youth === true);
   DRAW.flipX = opts?.flipX === true;
   drawSprite(
     s,
@@ -190,7 +253,7 @@ export function drawKeeper(
   DRAW.flipX = opts?.flipX === true;
   drawSprite(
     s,
-    keeperSet()[anim],
+    keeperSpriteOf(anim),
     frameIndex(frame, info.frames, info.loop),
     x,
     y,
@@ -218,6 +281,22 @@ const ADULT_BALL: SpotTable<PlayerAnim> = {
     p(1, -20),
     p(6, -12),
   ],
+  tapin: [p(7, -2), p(7, -2), null, null],
+  toepoke: [p(7, -2), p(7, -2), null, null, null],
+  trivela: [p(7, -2), p(7, -2), p(7, -2), null, null, null],
+  chip: [p(7, -2), p(7, -2), p(7, -2), null, null],
+  power: [p(7, -2), p(7, -2), p(7, -2), null, null, null],
+  finesse: [p(7, -2), p(7, -2), p(7, -2), null, null],
+  bicycle: [
+    p(-5, -10),
+    p(-3, -22),
+    p(1, -26),
+    p(4, -25),
+    p(7, -23),
+    null,
+    null,
+    null,
+  ],
 };
 
 const YOUTH_BALL: SpotTable<PlayerAnim> = {
@@ -231,6 +310,22 @@ const YOUTH_BALL: SpotTable<PlayerAnim> = {
     p(3, -18),
     p(1, -17),
     p(5, -9),
+  ],
+  tapin: [p(7, -2), p(7, -2), null, null],
+  toepoke: [p(7, -2), p(7, -2), null, null, null],
+  trivela: [p(7, -2), p(7, -2), p(7, -2), null, null, null],
+  chip: [p(7, -2), p(7, -2), p(7, -2), null, null],
+  power: [p(7, -2), p(7, -2), p(7, -2), null, null, null],
+  finesse: [p(7, -2), p(7, -2), p(7, -2), null, null],
+  bicycle: [
+    p(-5, -7),
+    p(-3, -17),
+    p(0, -20),
+    p(3, -19),
+    p(4, -18),
+    null,
+    null,
+    null,
   ],
 };
 

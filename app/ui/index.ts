@@ -6,6 +6,7 @@ export type { AnswerBarLabels, AnswerBarProps } from "./AnswerBar";
 export { Board } from "./Board";
 export type { BoardLabels, BoardProps } from "./Board";
 export { Button, IconButton } from "./Button";
+export { BURST_FRAMES, ClickBurst, MAX_BURSTS } from "./ClickBurst";
 export type {
   ButtonProps,
   ButtonVariant,
@@ -16,6 +17,14 @@ export { FullTimeCard } from "./FullTimeCard";
 export type { FullTimeCardProps, FullTimeResult } from "./FullTimeCard";
 export { GameLayout } from "./GameLayout";
 export type { GameLayoutProps } from "./GameLayout";
+export { HowToPlay, HowToPlayCard } from "./HowToPlay";
+export type {
+  HowToPlayCardProps,
+  HowToPlayLabels,
+  HowToPlayProps,
+  HowToPlayShot,
+  HowToPlayTier,
+} from "./HowToPlay";
 export { LeagueTable } from "./LeagueTable";
 export type {
   LeagueEntry,
@@ -24,6 +33,13 @@ export type {
   LeagueTableLabels,
   LeagueTableProps,
 } from "./LeagueTable";
+export { Leaderboard, TROPHY } from "./Leaderboard";
+export type {
+  LeaderboardBoard,
+  LeaderboardEntry,
+  LeaderboardLabels,
+  LeaderboardProps,
+} from "./Leaderboard";
 export { LedNumber } from "./LedNumber";
 export type { LedNumberProps, LedSize, LedTone } from "./LedNumber";
 export { MenuCaptions } from "./MenuCaptions";
@@ -38,10 +54,12 @@ export { PixelRoot } from "./PixelRoot";
 export type { PixelRootProps } from "./PixelRoot";
 export { PixelStage } from "./PixelStage";
 export type { PixelStageProps } from "./PixelStage";
+export { SoundToggle, SPEAKER_OFF, SPEAKER_ON } from "./SoundToggle";
+export type { SoundToggleLabels, SoundToggleProps } from "./SoundToggle";
 export { Pip, Pips } from "./Pips";
 export type { PipProps, PipState, PipsProps } from "./Pips";
 export { RevealSheet } from "./RevealSheet";
-export type { RevealSheetProps } from "./RevealSheet";
+export type { RevealSheetProps, RevealYours } from "./RevealSheet";
 export { TierBar } from "./TierBar";
 export type { TierBarProps } from "./TierBar";
 export { TimerStrip } from "./TimerStrip";
@@ -63,6 +81,13 @@ export {
   usePixelScale,
 } from "./scale";
 export type { PixelScale } from "./scale";
+export {
+  SLIDE_MS,
+  type Slider,
+  createSlider,
+  prefersReducedMotion,
+  snapToDevice,
+} from "./slide";
 export { useArrivalFocus } from "./useArrivalFocus";
 export { HEADING_FACES, fetchHeadingFaces } from "./fonts";
 export { useDeviceSky } from "./useDeviceSky";

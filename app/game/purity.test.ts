@@ -50,11 +50,14 @@ describe("the source of app/game", () => {
       "geo.ts",
       "index.ts",
       "judge.ts",
+      "reveal.ts",
       "scoring.ts",
       "session.ts",
       "share.ts",
+      "shots.ts",
       "storage.ts",
       "test-fixtures.ts",
+      "titles.ts",
       "types.ts",
       "view.ts",
     ]);
@@ -189,7 +192,7 @@ describe("with every impure global booby-trapped", () => {
       s = game.reduce(s, { type: "submit", input: "nobody", now: 2000 });
       s = game.reduce(s, { type: "submit", input: "charlei", now: 3000 });
       s = game.reduce(s, { type: "resolved" });
-      const reveal = game.revealFor(s, 2);
+      const reveal = game.revealFor(s);
       const progress = game.progressFor(s);
       s = game.reduce(s, { type: "next", now: 4000 });
       s = game.reduce(s, { type: "tick", now: 4000 + game.QUESTION_MS });

@@ -52,6 +52,13 @@ export interface Answer extends LatLng {
    * backend will count real answers later.
    */
   popularity: number;
+  /**
+   * The shot this answer is in its question's own mode (HOME: the most common answers are the
+   * worldies; AWAY: the most uncommon). Filed from the popularity estimates by `shotsFor` and
+   * then checked by eye (docs/data-notes/shots.md); a backend will file real answers the same
+   * way. Played under another rule, the answer's shot is worked out again from that rule.
+   */
+  shot: Shot;
 }
 
 export interface Question {
@@ -74,8 +81,16 @@ export interface Question {
   decoys?: string[];
 }
 
-export type Grade =
-  "worldie" | "topbins" | "goal" | "ontarget" | "wide" | "timeup" | "skipped";
+/**
+ * The six shots an answer can be, best first: WORLDIE 100, GOLAZO 80, TRIVELA 60,
+ * TOE POKE 30, TAP IN 10, MISS 0. Every answer is a goal of some kind except a miss. The points
+ * and the order are SHOT_POINTS and SHOT_ORDER (app/game/shots.ts).
+ */
+export type Shot =
+  "worldie" | "golazo" | "trivela" | "toepoke" | "tapin" | "miss";
+
+/** How a question went: a shot, or no answer ("timeup": the clock ran out; "skipped": passed). */
+export type Grade = Shot | "timeup" | "skipped";
 
 /** One answer placed in the table for a given stadium and rule. */
 export interface RankedAnswer {
@@ -84,7 +99,9 @@ export interface RankedAnswer {
   km: number;
   /** The answer's popularity: the share of players who give it, in percent. */
   share: number;
-  /** 0 to 100. */
+  /** The shot this answer is under the table's rule. */
+  shot: Shot;
+  /** The shot's points: SHOT_POINTS[shot]. */
   points: number;
   /** 1-based position in the table; tied answers share a rank. */
   rank: number;

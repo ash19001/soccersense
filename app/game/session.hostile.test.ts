@@ -489,7 +489,7 @@ describe("the last question and after", () => {
     }
     expect(phases).toEqual(["asking", "resolving", "reveal", "done"]);
     expect(s.total).toBe(0);
-    expect(summary(s).grades).toEqual(["wide"]);
+    expect(summary(s).grades).toEqual(["miss"]);
   });
 });
 
@@ -579,7 +579,7 @@ describe("noTimer", () => {
     expect(s.deadline).toBeNull();
     expect(reduce(s, tick(T0 + 1e9))).toBe(s);
     s = reduce(s, submit("Bravo", T0 + 1e9));
-    expect(currentTurn(s)).toMatchObject({ points: 50, msLeft: QUESTION_MS });
+    expect(currentTurn(s)).toMatchObject({ points: 30, msLeft: QUESTION_MS });
     s = run(s, resolved, next(T0 + 2e9));
     expect(s.deadline).toBeNull();
     s = reduce(s, pass(T0 + 2e9 + PASS_AFTER_MS));

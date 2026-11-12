@@ -17,7 +17,10 @@ import type { Action, Session } from "./session";
 import { east, ORIGIN, question } from "./test-fixtures";
 import type { Mode, Question } from "./types";
 
-/** Five answers, 111 km apart, heading east from the pin. HOME points: 100, 75, 50, 25, 0. */
+/**
+ * Five answers, 111 km apart, heading east from the pin. HOME: a worldie, a golazo, a
+ * toe poke, a tap-in and a miss (100, 80, 30, 10, 0); AWAY the other way round.
+ */
 function five(id: string): Question {
   return question(id, [
     east("Alpha Near", 1, ["Al"]),
@@ -165,14 +168,14 @@ describe("submit", () => {
     expect(s.rejected).toBeNull();
     expect(s.deadline).toBeNull();
     expect(s.index).toBe(0);
-    expect(s.total).toBe(75);
+    expect(s.total).toBe(80);
     expect(s.turns).toEqual([
       {
         questionId: "q1",
         input: "bravo smith",
         answerId: "bravo-smith",
-        grade: "goal",
-        points: 75,
+        grade: "golazo",
+        points: 80,
         km: 222,
         share: 178,
         rank: 2,
@@ -182,7 +185,7 @@ describe("submit", () => {
     expect(currentTurn(s)).toBe(s.turns[0]);
   });
 
-  it("grades by the table: best is a worldie, worst is wide", () => {
+  it("grades by the shots: the best is a worldie, the worst a miss", () => {
     const best = reduce(start(), { type: "submit", input: "Al", now: T0 + 1 });
     expect(best.turns[0]).toMatchObject({
       answerId: "alpha-near",
@@ -198,7 +201,7 @@ describe("submit", () => {
     });
     expect(worst.turns[0]).toMatchObject({
       answerId: "echo-far",
-      grade: "wide",
+      grade: "miss",
       points: 0,
       km: 556,
       rank: 5,
@@ -215,8 +218,8 @@ describe("submit", () => {
     expect(s.turns[0]).toMatchObject({
       input: "delta jonse",
       answerId: "delta-jones",
-      grade: "wide",
-      points: 25,
+      grade: "tapin",
+      points: 10,
     });
   });
 
@@ -233,7 +236,7 @@ describe("submit", () => {
       input: "Alpha Near",
       now: T0 + 1,
     });
-    expect(near.turns[0]).toMatchObject({ points: 0, grade: "wide", rank: 5 });
+    expect(near.turns[0]).toMatchObject({ points: 0, grade: "miss", rank: 5 });
   });
 
   it("scores HOME by popularity, whatever the stadium, and keeps the distance", () => {
@@ -477,8 +480,8 @@ describe("resolved and next", () => {
     expect(done.phase).toBe("done");
     expect(done.index).toBe(2);
     expect(done.deadline).toBeNull();
-    expect(done.total).toBe(225);
-    expect(done.turns.map((t) => t.points)).toEqual([100, 75, 50]);
+    expect(done.total).toBe(210);
+    expect(done.turns.map((t) => t.points)).toEqual([100, 80, 30]);
     expect(done.turns.map((t) => t.questionId)).toEqual(["q1", "q2", "q3"]);
     expect(currentQuestion(done)).toBe(QUESTIONS[2]);
     expect(msLeft(done, T0 + 90_000)).toBe(0);
@@ -522,12 +525,12 @@ describe("a whole game", () => {
     s = run(s, { type: "resolved" }, { type: "next", now: T0 + 25_000 });
     s = check(reduce(s, { type: "tick", now: T0 + 25_000 + QUESTION_MS }));
     s = run(s, { type: "resolved" }, { type: "next", now: T0 + 70_000 });
-    expect(totals).toEqual([75, 75, 75]);
+    expect(totals).toEqual([80, 80, 80]);
     expect(s.phase).toBe("done");
     expect(summary(s)).toEqual({
-      total: 75,
+      total: 80,
       tier: 0,
-      grades: ["goal", "skipped", "timeup"],
+      grades: ["golazo", "skipped", "timeup"],
       perfect: false,
     });
   });
@@ -594,7 +597,7 @@ describe("a whole game", () => {
       s = deepFreeze(next);
     }
     expect(s.phase).toBe("done");
-    expect(s.total).toBe(75);
+    expect(s.total).toBe(80);
   });
 });
 
@@ -648,9 +651,9 @@ describe("tableFor", () => {
     const table = tableFor(start(), 0);
     expect(table.map((r) => [r.answer.id, r.km, r.points, r.rank])).toEqual([
       ["alpha-near", 111, 100, 1],
-      ["bravo-smith", 222, 75, 2],
-      ["charlie-smith", 334, 50, 3],
-      ["delta-jones", 445, 25, 4],
+      ["bravo-smith", 222, 80, 2],
+      ["charlie-smith", 334, 30, 3],
+      ["delta-jones", 445, 10, 4],
       ["echo-far", 556, 0, 5],
     ]);
   });

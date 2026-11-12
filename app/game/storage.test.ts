@@ -129,6 +129,58 @@ describe("with a storage", () => {
     expect(loadGame(DAY, "away", storage)).toBeNull();
   });
 
+  it("reads a game saved before the six shots as nothing", () => {
+    const storage = new FakeStorage();
+    // (WORLDIE was an old grade too, and is a shot again: see the test below.)
+    for (const grade of ["topbins", "goal", "ontarget", "wide"]) {
+      storage.setItem(
+        storageKey(DAY, "home"),
+        JSON.stringify({
+          total: GAME.total,
+          turns: [{ ...TURNS[0], grade }, TURNS[1], TURNS[2]],
+        }),
+      );
+      expect(loadGame(DAY, "home", storage), grade).toBeNull();
+    }
+    for (const grade of [
+      "worldie",
+      "golazo",
+      "trivela",
+      "toepoke",
+      "tapin",
+      "miss",
+    ]) {
+      storage.setItem(
+        storageKey(DAY, "home"),
+        JSON.stringify({
+          total: GAME.total,
+          turns: [{ ...TURNS[0], grade }, TURNS[1], TURNS[2]],
+        }),
+      );
+      expect(loadGame(DAY, "home", storage)?.turns[0].grade).toBe(grade);
+    }
+  });
+
+  it("reads the shots' first names as the shots of the same points", () => {
+    const storage = new FakeStorage();
+    const first = {
+      bicycle: "worldie",
+      finesse: "golazo",
+      power: "trivela",
+      chip: "toepoke",
+    };
+    for (const [old, now] of Object.entries(first)) {
+      storage.setItem(
+        storageKey(DAY, "home"),
+        JSON.stringify({
+          total: GAME.total,
+          turns: [{ ...TURNS[0], grade: old }, TURNS[1], TURNS[2]],
+        }),
+      );
+      expect(loadGame(DAY, "home", storage)?.turns[0].grade, old).toBe(now);
+    }
+  });
+
   it("stores exactly { total, turns } as JSON", () => {
     const storage = new FakeStorage();
     const extra = { ...GAME, mode: "home", secret: 1 } as StoredGame;

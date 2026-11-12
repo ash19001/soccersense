@@ -11,6 +11,12 @@ import { distant, skyFor, type Lighting } from "~/art/lighting";
 import { P } from "~/art/palette";
 import { BAYS, paintBowl, wallPoint, type Bowl } from "~/art/stadium-bowl";
 import {
+  DEFAULT_SCHEME,
+  clubOf,
+  clubRaw,
+  type ClubScheme,
+} from "~/art/stadium-club";
+import {
   CARPARK,
   COACHES,
   COACH_BAY,
@@ -49,8 +55,10 @@ import {
   coach,
   conifer,
   lightPool,
+  logShadows,
   person,
   shadowBlob,
+  ShadowLog,
   tree,
   type BoxLook,
   type CarLook,
@@ -125,9 +133,11 @@ const BOWL_V = -58;
 
 /**
  * Draw every item, far to near, and note in the depth mask which pixels each slice of
- * depth painted (by comparing the rows it can reach before and after).
+ * depth painted (by comparing the rows it can reach before and after). A pixel only the
+ * slice's shadows darkened is still bare ground (`log`): a tree's shadow on the road
+ * must not hide a car driving through it, nor a van's shadow the queue at its hatch.
  */
-function drawItems(c: Ctx, town: Town): void {
+function drawItems(c: Ctx, town: Town, log: ShadowLog): void {
   const { s, view } = c;
   const { w, h } = view;
   const items = c.items;
@@ -169,9 +179,10 @@ function drawItems(c: Ctx, town: Town): void {
         );
     const y1 = Math.max(y0, Math.min(h, Math.ceil(rowAt(view, lo - 9)) + 5));
     prev.set(data.subarray(y0 * w, y1 * w), y0 * w);
+    log.now++;
     for (let n = i; n < j; n++) items[n].draw();
     for (let p = y0 * w; p < y1 * w; p++) {
-      if (data[p] !== prev[p]) depth[p] = lo;
+      if (data[p] !== prev[p] && !log.onlyShadow(p, prev[p])) depth[p] = lo;
     }
     i = j;
   }
@@ -220,6 +231,8 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
       env: light.env,
       lightsOn: night,
       sunny: light.sun.elevation > 3,
+      club: clubOf(light),
+      raw: clubRaw(light),
     },
     seed,
   );
@@ -240,8 +253,14 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
   lamps(c);
 
   castOn(s);
-  drawItems(c, town);
-  castOn(null);
+  const log = new ShadowLog(s);
+  logShadows(log);
+  try {
+    drawItems(c, town, log);
+  } finally {
+    logShadows(null);
+    castOn(null);
+  }
 
   const landH = Math.max(1, h - hy);
   const land = new Surface(w, landH);
@@ -462,6 +481,7 @@ export function coachLook(
   };
 }
 
+/** Home supporters' shirts: the club's main colour, and its second (index 4 and 9). */
 const SHIRTS_HOME: readonly Color[] = [
   P.home,
   P.home,
@@ -474,6 +494,14 @@ const SHIRTS_HOME: readonly Color[] = [
   P.slate,
   P.gold,
 ];
+function homeShirt(i: number, club: ClubScheme): Color {
+  return i === 4
+    ? club.second.base
+    : i === 9
+      ? club.second.light
+      : SHIRTS_HOME[i];
+}
+
 const HAIRS: readonly Color[] = [
   P.hairDark,
   P.hairBrown,
@@ -484,11 +512,12 @@ const HAIRS: readonly Color[] = [
 ];
 const SKINS: readonly Color[] = [P.skinA, P.skinB, P.skinC, P.skinA];
 
-/** A supporter's clothes: `kind` 0 home, 1 away, 2 steward, 3 anyone. */
+/** A supporter's clothes: `kind` 0 home, 1 away, 2 steward, 3 anyone; `club` the day's colours. */
 export function personLook(
   tone: (c: Color) => Color,
   r: number,
   kind = 0,
+  club: ClubScheme = DEFAULT_SCHEME,
 ): PersonLook {
   const i = Math.floor(r * 997);
   const shirt =
@@ -500,7 +529,7 @@ export function personLook(
         ? P.gold
         : kind === 3
           ? [P.steel, P.chalk, P.slate, P.mist, P.wood, P.skyMid][i % 6]
-          : SHIRTS_HOME[i % SHIRTS_HOME.length];
+          : homeShirt(i % SHIRTS_HOME.length, club);
   return {
     shirt: tone(shirt),
     hair: tone(HAIRS[(i >> 2) % HAIRS.length]),
@@ -523,6 +552,7 @@ function addPerson(
     floodlit ? c.lit : (col) => c.tone(col, V),
     c.h(key, 53),
     kind,
+    clubOf(c.light),
   );
   add(c, V - 0.01, () => {
     const cls = sizeClass(p.s);

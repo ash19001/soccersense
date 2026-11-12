@@ -6,6 +6,7 @@ import { lightingFor } from "~/art/lighting";
 import { logoSize } from "~/art/logo";
 import { P } from "~/art/palette";
 import { MenuBackdrop } from "~/art/stadium";
+import { schemeForDay } from "~/art/stadium-club";
 import type { Mode } from "~/game";
 import {
   MenuScene,
@@ -14,6 +15,7 @@ import {
   type MenuPhase,
   type MenuSceneOptions,
 } from "./menu";
+import type { SoundCue } from "./scene";
 import source from "./menu.ts?raw";
 
 // None of these tests looks at what the backdrop paints: only at whether pixels are
@@ -26,6 +28,8 @@ const LABELS: MenuLabels = {
   retro: "RETRO",
   closest: "CLOSEST",
   furthest: "FURTHEST",
+  guesswho: "GUESS WHO",
+  shootout: "SHOOTOUT",
   header: "DID YOU KNOW?",
   tagline: "DAILY FOOTBALL TRIVIA",
 };
@@ -379,7 +383,7 @@ describe("MenuScene: where the kick-offs go", () => {
   /** When the HOME ball is down and the AWAY ball is gone, in seconds from the choice. */
   const HOME_DOWN = 0.89;
   const AWAY_GONE = 0.97;
-  /** The iris starts to close. */
+  /** The iris starts to close (at 1.13). */
   const IRIS = 1.14;
 
   /** The wordmark's box, laid out as docs/API_ART.md says the home screen is put together. */
@@ -598,7 +602,7 @@ describe("MenuScene: where the kick-offs go", () => {
       // the iris closes on that spot: the last ring of picture is round the twinkle
       const kick = make(w, h);
       kick.choose("away");
-      advance(kick, 1.4);
+      advance(kick, 1.57);
       const frame = draw(kick, w, h);
       const open: [number, number][] = [];
       for (let i = 0; i < frame.data.length; i++) {
@@ -703,6 +707,8 @@ describe("MenuScene: the fact on the airship", () => {
         seed: 7,
         sign: { header: LABELS.header, text: FACT },
       });
+      // the scene dresses its backdrop in the day's colours (the airship's fins among them)
+      b.setScheme(schemeForDay(7).id);
       b.resize(w, h);
       b.setLighting(DAY);
       const bs = new Surface(w, h);
@@ -810,9 +816,22 @@ describe("MenuScene: the backdrop contract", () => {
       "draw",
       "airshipAt",
       "pokeAirship",
+      "mascotAt",
+      "pokeMascot",
+      "cuesBetween",
+      "setScheme",
     ];
     expect(calls.length).toBeGreaterThan(0);
     for (const name of calls) expect(allowed).toContain(name);
+  });
+
+  it("dresses the stadium in the day's club colours", () => {
+    const worn = vi.spyOn(MenuBackdrop.prototype, "setScheme");
+    for (const day of [0, 1, 2, 3, 11, 12]) {
+      worn.mockClear();
+      make(130, 281, { seed: day });
+      expect(worn).toHaveBeenCalledWith(schemeForDay(day).id);
+    }
   });
 
   it("HOME: the ground erupts as the ball drops in, and reset calms it", () => {
@@ -1472,7 +1491,7 @@ describe("MenuScene: the entrance", () => {
 
 describe("MenuScene: the kick-off", () => {
   it.each(["home", "away"] as const)(
-    "%s: onKickoff at once, onChoose exactly once, about 1.5 s later",
+    "%s: onKickoff at once, onChoose exactly once, about 1.8 s later",
     (mode) => {
       const scene = make();
       const log = listen(scene);
@@ -1486,8 +1505,8 @@ describe("MenuScene: the kick-off", () => {
       expect(log.choose).toEqual([]);
       expect(scene.phase).toBe("kickoff");
       const took = runToDone(scene);
-      expect(took).toBeGreaterThanOrEqual(1.4);
-      expect(took).toBeLessThanOrEqual(1.7);
+      expect(took).toBeGreaterThanOrEqual(1.75);
+      expect(took).toBeLessThanOrEqual(1.85);
       expect(log.choose).toEqual([mode]);
       expect(phases).toEqual(["done"]);
       // it stays done, in ink, and says nothing more
@@ -1496,6 +1515,52 @@ describe("MenuScene: the kick-off", () => {
       expect(allInk(draw(scene))).toBe(true);
       expect(log.choose).toEqual([mode]);
       expect(log.kickoff).toEqual([mode]);
+    },
+  );
+
+  it.each(["home", "away"] as const)(
+    "%s: the iris closes smoothly, a little every frame",
+    (mode) => {
+      flatBackdrop();
+      const w = 480;
+      const h = 270;
+      // the iris is what turns the flat picture to ink: count those pixels, against a
+      // menu left alone, once the ball is down or gone
+      const kick = make(w, h);
+      const calm = make(w, h);
+      kick.choose(mode);
+      advance(kick, 1);
+      advance(calm, 1);
+      const inked: number[] = [];
+      while (kick.phase === "kickoff") {
+        const a = draw(kick, w, h).data;
+        const b = draw(calm, w, h).data;
+        let n = 0;
+        for (let i = 0; i < a.length; i++) {
+          if (a[i] === P.ink && b[i] === FLAT) n++;
+        }
+        inked.push(allInk(draw(kick, w, h)) ? -1 : n);
+        kick.update(STEP);
+        calm.update(STEP);
+      }
+      const first = inked.findIndex((n) => n > inked[0]);
+      const shut = inked.indexOf(-1);
+      expect(first).toBeGreaterThan(0);
+      expect(shut).toBeGreaterThan(first);
+      // from the first bite of the corners to ink: over half a second
+      expect((shut - first) * STEP).toBeGreaterThanOrEqual(0.5);
+      expect((shut - first) * STEP).toBeLessThanOrEqual(0.75);
+      let still = 0;
+      for (let i = first + 1; i < shut; i++) {
+        // it never opens again, never takes a tenth of the screen in one frame...
+        expect(inked[i]).toBeGreaterThanOrEqual(inked[i - 1]);
+        expect(inked[i] - inked[i - 1]).toBeLessThan(w * h * 0.1);
+        // ...and never stops: a frame or two as it turns on the ring, no more
+        still = inked[i] === inked[i - 1] ? still + 1 : 0;
+        expect(still).toBeLessThanOrEqual(2);
+      }
+      // and once it is ink it stays ink until it is done
+      expect(inked.slice(shut).every((n) => n === -1)).toBe(true);
     },
   );
 
@@ -1772,7 +1837,7 @@ describe("MenuScene: robust", () => {
         scene.pointer({ type: "up", x: w / 2, y: h * 0.7 });
         scene.reset();
         expect(scene.choose(mode)).toBe(true);
-        for (let i = 0; i < 12; i++) {
+        for (let i = 0; i < 13; i++) {
           expect(covered(draw(scene, w, h))).toBe(true);
           scene.update(0.15);
         }
@@ -1959,9 +2024,9 @@ describe("MenuScene: spinning the ball", () => {
     const home = patch("left", W, H);
     const away = patch("right", W, H);
     let steps = 0;
-    drag(scene, home.x, home.y, 12, 2, 6);
+    drag(scene, home.x, home.y, 10, 2, 6);
     steps += 6;
-    scene.pointer({ type: "up", x: home.x + 72, y: home.y + 12 });
+    scene.pointer({ type: "up", x: home.x + 60, y: home.y + 12 });
     // still spinning half a second later: nothing hovers, the ball can be grabbed
     for (let i = 0; i < 30; i++) scene.update(STEP);
     steps += 30;
@@ -2121,7 +2186,7 @@ describe("MenuScene: spinning the ball", () => {
     noAirship();
     const scene = make(W, H);
     const m = menuLayout(W, H);
-    drag(scene, m.cx, m.ballCy, 6, 0, Math.ceil((m.ballR + 20) / 6));
+    drag(scene, m.cx, m.ballCy, 5, 0, Math.ceil((m.ballR + 20) / 5));
     const a = draw(scene, W, H);
     // well off the ball, still dragging
     scene.pointer({ type: "move", x: m.cx + m.ballR + 60, y: m.ballCy + 30 });
@@ -2183,7 +2248,10 @@ describe("MenuScene: the locked patches", () => {
   const H = 270;
 
   /** Where `slot` is when the ball shows `shown`, before the hover moves it a pixel or two. */
-  function shownAt(slot: BallSlot, shown: BallSlot): { x: number; y: number } {
+  function shownAt(
+    slot: BallSlot,
+    shown: BallSlot,
+  ): { x: number; y: number; facing: number } {
     const m = menuLayout(W, H);
     return ballSlotCenter(
       {
@@ -2223,21 +2291,37 @@ describe("MenuScene: the locked patches", () => {
     scene.pointer({ type: "leave", x: 0, y: 0 });
   }
 
-  /** Turn the ball by hand until `slot` faces the viewer, and let it go. */
-  function show(scene: MenuScene, slot: BallSlot): void {
+  /** Drag the ball sideways across its middle, from `from` to `to` of its radius. */
+  function across(scene: MenuScene, from: number, to: number): void {
+    const m = menuLayout(W, H);
+    carry(
+      scene,
+      { x: m.cx + Math.round(m.ballR * from), y: m.ballCy + 6 },
+      { x: m.cx + Math.round(m.ballR * to), y: m.ballCy + 6 },
+    );
+  }
+
+  /**
+   * Turn the ball by hand until `slot` faces the viewer, and let it go. Returns the frames
+   * stepped.
+   */
+  function show(scene: MenuScene, slot: BallSlot): number {
     const m = menuLayout(W, H);
     const middle = { x: m.cx, y: m.ballCy };
     if (slot === "top" || slot === "bottom") {
       carry(scene, patch(slot, W, H), middle);
+    } else if (slot === "rimLeft") {
+      // about a quarter turn, to the right
+      across(scene, -0.9, 0.6);
+    } else if (slot === "rimRight") {
+      across(scene, 0.9, -0.6);
     } else {
-      // most of half a turn, dragged left to right across the ball
-      const reach = Math.round(m.ballR * 0.85);
-      carry(
-        scene,
-        { x: m.cx - reach, y: m.ballCy + 6 },
-        { x: m.cx + reach, y: m.ballCy + 6 },
-      );
+      // most of half a turn, dragged left to right across the ball, and a little more
+      across(scene, -0.85, 0.85);
+      across(scene, -0.4, 0.4);
+      return 80;
     }
+    return 40;
   }
 
   const CASES = [
@@ -2245,7 +2329,52 @@ describe("MenuScene: the locked patches", () => {
     ["bottom", "bottom", "retro"],
     ["backRight", "backRight", "closest"],
     ["backLeft", "backRight", "furthest"],
+    ["rimLeft", "rimLeft", "guesswho"],
+    ["rimRight", "rimRight", "shootout"],
   ] as const;
+
+  it("puts GUESS WHO and SHOOTOUT a quarter turn round, out past HOME and AWAY", () => {
+    const m = menuLayout(W, H);
+    const home = shownAt("left", "left");
+    const away = shownAt("right", "right");
+    const guess = shownAt("rimLeft", "left");
+    const shoot = shownAt("rimRight", "left");
+    expect(guess.x).toBeLessThan(home.x);
+    expect(shoot.x).toBeGreaterThan(away.x);
+    expect(guess.y).toBeLessThan(m.ballCy);
+    expect(guess.facing).toBeLessThan(0.1);
+    // shown, each faces the viewer straight on
+    for (const slot of ["rimLeft", "rimRight"] as const) {
+      const c = shownAt(slot, slot);
+      expect(c.facing).toBeCloseTo(1, 6);
+      expect(Math.abs(c.x - m.cx)).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("a quarter turn by hand comes to rest on GUESS WHO or SHOOTOUT, and a click names it", () => {
+    noAirship();
+    for (const [slot, mode, from, to] of [
+      ["rimLeft", "guesswho", -0.9, 0.6],
+      ["rimRight", "shootout", 0.9, -0.6],
+    ] as const) {
+      const scene = make(W, H);
+      const log = listen(scene);
+      across(scene, from, to);
+      log.hover.length = 0;
+      advance(scene, 1.5);
+      const at = shownAt(slot, slot);
+      scene.pointer({ type: "move", x: at.x, y: at.y });
+      expect(scene.cursor()).toBe("pointer");
+      expect(log.hover.filter((m) => m !== null)).toEqual([]);
+      scene.pointer({ type: "down", x: at.x, y: at.y });
+      scene.pointer({ type: "up", x: at.x, y: at.y });
+      expect(log.locked).toEqual([mode]);
+      expect(log.kickoff).toEqual([]);
+      runToDone(scene, 2);
+      expect(log.choose).toEqual([]);
+      expect(scene.phase).toBe("idle");
+    }
+  });
 
   it("puts CLOSEST where HOME was and FURTHEST where AWAY was, half a turn round", () => {
     const cx = menuLayout(W, H).cx;
@@ -2260,8 +2389,8 @@ describe("MenuScene: the locked patches", () => {
       const scene = make(W, H);
       const calm = make(W, H);
       const log = listen(scene);
-      show(scene, shown);
-      for (let i = 0; i < 40; i++) calm.update(STEP);
+      const frames = show(scene, shown);
+      for (let i = 0; i < frames; i++) calm.update(STEP);
       const at = shownAt(slot, shown);
       // at rest showing it: it can be pointed at, and hovers no mode
       advance(scene, 1);
@@ -2417,7 +2546,8 @@ describe("MenuScene: the airship", () => {
     // pressed on the ball and let go off it: a drag, not a click on the airship
     scene.pointer({ type: "down", x: m.cx, y: m.ballCy });
     scene.pointer({ type: "up", x: m.cx + m.ballR + 20, y: m.ballCy });
-    advance(scene, 3);
+    // (it may come to rest showing a locked patch, and hold it a while)
+    advance(scene, 8);
     tap(scene, "left");
     expect(log.kickoff).toEqual(["home"]);
     expect(poke).not.toHaveBeenCalled();
@@ -2431,4 +2561,573 @@ describe("MenuScene: the airship", () => {
     scene.pointer({ type: "down", x: p.x, y: p.y });
     scene.pointer({ type: "up", x: p.x, y: p.y });
   }
+});
+
+describe("MenuScene: sound", () => {
+  const W = 480;
+  const H = 270;
+
+  /** Everything the scene asks to be heard, in order. */
+  function hear(scene: MenuScene): SoundCue[] {
+    const cues: SoundCue[] = [];
+    scene.onSound = (cue) => cues.push(cue);
+    return cues;
+  }
+
+  function of<K extends SoundCue["kind"]>(
+    cues: readonly SoundCue[],
+    kind: K,
+  ): Extract<SoundCue, { kind: K }>[] {
+    return cues.filter(
+      (c): c is Extract<SoundCue, { kind: K }> => c.kind === kind,
+    );
+  }
+
+  /** The cues with each run of wind counted once. */
+  function story(cues: readonly SoundCue[]): string[] {
+    const out: string[] = [];
+    for (const c of cues) {
+      if (c.kind === "wind" && out.at(-1) === "wind") continue;
+      out.push(c.kind);
+    }
+    return out;
+  }
+
+  it("is silent as the pointer comes onto the ball and moves about on it", () => {
+    noAirship();
+    const scene = make(W, H);
+    const cues = hear(scene);
+    const m = menuLayout(W, H);
+    const off = { x: m.cx + m.ballR + 30, y: m.ballCy };
+    for (let n = 0; n < 4; n++) {
+      scene.pointer({ type: "move", ...off });
+      advance(scene, 0.3);
+      scene.pointer({ type: "move", x: m.cx, y: m.ballCy });
+      // moving about on it, over HOME and AWAY, the ball breathing under it
+      for (let i = 0; i < 60; i++) {
+        scene.pointer({
+          type: "move",
+          x: m.cx + ((i * 7) % 61) - 30,
+          y: m.ballCy,
+        });
+        scene.update(STEP);
+      }
+    }
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+    expect(cues).toEqual([]);
+  });
+
+  it("gives a soft kick on a press of the ball, a click or the start of a drag", () => {
+    noAirship();
+    const m = menuLayout(W, H);
+    const soft = { kind: "kick", power: expect.closeTo(0.3, 1) as number };
+    // a click off the patches
+    const scene = make(W, H);
+    const cues = hear(scene);
+    const blank = { x: m.cx, y: m.ballCy + Math.round(m.ballR * 0.6) };
+    scene.pointer({ type: "down", ...blank });
+    expect(cues).toEqual([soft]);
+    scene.pointer({ type: "up", ...blank });
+    expect(cues).toEqual([soft]);
+    // another a moment later: another
+    advance(scene, 0.3);
+    scene.pointer({ type: "down", ...blank });
+    scene.pointer({ type: "up", ...blank });
+    expect(of(cues, "kick").length).toBe(2);
+    // a tap with a finger is one, not two
+    const tapped = make(W, H);
+    const taps = hear(tapped);
+    tapped.pointer({ type: "down", ...blank, touch: true });
+    tapped.pointer({ type: "up", ...blank, touch: true });
+    expect(taps).toEqual([soft]);
+    // the start of a drag: one, as it is pressed, then only wind
+    const dragged = make(W, H);
+    const drag = hear(dragged);
+    const home = patch("left", W, H);
+    dragged.pointer({ type: "down", x: home.x, y: home.y });
+    for (let i = 1; i <= 6; i++) {
+      dragged.pointer({ type: "move", x: home.x + 10 * i, y: home.y });
+      dragged.update(STEP);
+    }
+    expect(story(drag)).toEqual(["kick", "wind"]);
+    expect(of(drag, "kick")).toEqual([soft]);
+    // a press off the ball, in the sky: nothing
+    const sky = make(W, H);
+    const none = hear(sky);
+    sky.pointer({ type: "down", x: 5, y: 5 });
+    sky.pointer({ type: "up", x: 5, y: 5 });
+    expect(none).toEqual([]);
+  });
+
+  it("blows wind while the ball spins, as hard as it spins, and none at rest", () => {
+    noAirship();
+    const scene = make(W, H);
+    const cues = hear(scene);
+    advance(scene, 2);
+    expect(cues).toEqual([]);
+    const home = patch("left", W, H);
+    scene.pointer({ type: "down", x: home.x, y: home.y });
+    for (let i = 1; i <= 6; i++) {
+      scene.pointer({ type: "move", x: home.x + 10 * i, y: home.y + 2 * i });
+      scene.update(STEP);
+    }
+    scene.pointer({ type: "up", x: home.x + 60, y: home.y + 12 });
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+    // every frame of the flick and the coast
+    const at = cues.length;
+    advance(scene, 0.5);
+    expect(of(cues, "wind").length).toBeGreaterThanOrEqual(at + 29);
+    const speeds = of(cues, "wind").map((c) => c.speed);
+    const top = Math.max(...speeds);
+    expect(top).toBeGreaterThan(0.5);
+    expect(top).toBeLessThanOrEqual(1);
+    expect(Math.min(...speeds)).toBeGreaterThan(0);
+    // it dies away as the ball slows, and stops once it is home
+    advance(scene, 6);
+    const after = cues.length;
+    expect(of(cues, "wind").at(-1)?.speed).toBeLessThan(0.2);
+    advance(scene, 1);
+    expect(cues.length).toBe(after);
+    // the soft kick of the press that started the drag, and no other
+    expect(of(cues, "kick")).toEqual([{ kind: "kick", power: 0.3 }]);
+  });
+
+  it("HOME: the strike, the wind of the flight and the landing, and no roar or horns", () => {
+    noAirship();
+    const scene = make(W, H);
+    const cues = hear(scene);
+    scene.choose("home");
+    runToDone(scene);
+    expect(story(cues)).toEqual(["kick", "wind", "land", "land", "transition"]);
+    // the thump as it drops onto the spot, then a softer one for its small bounce
+    expect(of(cues, "land")).toEqual([
+      { kind: "land", power: 1 },
+      { kind: "land", power: expect.closeTo(0.35, 2) as number },
+    ]);
+    expect(of(cues, "sparkle")).toEqual([]);
+    expect(of(cues, "kick")).toEqual([{ kind: "kick", power: 1 }]);
+    for (const c of of(cues, "wind")) {
+      expect(c.speed).toBeGreaterThan(0);
+      expect(c.speed).toBeLessThanOrEqual(1);
+    }
+    expect(of(cues, "wind").length).toBeGreaterThan(20);
+  });
+
+  it("AWAY: the strike and a wind that fades as the ball vanishes, and no roar", () => {
+    noAirship();
+    const scene = make(W, H);
+    const cues = hear(scene);
+    scene.choose("away");
+    runToDone(scene);
+    expect(story(cues)).toEqual([
+      "kick",
+      "wind",
+      "sparkle",
+      "wind",
+      "transition",
+      "wind",
+    ]);
+    expect(of(cues, "sparkle")).toEqual([{ kind: "sparkle" }]);
+    expect(of(cues, "land")).toEqual([]);
+    const winds = of(cues, "wind").map((c) => c.speed);
+    for (let i = 1; i < winds.length; i++) {
+      expect(winds[i]).toBeLessThanOrEqual(winds[i - 1]);
+    }
+    expect(winds[0]).toBeGreaterThan(0.6);
+    expect(winds.at(-1)).toBeLessThan(0.05);
+  });
+
+  it("lands HOME's thumps on the landing and its bounce, and AWAY's sparkle on the twinkle", () => {
+    noAirship();
+    const when = (mode: "home" | "away", kind: SoundCue["kind"]): number[] => {
+      const scene = make(W, H);
+      const cues = hear(scene);
+      scene.choose(mode);
+      const times: number[] = [];
+      let t = 0;
+      while (scene.phase === "kickoff") {
+        const before = cues.length;
+        scene.update(STEP);
+        t += STEP;
+        for (const c of cues.slice(before)) if (c.kind === kind) times.push(t);
+      }
+      return times;
+    };
+    // HOME's ball is down 0.89 s after the choice and its bounce comes down 0.2 s later
+    const [down, bounce] = when("home", "land");
+    expect(down).toBeCloseTo(0.89, 1);
+    expect(bounce - down).toBeCloseTo(0.2, 1);
+    // AWAY's twinkle flares 1.07 s after the choice; the sparkle peaks 0.12 s after it
+    // starts, so it starts a moment before the ball vanishes, and before the iris (1.13 s)
+    const [sparkle] = when("away", "sparkle");
+    expect(sparkle + 0.12).toBeCloseTo(1.07, 1);
+    expect(sparkle).toBeLessThan(when("away", "transition")[0]);
+  });
+
+  it("sends the transition's sound once, closing, as the iris starts", () => {
+    noAirship();
+    for (const mode of ["home", "away"] as const) {
+      const scene = make(W, H);
+      const cues = hear(scene);
+      scene.choose(mode);
+      let t = 0;
+      let when = -1;
+      while (scene.phase === "kickoff") {
+        const before = cues.length;
+        scene.update(STEP);
+        t += STEP;
+        if (cues.slice(before).some((c) => c.kind === "transition")) when = t;
+      }
+      expect(of(cues, "transition"), mode).toEqual([
+        { kind: "transition", opening: false },
+      ]);
+      // after the ball is down or gone, just as the picture starts to close
+      expect(when, mode).toBeGreaterThan(1.05);
+      expect(when, mode).toBeLessThan(1.2);
+      advance(scene, 2);
+      expect(of(cues, "transition").length, mode).toBe(1);
+    }
+    // once even when the whole kick-off goes by in one step
+    const jump = make(W, H);
+    const cues = hear(jump);
+    jump.choose("home");
+    jump.update(5);
+    expect(of(cues, "transition")).toEqual([
+      { kind: "transition", opening: false },
+    ]);
+    // and again for the next kick-off, after a reset
+    jump.reset();
+    jump.choose("away");
+    runToDone(jump);
+    expect(of(cues, "transition").length).toBe(2);
+  });
+
+  it("with reduced motion: the strike and the cut, and nothing more", () => {
+    noAirship();
+    for (const mode of ["home", "away"] as const) {
+      const scene = make(W, H);
+      scene.setReducedMotion(true);
+      const cues = hear(scene);
+      scene.choose(mode);
+      runToDone(scene);
+      expect(story(cues), mode).toEqual(["kick", "transition"]);
+    }
+  });
+
+  it("the airship squeaks when poked and pops when it bursts", () => {
+    vi.spyOn(MenuBackdrop.prototype, "airshipAt").mockImplementation(
+      (x, y) => x < 60 && y < 40,
+    );
+    vi.spyOn(MenuBackdrop.prototype, "pokeAirship")
+      .mockReturnValueOnce("wobble")
+      .mockReturnValueOnce("wobble")
+      .mockReturnValueOnce("pop")
+      .mockReturnValue("none");
+    const scene = make(W, H);
+    const cues = hear(scene);
+    for (let i = 0; i < 4; i++) {
+      scene.pointer({ type: "move", x: 30, y: 20 });
+      scene.pointer({ type: "down", x: 30, y: 20 });
+      scene.pointer({ type: "up", x: 30, y: 20 });
+      advance(scene, 0.1);
+    }
+    expect(story(cues)).toEqual(["squeak", "squeak", "pop"]);
+  });
+
+  it("is a town with a stadium in the distance, by day and by night", () => {
+    const scene = make(W, H);
+    expect(scene.ambience()).toEqual({
+      venue: "town",
+      crowd: expect.closeTo(0.3, 1) as number,
+      night: false,
+    });
+    scene.setLighting(NIGHT);
+    expect(scene.ambience().night).toBe(true);
+  });
+
+  it("never sends a horn, and only the picture's faint cheer and distant rockets, over minutes of play", () => {
+    const tricks = vi.spyOn(MenuBackdrop.prototype, "pokeMascot");
+    const scene = make(W, H);
+    const cues = hear(scene);
+    const m = menuLayout(W, H);
+    // every frame stepped, a frame drawn now and then (the picture's clock is the drawn one)
+    const play = (seconds: number) => {
+      for (let i = 0; i < seconds * 60; i++) scene.update(STEP);
+      draw(scene, W, H);
+    };
+    // the pointer on the ball and off it, now and then
+    for (let i = 0; i < 6; i++) {
+      scene.pointer({ type: "move", x: m.cx, y: m.ballCy });
+      play(2);
+      scene.pointer({ type: "move", x: 2, y: H - 2 });
+      play(3);
+    }
+    // a spin by hand
+    const home = patch("left", W, H);
+    scene.pointer({ type: "down", x: home.x, y: home.y });
+    for (let i = 1; i <= 6; i++) {
+      scene.pointer({ type: "move", x: home.x + 10 * i, y: home.y + 2 * i });
+      scene.update(STEP);
+    }
+    scene.pointer({ type: "up", x: home.x + 60, y: home.y + 12 });
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+    play(8);
+    // the airship poked until it pops, and left to come down and come back
+    const backdrop = (scene as unknown as { backdrop: MenuBackdrop }).backdrop;
+    let sx = 0;
+    let sy = 0;
+    let n = 0;
+    for (let y = 0; y < H / 2; y += 2) {
+      for (let x = 0; x < W / 2; x += 2) {
+        if (backdrop.airshipAt(x, y, 0)) {
+          sx += x;
+          sy += y;
+          n++;
+        }
+      }
+    }
+    expect(n).toBeGreaterThan(0);
+    sx = Math.round(sx / n);
+    sy = Math.round(sy / n);
+    for (let i = 0; i < 12; i++) {
+      scene.pointer({ type: "move", x: sx, y: sy });
+      scene.pointer({ type: "down", x: sx, y: sy });
+      scene.pointer({ type: "up", x: sx, y: sy });
+      play(0.2);
+    }
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+    play(20);
+    // every one of the mascot's tricks
+    const spot = backdrop.mascotSpot();
+    expect(spot).not.toBeNull();
+    for (let i = 0; i < 5; i++) {
+      scene.pointer({ type: "move", x: spot!.x, y: spot!.y - 4 });
+      scene.pointer({ type: "down", x: spot!.x, y: spot!.y - 4 });
+      scene.pointer({ type: "up", x: spot!.x, y: spot!.y - 4 });
+      scene.pointer({ type: "leave", x: 0, y: 0 });
+      play(5);
+    }
+    // a few minutes of the match and its fireworks, then a HOME kick-off
+    play(150);
+    scene.choose("home");
+    runToDone(scene);
+    const kinds = new Set(cues.map((c) => c.kind));
+    expect(kinds.has("squeak")).toBe(true);
+    expect(kinds.has("pop")).toBe(true);
+    expect(kinds.has("kick")).toBe(true);
+    expect(kinds.has("thud") || kinds.has("splash")).toBe(true);
+    expect(tricks.mock.results.filter((r) => r.value === "trick").length).toBe(
+      5,
+    );
+    expect(of(cues, "vuvuzela")).toEqual([]);
+    // the match far off: a goal every 40 s of the picture's clock, a very small cheer each
+    expect(of(cues, "cheer").length).toBeGreaterThanOrEqual(4);
+    for (const c of of(cues, "cheer"))
+      expect(c).toEqual({ kind: "cheer", size: 0.1 });
+    expect(of(cues, "firework").length).toBeGreaterThan(0);
+    for (const c of of(cues, "firework")) {
+      expect(c).toEqual({ kind: "firework", distant: true });
+    }
+  });
+
+  it("asks for nothing to be heard when nobody is listening", () => {
+    noAirship();
+    const scene = make(W, H);
+    const m = menuLayout(W, H);
+    scene.pointer({ type: "move", x: m.cx, y: m.ballCy });
+    expect(() => {
+      scene.choose("home");
+      runToDone(scene);
+    }).not.toThrow();
+  });
+});
+
+describe("MenuScene: the picture's sounds", () => {
+  const W = 480;
+  const H = 270;
+
+  it("forwards the picture's own cues once, over spans that meet, on the clock it is drawn with", () => {
+    const spans: [number, number][] = [];
+    const clocks: number[] = [];
+    vi.spyOn(MenuBackdrop.prototype, "draw").mockImplementation((s, t) => {
+      clocks.push(t);
+      s.clear(FLAT);
+    });
+    vi.spyOn(MenuBackdrop.prototype, "cuesBetween").mockImplementation(
+      (t0, t1) => {
+        spans.push([t0, t1]);
+        // a whistle on every whole second
+        return Math.floor(t1) > Math.floor(t0) ? [{ kind: "whistle" }] : [];
+      },
+    );
+    const scene = make(W, H);
+    const cues: SoundCue[] = [];
+    scene.onSound = (cue) => cues.push(cue);
+    for (let i = 0; i < 3 * 60 + 3; i++) {
+      scene.update(STEP);
+      draw(scene, W, H);
+    }
+    expect(cues).toEqual([
+      { kind: "whistle" },
+      { kind: "whistle" },
+      { kind: "whistle" },
+    ]);
+    // each span starts where the last ended, and ends on the clock the frame is drawn with
+    for (let i = 1; i < spans.length; i++) {
+      expect(spans[i][0]).toBe(spans[i - 1][1]);
+    }
+    expect(spans.at(-1)?.[1]).toBe(clocks.at(-1));
+    // not once the screen has gone to ink
+    scene.choose("home");
+    runToDone(scene);
+    const heard = spans.length;
+    advance(scene, 1);
+    expect(spans.length).toBe(heard);
+  });
+});
+
+describe("MenuScene: the mascot", () => {
+  const W = 480;
+  const H = 270;
+
+  it("hovers and takes clicks on the backdrop's clock, and never does anything else", () => {
+    noAirship();
+    const clocks: number[] = [];
+    vi.spyOn(MenuBackdrop.prototype, "draw").mockImplementation((s, t) => {
+      clocks.push(t);
+      s.clear(FLAT);
+    });
+    const at = vi
+      .spyOn(MenuBackdrop.prototype, "mascotAt")
+      .mockImplementation((x, y) => x >= 40 && x < 60 && y >= 200 && y < 230);
+    const poke = vi
+      .spyOn(MenuBackdrop.prototype, "pokeMascot")
+      .mockReturnValue("trick");
+    const scene = make(W, H);
+    const log = listen(scene);
+    const cues: SoundCue[] = [];
+    scene.onSound = (cue) => cues.push(cue);
+    advance(scene, 1.3);
+    draw(scene, W, H);
+    scene.pointer({ type: "move", x: 50, y: 215 });
+    expect(scene.cursor()).toBe("pointer");
+    expect(at).toHaveBeenLastCalledWith(50, 215, clocks.at(-1));
+    // four clicks: four pokes, each on the clock the picture is drawn with
+    for (let i = 0; i < 4; i++) {
+      scene.pointer({ type: "down", x: 50, y: 215 });
+      scene.pointer({ type: "up", x: 50, y: 215 });
+      draw(scene, W, H);
+      expect(poke).toHaveBeenLastCalledWith(clocks.at(-1));
+      advance(scene, 0.4);
+    }
+    expect(poke).toHaveBeenCalledTimes(4);
+    // a press that drags, or that ends off him, is no click
+    scene.pointer({ type: "down", x: 50, y: 215 });
+    scene.pointer({ type: "move", x: 58, y: 222 });
+    scene.pointer({ type: "up", x: 50, y: 215 });
+    scene.pointer({ type: "down", x: 58, y: 215 });
+    scene.pointer({ type: "up", x: 61, y: 215 });
+    expect(poke).toHaveBeenCalledTimes(4);
+    // nothing else: no mode, no sound of the scene's own, the ball untouched
+    expect(log.kickoff).toEqual([]);
+    expect(log.locked).toEqual([]);
+    expect(log.hover).toEqual([]);
+    expect(cues).toEqual([]);
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+    expect(scene.cursor()).toBe("default");
+    const calm = make(W, H);
+    advance(calm, 1.3 + 1.6);
+    expect(same(draw(calm, W, H), draw(scene, W, H))).toBe(true);
+  });
+
+  it("is behind the ball: a press on the ball is never his", () => {
+    noAirship();
+    vi.spyOn(MenuBackdrop.prototype, "mascotAt").mockReturnValue(true);
+    const poke = vi
+      .spyOn(MenuBackdrop.prototype, "pokeMascot")
+      .mockReturnValue("trick");
+    const scene = make(W, H);
+    const log = listen(scene);
+    const p = patch("left", W, H);
+    scene.pointer({ type: "down", x: p.x, y: p.y });
+    scene.pointer({ type: "up", x: p.x, y: p.y });
+    expect(log.kickoff).toEqual(["home"]);
+    expect(poke).not.toHaveBeenCalled();
+  });
+});
+
+describe("MenuScene: the wind round the spinning ball", () => {
+  const W = 480;
+  const H = 270;
+  type Windy = { compose(): void; drawWind(s: Surface): void };
+
+  /** The streaks alone, on a clear surface: where each pixel of them is. */
+  function streaks(scene: MenuScene): [number, number][] {
+    const s = new Surface(W, H);
+    s.clear(TRANSPARENT);
+    const w = scene as unknown as Windy;
+    w.compose();
+    w.drawWind(s);
+    const out: [number, number][] = [];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (s.data[y * W + x] !== TRANSPARENT) out.push([x, y]);
+      }
+    }
+    return out;
+  }
+
+  function flick(scene: MenuScene): void {
+    const home = patch("left", W, H);
+    scene.pointer({ type: "down", x: home.x, y: home.y });
+    for (let i = 1; i <= 6; i++) {
+      scene.pointer({ type: "move", x: home.x + 10 * i, y: home.y + 2 * i });
+      scene.update(STEP);
+    }
+    scene.pointer({ type: "up", x: home.x + 60, y: home.y + 12 });
+    scene.pointer({ type: "leave", x: 0, y: 0 });
+  }
+
+  it("blows round the ball as it spins, less as it slows, and none at rest", () => {
+    noAirship();
+    const scene = make(W, H);
+    advance(scene, 1);
+    expect(streaks(scene)).toEqual([]);
+    flick(scene);
+    const m = menuLayout(W, H);
+    const counts: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const px = streaks(scene);
+      counts.push(px.length);
+      const ball = (scene as unknown as { ball: { cx: number; cy: number } })
+        .ball;
+      for (const [x, y] of px) {
+        // just outside the ball, never on it (its words) nor up in the logo's sky
+        const d = Math.hypot(x - ball.cx, y - ball.cy);
+        expect(d).toBeGreaterThan(m.ballR + 1);
+        expect(d).toBeLessThan(m.ballR * 1.3 + 4);
+        expect(y).toBeGreaterThanOrEqual(m.logo.h);
+      }
+      advance(scene, 0.15);
+    }
+    expect(counts[0]).toBeGreaterThan(60);
+    expect(counts[5]).toBeLessThan(counts[0]);
+    advance(scene, 8);
+    expect(streaks(scene)).toEqual([]);
+  });
+
+  it("is none with reduced motion, and the same every time", () => {
+    noAirship();
+    const calm = make(W, H);
+    calm.setReducedMotion(true);
+    flick(calm);
+    expect(streaks(calm)).toEqual([]);
+    const a = make(W, H);
+    const b = make(W, H);
+    flick(a);
+    flick(b);
+    advance(a, 0.2);
+    advance(b, 0.2);
+    expect(streaks(a)).toEqual(streaks(b));
+  });
 });

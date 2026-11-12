@@ -103,7 +103,7 @@ describe("the mode pages", () => {
 });
 
 describe("the rules page", () => {
-  test("is a page of the game: a PixelRoot, the kit's type, and the way back", () => {
+  test("old links still work: the pop-up's card on a page of the game, and the way back", () => {
     site("/how-to-play?time=23:00");
     // Sized from the device's own pixels, like every other screen.
     const root = document.querySelector(".ss-root.ss-page");
@@ -111,12 +111,21 @@ describe("the rules page", () => {
     expect((root as HTMLElement).style.getPropertyValue("--px")).not.toBe("");
     const heading = screen.getByRole("heading", {
       level: 1,
-      name: strings.howToPlay.title,
+      name: strings.howToPlay.heading,
     });
-    // The pixel faces are only ever set at their own sizes.
-    expect(heading).toHaveClass("ss-t20");
+    // The same card as the pop-up on the home screen, its heading the page's.
+    expect(heading).toHaveClass("ss-help__title");
     expect(heading.className).not.toMatch(/\btext-/);
-    expect(screen.getByText(strings.howToPlay.description)).toBeInTheDocument();
+    expect(heading.closest(".ss-help")).not.toBeNull();
+    expect(document.querySelector("dialog")).toBeNull();
+    expect(screen.getByText(strings.howToPlay.intro)).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
+    ).toEqual([
+      strings.howToPlay.shots.heading,
+      strings.howToPlay.career.heading,
+    ]);
+    expect(document.querySelectorAll(".ss-help__shot")).toHaveLength(6);
     expect(
       screen.getByRole("link", { name: strings.play.back }),
     ).toHaveAttribute("href", "/?time=23:00");
@@ -135,7 +144,11 @@ describe("the rules page", () => {
     } finally {
       vi.unstubAllGlobals();
     }
-    expect(html).toContain(strings.howToPlay.description);
+    // The whole of the rules is in the prerendered page: no script needed to read them.
+    expect(html).toContain(strings.howToPlay.heading);
+    expect(html).toContain(strings.howToPlay.intro);
+    expect(html).toContain(strings.howToPlay.career.heading);
+    expect(html).toContain(strings.play.shots.toepoke);
     expect(html).toContain('href="/"');
     const tags = rulesMeta({} as Parameters<typeof rulesMeta>[0]) ?? [];
     expect(tags).toContainEqual({
@@ -225,16 +238,28 @@ describe("focus, from page to page", () => {
     );
   });
 
-  test("the rules page and back", async () => {
+  test("the rules pop up over the menu and close back to the ? button", () => {
     site("/?day=1");
-    fireEvent.click(
-      screen.getByRole("link", { name: strings.howToPlay.title }),
-    );
-    const heading = await screen.findByRole("heading", {
-      level: 1,
-      name: strings.howToPlay.title,
+    const help = screen.getByRole("button", { name: strings.howToPlay.title });
+    act(() => help.focus());
+    fireEvent.click(help);
+    const dialog = screen.getByRole("dialog", {
+      name: strings.howToPlay.heading,
     });
-    expect(document.activeElement).toBe(heading);
+    expect(dialog).toContainElement(document.activeElement as HTMLElement);
+    fireEvent.click(
+      screen.getByRole("button", { name: strings.howToPlay.close }),
+    );
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(help).toHaveFocus();
+    // Still the home page.
+    expect(
+      screen.getByRole("heading", { level: 1, name: strings.siteName }),
+    ).toBeInTheDocument();
+  });
+
+  test("the old rules page and back", async () => {
+    site("/how-to-play?day=1");
     const back = screen.getByRole("link", { name: strings.play.back });
     expect(back).toHaveAttribute("href", "/?day=1");
     fireEvent.click(back);

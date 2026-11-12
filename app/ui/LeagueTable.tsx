@@ -3,6 +3,7 @@ import { type Ref, useEffect, useRef } from "react";
 import { GAP_DOTS } from "./bitmaps";
 import { cx } from "./cx";
 import { PixelGlyph } from "./PixelGlyph";
+import type { UiGrade } from "./types";
 
 export interface LeagueRow {
   /** Position in the table. Tied answers share one. */
@@ -14,9 +15,13 @@ export interface LeagueRow {
   /** Already formatted: "3 miles" */
   distance: string;
   points: number;
+  /** The answer's shot: colours its tag and its points. */
+  grade?: UiGrade;
+  /** The shot's name, shown in the SHOT column when the table has one: "GOLAZO". */
+  shot?: string;
   /** The player's own answer: highlighted, with the YOU tag. */
   you?: boolean;
-  /** Gold row. Defaults to `points === 100`. */
+  /** Gold row. Defaults to a worldie (`grade`), or `points === 100` without a grade. */
   best?: boolean;
   /** Stable React key. Defaults to rank and name. */
   id?: string;
@@ -32,10 +37,12 @@ export type LeagueEntry = LeagueRow | LeagueGap;
 export interface LeagueTableLabels {
   /** Table caption for screen readers: "The table". */
   caption: string;
-  /** Column headings: "#", "ANSWER", "DISTANCE", "PTS". */
+  /** Column headings: "#", "ANSWER", "DISTANCE", "SHOT", "PTS". */
   rank: string;
   answer: string;
   distance: string;
+  /** Give it for a SHOT column: each row's `shot` as a tag in its grade's colour. */
+  shot?: string;
   points: string;
   /** The tag on the player's row: "YOU". */
   you: string;
@@ -56,6 +63,12 @@ export interface LeagueTableProps {
    * scrolls beneath it (default true). Pass the rows best first.
    */
   pinFirst?: boolean;
+  /**
+   * Put each place on its name's line, after it, instead of on a line of its own (default
+   * false): rows are one line tall unless a name is long, so five rows and the headings fit
+   * a short screen. The reveal uses it.
+   */
+  inlinePlace?: boolean;
   className?: string;
   ref?: Ref<HTMLDivElement>;
 }
@@ -76,12 +89,13 @@ function Distance({ text }: { text: string }) {
   );
 }
 
-/** The reveal's league table: position, name and place, distance, points. */
+/** The reveal's league table: position, name and place, distance, the shot, points. */
 export function LeagueTable({
   rows,
   labels,
   followYou = true,
   pinFirst = true,
+  inlinePlace = false,
   className,
   ref,
 }: LeagueTableProps) {
@@ -92,6 +106,7 @@ export function LeagueTable({
 
   // What the rows are, so the table is only moved again when they really change (a parent
   // that builds a new array on every render must not undo the player's own scrolling).
+  const shots = labels.shot !== undefined;
   const signature = rows
     .map((entry) =>
       isGap(entry)
@@ -190,7 +205,10 @@ export function LeagueTable({
       aria-label={labels.caption}
       tabIndex={0}
     >
-      <table ref={tableRef} className="ss-table">
+      <table
+        ref={tableRef}
+        className={cx("ss-table", inlinePlace && "ss-table--inline")}
+      >
         <caption className="ss-sr">{labels.caption}</caption>
         <thead>
           <tr>
@@ -203,6 +221,11 @@ export function LeagueTable({
             <th scope="col" className="ss-table__dist">
               {labels.distance}
             </th>
+            {shots && (
+              <th scope="col" className="ss-table__shot">
+                {labels.shot}
+              </th>
+            )}
             <th scope="col" className="ss-table__pts">
               {labels.points}
             </th>
@@ -213,18 +236,21 @@ export function LeagueTable({
             if (isGap(entry)) {
               return (
                 <tr key={`gap-${i}`} className="ss-table__gap">
-                  <td colSpan={4}>
+                  <td colSpan={shots ? 5 : 4}>
                     <PixelGlyph bitmap={GAP_DOTS} />
                     <span className="ss-sr">{labels.gap}</span>
                   </td>
                 </tr>
               );
             }
-            const best = entry.best ?? entry.points === 100;
+            const best =
+              entry.best ??
+              (entry.grade ? entry.grade === "worldie" : entry.points === 100);
             return (
               <tr
                 key={entry.id ?? `${entry.rank}-${entry.name}`}
                 ref={entry.you ? youRef : undefined}
+                data-grade={entry.grade}
                 className={cx(
                   entry.you && "is-you",
                   best && "is-best",
@@ -239,11 +265,20 @@ export function LeagueTable({
                 </td>
                 <th scope="row" className="ss-table__who">
                   <span className="ss-table__name">{entry.name}</span>
+                  {/* A space, so a place on the name's line can wrap after it. */}
+                  {entry.place && " "}
                   <span className="ss-table__place">{entry.place}</span>
                 </th>
                 <td className="ss-table__dist">
                   <Distance text={entry.distance} />
                 </td>
+                {shots && (
+                  <td className="ss-table__shot">
+                    {entry.shot && (
+                      <span className="ss-table__tag">{entry.shot}</span>
+                    )}
+                  </td>
+                )}
                 <td className="ss-table__pts">
                   <span className="ss-table__ptsbox">{entry.points}</span>
                 </td>

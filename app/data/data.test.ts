@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { judge, normalise } from "~/game/judge";
+import { SCORING_SHOTS, revealRows } from "~/game/reveal";
+import { ruleFor } from "~/game/scoring";
+import { SHOT_ORDER, isGoal, shotIndex, shotsFor } from "~/game/shots";
 import type { Answer, Mode, Question, Stadium } from "~/game/types";
 
 import { AWAY_QUESTIONS, HOME_QUESTIONS, STADIUMS, questionsFor } from ".";
@@ -20,6 +23,21 @@ const SETS: ReadonlyArray<readonly [Mode, Question[]]> = [
   ["away", AWAY_QUESTIONS],
 ];
 const ALL_QUESTIONS = [...HOME_QUESTIONS, ...AWAY_QUESTIONS];
+
+/**
+ * The answers filed one step away from what `shotsFor` gives, after a look by eye, and why
+ * (docs/data-notes/shots.md). Everything else is exactly the rule.
+ */
+const MOVED_BY_EYE: Readonly<Record<string, readonly string[]>> = {
+  // (Chelsea in pl-winning-clubs went back to the rule's toe poke on 2026-11-12: moved up a
+  // step they left that question with no toe poke, and the reveal shows one of each.)
+  // Mourinho, three titles, sits with Wenger.
+  "pl-winning-managers": ["jose-mourinho"],
+  // Germany and Italy, four titles each, up one step.
+  "world-cup-winning-countries": ["germany", "italy"],
+  // The 1938 final's ground is as deep a cut as the 1934 one.
+  "world-cup-final-stadiums": ["stade-olympique-de-colombes"],
+};
 
 /** Lower case, no accents: the comparison the brief asks for. */
 function fold(text: string): string {
@@ -189,12 +207,105 @@ describe.each(ALL_QUESTIONS.map((q) => [q.id, q] as const))(
       expect(Math.abs(sum - 100)).toBeLessThanOrEqual(0.5);
     });
 
-    it("has one most common and one most niche answer (no tie at either end)", () => {
+    it("has one most common and one most uncommon answer (no tie at either end)", () => {
       const tenths = question.answers
         .map((a) => Math.round(a.popularity * 10))
         .sort((a, b) => b - a);
       expect(tenths[0]).toBeGreaterThan(tenths[1]);
       expect(tenths.at(-1)).toBeLessThan(tenths.at(-2) ?? 0);
+    });
+
+    describe("the shots (docs/data-notes/shots.md)", () => {
+      const home = question.mode === "home";
+      const used = new Set(question.answers.map((a) => a.shot));
+
+      it("every answer is filed under one of the six shots", () => {
+        expect(
+          eachAnswer(question, (answer, label) =>
+            SHOT_ORDER.includes(answer.shot)
+              ? []
+              : [`${label}: ${String(answer.shot)}`],
+          ),
+        ).toEqual([]);
+      });
+
+      it("never contradicts the popularity", () => {
+        // HOME: a more popular answer is never a worse shot; AWAY the other way round.
+        const problems: string[] = [];
+        for (const a of question.answers) {
+          for (const b of question.answers) {
+            const better = home
+              ? a.popularity > b.popularity
+              : a.popularity < b.popularity;
+            if (better && shotIndex(a.shot) > shotIndex(b.shot)) {
+              problems.push(
+                `${a.id} (${a.shot}) is filed below ${b.id} (${b.shot})`,
+              );
+            }
+          }
+        }
+        expect(problems).toEqual([]);
+      });
+
+      it("has a worldie, the best answer, and something below it", () => {
+        const best = [...question.answers].sort((a, b) =>
+          home ? b.popularity - a.popularity : a.popularity - b.popularity,
+        )[0];
+        expect(best.shot).toBe("worldie");
+        expect(question.answers.some((a) => a.shot !== "worldie")).toBe(true);
+      });
+
+      it("uses all six shots when it has a dozen answers or more, four at least otherwise", () => {
+        if (question.answers.length >= 12) {
+          expect([...used].sort()).toEqual([...SHOT_ORDER].sort());
+        } else {
+          expect(used.size).toBeGreaterThanOrEqual(4);
+          expect(used.has("miss")).toBe(true);
+        }
+      });
+
+      it("has at least one answer in each of the five shots that score", () => {
+        // The reveal shows one answer for each (app/game/reveal.ts): an empty shot would be
+        // a missing row.
+        const scoring = SHOT_ORDER.filter(isGoal);
+        expect(scoring.filter((shot) => !used.has(shot))).toEqual([]);
+      });
+
+      it("the reveal shows five rows for it, whatever the player answered", () => {
+        for (const answerId of [null, ...question.answers.map((a) => a.id)]) {
+          const rows = revealRows(
+            question,
+            question.mode,
+            { answerId },
+            STADIUMS[0],
+          );
+          expect(
+            rows.map((r) => r.shot),
+            String(answerId),
+          ).toEqual(SCORING_SHOTS);
+          const mine = question.answers.find((a) => a.id === answerId);
+          expect(
+            rows.some((r) => r.isPlayer),
+            String(answerId),
+          ).toBe(mine !== undefined && mine.shot !== "miss");
+        }
+      });
+
+      it("follows the rule, but for the few answers moved by eye", () => {
+        const ruled = shotsFor(
+          question.answers.map((a) => a.popularity),
+          ruleFor(question.mode),
+        );
+        const moved = question.answers
+          .filter((a, i) => a.shot !== ruled[i])
+          .map((a) => {
+            const i = question.answers.indexOf(a);
+            // Never more than one step from the rule.
+            expect(Math.abs(shotIndex(a.shot) - shotIndex(ruled[i]))).toBe(1);
+            return a.id;
+          });
+        expect(moved).toEqual(MOVED_BY_EYE[question.id] ?? []);
+      });
     });
 
     it("no alias is empty or equal to its own name", () => {

@@ -13,6 +13,7 @@ import {
   type Session,
   type StorageLike,
   type Turn,
+  SHOT_ORDER,
   dayKeyFor,
   storageKey,
 } from "~/game";
@@ -48,15 +49,8 @@ function resolveStorage(
   }
 }
 
-const GRADES: readonly Grade[] = [
-  "worldie",
-  "topbins",
-  "goal",
-  "ontarget",
-  "wide",
-  "timeup",
-  "skipped",
-];
+/** A game begun before the six shots (with the old grades) is not carried on. */
+const GRADES: readonly Grade[] = [...SHOT_ORDER, "timeup", "skipped"];
 const PHASES: readonly Phase[] = ["asking", "resolving", "reveal", "done"];
 
 const isNumber = (v: unknown): v is number =>

@@ -7,8 +7,9 @@
  */
 import { careerFor, tiersCrossed } from "./career";
 import type { Career } from "./career";
-import { rankedFor, tableExcerpt } from "./scoring";
-import type { TableRow } from "./scoring";
+import { shotRows } from "./reveal";
+import type { RevealRow } from "./reveal";
+import { rankedFor } from "./scoring";
 import {
   PASS_AFTER_MS,
   QUESTION_MS,
@@ -42,7 +43,7 @@ export interface QuestionView {
   question: Question;
   /** "Name a manager who has won the Premier League" */
   prompt: string;
-  /** HOME: the most common answer wins. AWAY: the most niche answer wins. */
+  /** HOME: the most common answer wins. AWAY: the most uncommon answer wins. */
   mode: Mode;
   /** How the answers are ranked: `ruleFor(mode)`. */
   rule: Rule;
@@ -117,22 +118,28 @@ export interface RevealView {
   row: RankedAnswer | null;
   /** The best answer under the game's rule: the top row. Null only for an empty answer list. */
   best: RankedAnswer | null;
-  /** The table rows to draw, best first, with the player's row marked `isPlayer`. */
-  rows: TableRow[];
-  /** How many rows the full table has. */
+  /**
+   * The table rows to draw: one per scoring shot, best first (`shotRows`). The player's
+   * answer is the row for its shot when it scored, marked `isPlayer`.
+   */
+  rows: RevealRow[];
+  /**
+   * The player's answer is one of `rows`: it scored. False for a miss, a pass or a
+   * time-up, which the sheet shows above the table instead.
+   */
+  playerInRows: boolean;
+  /** How many answers the full table has. */
   tableSize: number;
   /** This was the last question: the button reads FULL TIME. */
   isLast: boolean;
 }
 
 /**
- * The reveal for one question: the current one unless `index` is given. `maxRows` trims a
- * long table (see `tableExcerpt`); leave it out for the whole table. Null while the question
- * has not been decided yet.
+ * The reveal for one question: the current one unless `index` is given. Null while the
+ * question has not been decided yet.
  */
 export function revealFor(
   session: Session,
-  maxRows = Infinity,
   index = session.index,
 ): RevealView | null {
   const question = session.questions[index];
@@ -140,6 +147,7 @@ export function revealFor(
   if (!question || !turn) return null;
   const table = tableFor(session, index);
   const row = rankedFor(table, turn.answerId);
+  const rows = shotRows(table, turn.answerId);
   return {
     index,
     question,
@@ -147,7 +155,8 @@ export function revealFor(
     answer: row?.answer ?? null,
     row,
     best: table[0] ?? null,
-    rows: tableExcerpt(table, turn.answerId, maxRows),
+    rows,
+    playerInRows: rows.some((r) => r.isPlayer),
     tableSize: table.length,
     isLast: index >= session.questions.length - 1,
   };
@@ -216,16 +225,22 @@ export function results(session: Session): ResultLine[] {
 }
 
 /**
- * The input for `buildShareText`, from a game. `tierName` is the career title as shown on
- * screen ("TOP FLIGHT"), which lives with the interface text.
+ * The input for `buildShareText`, from a game. `tierName` is the career tier as shown on
+ * screen ("TOP FLIGHT") and `title` the title the total earned ("SEASON TICKET HOLDER", the
+ * words for `titleFor`), both from the interface text.
  */
-export function shareInputFor(session: Session, tierName: string): ShareInput {
+export function shareInputFor(
+  session: Session,
+  tierName: string,
+  title?: string,
+): ShareInput {
   return {
     dayNumber: session.dayNumber,
     mode: session.mode,
     stadiumName: session.stadium.name,
     total: session.total,
     tierName,
+    ...(title ? { title } : {}),
     grades: session.turns.map((turn) => turn.grade),
   };
 }
