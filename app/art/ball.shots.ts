@@ -45,8 +45,8 @@ import { drawSky } from "./sky";
 const PATCHES: BallPatches = {
   left: { label: "HOME", icon: "home", accent: MODE_COLORS.home },
   right: { label: "AWAY", icon: "away", accent: MODE_COLORS.away },
-  top: { label: "NEXT-GEN", icon: "forward", locked: true },
-  bottom: { label: "RETRO", icon: "rewind", locked: true },
+  top: { label: "NEXT-GEN", icon: "nextgen", locked: true },
+  bottom: { label: "RETRO", icon: "retro", locked: true },
   backRight: { label: "CLOSEST", icon: "pin", locked: true },
   backLeft: { label: "FURTHEST", icon: "globe", locked: true },
   rimLeft: { label: "GUESS WHO", icon: "shirt", locked: true },
@@ -56,8 +56,8 @@ const PATCHES: BallPatches = {
 /** RETRO and NEXT-GEN open (2026-11-13): four buttons, each framed in its mode's colour. */
 const ERA: BallPatches = {
   ...PATCHES,
-  top: { label: "NEXT-GEN", icon: "forward", accent: MODE_COLORS.nextgen },
-  bottom: { label: "RETRO", icon: "rewind", accent: MODE_COLORS.retro },
+  top: { label: "NEXT-GEN", icon: "nextgen", accent: MODE_COLORS.nextgen },
+  bottom: { label: "RETRO", icon: "retro", accent: MODE_COLORS.retro },
 };
 
 const ERA_SCORED: BallPatches = {

@@ -156,8 +156,8 @@ export const MODE_SLOTS: Readonly<Record<Mode | LockedMode, BallSlot>> = {
 const MODE_ICONS: Readonly<Record<Mode, BallIcon>> = {
   home: "home",
   away: "away",
-  nextgen: "forward",
-  retro: "rewind",
+  nextgen: "nextgen",
+  retro: "retro",
 };
 
 export interface MenuLabels {
@@ -1355,6 +1355,8 @@ export class MenuScene implements Scene {
   /** The airship's sign: the header (from the labels) and the fact. */
   private header: string;
   private fact: string;
+  /** The plane tows the fact across the sky (the page turns it off on a phone). */
+  private planeOn = true;
   private readonly patches: Record<BallSlot, BallPatch>;
   private readonly logo: LogoOptions = { maxWidth: 1, maxHeight: 1, t: 0 };
   private logoTop = 0;
@@ -1526,8 +1528,8 @@ export class MenuScene implements Scene {
     this.patches = {
       left: { label: "", icon: "home", accent: MODE_COLORS.home },
       right: { label: "", icon: "away", accent: MODE_COLORS.away },
-      top: { label: "", icon: "forward", accent: MODE_COLORS.nextgen },
-      bottom: { label: "", icon: "rewind", accent: MODE_COLORS.retro },
+      top: { label: "", icon: "nextgen", accent: MODE_COLORS.nextgen },
+      bottom: { label: "", icon: "retro", accent: MODE_COLORS.retro },
       backRight: { label: "", icon: "pin", locked: true },
       backLeft: { label: "", icon: "globe", locked: true },
       rimLeft: { label: "", icon: "shirt", locked: true },
@@ -1979,7 +1981,18 @@ export class MenuScene implements Scene {
     if (text === this.fact) return;
     this.fact = text;
     this.backdrop.setSign({ header: this.header, text });
-    this.backdrop.setBanner(bannerWords(this.header, text));
+    this.backdrop.setBanner(this.planeOn ? bannerWords(this.header, text) : "");
+  }
+
+  /**
+   * Whether the plane flies with the fact on its banner: on (the default) on a large
+   * screen; off on a phone, whose sky is crowded enough with the wordmark and the airship.
+   * Off takes it out of the sky at once, mid-pass or not.
+   */
+  setPlane(on: boolean): void {
+    if (on === this.planeOn) return;
+    this.planeOn = on;
+    this.backdrop.setBanner(on ? bannerWords(this.header, this.fact) : "");
   }
 
   /**

@@ -478,7 +478,8 @@ NEXT-GEN), `onSelect?(mode)`,
 switch beside the "?": labels, default `strings.sound`, or `false`; see `SoundToggle`),
 `stats?: { label, onClick, open? }` and `statsRef?` (new 2026-11-12: the stats button after
 the sound switch, `StatsButton`; see `Stats` below), `streak?` (new 2026-11-12: `StreakProps`,
-the daily streak in the day plate after the day; leave it out for none),
+the daily streak in the day plate after the day, or under it on a monitor (2026-11-13); leave
+it out for none),
 `remind?: { label, onClick, open? }` and `remindRef?`, `support?: { label, onClick, open? }` and
 `supportRef?` (new 2026-11-13: the bell and the heart beside the day plate; see "`RemindMe`
 and `Support`" below; leave them out for none)

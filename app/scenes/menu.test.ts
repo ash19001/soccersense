@@ -328,3 +328,19 @@ describe("the menu", () => {
     });
   });
 });
+
+describe("the plane with the fact", () => {
+  it("flies until the page turns it off, and stays off for a new fact", () => {
+    const banner = vi.spyOn(MenuBackdrop.prototype, "setBanner");
+    const scene = make(240, 444);
+    expect(banner).toHaveBeenLastCalledWith(expect.stringContaining("A FACT."));
+    scene.setPlane(false);
+    expect(banner).toHaveBeenLastCalledWith("");
+    scene.setFact("Another fact.");
+    expect(banner).toHaveBeenLastCalledWith("");
+    scene.setPlane(true);
+    expect(banner).toHaveBeenLastCalledWith(
+      expect.stringContaining("ANOTHER FACT."),
+    );
+  });
+});

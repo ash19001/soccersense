@@ -128,7 +128,7 @@ to `sheetY`. If a number matters to more than one painter, it goes in this file.
 type BallSlot = "left" | "right" | "top" | "bottom" | "backLeft" | "backRight"
               | "rimLeft" | "rimRight";
 const BALL_SLOTS: readonly BallSlot[];      // all eight, in that order
-type BallIcon = "home" | "away" | "forward" | "rewind" | "pin" | "globe" | "shirt" | "goal"
+type BallIcon = "home" | "away" | "nextgen" | "retro" | "pin" | "globe" | "shirt" | "goal"
               | "lock" | "none";
 interface BallPatch { label: string; icon: BallIcon;
                       accent?: { dark; base; light }; locked?: boolean; badge?: string }
@@ -148,8 +148,8 @@ The slots, and what the menu puts on them:
 | ----------- | ------------------------------------------- | ----------------- | --------- | ----------------------------------- |
 | `left`      | level, 31.7 degrees left of the middle      | HOME, red-orange  | `home`    | the menu pose                       |
 | `right`     | level, 31.7 degrees right                   | AWAY, teal        | `away`    | the menu pose                       |
-| `top`       | 58.3 degrees above the middle               | NEXT-GEN, magenta | `forward` | pitch -58.3 degrees: straight on    |
-| `bottom`    | 58.3 degrees below                          | RETRO, old gold   | `rewind`  | pitch +58.3 degrees: straight on    |
+| `top`       | 58.3 degrees above the middle               | NEXT-GEN, magenta | `nextgen` | pitch -58.3 degrees: straight on    |
+| `bottom`    | 58.3 degrees below                          | RETRO, old gold   | `retro`   | pitch +58.3 degrees: straight on    |
 | `backRight` | on the back, directly behind `right` (AWAY) | CLOSEST, locked   | `pin`     | yaw pi: where `left` (HOME) was     |
 | `backLeft`  | on the back, directly behind `left` (HOME)  | FURTHEST, locked  | `globe`   | yaw pi: where `right` (AWAY) was    |
 | `rimLeft`   | on the rim out past HOME, 31.7 degrees up   | GUESS WHO, locked | `shirt`   | yaw +pi/2, pitch -31.7: straight on |
@@ -209,7 +209,8 @@ it, `goal` a goal with its net and a ball on the spot.
 - `hovered`, `pressed` and `chosen` are slots or `null`. `chosen` flashes at 8 Hz off `t`.
   A bar of light crosses HOME then AWAY every five seconds off `t` (off at `t = 0`). There is
   no reduced-motion input: hold `t` still.
-- `badge` puts a small plate on the patch (a score once the mode has been played).
+- `badge` writes a score on the patch in place of its word, once the mode has been played:
+  bare figures in the button's colour on all four (no plate since 2026-11-13).
 - `accent` is usually `MODE_COLORS[mode]`.
 - What a button shows depends on the radius: big icons and words from r = 56, icon and word
   from 37, icon only below 37, only the coloured line below 26; and on how far it faces the

@@ -57,8 +57,10 @@ import {
   useArrivalFocus,
   useDeviceSky,
   useFadeArrival,
+  usePixelScale,
 } from "~/ui";
 import type { Route } from "./+types/home";
+import { planeFits } from "./home-plane";
 import { signMessages } from "./home-sign";
 import { howToPlayContent } from "./how-to-play-card";
 import { type StatsContent, statsContent } from "./stats-content";
@@ -447,6 +449,13 @@ export default function Home() {
   useEffect(() => {
     if (scene && moonPhase !== undefined) scene.setMoonPhase(moonPhase);
   }, [scene, moonPhase]);
+
+  // The plane with the fact flies on a large screen only (home-plane.ts). Its first pass
+  // is 6 s in, so a phone has it turned off long before it could show.
+  const plane = planeFits(usePixelScale());
+  useEffect(() => {
+    scene?.setPlane(plane);
+  }, [scene, plane]);
 
   // The next page's heading face: see FACES_AFTER_MS.
   const ready = matchday !== null;

@@ -2301,11 +2301,23 @@ button.ss-menu__card:active {
 }
 
 /*
- * These squares (and the bell and heart's, section 27) are fitted to the rows round a
- * symbol in logical pixels (--ss-row-glyph), so it stays in logical pixels here.
+ * In these squares (and the bell and heart's, section 27) the symbol is in icon pixels
+ * (--ip, section 4), as on a phone, so the face shows all round it (2026-11-13: in logical
+ * pixels it reached the face's top edge). It is placed by arithmetic, not by a flex box:
+ * what the square leaves round its 10 x 10 box inside the border, halved, on a whole pixel.
  */
 .ss-game[data-wide] .ss-menu .ss-btn--icon {
-  --ip: var(--px);
+  --ss-row-glyph: calc((var(--ss-row) - var(--u) * 2 - var(--ip) * 10) / 2);
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-game[data-wide] .ss-menu .ss-btn--icon {
+    --ss-row-glyph: round(
+      down,
+      calc((var(--ss-row) - var(--u) * 2 - var(--ip) * 10) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
 }
 
 /*
@@ -2851,6 +2863,9 @@ button.ss-menu__card:active {
  * the screen and the tab is all that is left, standing on the right edge.
  */
 .ss-lb__handle {
+  /* The symbols in icon pixels, as on an icon button (section 4): face shows round them. */
+  --ip: var(--ip-fit, var(--px));
+
   position: absolute;
   top: var(--u3);
   right: 100%;
@@ -2866,11 +2881,18 @@ button.ss-menu__card:active {
   gap: var(--u2);
 }
 
-/* Each 9 x 9 icon in the top left of a 10 x 10 box, as in an icon button. */
+/*
+ * Each 9 x 9 icon in the top left of a 10 x 10 box of icon pixels, as in an icon button, and
+ * that box in the middle of one 10 logical pixels square, so the tab keeps its size (half the
+ * difference each way: five times a whole number of device pixels, so a whole number too).
+ */
 .ss-lb__handle-icon {
   display: block;
+  box-sizing: border-box;
   width: calc(var(--px) * 10);
   height: calc(var(--px) * 10);
+  padding: calc((var(--px) - var(--ip)) * 5) 0 0
+    calc((var(--px) - var(--ip)) * 5);
 }
 
 .ss-lb__handle-icon:first-child .ss-glyph {
@@ -4348,6 +4370,19 @@ html:has(.ss-help-dialog[open]) {
 
 .ss-menu__day .ss-streak {
   margin-left: calc(var(--fp) * 5);
+}
+
+/*
+ * A monitor: the plate is as tall as both rows, so the streak has the second row to itself,
+ * under the day (2026-11-13): the day beside the bell, the streak beside the heart (section
+ * 27). Its line starts as far down the second row as the day's does down the first (the
+ * rows are --ss-row tall with --u between them, a line --lh-tight).
+ */
+.ss-game[data-wide] .ss-menu__day .ss-streak {
+  display: flex;
+  width: max-content;
+  margin-top: calc(var(--ss-row) + var(--u) - var(--lh-tight));
+  margin-left: 0;
 }
 
 .ss-streak__flame {

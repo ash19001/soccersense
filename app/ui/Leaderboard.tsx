@@ -722,10 +722,13 @@ export function Leaderboard({
         >
           <span className="ss-btn__label">
             <span className="ss-lb__handle-icon">
-              <PixelGlyph bitmap={TROPHY} layers={TROPHY_LAYERS} />
+              <PixelGlyph bitmap={TROPHY} layers={TROPHY_LAYERS} unit="ip" />
             </span>
             <span className="ss-lb__handle-icon">
-              <PixelGlyph bitmap={collapsed ? ARROW_LEFT : ARROW_RIGHT} />
+              <PixelGlyph
+                bitmap={collapsed ? ARROW_LEFT : ARROW_RIGHT}
+                unit="ip"
+              />
             </span>
           </span>
         </button>

@@ -97,16 +97,16 @@ export const BALL_SLOTS: readonly BallSlot[] = [
 ];
 
 /**
- * A patch's picture. "home" a house, "away" an aeroplane, "forward" a fast-forward (the
- * future), "rewind" a rewind (the past), "pin" a map pin, "globe" a globe, "shirt" the
+ * A patch's picture. "home" a stadium, "away" an aeroplane, "nextgen" a modern boot (the
+ * future), "retro" an old high-laced boot (the past), "pin" a map pin, "globe" a globe, "shirt" the
  * back of a shirt with its number, "goal" a goal with a ball on the spot, "lock" a padlock
  * alone, "none" nothing.
  */
 export type BallIcon =
   | "home"
   | "away"
-  | "forward"
-  | "rewind"
+  | "nextgen"
+  | "retro"
   | "pin"
   | "globe"
   | "shirt"
@@ -640,10 +640,10 @@ function rasterise(from = 0, to = disc.d, c0 = 0, c1 = disc.d): void {
 function pictureFor(patch: BallPatch, small: boolean): Sprite | null {
   const I = ballIcons();
   switch (patch.icon) {
-    case "forward":
-      return small ? I.forwardSmall : I.forward;
-    case "rewind":
-      return small ? I.rewindSmall : I.rewind;
+    case "nextgen":
+      return small ? I.nextgenSmall : I.nextgen;
+    case "retro":
+      return small ? I.retroSmall : I.retro;
     case "pin":
       return small ? I.pinSmall : I.pin;
     case "globe":
@@ -667,10 +667,10 @@ function iconFor(patch: BallPatch, big: boolean): Sprite | null {
       return big ? I.homeBig : I.home;
     case "away":
       return big ? I.awayBig : I.away;
-    case "forward":
-      return I.forward;
-    case "rewind":
-      return I.rewind;
+    case "nextgen":
+      return I.nextgen;
+    case "retro":
+      return I.retro;
     case "pin":
       return I.pin;
     case "globe":
@@ -700,8 +700,6 @@ const LIFTED = 5;
 const slotMode = new Int8Array(SLOT_COUNT);
 /** Colours per slot: fill light, fill base, fill dark, edge, inner line. */
 const slotColor = new Uint32Array(SLOT_COUNT * 5);
-/** The dark ink for a score on its plate, per slot. */
-const slotDeep = new Uint32Array(SLOT_COUNT);
 /** Projected centre of each panel, in pixels (see `SLOT_FACE` for the slots). */
 const panelX = new Int32Array(FACES);
 const panelY = new Int32Array(FACES);
@@ -776,7 +774,6 @@ function prepareSlots(
     const o = i * 5;
     slotShine[i] = NO_SHINE;
     slotMode[i] = PLAIN;
-    slotDeep[i] = tones.ink;
     if (!patch) continue;
     if (!accent) {
       // Locked, or a plain patch: it never takes a colour, hover only lifts it.
@@ -793,7 +790,6 @@ function prepareSlots(
     const dark = light.lit(accent.dark);
     const base = light.lit(accent.base);
     const lite = light.lit(accent.light);
-    slotDeep[i] = state.chosen === slot ? accent.dark : dark;
     if (state.chosen === slot) {
       // A flash is a light source: raw colour, stepped at 8 Hz.
       const on = (Math.floor(finite(state.t) * 8) & 1) === 0;
@@ -1134,18 +1130,20 @@ function chooseLayout(patches: BallPatches, room: Int16Array): void {
   const F = labelFonts();
   const rowsS = 10;
   const rowsB = 14;
-  // The widest label in each font, and the widest plate a score would need.
+  // The widest label in each font, and the widest score in small figures.
   let small = 0;
   let big = 0;
-  let plate = 0;
+  let score = 0;
   for (let i = 0; i < SLOT_COUNT; i++) {
     const patch = patches[SLOTS[i]];
     // the side buttons (a locked patch has its own layout: see `drawLocked`; so do the
     // buttons on the top and the bottom: see `drawFront`)
     if (!patch || !accentOf(patch) || FRONT_FACE[SLOT_FACE[i]] === 1) continue;
     if (hasBadge(patch)) {
-      const w = measureText(patch.badge as string, F.SMALL_DIGITS) + 8;
-      plate = Math.max(plate, w);
+      score = Math.max(
+        score,
+        measureText(patch.badge as string, F.SMALL_DIGITS),
+      );
     } else if (patch.label !== "") {
       small = Math.max(small, measureText(patch.label, F.SMALL));
       big = Math.max(big, measureText(patch.label, F.BIG));
@@ -1161,12 +1159,12 @@ function chooseLayout(patches: BallPatches, room: Int16Array): void {
   } else if (bigIcons && big <= room[roomAt(2, rowsB)]) {
     labelOpts = F.BIG;
   } else {
-    // Step the line out, and then off, until the words and the plate fit. If the plate
-    // never does, the words alone decide (the score is then written without one).
+    // Step the line out, and then off, until the words and the scores fit. If a score
+    // never does, the words alone decide (the score is then left off: see `drawContent`).
     let ring = 2;
     while (
       ring >= 0 &&
-      (small > room[roomAt(ring, rowsS)] || plate > room[roomAt(ring, rowsB)])
+      (small > room[roomAt(ring, rowsS)] || score > room[roomAt(ring, rowsS)])
     ) {
       ring--;
     }
@@ -1519,14 +1517,9 @@ function plotStamp(
   }
 }
 
-/** How a badge fits in a font `rows` tall: 2 on a plate, 1 as bare figures, 0 not. */
-function badgeFit(text: string, opts: TextOptions, rows: number): number {
-  const room = roomFor();
-  const w = measureText(text, opts);
-  if (w + 8 <= room[roomAt(ringAt, 14)] - (rows > 10 ? 4 : 0)) {
-    return 2;
-  }
-  return w <= room[roomAt(ringAt, rows)] ? 1 : 0;
+/** Whether a badge fits as bare figures in a font `rows` tall. */
+function badgeFits(text: string, opts: TextOptions, rows: number): boolean {
+  return measureText(text, opts) <= roomFor()[roomAt(ringAt, rows)];
 }
 
 function drawContent(
@@ -1562,20 +1555,17 @@ function drawContent(
   const iconInk = mode === NORMAL ? (slotColor[o] as Color) : ink;
   const badge = hasBadge(patch);
   const text = badge ? (patch.badge as string) : patch.label;
-  // A badge is news (today's score), so it shows whenever it fits by itself: on a plate
-  // when there is room for one, as bare figures when there is not.
+  // A badge is news (today's score), so it shows whenever it fits by itself: bare figures
+  // in the button's colour, as NEXT-GEN's and RETRO's are (no plate: the product owner,
+  // 2026-11-13, so that all four scores look alike).
   const F = labelFonts();
   let opts = labelOpts;
-  let plate = false;
   if (badge) {
     opts = F.BIG_DIGITS;
-    let fit = bigIcons ? badgeFit(text, opts, 14) : 0;
-    if (fit === 0) {
+    if (!bigIcons || !badgeFits(text, opts, 14)) {
       opts = F.SMALL_DIGITS;
-      fit = badgeFit(text, opts, 10);
+      if (!badgeFits(text, opts, 10)) opts = null;
     }
-    if (fit === 0) opts = null;
-    plate = fit === 2;
   }
   if (opts === null || text === "" || facing < FACING_LABEL) {
     if (icon) {
@@ -1586,47 +1576,36 @@ function drawContent(
 
   // The label sits on the pentagon's widest rows (it only just fits), centred in what
   // the panel has free there this frame, with the icon above and the tab below.
-  const tw = Math.min(stamp.w - 8, measureText(text, opts));
-  const w = plate ? tw + 8 : tw;
-  const h =
-    (opts === F.BIG || opts === F.BIG_DIGITS ? 7 : 5) * 2 + (plate ? 4 : 0);
+  const w = Math.min(stamp.w - 8, measureText(text, opts));
+  const h = (opts === F.BIG || opts === F.BIG_DIGITS ? 7 : 5) * 2;
   const top = icon ? textTop(cy, h) : cy - halfRows(h);
   const free = freeRun(f, cx, top, h, minE(ringAt + 2));
   const left = free > 0 ? runLo + ((free - w) >> 1) : cx - (w >> 1);
   const mid = left + (w >> 1);
 
   stamp.erase(0, 0, stamp.w, stamp.h);
-  if (plate) {
-    // A score: a chalk plate with dark digits, so it reads as a result, not a name.
-    const paper = mode === CHOSEN ? P.white : tones.chalk;
-    plateShape(w, h, paper);
-    drawText(stamp, text, 4, 2, slotDeep[i] as Color, opts);
-  } else {
-    drawText(stamp, text, 0, 0, badge && mode === NORMAL ? iconInk : ink, opts);
-  }
+  drawText(stamp, text, 0, 0, badge && mode === NORMAL ? iconInk : ink, opts);
   plotStamp(s, w, h, left, top, f);
   if (!icon) return;
   plotSprite(s, icon, mid - (icon.w >> 1), top - 2 - icon.h, f, iconInk);
-  if (!plate) {
-    // The tab: a little bar in the button's colour.
-    const tab =
-      mode === NORMAL
-        ? (slotColor[o + 1] as Color)
-        : mode === CHOSEN
-          ? accent.base
-          : ink;
-    const half = (bigIcons ? 5 : 3) * 2;
-    const edge = minE(inkEdge);
-    for (let y = top + h + 4; y < top + h + 8; y++) {
-      for (let x = mid - half; x <= mid + half; x++) {
-        if (spot(s, x, y, f, edge) >= 0) s.data[y * s.w + x] = tab;
-      }
+  // The tab: a little bar in the button's colour.
+  const tab =
+    mode === NORMAL
+      ? (slotColor[o + 1] as Color)
+      : mode === CHOSEN
+        ? accent.base
+        : ink;
+  const half = (bigIcons ? 5 : 3) * 2;
+  const edge = minE(inkEdge);
+  for (let y = top + h + 4; y < top + h + 8; y++) {
+    for (let x = mid - half; x <= mid + half; x++) {
+      if (spot(s, x, y, f, edge) >= 0) s.data[y * s.w + x] = tab;
     }
   }
 }
 
 /**
- * A plate (a score's, a word's tag) on the stamp, `w` by `h`, with clipped corners: a 45
+ * A plate (a word's tag) on the stamp, `w` by `h`, with clipped corners: a 45
  * degree chamfer of two pixels.
  */
 function plateShape(w: number, h: number, c: Color): void {

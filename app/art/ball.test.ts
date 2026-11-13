@@ -17,8 +17,8 @@ import { MODE_COLORS, P } from "./palette";
 const MENU: BallPatches = {
   left: { label: "HOME", icon: "home", accent: MODE_COLORS.home },
   right: { label: "AWAY", icon: "away", accent: MODE_COLORS.away },
-  top: { label: "NEXT-GEN", icon: "forward", locked: true },
-  bottom: { label: "RETRO", icon: "rewind", locked: true },
+  top: { label: "NEXT-GEN", icon: "nextgen", locked: true },
+  bottom: { label: "RETRO", icon: "retro", locked: true },
   backRight: { label: "CLOSEST", icon: "pin", locked: true },
   backLeft: { label: "FURTHEST", icon: "globe", locked: true },
   rimLeft: { label: "GUESS WHO", icon: "shirt", locked: true },
@@ -150,8 +150,8 @@ describe("drawBall", () => {
   it("frames every open patch in its mode's colour, on the menu's sizes, and never a locked one", () => {
     const era: BallPatches = {
       ...MENU,
-      top: { label: "NEXT-GEN", icon: "forward", accent: MODE_COLORS.nextgen },
-      bottom: { label: "RETRO", icon: "rewind", accent: MODE_COLORS.retro },
+      top: { label: "NEXT-GEN", icon: "nextgen", accent: MODE_COLORS.nextgen },
+      bottom: { label: "RETRO", icon: "retro", accent: MODE_COLORS.retro },
     };
     for (const r of [84, 88, 90]) {
       const state = ball({ r });
@@ -184,8 +184,8 @@ describe("drawBall", () => {
   it("writes NEXT-GEN and RETRO in their colours when their pose shows them, with no padlock", () => {
     const era: BallPatches = {
       ...MENU,
-      top: { label: "NEXT-GEN", icon: "forward", accent: MODE_COLORS.nextgen },
-      bottom: { label: "RETRO", icon: "rewind", accent: MODE_COLORS.retro },
+      top: { label: "NEXT-GEN", icon: "nextgen", accent: MODE_COLORS.nextgen },
+      bottom: { label: "RETRO", icon: "retro", accent: MODE_COLORS.retro },
     };
     for (const [slot, mode] of [
       ["top", "nextgen"],

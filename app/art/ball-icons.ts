@@ -1,7 +1,8 @@
 /**
  * The menu ball's 19 one-colour pictures (`ball.ts` draws them on its patches): the extra
- * pixels go into the shapes (a pitched roof with a chimney and a
- * round gable window, a swept-wing aeroplane, padlocks with a real shackle and keyhole, a
+ * pixels go into the shapes (a stadium's bowl with its pennants and the pitch's markings, a
+ * swept-wing aeroplane, a modern boot with its speed lines and an old high-laced one,
+ * padlocks with a real shackle and keyhole, a
  * pin with its hole, a globe's meridians, a shirt's collar and its 7, a goal's net and the
  * ball on the spot). Strokes are 2 px where the picture needs its weight.
  *
@@ -18,14 +19,14 @@ export interface BallIcons {
   lock: Sprite;
   lockMid: Sprite;
   lockSmall: Sprite;
-  forward: Sprite;
-  rewind: Sprite;
+  nextgen: Sprite;
+  retro: Sprite;
   pin: Sprite;
   globe: Sprite;
   shirt: Sprite;
   goal: Sprite;
-  forwardSmall: Sprite;
-  rewindSmall: Sprite;
+  nextgenSmall: Sprite;
+  retroSmall: Sprite;
   pinSmall: Sprite;
   globeSmall: Sprite;
   shirtSmall: Sprite;
@@ -34,62 +35,62 @@ export interface BallIcons {
 
 const W = "w";
 
-/** The same art, mirrored left to right (rewind from fast-forward). */
-function mirror(art: string): string {
-  return art
-    .split("\n")
-    .map((row) => Array.from(row).reverse().join(""))
-    .join("\n");
-}
-
+/**
+ * HOME: a stadium (the product owner, 2026-11-13: a stadium, not a house), the bowl from
+ * above and in front. Its rim is an oval with the pitch inside and a gap all round it; under
+ * the rim's front edge, a line of gap, then the bowl's outer wall. On this small one a
+ * single pennant flies from the far rim (three were too crowded at this size, and read as a
+ * crown) and the pitch is plain.
+ */
 const HOME = `
-........ww........
-.......wwww.ww....
-......wwwwwwww....
-.....wwwwwwwww....
+........wwww......
+........wwwwww....
+........wwww......
+........w.........
+........w.........
 ....wwwwwwwwww....
-...wwwww..wwwww...
-..wwwwww..wwwwww..
 .wwwwwwwwwwwwwwww.
+wwww..........wwww
+www..wwwwwwww..www
+www.wwwwwwwwww.www
+www..wwwwwwww..www
+.wwww........wwww.
+w..wwwwwwwwwwww..w
+ww..............ww
 wwwwwwwwwwwwwwwwww
-..wwwwwwwwwwwwww..
-..wwwwwwwwwwwwww..
-..wwwwwwwwwwwwww..
-..wwwww....wwwww..
-..wwwww....wwwww..
-..wwwww....wwwww..
-..wwwww....wwwww..
-..wwwww....wwwww..
-..wwwww....wwwww..
+wwwwwwwwwwwwwwwwww
+.wwwwwwwwwwwwwwww.
+....wwwwwwwwww....
 `;
 
+/** The big HOME: the same stadium with three pennants, and the halfway line through the centre circle. */
 const HOME_BIG = `
-............ww............
-...........wwww...........
-..........wwwwww..www.....
-.........wwwwwwww.www.....
-........wwwwwwwwwwwww.....
-.......wwwwwwwwwwwwww.....
-......wwwwwwwwwwwwwww.....
-.....wwwwwwwwwwwwwwww.....
-....wwwwwwww..wwwwwwww....
-...wwwwwwwww..wwwwwwwww...
-..wwwwwwwwwwwwwwwwwwwwww..
-.wwwwwwwwwwwwwwwwwwwwwwww.
+............www...........
+............wwwww.........
+.....www....www.....www...
+.....wwwww..w.......wwwww.
+.....www....w.......www...
+.....w......w.......w.....
+.....w......w.......w.....
+.....w..wwwwwwwwww..w.....
+....wwwwwwwwwwwwwwwwww....
+..wwww..............wwww..
+.www...wwwww..wwwww...www.
+www...wwwww....wwwww...www
+ww...wwwww.w..w.wwwww...ww
+ww...wwwww.w..w.wwwww...ww
+www..wwwwww....wwwwww..www
+.www..wwwwww..wwwwww..www.
+w.wwww..............wwww.w
+ww..wwwwwwwwwwwwwwwwww..ww
+wwww....wwwwwwwwww....wwww
+wwwwwwww..........wwwwwwww
 wwwwwwwwwwwwwwwwwwwwwwwwww
-...wwwwwwwwwwwwwwwwwwww...
-...wwwwwwwwwwwwwwwwwwww...
-...wwwwwwwwwwwwwwwwwwww...
-...ww...wwwwwwwwww...ww...
-...ww...www....www...ww...
-...ww...www....www...ww...
-...wwwwwwww....wwwwwwww...
-...wwwwwwww....wwwwwwww...
-...wwwwwwww..w.wwwwwwww...
-...wwwwwwww....wwwwwwww...
-...wwwwwwww....wwwwwwww...
-...wwwwwwww....wwwwwwww...
-...wwwwwwww....wwwwwwww...
+wwwwwwwwwwwwwwwwwwwwwwwwww
+.wwwwwwwwwwwwwwwwwwwwwwww.
+..wwwwwwwwwwwwwwwwwwwwww..
+....wwwwwwwwwwwwwwwwww....
+........wwwwwwwwww........
 `;
 
 const AWAY = `
@@ -193,34 +194,74 @@ wwwwwwwwww
 wwwwwwwwww
 `;
 
-const FORWARD = `
-w.......w.......
-ww......ww......
-www.....www.....
-wwww....wwww....
-wwwww...wwwww...
-wwwwww..wwwwww..
-wwwwwwwwwwwwwww.
-wwwwwwwwwwwwwww.
-wwwwww..wwwwww..
-wwwww...wwwww...
-wwww....wwww....
-www.....www.....
-ww......ww......
-w.......w.......
+/**
+ * NEXT-GEN: a modern boot, low and sleek, its toe pointing on (to the right, the future),
+ * with speed lines behind it (the product owner, 2026-11-13: football pictures, not a
+ * fast-forward).
+ */
+const NEXTGEN = `
+................
+................
+................
+....ww..........
+....www.ww......
+ww..wwwwwwww....
+....wwwwwwwwww..
+www.wwwwwwwwwww.
+....wwwwwwwwwwww
+ww..wwwwwwwwwwww
+....wwwwwwwwwwww
+.....ww..ww..ww.
+................
+................
 `;
 
-const FORWARD_SMALL = `
-w.....w.....
-ww....ww....
-www...www...
-wwww..wwww..
-wwwwwwwwwww.
-wwwwwwwwwww.
-wwww..wwww..
-www...www...
-ww....ww....
-w.....w.....
+/**
+ * RETRO: an old leather boot, laced high over the ankle, on bar studs, its toe pointing
+ * back (to the left, the past).
+ */
+const RETRO = `
+................
+...........wwww.
+...........wwww.
+..........w.www.
+...........wwww.
+..........w.www.
+.........w.wwww.
+......wwwwwwwww.
+...wwwwwwwwwwww.
+.wwwwwwwwwwwwww.
+wwwwwwwwwwwwwwww
+wwwwwwwwwwwwwwww
+.ww..ww..ww..ww.
+................
+`;
+
+/** The small NEXT-GEN: the boot alone, long and low (speed lines leave it too short to read). */
+const NEXTGEN_SMALL = `
+............
+............
+............
+.ww.........
+.www.ww.....
+.wwwwwwww...
+.wwwwwwwwww.
+.wwwwwwwwwww
+.wwwwwwwwwww
+..ww..ww..ww
+`;
+
+const RETRO_SMALL = `
+.......wwww.
+.......wwww.
+......w.www.
+.......wwww.
+.....w.wwww.
+...wwwwwwww.
+.wwwwwwwwww.
+wwwwwwwwwwww
+wwwwwwwwwwww
+.ww..ww..ww.
 `;
 
 const PIN = `
@@ -371,14 +412,14 @@ export function ballIcons(): BallIcons {
     lock: sprite(LOCK, W),
     lockMid: sprite(LOCK_MID, W),
     lockSmall: sprite(LOCK_SMALL, W),
-    forward: sprite(FORWARD, W),
-    rewind: sprite(mirror(FORWARD), W),
+    nextgen: sprite(NEXTGEN, W),
+    retro: sprite(RETRO, W),
     pin: sprite(PIN, W),
     globe: sprite(GLOBE, W),
     shirt: sprite(SHIRT, W),
     goal: sprite(goalArt(), W),
-    forwardSmall: sprite(FORWARD_SMALL, W),
-    rewindSmall: sprite(mirror(FORWARD_SMALL), W),
+    nextgenSmall: sprite(NEXTGEN_SMALL, W),
+    retroSmall: sprite(RETRO_SMALL, W),
     pinSmall: sprite(PIN_SMALL, W),
     globeSmall: sprite(GLOBE_SMALL, W),
     shirtSmall: sprite(SHIRT_SMALL, W),

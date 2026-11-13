@@ -284,11 +284,15 @@ crowd colours and kit differ.
 - In front of the picture floats a classic black and white football. **The ball is the menu**,
   the focus point of the screen: it hovers and does not rest on the ground. Its black patches
   are the options.
-- The two big patches facing the player are **HOME** (left, the house, warm red-orange: the most
-  common answer wins) and **AWAY** (right, the aeroplane, teal: the most uncommon answer wins).
+- The two big patches facing the player are **HOME** (left, a stadium with three pennants on
+  its rim, warm red-orange: the most common answer wins; it was a house until the product
+  owner asked for a stadium on 2026-11-13) and **AWAY** (right, the aeroplane, teal: the most uncommon answer wins).
 - Six more patches are **locked modes**, each with its own picture and a small padlock, in
-  quiet greys so that HOME and AWAY lead: **NEXT-GEN** on the patch above (a fast-forward: the
-  future), **RETRO** on the patch below (a rewind: the past), on the back of the ball, directly
+  quiet greys so that HOME and AWAY lead: **NEXT-GEN** on the patch above (a modern boot,
+  low, its toe pointing on, with speed lines: the future), **RETRO** on the patch below (an old
+  leather boot laced high over the ankle, its toe pointing back: the past; both were a
+  fast-forward and a rewind until the product owner asked for football pictures on
+  2026-11-13), on the back of the ball, directly
   behind AWAY and HOME, **CLOSEST** (a map pin) and **FURTHEST** (a globe): the old distance
   rules, closest to today's stadium and furthest from it; and on the rim, a quarter turn round
   out past HOME and past AWAY, **GUESS WHO** (the back of a shirt with its number) and
@@ -328,8 +332,10 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   minute (the first pass 6 seconds after the page opens), towing `DID YOU KNOW? ...` and the
   fact in painted letters on a rippling banner, at a reading pace (a letter a seventh of a
   second); at night its cabin and navigation lamps are lit and lamps along the banner light
-  it. On a monitor it flies in the sky beside the wordmark, behind the airship; on a phone just
-  under the airship. Before 2026-11-12 the fact scrolled on the airship's sign (the product
+  it. On a monitor it flies in the sky beside the wordmark, behind the airship. Not on a phone,
+  either way up (the product owner, 2026-11-13: "On a phone screen remove the plane with fun fact
+  since it's too crowded - that can be large screen only"): it flies where the screen's shorter
+  side is at least 500 px (`app/routes/home-plane.ts`), so a phone shows no fact. Before 2026-11-12 the fact scrolled on the airship's sign (the product
   owner, 2026-11-11: "The blimp should now say just a fun football daily fact instead"); it
   showed today's stadium before that; the stadium now belongs to the game screens. Sixty fact-checked facts
   in a fixed cycle, the first on day 1 (2026-11-10): `app/data/facts.ts`, notes in
@@ -342,7 +348,9 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
 - **The daily streak** (the product owner, 2026-11-12: "there should be a daily streak showing
   if the user comes on everyday to play then it should keep going up"): a small pixel flame and
   the days in a row with a finished game (`streakFor`, section 6.6) in the day plate under the
-  ball (`DAY 12` then the flame and `4`). The first time it is seen after it went up it hops
+  ball (`DAY 12` then the flame and `4`; on a monitor, where the plate is two rows tall, the
+  flame and `4` are on the second row, under the day, beside the heart: the product owner,
+  2026-11-13). The first time it is seen after it went up it hops
   and throws a ring of gold sparks. With no streak nothing shows. It is also on the full-time
   card (`STREAK 4` under the title) and one of the airship's messages. Screen readers hear
   "Daily streak: 4 days in a row".

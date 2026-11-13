@@ -204,6 +204,7 @@ class MenuScene implements Scene {
 
   // what the page tells it
   setFact(text: string): void; // a new fact on the banner (and the sign, with no messages); the same again does nothing
+  setPlane(on: boolean): void; // the plane and its banner fly (default) or not: the home page turns it off on a phone
   setSignMessages(messages: readonly MenuSign[]): void; // the sign's messages, one after another (none: the fact)
   setLabels(labels: MenuLabels): void; // a new header goes to the sign too
   setScores(scores: Partial<Record<Mode, number | null>>): void; // a badge on the patch; null takes it off
