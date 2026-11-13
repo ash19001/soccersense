@@ -468,7 +468,14 @@ describe("ruleFor", () => {
   });
 
   it("knows the distance rules apart from the popularity rules", () => {
-    expect(RULES).toEqual(["common", "niche", "closest", "furthest"]);
+    expect(RULES).toEqual([
+      "common",
+      "niche",
+      "oldest",
+      "newest",
+      "closest",
+      "furthest",
+    ]);
     expect(RULES.filter(isDistanceRule)).toEqual(["closest", "furthest"]);
   });
 });

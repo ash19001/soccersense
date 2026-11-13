@@ -8,7 +8,21 @@
  * once warm (the shadow cache fills once per light).
  */
 
+import type { Era } from "~/art/era";
 import { P } from "~/art/palette";
+import {
+  drawOldBall,
+  drawRetroConfetti,
+  drawRetroGoalFireworks,
+  retroBuildColors,
+} from "./career-fx-retro";
+import {
+  NEXTGEN_BOKEH_2,
+  NEXTGEN_TRAIL,
+  drawNextgenConfetti,
+  drawNextgenGoalFireworks,
+  nextgenBuildColors,
+} from "./career-fx-nextgen";
 import {
   TRANSPARENT,
   clamp,
@@ -19,6 +33,7 @@ import {
   sprite,
   drawSprite,
   type Color,
+  type Sprite,
   type Surface,
 } from "~/pixel";
 
@@ -38,15 +53,26 @@ function darkOf(c: Color): Color {
   return d;
 }
 
-/** A 1 px shadow row from x0 to x1 (inclusive) on row y, darkening what is there. */
-export function shadowRow(s: Surface, x0: number, x1: number, y: number): void {
-  const yy = Math.round(y);
-  if (yy < 0 || yy >= s.h) return;
+/**
+ * A shadow from x0 to x1 (inclusive) on row y, darkening what is there: one row, or
+ * `rows` rows down from y.
+ */
+export function shadowRow(
+  s: Surface,
+  x0: number,
+  x1: number,
+  y: number,
+  rows = 1,
+): void {
   const a = Math.max(0, Math.round(x0));
   const b = Math.min(s.w - 1, Math.round(x1));
-  for (let x = a; x <= b; x++) {
-    const c = s.get(x, yy);
-    if (c !== TRANSPARENT) s.px(x, yy, darkOf(c));
+  for (let k = 0; k < rows; k++) {
+    const yy = Math.round(y) + k;
+    if (yy < 0 || yy >= s.h) continue;
+    for (let x = a; x <= b; x++) {
+      const c = s.get(x, yy);
+      if (c !== TRANSPARENT) s.px(x, yy, darkOf(c));
+    }
   }
 }
 
@@ -94,16 +120,16 @@ export interface BuildArea {
 
 /**
  * The close-up's hole for a canvas `w` wide whose action band runs from `actionTop` to
- * `groundY`: in the middle of the stage, as big as fits (at 480 x 270, 222 x 106; on a
- * 130 px phone, 114 x 112).
+ * `groundY`: in the middle of the stage, as big as fits (at 960 x 540, 227 x 108; on a
+ * 260 px phone, 114 x 112).
  */
 export function closeUpSize(
   w: number,
   actionTop: number,
   groundY: number,
 ): { rx: number; ry: number; cy: number } {
-  const ry = Math.round(clamp((groundY - actionTop) * 0.95, 20, 70));
-  const rx = Math.round(Math.max(16, Math.min(w / 2 - 8, ry * 2.1)));
+  const ry = Math.round(clamp((groundY - actionTop) * 0.95, 40, 140));
+  const rx = Math.round(Math.max(32, Math.min(w / 2 - 16, ry * 2.1)));
   return { rx, ry, cy: Math.round((actionTop + groundY) / 2) };
 }
 
@@ -136,9 +162,18 @@ export interface BuildColors {
   patch: Color;
   patchHi: Color;
   ink: Color;
+  /** The era the close-up is drawn in (`~/art/era`); today's when absent. */
+  era?: Era;
 }
 
-export function buildColors(grade: (c: Color) => Color): BuildColors {
+export function buildColors(
+  grade: (c: Color) => Color,
+  era: Era = "today",
+): BuildColors {
+  // RETRO's rope net and old leather ball (career-fx-retro.ts)
+  if (era === "retro") return retroBuildColors(grade);
+  // NEXT-GEN's net of light and ball of glowing panels (career-fx-nextgen.ts)
+  if (era === "nextgen") return nextgenBuildColors(grade);
   return {
     hi: grade(P.white),
     base: grade(P.chalk),
@@ -182,15 +217,15 @@ export function drawBuild(
   const { top, bottom, w } = a;
   const front =
     t < BUILD.sweep
-      ? Math.round(-30 + (w + 60) * easeInOutCubic(t / BUILD.sweep))
-      : w + 30;
+      ? Math.round(-60 + (w + 120) * easeInOutCubic(t / BUILD.sweep))
+      : w + 60;
   const clear = clamp((t - BUILD.clear0) / (BUILD.clear1 - BUILD.clear0));
-  const drift = Math.round(clear * clear * 14);
-  const sink = Math.round(clear * 4);
+  const drift = Math.round(clear * clear * 28);
+  const sink = Math.round(clear * 8);
 
   // the body of the smoke: solid while it is thick
-  const bodyTop = top + 7;
-  const bodyBottom = bottom - 5;
+  const bodyTop = top + 14;
+  const bodyBottom = bottom - 10;
   const solid = 1 - clear * 3;
   if (solid > 0 && front > 0) {
     if (solid >= 1) s.rect(0, bodyTop, front, bodyBottom - bodyTop, c.base);
@@ -198,52 +233,50 @@ export function drawBuild(
   }
 
   // puffs along the top, the bottom and the leading edge, and clumps inside
-  const step = 9;
+  const step = 18;
   for (let col = -1; col * step < w + step; col++) {
-    const x = col * step + Math.round(hash2(col, 1, seed) * 5) + drift;
-    if (x - 12 > front) break;
+    const x = col * step + Math.round(hash2(col, 1, seed) * 10) + drift;
+    if (x - 24 > front) break;
     // top edge: billows lit from the top left
     if (!gone(col, 11, seed, clear)) {
-      const r = 6 + Math.round(hash2(col, 2, seed) * 3);
-      const y = top + 6 + Math.round(hash2(col, 3, seed) * 3) + sink;
+      const r = (6 + Math.round(hash2(col, 2, seed) * 3)) * 2;
+      const y = top + (6 + Math.round(hash2(col, 3, seed) * 3)) * 2 + sink;
       s.disc(x, y, r, c.base);
-      s.disc(x - 2, y - 2, r - 3, c.hi);
+      s.disc(x - 4, y - 4, r - 6, c.hi);
     }
     // bottom edge: rolling along the grass, darker underneath
     if (!gone(col, 12, seed, clear)) {
-      const r = 5 + Math.round(hash2(col, 4, seed) * 3);
-      const y = bottom - 5 + Math.round(hash2(col, 5, seed) * 2);
-      s.disc(x, y + 1, r, c.shade);
-      s.disc(x - 1, y - 1, r - 1, c.base);
+      const r = (5 + Math.round(hash2(col, 4, seed) * 3)) * 2;
+      const y = bottom + (-5 + Math.round(hash2(col, 5, seed) * 2)) * 2;
+      s.disc(x, y + 2, r, c.shade);
+      s.disc(x - 2, y - 2, r - 2, c.base);
     }
     // billows inside (every other one while it is thick), clumps once it breaks up
-    for (let row = 1; bodyTop + row * 10 < bodyBottom; row++) {
+    for (let row = 1; bodyTop + row * 20 < bodyBottom; row++) {
       if (clear === 0 && ((col + row) & 1) === 1) continue;
       if (gone(col, 20 + row, seed, clear)) continue;
-      const r = 5 + Math.round(hash2(col, 30 + row, seed) * 3);
+      const r = (5 + Math.round(hash2(col, 30 + row, seed) * 3)) * 2;
       const y =
         bodyTop +
-        row * 10 -
-        3 +
-        Math.round(hash2(col, 40 + row, seed) * 4) +
+        (row * 10 - 3 + Math.round(hash2(col, 40 + row, seed) * 4)) * 2 +
         sink;
-      s.disc(x + 1, y + 1, r, c.shade);
-      s.disc(x, y, r - 1, c.base);
-      s.disc(x - 2, y - 2, Math.max(0, r - 4), c.hi);
+      s.disc(x + 2, y + 2, r, c.shade);
+      s.disc(x, y, r - 2, c.base);
+      s.disc(x - 4, y - 4, Math.max(0, r - 8), c.hi);
     }
   }
 
   // texture: a few lighter swirls and darker hollows in the body
   if (solid > 0.5) {
     for (let i = 0; i < 26; i++) {
-      const x = Math.round(hash2(i, 70, seed) * w + t * 12) % w;
-      if (x > front - 6) continue;
+      const x = Math.round(hash2(i, 70, seed) * w + t * 24) % w;
+      if (x > front - 12) continue;
       const y =
         bodyTop +
-        3 +
-        Math.round(hash2(i, 71, seed) * (bodyBottom - bodyTop - 6));
-      if (i % 3 === 0) s.disc(x, y, 2, c.shade, 0.5);
-      else s.disc(x, y, 2 + (i % 2), c.hi);
+        6 +
+        Math.round(hash2(i, 71, seed) * (bodyBottom - bodyTop - 12));
+      if (i % 3 === 0) s.disc(x, y, 4, c.shade, 0.5);
+      else s.disc(x, y, (2 + (i % 2)) * 2, c.hi);
     }
   }
 
@@ -257,15 +290,15 @@ export function drawBuild(
   // the leading edge, rolling over itself (and over the cloud)
   if (t < BUILD.sweep + 0.05) {
     for (
-      let y = Math.min(top, a.cy - a.ry) + 4, i = 0;
-      y < Math.max(bottom, a.cy + a.ry + 4);
-      y += 8, i++
+      let y = Math.min(top, a.cy - a.ry) + 8, i = 0;
+      y < Math.max(bottom, a.cy + a.ry + 8);
+      y += 16, i++
     ) {
-      const r = 7 + Math.round(hash2(i, 50, seed) * 3);
-      const x = front - 4 + Math.round(hash2(i, 51, seed) * 4);
+      const r = (7 + Math.round(hash2(i, 50, seed) * 3)) * 2;
+      const x = front + (-4 + Math.round(hash2(i, 51, seed) * 4)) * 2;
       s.disc(x, y, r, c.base);
-      s.disc(x - 2, y - 2, r - 3, c.hi);
-      s.disc(x + 3, y + 3, r - 4, c.shade);
+      s.disc(x - 4, y - 4, r - 6, c.hi);
+      s.disc(x + 6, y + 6, r - 8, c.shade);
     }
   }
 }
@@ -302,7 +335,7 @@ function drawCloud(
 ): void {
   const { cx, cy, rx, ry } = a;
   // how far the cloud reaches past the hole
-  const m = Math.max(7, Math.round(ry * 0.2));
+  const m = Math.max(14, Math.round(ry * 0.2));
   const orx = rx + m;
   const ory = ry + m;
   if (solid > 0)
@@ -317,23 +350,24 @@ function drawCloud(
     );
   const k = holeAt(t);
   // billows all through it (the open hole covers those in its middle), clumps as it clears
-  for (let j = 0, row = 8 - ory; row < ory - 5; j++, row += 14) {
-    const half = orx * Math.sqrt(Math.max(0, 1 - (row / ory) ** 2)) - 8;
-    for (let i = 0, col = (j & 1) * 7 - half; col < half; i++, col += 14) {
+  for (let j = 0, row = 16 - ory; row < ory - 10; j++, row += 28) {
+    const half = orx * Math.sqrt(Math.max(0, 1 - (row / ory) ** 2)) - 16;
+    for (let i = 0, col = (j & 1) * 14 - half; col < half; i++, col += 28) {
       const id = i * 31 + j;
       if (gone(id, 83, seed, clear)) continue;
       const hx = k > 0 ? col / (rx * k) : 9;
       const hy = k > 0 ? row / (ry * k) : 9;
       if (hx * hx + hy * hy < 0.6) continue;
-      const r = Math.round(7 + hash2(id, 84, seed) * 4);
-      const x = Math.round(cx + col + hash2(id, 85, seed) * 4) + drift;
-      const y = Math.round(cy + row + hash2(id, 86, seed) * 4) + sink;
-      s.disc(x + 1, y + 1, r, c.shade);
-      s.disc(x, y, r - 1, c.base);
-      s.disc(x - 2, y - 2, Math.max(0, r - 4), c.hi);
+      const r = Math.round(7 + hash2(id, 84, seed) * 4) * 2;
+      const x = Math.round(cx + col + hash2(id, 85, seed) * 8) + drift;
+      const y = Math.round(cy + row + hash2(id, 86, seed) * 8) + sink;
+      s.disc(x + 2, y + 2, r, c.shade);
+      s.disc(x, y, r - 2, c.base);
+      s.disc(x - 4, y - 4, Math.max(0, r - 8), c.hi);
     }
   }
-  const n = Math.max(12, Math.round((orx + ory) * 0.3));
+  // the puffs round its rim
+  const n = Math.max(12, Math.round(((orx + ory) * 0.3) / 2));
   for (let i = 0; i < n; i++) {
     if (gone(i, 80, seed, clear)) continue;
     const ang = ((i + hash2(i, 81, seed) * 0.4) / n) * Math.PI * 2;
@@ -343,9 +377,9 @@ function drawCloud(
     );
     const x = Math.round(cx + Math.cos(ang) * (orx - r * 0.4)) + drift;
     const y = Math.round(cy + Math.sin(ang) * (ory - r * 0.4)) + sink;
-    s.disc(x + 1, y + 1, r, c.shade);
-    s.disc(x, y, r - 1, c.base);
-    s.disc(x - 2, y - 2, Math.max(0, r - 4), c.hi);
+    s.disc(x + 2, y + 2, r, c.shade);
+    s.disc(x, y, r - 2, c.base);
+    s.disc(x - 4, y - 4, Math.max(0, r - 8), c.hi);
   }
   if (k > 0) drawCloseUp(s, t, a, c, seed, k, m);
 }
@@ -412,14 +446,16 @@ function drawCloseUp(
     const y = Math.round(cy - ry * (0.45 - hash2(i, 97, seed) * 0.35));
     const r = Math.round(ry * (0.06 + hash2(i, 98, seed) * 0.05));
     if (!inHole(x, y)) continue;
-    s.disc(x, y, r, c.bokeh, 0.25);
-    s.disc(x, y, Math.max(1, r - 2), c.bokeh, 0.5);
+    // NEXT-GEN's arena lights: cyan and magenta by turns
+    const bk = c.era === "nextgen" && (i & 1) === 1 ? NEXTGEN_BOKEH_2 : c.bokeh;
+    s.disc(x, y, r, bk, 0.25);
+    s.disc(x, y, Math.max(2, r - 4), bk, 0.5);
   }
 
-  // the far netting, out of focus: a dotted mesh twice the size
-  const R = Math.max(5, Math.round(Math.min(ry * 0.48, rx * 0.36)));
-  const gx = Math.max(3, Math.round(R * 0.3));
-  const gy = Math.max(3, Math.round(R * 0.36));
+  // the far netting, out of focus: a dotted mesh twice the size (its strings 1 px)
+  const R = Math.max(10, Math.round(Math.min(ry * 0.48, rx * 0.36)));
+  const gx = Math.max(6, Math.round(R * 0.3));
+  const gy = Math.max(6, Math.round(R * 0.36));
   meshLattice(s, cx + gx, cy + gy, rx, ry, gx * 2, gy * 2, c, true);
 
   // the ball: in at us out of the goal, then held by the net, still turning
@@ -436,13 +472,14 @@ function drawCloseUp(
     if (v > 0) {
       bx = Math.round(lerp(cx - rx - R, restX, v));
       by = Math.round(lerp(restY + R * 0.7, restY, v));
-      br = Math.max(2, Math.round(R / (1 + 1.2 * (1 - v))));
+      br = Math.max(4, Math.round(R / (1 + 1.2 * (1 - v))));
       turn = t * 16;
       // the rush of it: streaks behind
       for (let j = -1; j <= 1; j++) {
         const yy = by + Math.round(j * br * 0.55);
         const tail = Math.round(R * (1.4 - 0.4 * Math.abs(j)));
-        streak(s, bx - br - 2 - tail, yy, tail, c.hi);
+        const trail = c.era === "nextgen" ? NEXTGEN_TRAIL : c.hi;
+        streak(s, bx - br - 4 - tail, yy, tail, trail);
       }
     } else {
       br = 0;
@@ -450,10 +487,12 @@ function drawCloseUp(
   } else {
     // the net takes it: out past where it settles, back, and held there
     press = 0.85 * (1 - Math.exp(-7 * u) * Math.cos(18 * u));
-    bx = restX + Math.round(press * 3);
+    bx = restX + Math.round(press * 6);
     turn = BUILD.hit * 16 + (16 * (1 - Math.exp(-3 * u))) / 3;
   }
-  if (br > 0) bigBall(s, bx, by, br, turn, 0.5 + turn * 0.12, c);
+  if (br > 0 && c.era === "retro") {
+    drawOldBall(s, bx, by, br, turn, 0.5 + turn * 0.12, c, inHole);
+  } else if (br > 0) bigBall(s, bx, by, br, turn, 0.5 + turn * 0.12, c);
 
   // the back of the net in front of it: a diamond mesh, pulled into a pocket round it
   pocket.bx = bx;
@@ -463,7 +502,7 @@ function drawCloseUp(
   meshLattice(s, cx, cy, rx, ry, gx, gy, c, false);
 
   // the smoke round the hole, drifting slowly round it
-  const n = Math.max(8, Math.round((hrx + hry) * 0.17));
+  const n = Math.max(8, Math.round(((hrx + hry) * 0.17) / 2));
   for (let i = 0; i < n; i++) {
     const ang = ((i + hash2(i, 90, seed) * 0.6) / n) * Math.PI * 2 + t * 0.2;
     // shrinking with the hole as it closes
@@ -473,9 +512,9 @@ function drawCloseUp(
     const out = r * (0.25 + hash2(i, 95, seed) * 0.35);
     const x = Math.round(cx + Math.cos(ang) * (hrx + out));
     const y = Math.round(cy + Math.sin(ang) * (hry + out));
-    s.disc(x + 1, y + 1, r, c.shade);
-    s.disc(x, y, r - 1, c.base);
-    s.disc(x - 2, y - 2, Math.max(0, r - 4), c.hi);
+    s.disc(x + 2, y + 2, r, c.shade);
+    s.disc(x, y, r - 2, c.base);
+    s.disc(x - 4, y - 4, Math.max(0, r - 8), c.hi);
   }
 }
 
@@ -580,7 +619,7 @@ function meshLattice(
   c: BuildColors,
   far: boolean,
 ): void {
-  const pad = far ? 0 : pocket.r * 1.2 + 4;
+  const pad = far ? 0 : pocket.r * 1.2 + 8;
   const i0 = Math.floor((-rx - pad) / gx) - 1;
   const i1 = Math.ceil((rx + pad) / gx) + 1;
   const j0 = Math.floor((-ry - pad) / gy) - 1;
@@ -613,6 +652,13 @@ function meshLattice(
       const x = Math.round(warped.x);
       const y = Math.round(warped.y);
       if (!inHole(x, y) || onBall(x, y)) continue;
+      if (c.era === "nextgen") {
+        // a knot of light: its glow round it, a plus in the string's colour
+        s.px(x - 1, y, c.net);
+        s.px(x + 1, y, c.net);
+        s.px(x, y - 1, c.net);
+        s.px(x, y + 1, c.net);
+      }
       s.px(x, y, c.knot);
     }
   }
@@ -665,6 +711,10 @@ function netLine(
         );
       } else {
         s.px(x, y, inFlank(x, y) ? c.netShade : c.net);
+        // RETRO's net is thick rope: each string has its shaded underside
+        if (c.era === "retro" && inHole(x, y + 1) && !onBall(x, y + 1)) {
+          s.px(x, y + 1, c.netShade);
+        }
       }
     }
     if (x === x1 && y === y1) break;
@@ -1009,11 +1059,39 @@ export function drawGoalFireworks(
   roofY: number,
   seed: number,
   modeColor: Color,
+  era: Era = "today",
 ): void {
   if (!(age >= 0)) return;
+  // RETRO's rockets on sticks and gold willows (career-fx-retro.ts)
+  if (era === "retro") {
+    drawRetroGoalFireworks(s, age, n, size, x0, x1, roofY, seed);
+    return;
+  }
+  // NEXT-GEN's bursts of light (career-fx-nextgen.ts)
+  if (era === "nextgen") {
+    drawNextgenGoalFireworks(s, age, n, size, x0, x1, roofY, seed, modeColor);
+    return;
+  }
   BURST[3] = modeColor;
   const z = clamp(Number(size) || 0);
   const tt = Math.floor(age * 15) / 15;
+  fireworks(s, tt, n, z, x0, x1, roofY, seed);
+}
+
+/**
+ * The fireworks' bursts: the rocket's trail 1 px wide, each spark a short streak pointing
+ * out (a lit tip and its tail), the flash 2 x 2.
+ */
+function fireworks(
+  s: Surface,
+  tt: number,
+  n: number,
+  z: number,
+  x0: number,
+  x1: number,
+  roofY: number,
+  seed: number,
+): void {
   const RISE = 0.3;
   const LIFE = 1.1;
   for (let i = 0; i < n; i++) {
@@ -1023,24 +1101,28 @@ export function drawGoalFireworks(
     const bx = Math.round(
       x0 + ((i * 0.618 + hash2(i, 2, seed) * 0.3) % 1) * (x1 - x0),
     );
-    const high = 14 + 8 * z;
-    const by = Math.max(4, Math.round(roofY - 6 - hash2(i, 3, seed) * high));
+    const high = (14 + 8 * z) * 2;
+    const by = Math.max(8, Math.round(roofY - 12 - hash2(i, 3, seed) * high));
     const col =
       BURST[Math.floor(hash2(i, 4, seed) * BURST.length) % BURST.length];
     const col2 =
       BURST[Math.floor(hash2(i, 5, seed) * BURST.length) % BURST.length];
     if (a < RISE) {
-      const y = Math.round(by + (1 - a / RISE) * (roofY - by + 4));
-      s.px(bx, y, P.goldLight);
-      s.px(bx, y + 1, P.amber);
-      s.px(bx, y + 2, P.amberDim);
+      const y = Math.round(by + (1 - a / RISE) * (roofY - by + 8));
+      s.px(bx, y, P.white);
+      s.px(bx, y + 1, P.goldLight);
+      s.px(bx, y + 2, P.goldLight);
+      s.px(bx, y + 3, P.amber);
+      s.px(bx, y + 4, P.amber);
+      s.px(bx, y + 5, P.amberDim);
+      if (Math.floor(a * 30) % 2 === 0) s.px(bx, y + 7, P.amberDim);
       continue;
     }
     const u = (a - RISE) / LIFE;
-    const rMax = 5 + 5 * z + hash2(i, 6, seed) * (3 + z);
-    const r = 1 + Math.round(Math.sqrt(u) * rMax);
-    const drop = Math.round(u * u * 5);
-    const spokes = 10 + Math.round(4 * z);
+    const rMax = (5 + 5 * z + hash2(i, 6, seed) * (3 + z)) * 2;
+    const r = 2 + Math.round(Math.sqrt(u) * rMax);
+    const drop = Math.round(u * u * 10);
+    const spokes = (10 + Math.round(4 * z)) * 2;
     for (let k = 0; k < spokes; k++) {
       if (
         u > 0.55 &&
@@ -1049,18 +1131,26 @@ export function drawGoalFireworks(
         continue;
       }
       const ang = (k / spokes) * Math.PI * 2 + i;
-      const x = Math.round(bx + Math.cos(ang) * r);
-      const y = Math.round(by + Math.sin(ang) * r * 0.9) + drop;
-      s.px(x, y, k % 2 === 0 ? col : col2);
-      if (u < 0.4 && r > 3) {
+      const cs = Math.cos(ang);
+      const sn = Math.sin(ang) * 0.9;
+      const c = k % 2 === 0 ? col : col2;
+      s.px(Math.round(bx + cs * r), Math.round(by + sn * r) + drop, c);
+      if (r > 4) {
         s.px(
-          Math.round(bx + Math.cos(ang) * (r - 2)),
-          Math.round(by + Math.sin(ang) * (r - 2) * 0.9) + drop,
+          Math.round(bx + cs * (r - 1.5)),
+          Math.round(by + sn * (r - 1.5)) + drop,
+          c,
+        );
+      }
+      if (u < 0.4 && r > 6) {
+        s.px(
+          Math.round(bx + cs * (r - 4)),
+          Math.round(by + sn * (r - 4)) + drop,
           col,
         );
       }
     }
-    if (u < 0.12) s.px(bx, by, P.white);
+    if (u < 0.12) s.rect(bx - 1, by - 1, 2, 2, P.white);
   }
 }
 
@@ -1091,30 +1181,40 @@ export function drawConfetti(
   seed: number,
   mode: Color,
   modeLight: Color,
+  era: Era = "today",
 ): void {
   if (!(t >= 0)) return;
+  // RETRO's paper, caps and bowlers (career-fx-retro.ts)
+  if (era === "retro") {
+    drawRetroConfetti(s, t, x0, x1, top, bottom, seed, mode, modeLight);
+    return;
+  }
+  // NEXT-GEN's glowing confetti (career-fx-nextgen.ts)
+  if (era === "nextgen") {
+    drawNextgenConfetti(s, t, x0, x1, top, bottom, seed, mode, modeLight);
+    return;
+  }
   CONFETTI[3] = mode;
   CONFETTI[4] = modeLight;
   const span = Math.max(1, bottom - top);
   const width = Math.max(1, x1 - x0);
-  const count = Math.round(Math.min(140, width * 0.45));
+  // each a little card that tumbles (face on, side on, edge on)
+  const count = Math.round(Math.min(140, (width * 0.45) / 2));
   const flutter = Math.floor(t * 6);
   for (let i = 0; i < count; i++) {
-    const speed = 12 + hash2(i, 1, seed) * 16;
+    const speed = (12 + hash2(i, 1, seed) * 16) * 2;
     const fall = t * speed - hash2(i, 2, seed) * span * 1.3;
     if (fall < 0) continue;
     const y = top + (fall % span);
-    const sway = Math.sin(t * (1.5 + hash2(i, 3, seed)) + i) * 2.2;
+    const sway = Math.sin(t * (1.5 + hash2(i, 3, seed)) + i) * 4.4;
     const x = Math.round(x0 + hash2(i, 4, seed) * width + sway);
     const c = CONFETTI[i % CONFETTI.length];
     const yy = Math.round(y);
-    if ((flutter + i) % 3 === 0) {
-      s.px(x, yy, c);
-      s.px(x, yy + 1, c);
-    } else {
-      s.px(x, yy, c);
-      s.px(x + 1, yy, c);
-    }
+    const turn = (flutter + i) % 4;
+    if (turn === 0) s.rect(x, yy, 2, 4, c);
+    else if (turn === 1) s.rect(x, yy, 4, 2, c);
+    else if (turn === 2) s.rect(x, yy, 3, 3, c);
+    else s.rect(x, yy + 1, 4, 1, c);
   }
 }
 
@@ -1122,26 +1222,30 @@ export function drawConfetti(
 // The whistle and the gold burst
 // ---------------------------------------------------------------------------
 
-// A referee's whistle seen side on: the round chamber, the hole on top, the mouthpiece.
-// k ink, w body, m shade, o the hole.
-const WHISTLE = sprite(
-  `
-..kkkk....
-.kwwwwkkkk
-kwwookwwwk
-kwmmmmmmmk
-.kmmmkkkkk
-..kkk.....
-`,
-  "kwmo",
-);
-
 const whistleColors: Color[] = [
   TRANSPARENT,
   TRANSPARENT,
   TRANSPARENT,
   TRANSPARENT,
+  TRANSPARENT,
 ];
+
+// A referee's whistle seen side on, 20 x 10: the round chamber with a glint, the slot on its top,
+// the mouthpiece to the right. k ink, w body, m shade, o the slot, h the glint (the sign's
+// paper). Built on first use.
+let whistleArt: Sprite | undefined;
+const WHISTLE = `
+...kkkkkk...........
+.kkwwwwwwkk.........
+kwwhhwwkookkkkkkkkkk
+kwhwwwwwwwwwwwwwwwwk
+kwwwwwwwwwwwwwwwwwwk
+kwwwwwwwwmmmmmmmmmmk
+kwwwwwwwmkkkkkkkkkkk
+kmwwwwwmmk..........
+.kmmmmmmk...........
+..kkkkkk............
+`;
 
 /**
  * The whistle sign: a little chalk sign with a whistle on it, its tail pointing down at
@@ -1163,31 +1267,67 @@ export function drawWhistle(
   whistleColors[1] = body;
   whistleColors[2] = bodyShade;
   whistleColors[3] = ink;
-  // it pops up, then sits with a small bob while it blows
-  const lift = age < 0.06 ? 2 : age < 0.12 ? 1 : 0;
-  const bob = age > 0.3 && Math.floor(age * 3) % 2 === 1 ? 1 : 0;
-  const W = 19;
-  const H = 10;
-  const x0 = x - 9;
-  const y0 = y - H - 3 - lift - bob;
-  // the sign, corners rounded off, and its tail
-  s.rect(x0 + 1, y0 + 1, W - 2, H - 2, paper);
-  s.hline(x0 + 1, y0, W - 2, ink);
-  s.hline(x0 + 1, y0 + H - 1, W - 2, ink);
-  s.vline(x0, y0 + 1, H - 2, ink);
-  s.vline(x0 + W - 1, y0 + 1, H - 2, ink);
-  s.px(x - 1, y0 + H, ink);
-  s.px(x, y0 + H, paper);
-  s.px(x + 1, y0 + H, ink);
-  s.px(x, y0 + H + 1, ink);
-  // the whistle, and the blast coming out of it to the left, on and off
-  drawSprite(s, WHISTLE, 0, x0 + 7, y0 + 2, whistleColors);
+  whistleColors[4] = paper;
+  whistleSign(s, x, y, age, ink, paper);
+}
+
+/**
+ * The whistle sign: 38 x 20, its corners rounded, a 1 px
+ * ink edge, its tail a V pointing at (x, y) four rows under it; the whistle 20 x 10 with
+ * three lines of its blast fanning out to the left. Pops up 4 px, bobs 2.
+ */
+function whistleSign(
+  s: Surface,
+  x: number,
+  y: number,
+  age: number,
+  ink: Color,
+  paper: Color,
+): void {
+  const lift = age < 0.06 ? 4 : age < 0.12 ? 2 : 0;
+  const bob = age > 0.3 && Math.floor(age * 3) % 2 === 1 ? 2 : 0;
+  const W = 38;
+  const H = 20;
+  const x0 = x - 19;
+  const y0 = y - H - 5 - lift - bob;
+  s.rect(x0 + 1, y0 + 2, W - 2, H - 4, paper);
+  s.hline(x0 + 2, y0 + 1, W - 4, paper);
+  s.hline(x0 + 2, y0 + H - 2, W - 4, paper);
+  s.hline(x0 + 2, y0, W - 4, ink);
+  s.hline(x0 + 2, y0 + H - 1, W - 4, ink);
+  s.vline(x0, y0 + 2, H - 4, ink);
+  s.vline(x0 + W - 1, y0 + 2, H - 4, ink);
+  s.px(x0 + 1, y0 + 1, ink);
+  s.px(x0 + W - 2, y0 + 1, ink);
+  s.px(x0 + 1, y0 + H - 2, ink);
+  s.px(x0 + W - 2, y0 + H - 2, ink);
+  // the tail, under the middle (between columns x - 1 and x)
+  const ty = y0 + H - 1;
+  s.px(x - 3, ty, ink);
+  s.hline(x - 2, ty, 4, paper);
+  s.px(x + 2, ty, ink);
+  s.px(x - 2, ty + 1, ink);
+  s.hline(x - 1, ty + 1, 2, paper);
+  s.px(x + 1, ty + 1, ink);
+  s.hline(x - 1, ty + 2, 2, ink);
+  drawSprite(
+    s,
+    (whistleArt ??= sprite(WHISTLE, "kwmoh")),
+    0,
+    x0 + 14,
+    y0 + 5,
+    whistleColors,
+  );
   if (age < 0.4 || Math.floor(age * 6) % 2 === 0) {
-    s.px(x0 + 4, y0 + 2, ink);
-    s.px(x0 + 5, y0 + 3, ink);
-    s.hline(x0 + 2, y0 + 5, 3, ink);
-    s.px(x0 + 5, y0 + 7, ink);
-    s.px(x0 + 4, y0 + 8, ink);
+    s.px(x0 + 7, y0 + 4, ink);
+    s.px(x0 + 8, y0 + 5, ink);
+    s.px(x0 + 9, y0 + 6, ink);
+    s.px(x0 + 10, y0 + 7, ink);
+    s.hline(x0 + 4, y0 + 10, 7, ink);
+    s.px(x0 + 10, y0 + 13, ink);
+    s.px(x0 + 9, y0 + 14, ink);
+    s.px(x0 + 8, y0 + 15, ink);
+    s.px(x0 + 7, y0 + 16, ink);
   }
 }
 
@@ -1238,23 +1378,36 @@ export function drawGoldBurst(
   age: number,
 ): void {
   if (!(age >= 0) || age >= 0.45) return;
-  const r = 2 + Math.round(age * 22);
-  for (let k = 0; k < 10; k++) {
+  goldBurst(s, x, y, age);
+}
+
+/**
+ * The gold burst: the ring and its sparks (each a lit tip and a tail pointing out), the
+ * flash round the ball's middle (between columns x - 1 and x: the 6 x 6 ball is centred
+ * there).
+ */
+function goldBurst(s: Surface, x: number, y: number, age: number): void {
+  const r = 4 + Math.round(age * 44);
+  const cx = x - 0.5;
+  const cy = y - 0.5;
+  for (let k = 0; k < 20; k++) {
     if (age > 0.25 && (k + Math.floor(age * 20)) % 3 === 0) continue;
-    const ang = (k / 10) * Math.PI * 2 + 0.3;
-    const px = Math.round(x + Math.cos(ang) * r);
-    const py = Math.round(y + Math.sin(ang) * r);
-    s.px(px, py, k % 2 === 0 ? P.gold : P.goldLight);
+    const ang = (k / 20) * Math.PI * 2 + 0.3;
+    const cs = Math.cos(ang);
+    const sn = Math.sin(ang);
+    const c = k % 2 === 0 ? P.gold : P.goldLight;
+    s.px(Math.round(cx + cs * r), Math.round(cy + sn * r), c);
+    s.px(Math.round(cx + cs * (r - 1.5)), Math.round(cy + sn * (r - 1.5)), c);
     if (age < 0.2) {
       s.px(
-        Math.round(x + Math.cos(ang) * (r - 2)),
-        Math.round(y + Math.sin(ang) * (r - 2)),
+        Math.round(cx + cs * (r - 4)),
+        Math.round(cy + sn * (r - 4)),
         P.goldLight,
       );
     }
   }
   if (age < 0.08) {
-    s.disc(x, y, 2, P.goldLight);
-    s.px(x, y, P.white);
+    s.disc(x, y, 4, P.goldLight);
+    s.rect(x - 1, y - 1, 2, 2, P.white);
   }
 }

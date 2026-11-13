@@ -11,6 +11,11 @@ import { createContext, useContext, useSyncExternalStore } from "react";
  * CSS pixels, which makes them fractions at a fractional device pixel ratio: 3.2 CSS px at
  * 125% is exactly 4 device pixels. At ratios 1, 2 and 3 they are the whole numbers they
  * always were.
+ *
+ * The canvas has values of its own (`canvasW`, `canvasH`, `canvasDp`, `canvasPx`): its
+ * pixels are half the size of the interface's logical pixels, rounded up to whole device
+ * pixels (`canvasDpFor`), so it has about twice as many each way (960 x 540 at
+ * 1920 x 1080, where the interface's logical canvas is 480 x 270).
  */
 export interface PixelScale {
   /**
@@ -47,6 +52,20 @@ export interface PixelScale {
    * to one CSS pixel. Exactly 1 at ratios 1, 2 and 3; 0.8 at 125%.
    */
   snap: number;
+  /**
+   * The canvas's logical width: ceil(device width / canvasDp). About twice `logicalW` (960
+   * at 1920 x 1080). The interface never uses it.
+   */
+  canvasW: number;
+  /** The canvas's logical height: ceil(device height / canvasDp). */
+  canvasH: number;
+  /**
+   * Device pixels per canvas pixel: `canvasDpFor(dp)`. A whole number, at least 1 (1 only
+   * where `dp` is 2).
+   */
+  canvasDp: number;
+  /** CSS pixels per canvas pixel: `canvasDp / dpr`. */
+  canvasPx: number;
 }
 
 export const MIN_PX = 2;
@@ -73,6 +92,22 @@ export const COLUMN_LOGICAL_WIDTH = 135;
  */
 export const WIDE_ROW_PX = 60;
 export const WIDE_ROW_CP = 480;
+
+/**
+ * Device pixels per CANVAS pixel, from `dp`, the device pixels per logical pixel of the
+ * interface: max(1, ceil(dp / 2)), half the size, rounded up to whole device pixels.
+ *
+ * So an even `dp` gives a canvas exactly twice the interface's logical canvas each way (dp
+ * 4: 2 device pixels each, 960 x 540 at 1920 x 1080), and an odd one the next coarser whole
+ * size, never finer: dp 3, 5, 7 and 9 give 2, 3, 4 and 5, a canvas 1.5, 1.67, 1.75 and 1.8
+ * times the logical one. A canvas pixel is never one device pixel, except where the
+ * interface's is two: there two would leave a canvas half as wide as the painters are made
+ * for (everything twice as big on screen). Rounding up keeps the canvas inside the
+ * painters' range (art bible section 2) and its pixels at least as chunky as asked.
+ */
+export function canvasDpFor(dp: number): number {
+  return Math.max(1, Math.ceil(dp / 2));
+}
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -116,6 +151,9 @@ function deviceSpan(css: number, dpr: number): number {
  * and likewise the font pixel, max(1, round(max(1, round(target / 3)) * dpr)) device pixels.
  * The logical canvas is the device size divided by dp, rounded up.
  *
+ * The canvas's own values (`canvasW`, `canvasH`, `canvasDp`, `canvasPx`) are worked out
+ * the same way from `canvasDpFor(dp)`.
+ *
  * The fallback in ui.css (section 1) is the CSS-pixel rule in CSS: change them together.
  */
 export function pixelScale(
@@ -146,18 +184,25 @@ export function pixelScale(
   const textDp = Math.max(1, Math.round(textTarget * ratio));
   const captionDp = Math.max(fontDp, Math.ceil(dp / 2));
   const snapDp = Math.max(1, Math.round(ratio));
+  const deviceW = deviceSpan(cssWidth, ratio);
+  const deviceH = deviceSpan(cssHeight, ratio);
+  const canvasDp = canvasDpFor(dp);
 
   return {
     px: deviceToCss(dp, ratio),
     tx: deviceToCss(textDp, ratio),
     fp: deviceToCss(fontDp, ratio),
     cp: deviceToCss(captionDp, ratio),
-    logicalW: Math.ceil(deviceSpan(cssWidth, ratio) / dp),
-    logicalH: Math.ceil(deviceSpan(cssHeight, ratio) / dp),
+    logicalW: Math.ceil(deviceW / dp),
+    logicalH: Math.ceil(deviceH / dp),
     portrait,
     dpr: ratio,
     dp,
     snap: deviceToCss(snapDp, ratio),
+    canvasW: Math.ceil(deviceW / canvasDp),
+    canvasH: Math.ceil(deviceH / canvasDp),
+    canvasDp,
+    canvasPx: deviceToCss(canvasDp, ratio),
   };
 }
 
@@ -236,10 +281,11 @@ function readScale(): PixelScale {
   const w = window.innerWidth;
   const h = window.innerHeight;
   const ratio = ratioNow();
-  if (w === lastW && h === lastH && ratio === lastRatio) return snapshot;
+  const same = ratio === lastRatio;
+  if (w === lastW && h === lastH && same) return snapshot;
   // An on-screen keyboard can shrink the layout height on some browsers. That must not
   // flip the orientation or change the pixel size under the player's thumbs.
-  if (lastW === w && h < lastH && ratio === lastRatio && isEditing()) {
+  if (lastW === w && h < lastH && same && isEditing()) {
     return snapshot;
   }
   lastW = w;
@@ -258,7 +304,9 @@ function readScale(): PixelScale {
     next.dpr !== snapshot.dpr ||
     next.logicalW !== snapshot.logicalW ||
     next.logicalH !== snapshot.logicalH ||
-    next.portrait !== snapshot.portrait
+    next.portrait !== snapshot.portrait ||
+    next.canvasW !== snapshot.canvasW ||
+    next.canvasH !== snapshot.canvasH
   ) {
     snapshot = next;
   }

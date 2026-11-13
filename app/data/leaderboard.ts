@@ -202,13 +202,28 @@ function totalFor(r: Rng, skill: number): number {
   return total;
 }
 
+/**
+ * Each mode's own number in the hashes, so every mode has its own field (HOME's and AWAY's
+ * as they always were).
+ */
+const MODE_SALT: Readonly<Record<Mode, number>> = {
+  home: 1,
+  away: 2,
+  retro: 3,
+  nextgen: 4,
+};
+
+function saltOf(mode: Mode): number {
+  return Object.hasOwn(MODE_SALT, mode) ? MODE_SALT[mode] : 1;
+}
+
 function seedFor(day: number, mode: Mode): number {
-  return Math.floor(hash2(day, mode === "home" ? 1 : 2, 0x1eade5) * 2 ** 32);
+  return Math.floor(hash2(day, saltOf(mode), 0x1eade5) * 2 ** 32);
 }
 
 /** How many played the mode on the day, the player not counted. */
 export function fieldSize(day: number, mode: Mode): number {
-  const h = hash2(day, mode === "home" ? 11 : 12, 0xf1e1d);
+  const h = hash2(day, 10 + saltOf(mode), 0xf1e1d);
   return MOCK_FIELD.min + Math.floor(h * (MOCK_FIELD.max - MOCK_FIELD.min + 1));
 }
 

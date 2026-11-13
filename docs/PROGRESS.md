@@ -1,6 +1,6 @@
 # Build progress (iteration 1)
 
-Updated 2026-11-11. This file says what exists, what is in flight and what comes next, so the
+Updated 2026-11-13. This file says what exists, what is in flight and what comes next, so the
 build can be picked up after an interruption.
 
 ## Done
@@ -224,6 +224,163 @@ checked by a final review in a real browser:
   has an answer in each scoring shot (a test holds it).
 - One background bird, a long trill sliding down in pitch, was removed: the product owner
   heard it as something falling.
+- Then (run `soccersense-reveal-fit-and-result-sounds`): the reveal always shows all five rows
+  and the player's own line, with nothing cut or scrolled, measured over every question and
+  every kind of result at 15 screen sizes. The sheet grows as tall as it needs, and only on
+  very short screens does it hide countries or tighten rows. A result's sounds (the sting, the net,
+  the cheer, the groan, the whistle, the horn) are never dropped as busy any more: the oldest
+  fades out in 0.3 s to make room. The review also stopped a late horn after a quick NEXT into
+  the World Cup.
+
+Open after this round: on small phones (360x640) the reveal now covers about 58% of the scene,
+so the players are hidden until NEXT; trying the compact steps before growing past 46% on
+phones would keep more of the scene in view.
+
+## Detail 2: twice the detail (2026-11-12)
+
+The product owner asked for more detail in the home screen's map (cars, people) and in the
+game. Every fixed-size drawing was redrawn natively with twice the pixels at the same size on
+screen (art bible 2 and 5): the players, the keeper and the youth, the crowds, the grounds at
+every tier, the town and its traffic, the mascot, the airship and its sign, the wordmark, the
+menu ball and the lettering, in two waves of artists and a polish round (with new features
+that came with it: the sign's messages, the plane towing the fact, the daily streak, the ball
+fetched back after a shot, the end stand behind the goal, lamp shadows). Then **the default
+flipped to detail 2** (`DEFAULT_DETAIL` in `app/art/detail.ts`): every page, the prerender and
+the first client render drew at 2, and the snap tool at 2 unless `--detail 1`. The old
+art (detail 1) was kept, pixel for pixel, for comparison with `?detail=1` (kept for the tab's
+visit) and `snap.ts --detail 1`; step 3b removed it with its tests and the `pick`/`dpx`
+branches. Proof of the flip: the home page and the game at the default are 0 pixels from
+`?detail=2` just before it, on four screens.
+
+**The cleanup (step 3b, 2026-11-12).** The old art and the switch are gone: there is one
+scale, and twice the detail is simply the game's art. `app/art/detail.ts` (`detail`,
+`setDetail`, `withDetail`, `pick`, `dpx`, `perDetail`, `drawFallback`), the `?detail` query
+and `snap.ts --detail` were removed with every detail-1 drawing, table, spot, size and test;
+every `dpx(n)` is its plain value, every `pick(today, d2)` its second value, every `-d2` file
+and `D2` name took today's name and place, and caches lost their level key. `app/ui/scale.ts`
+has one canvas rule (`canvasDpFor(dp)`, half the interface's pixel rounded up), and
+`PixelRoot` forgets a tab's stored choice (`app/ui/forget-detail.ts`). Four cleaners worked at
+once (characters, grounds and the game, the home screen, the core), proven against references
+taken before the first change: step 1's 24 shots and 96 more (every tier asking, full time,
+the stats, the streak, the sign's messages, the plane, the fetch) at 1920 x 1080, 1366 x 768,
+1536 x 864 at 1.25 and 390 x 844 at 3 are 0 pixels apart; every shot sheet is the same or
+renamed and identical, but for the comparison sheets that showed the old art beside the new.
+
+## Era art: RETRO and NEXT-GEN get their own look (2026-11-13)
+
+The product owner: "retro should be olden times so the first types of football kits, old
+brown ball, old houses in background and net and park and stadiums etc. next gen should all
+be futuristic." RETRO and NEXT-GEN had played as HOME, in HOME's look. Now the career scene
+draws each in its own era: RETRO the early days of the game, NEXT-GEN the future (art bible
+section 10). The composition and the play are HOME's in both; only the look changes. HOME
+and AWAY did not change by a pixel.
+
+- **The era parameter** (`app/art/era.ts`, `docs/API_ART.md` "Eras"): the scene decides it
+  once from its mode and passes it to the ground (`Paint.era`), on the kits (`Kit.era`,
+  `eraColors`, `eraGlows`, with twelve era letters in the people's legend and a frame layer
+  per era in `era-frames.ts`), to the ball and the trophy, and to the effects. Every painter
+  takes it as an optional last argument that defaults to today's look. The ground gained
+  `Life.movers` for an era's moving things.
+- **Six artists**, one per era and area: RETRO players, small grounds (tiers 0 to 3), big
+  grounds (4 to 7) and effects; NEXT-GEN the same. Each worked in its own files, with
+  one-line dispatches in the shared painters. Their reports and sheets are in
+  `.snaps/era-art/` (`reports/*.txt`, `*.png`); the agreements between them in
+  `.snaps/era-art/THEME.md`.
+- **The review** played both eras at every tier, by day and at night, and fixed what did not
+  match: the hero's colour is his mode's in every era and his crowd and things wear it
+  (RETRO old gold, NEXT-GEN magenta, never HOME's red); RETRO's tier 6 cup is the silver cup
+  he lifts at tier 7; NEXT-GEN's holo screen moved clear of the question board. It also made
+  every airship sign message fit without scrolling and made the full-time card's
+  paired-mode button the mode's name alone.
+- **Housekeeping**: the sign's place line reads "37 OF 1,284" (it was "37TH/1,284"; the
+  longest the leaderboard can give, "1891 OF 1,891", fits the smallest sign, where "#" or
+  "TH" would not). The references in `.snaps/era-art/ref` were retaken for the two changes
+  the review made on purpose (the home page's sign, the full-time buttons); everything else
+  in them is as taken before the round.
+- **Proof**: the shot sheets' fingerprints (311 of today's shots) are unchanged by day and at
+  night at two sizes; the browser references (HOME and AWAY asking at every tier, the reveal,
+  shots in flight, promotions, full time, night) are 0 pixels apart but for the two changes
+  above. **Cost** (the review, Chrome at 1920 x 1080): no frame over 16.7 ms in either era;
+  the worst 14.3 ms (RETRO, the promotion to tier 6) and 13.7 ms (NEXT-GEN, a worldie at
+  tier 4).
+
+What is weak (from the artists and the review; six polishers follow):
+
+- RETRO: the tier 4 crowd in old gold and dark coats is busy and leans brown; the
+  grandstand's red trim at tier 4 does not match the gold crowd; caps and bowlers are hard
+  to tell apart at 1x, and rattles barely show; the brass band and the newsreel men are
+  tiny; a moustache on dark skin is faint; the tier 1 subs wear plain red and navy coats; the
+  end's scoreboard is off screen on phones; the mill smoke rises behind the pediment's clock;
+  the warm grade stops at tier 3, so the colour shifts a little at the promotion to tier 4.
+- NEXT-GEN: the daytime skyline behind the low tiers is busy; goal bursts are thin by day;
+  the referee drone's rotors are faint; the glowing seams on the club shirt are subtle;
+  wristbands at rest are a single pixel; the trophy orb can blend into the crowd at tier 7;
+  the tier 3 photographers are today's; on a phone the end and the holo screen are mostly
+  off screen; the sky at tiers 6 and 7 is busy.
+- Both: a title on the airship's sign shows without its mode's label; the paired-mode button
+  no longer says "PLAY" on screen (it is read out as "Play AWAY").
+
+## Era art: the polish (2026-11-13)
+
+Two critics played RETRO and NEXT-GEN beside HOME at the same frozen moments (their sheets:
+`.snaps/era-art/crit-retro.png`, `crit-nextgen.png`) and found 27 things; six polishers, one
+per era and area as before, fixed them and the weak points above. A review then checked
+every finding in the game and fixed what was left. Everything is written up in
+`.snaps/era-art/THEME.md` ("Polish notes"), the polishers' logs `progress-*.md` and sheets
+`polish-*.png`; the art bible's section 10 and `docs/API_ART.md` "Eras" describe the result.
+
+- **RETRO.** The hero's kit is the deep end of the old gold with a chalk laced collar and
+  dark knickerbockers to the knee, so he stands off the cream boards and the gold crowd (he
+  had vanished in the bicycle kick); the park keeper wears a cream jumper with a green roll
+  neck and a tweed cap; the ball's lace is a row of dashes, the worldie's ball gilded leather;
+  the cup is gilt. Caps and bowlers read apart, rattles have a clacker. His street is RETRO's
+  own (sash windows, painted doors and shop signs, gas lamps, cobbles, plumes from the
+  stacks, a viaduct with a steam train, a milk cart), with an old gent and a pram near the
+  middle of the lower green so phones see it; the subs wear old gold overcoats; the goal is
+  squared timber and a rope mesh at every tier; one warm grade covers every tier
+  (`retro-grade.ts`), so the promotion to tier 4 no longer jumps. From tier 3 the near crowd
+  dresses lighter (no more brown mush), iron lamp standards with bare bulbs replace the
+  lattice pylons (timber lamp towers light tier 3 by night), the end's boards are lettered
+  by hand, the trim follows the crowd (gold to 4, brick from 5), the scoreboard moves to the
+  grandstand's roof on phones, no smoke rises out of the pediment, the podium's winner
+  stands higher, and the band, newsreel cranks and fireworks read better.
+- **NEXT-GEN.** The referee is a man in black with amber seams and a visor (the drone read
+  as a floating pill); the trophy is a tall gold cup, not an orb; the crowd mixes violet,
+  slate, white, cyan and silver under the magenta, with 2 x 2 wristbands that run a light
+  wave, visors and headsets. The park's goal is two marker cones, the day skyline sits back
+  in three depths, the turf's stray studs became sensor rows along the touchlines, the
+  holographic boards crawl, and the city behind the stands costs 0.02 ms where it cost 0.6.
+  From tier 4 the goal is a bold frame of light, the band a phone sees (balcony, boxes, tier
+  fronts, track edge, drones, ball kids, dugouts) is clearly of the future, the boards say
+  NEXT-GEN's own words (DRONE PIES, HOLO SEATS, SCAN TO CHEER), the plinth is white glass,
+  the holo sign is scanlines carried by drones, photographers wear light and a drone takes
+  one's place, bursts are bolder by day, and the sky at 6 and 7 is quieter.
+- **The review** fixed the critics' one finding nobody had taken: the standing watchers at
+  tiers 0 to 2 in NEXT-GEN still wore today's coats; they now wear slim jackets with a hem
+  and zip of light, about half with a visor (`nextgenCoat`, `nextgenWatcherLights`,
+  `Watcher.trim`). The park's planter lost its last red blooms (magenta now).
+- **Proof**: the four shot-sheet fingerprints still say "311 same, 0 differ or gone"; every
+  browser reference of HOME and AWAY (all groups, all four sizes) is 164 compared, 0 differ.
+  **Cost** (Chrome at 1920 x 1080, every shot, a miss and its fetch, all six promotions, full
+  time at 0, 4 and 7, by day and at night): no frame over 16.7 ms; the worst 14.9 ms (RETRO,
+  full time at tier 7 by night) and 15.7 ms (NEXT-GEN, the promotion to tier 6). In Node at
+  960 x 540 the first build of a new ground on a promotion can reach 17 to 18 ms (RETRO, tier
+  3 to 4, while the code is still cold; about 9 ms warm). The whole suite passes (121 files,
+  2,815 tests).
+
+What is still weak:
+
+- RETRO: the cream boards still sit behind the hero at some spots (his dark knickers carry
+  him); the bandsmen and newsreel men are a few pixels each at 1x; tier 5's brick coats are
+  duller than HOME's red; the mill smoke is a stylised arc; the flower bed keeps a few red
+  geraniums.
+- NEXT-GEN: the holo sign is top left only, so phones never see it (the band below carries
+  the look there); magenta is still loud in the tier 4 upper stand; the cast's cyan visors
+  make faces alike at 1x; the near crowd's headsets can run a pixel past a small head; by day
+  the street's townhouses are the brightest band behind the action; the photographers'
+  drone is cut off at the phone's right edge.
+- Both: the lower park below the path at tiers 0 and 1 is empty grass in NEXT-GEN (as in
+  HOME), where RETRO has its lower green.
 
 ## Milestone C: the AWAY journey and polish
 

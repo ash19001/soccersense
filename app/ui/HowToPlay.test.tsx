@@ -187,6 +187,25 @@ describe("HowToPlayCard", () => {
     expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(2);
   });
 
+  test("has the small print at its foot when given it", () => {
+    const legal = "An independent fan game.";
+    render(
+      at(
+        MONITOR,
+        <HowToPlayCard
+          {...CARD}
+          labels={{ ...CARD.labels, disclaimer: legal }}
+        />,
+      ),
+    );
+    const small = screen.getByText(legal);
+    expect(small).toHaveClass("ss-legal");
+    // Last in the card's body, after the career.
+    expect(document.querySelector(".ss-help__body")?.lastElementChild).toBe(
+      small,
+    );
+  });
+
   test("renders at build time", () => {
     const html = renderToString(at(DEFAULT_SCALE, <HowToPlayCard {...CARD} />));
     expect(html).toContain("HOW TO PLAY");

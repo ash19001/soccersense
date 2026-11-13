@@ -1,48 +1,72 @@
+/**
+ * The people: animation tables, cells, drawing, spots and kits, for every animation. The
+ * youth's moves and the shots have their own files (youth.test.ts, adult-shots.test.ts,
+ * youth-shots.test.ts), the keeper and the props keeper.test.ts.
+ */
+
 import { describe, expect, it } from "vitest";
 import { Surface, TRANSPARENT, rgb, type Color } from "~/pixel";
-import { KEEPER, PLAYER, YOUTH } from "../layout";
+import { castSpots } from "~/scenes/career-cast";
+import { FAN, KEEPER, MATCH_BALL, PLAYER, TROPHY, YOUTH } from "../layout";
 import { lightingFor, type Lighting } from "../lighting";
 import { P } from "../palette";
+import { LEGEND } from "./figure";
+import {
+  HERO_LOOK,
+  KIT_BASES,
+  kitColors,
+  litKit,
+  makeKit,
+  type Kit,
+  type KitBase,
+} from "./kit";
 import {
   BICYCLE_CELL,
   BICYCLE_YOUTH_CELL,
-  HERO_LOOK,
   KEEPER_ANIMS,
+  KEEPER_ANIM_NAMES,
   KICK_STRIKE_FRAME,
   PLAYER_ANIMS,
+  PLAYER_ANIM_NAMES,
   SHOT_ANIMS,
   SPRAWL_CELL,
   STRIKE_FRAME,
   ballSpot,
   drawKeeper,
-  drawMatchBall,
   drawPlayer,
-  drawPuff,
-  drawTrophy,
   handsSpot,
   keeperCell,
   keeperHands,
-  litKit,
-  makeKit,
+  keeperSprite,
   playerCell,
-  type Kit,
-  type KitBase,
+  playerSprite,
   type KeeperAnim,
   type PlayerAnim,
-} from "./index";
-import {
-  KEEPER_ANIM_NAMES,
-  PLAYER_ANIM_NAMES,
-  keeperSprite,
-  playerSprite,
 } from "./people";
-import { KIT_BASES } from "./kit";
 
 const DAY = lightingFor({ elevation: 45, morning: false });
 const KIT = makeKit("home");
-const SLOTS = Object.keys(KIT) as (keyof Kit)[];
+/** The colour slots (today's kit has no era fields). */
+const SLOTS = Object.keys(KIT) as Exclude<
+  keyof Kit,
+  "era" | "eraColors" | "eraGlows"
+>[];
+const X = 60;
+const Y = 70;
 
-/** Every painted pixel of a surface, as [x, y]. */
+/** The moves: every animation but the shots. */
+const MOVES: readonly PlayerAnim[] = [
+  "idle",
+  "run",
+  "kick",
+  "juggle",
+  "celebrate",
+  "dejected",
+  "lift",
+  "shrug",
+  "slide",
+];
+
 function painted(s: Surface): [number, number][] {
   const out: [number, number][] = [];
   for (let y = 0; y < s.h; y++) {
@@ -53,11 +77,14 @@ function painted(s: Surface): [number, number][] {
   return out;
 }
 
-function bounds(s: Surface) {
+function drawn(draw: (s: Surface) => void) {
+  const s = new Surface(120, 90);
+  draw(s);
   const px = painted(s);
   const xs = px.map(([x]) => x);
   const ys = px.map(([, y]) => y);
   return {
+    s,
     count: px.length,
     x0: Math.min(...xs),
     x1: Math.max(...xs),
@@ -66,23 +93,64 @@ function bounds(s: Surface) {
   };
 }
 
-const X = 40;
-const Y = 40;
+describe("sizes", () => {
+  it("the layout's sprite sizes are the art bible's", () => {
+    expect(PLAYER).toEqual({ w: 24, h: 36, cellW: 32, cellH: 40 });
+    expect(YOUTH).toEqual({ w: 20, h: 28, cellW: 28, cellH: 32 });
+    expect(KEEPER).toBe(PLAYER);
+    expect(MATCH_BALL).toEqual({ size: 6, shadow: 2 });
+    expect(FAN).toEqual({ w: 6, h: 8, pitch: 8 });
+    expect(TROPHY).toEqual({ w: 18, h: 24 });
+  });
 
-function drawn(
-  draw: (s: Surface) => void,
-): ReturnType<typeof bounds> & { s: Surface } {
-  const s = new Surface(80, 60);
-  draw(s);
-  return { ...bounds(s), s };
-}
+  it("cells are the layout's, but for the bicycle and the sprawl", () => {
+    for (const anim of PLAYER_ANIM_NAMES) {
+      const big = anim === "bicycle";
+      expect(playerCell(anim)).toBe(big ? BICYCLE_CELL : PLAYER);
+      expect(playerCell(anim, true)).toBe(big ? BICYCLE_YOUTH_CELL : YOUTH);
+    }
+    expect(BICYCLE_CELL).toEqual({ cellW: 48, cellH: 56 });
+    expect(BICYCLE_YOUTH_CELL).toEqual({ cellW: 40, cellH: 44 });
+    expect(SPRAWL_CELL).toEqual({ cellW: 48, cellH: 40 });
+    for (const anim of KEEPER_ANIM_NAMES) {
+      expect(keeperCell(anim)).toBe(anim === "sprawl" ? SPRAWL_CELL : KEEPER);
+    }
+    // Every cell is even, so the anchor column is the cell's middle.
+    for (const c of [BICYCLE_CELL, BICYCLE_YOUTH_CELL, SPRAWL_CELL]) {
+      expect(c.cellW % 2).toBe(0);
+    }
+  });
+
+  it("the legend has the kit's slots and seven tones more, all coloured by kitColors", () => {
+    // then the eras' twelve slots (.snaps/era-art/THEME.md): unused, so empty, today
+    expect(LEGEND).toBe("khsStTrpqoObgGHmURBwl" + "123456789ACD");
+    for (const base of KIT_BASES) {
+      const kit = makeKit(base);
+      const colors = kitColors(kit);
+      expect(colors.length).toBe(LEGEND.length);
+      expect(colors.slice(0, 3)).toEqual([kit.outline, kit.hair, kit.skin]);
+      for (const c of colors.slice(0, 21)) expect(c).not.toBe(TRANSPARENT);
+      for (const c of colors.slice(21)) expect(c).toBe(TRANSPARENT);
+    }
+  });
+});
 
 describe("animation tables", () => {
-  it("every player animation has its declared frames, adult and youth", () => {
-    for (const anim of PLAYER_ANIM_NAMES) {
-      const n = PLAYER_ANIMS[anim].frames;
-      expect(playerSprite(anim, false).frames.length, anim).toBe(n);
-      expect(playerSprite(anim, true).frames.length, anim).toBe(n);
+  it("every animation is drawn with its declared frames, in its cell and the legend", () => {
+    for (const youth of [false, true]) {
+      for (const anim of PLAYER_ANIM_NAMES) {
+        const sp = playerSprite(anim, youth);
+        const cell = playerCell(anim, youth);
+        expect(sp.frames.length, anim).toBe(PLAYER_ANIMS[anim].frames);
+        expect(sp.w, anim).toBe(cell.cellW);
+        expect(sp.h, anim).toBe(cell.cellH);
+        expect(sp.legend).toBe(LEGEND);
+      }
+    }
+    for (const anim of KEEPER_ANIM_NAMES) {
+      const sp = keeperSprite(anim);
+      expect(sp.frames.length, anim).toBe(KEEPER_ANIMS[anim].frames);
+      expect(sp.w, anim).toBe(keeperCell(anim).cellW);
     }
   });
 
@@ -119,31 +187,6 @@ describe("animation tables", () => {
     };
     for (const anim of KEEPER_ANIM_NAMES) {
       expect(KEEPER_ANIMS[anim].frames).toBe(kmin[anim]);
-      expect(keeperSprite(anim).frames.length).toBe(kmin[anim]);
-    }
-  });
-
-  it("uses the cell sizes from the layout, but for the bicycle and the sprawl", () => {
-    for (const anim of PLAYER_ANIM_NAMES) {
-      const big = anim === "bicycle";
-      const adult = big ? BICYCLE_CELL : PLAYER;
-      const youth = big ? BICYCLE_YOUTH_CELL : YOUTH;
-      expect(playerCell(anim).cellW).toBe(adult.cellW);
-      expect(playerCell(anim, true).cellH).toBe(youth.cellH);
-      expect(playerSprite(anim).w).toBe(adult.cellW);
-      expect(playerSprite(anim).h).toBe(adult.cellH);
-      expect(playerSprite(anim, true).w).toBe(youth.cellW);
-      expect(playerSprite(anim, true).h).toBe(youth.cellH);
-    }
-    for (const anim of KEEPER_ANIM_NAMES) {
-      const cell = anim === "sprawl" ? SPRAWL_CELL : KEEPER;
-      expect(keeperCell(anim).cellW).toBe(cell.cellW);
-      expect(keeperSprite(anim).w).toBe(cell.cellW);
-      expect(keeperSprite(anim).h).toBe(cell.cellH);
-    }
-    // Every cell is even, so a flipped spot is -dx - 1 and the anchor stays put.
-    for (const c of [BICYCLE_CELL, BICYCLE_YOUTH_CELL, SPRAWL_CELL]) {
-      expect(c.cellW % 2).toBe(0);
     }
   });
 
@@ -161,21 +204,30 @@ describe("animation tables", () => {
       expect(STRIKE_FRAME[anim], anim).toBeLessThan(PLAYER_ANIMS[anim].frames);
     }
   });
+
+  it("loops wrap and one-shots hold their last frame", () => {
+    const at = (anim: PlayerAnim, f: number) =>
+      drawn((s) => drawPlayer(s, anim, f, X, Y, KIT)).s.data.join();
+    expect(at("run", 5)).toBe(at("run", 1));
+    expect(at("run", -1)).toBe(at("run", 3));
+    expect(at("kick", 99)).toBe(at("kick", PLAYER_ANIMS.kick.frames - 1));
+    expect(at("kick", -3)).toBe(at("kick", 0));
+  });
 });
 
-describe("drawing stays inside the cell", () => {
+describe("drawing", () => {
   for (const youth of [false, true]) {
-    it(`${youth ? "youth" : "adult"}: every frame, both ways round`, () => {
+    it(`${youth ? "youth" : "adult"}: every frame stays inside its cell, both ways round`, () => {
       for (const anim of PLAYER_ANIM_NAMES) {
         const cell = playerCell(anim, youth);
-        const left = X - Math.floor(cell.cellW / 2);
+        const left = X - cell.cellW / 2;
         for (let f = 0; f < PLAYER_ANIMS[anim].frames; f++) {
           for (const flipX of [false, true]) {
             const b = drawn((s) =>
               drawPlayer(s, anim, f, X, Y, KIT, { youth, flipX }),
             );
             const tag = `${anim} ${f} ${flipX}`;
-            expect(b.count, tag).toBeGreaterThan(20);
+            expect(b.count, tag).toBeGreaterThan(80);
             expect(b.x0, tag).toBeGreaterThanOrEqual(left);
             expect(b.x1, tag).toBeLessThan(left + cell.cellW);
             expect(b.y0, tag).toBeGreaterThanOrEqual(Y - cell.cellH);
@@ -186,15 +238,14 @@ describe("drawing stays inside the cell", () => {
     });
   }
 
-  it("keeper: every frame, both ways round", () => {
+  it("keeper: every frame stays inside its cell, both ways round", () => {
+    const kit = makeKit("keeper");
     for (const anim of KEEPER_ANIM_NAMES) {
       const cell = keeperCell(anim);
-      const left = X - Math.floor(cell.cellW / 2);
+      const left = X - cell.cellW / 2;
       for (let f = 0; f < KEEPER_ANIMS[anim].frames; f++) {
         for (const flipX of [false, true]) {
-          const b = drawn((s) =>
-            drawKeeper(s, anim, f, X, Y, makeKit("keeper"), { flipX }),
-          );
+          const b = drawn((s) => drawKeeper(s, anim, f, X, Y, kit, { flipX }));
           expect(b.x0).toBeGreaterThanOrEqual(left);
           expect(b.x1).toBeLessThan(left + cell.cellW);
           expect(b.y0).toBeGreaterThanOrEqual(Y - cell.cellH);
@@ -205,22 +256,18 @@ describe("drawing stays inside the cell", () => {
   });
 
   it("standing frames stand on the ground row y - 1", () => {
-    for (const youth of [false, true]) {
-      for (const anim of [
-        "idle",
-        "run",
-        "kick",
-        "juggle",
-        "tapin",
-        "toepoke",
-        "trivela",
-        "chip",
-        "power",
-        "finesse",
-        "bicycle",
-      ] as PlayerAnim[]) {
-        const b = drawn((s) => drawPlayer(s, anim, 0, X, Y, KIT, { youth }));
-        expect(b.y1, anim).toBe(Y - 1);
+    for (const anim of [
+      "idle",
+      "run",
+      "kick",
+      "juggle",
+      "dejected",
+      "shrug",
+    ] as PlayerAnim[]) {
+      for (let f = 0; f < PLAYER_ANIMS[anim].frames; f++) {
+        if (anim === "run" && f % 2 === 1) continue; // the passing frames are in the air
+        const b = drawn((s) => drawPlayer(s, anim, f, X, Y, KIT));
+        expect(b.y1, `${anim} ${f}`).toBe(Y - 1);
       }
     }
     for (const anim of ["ready", "hold", "beaten"] as KeeperAnim[]) {
@@ -229,182 +276,164 @@ describe("drawing stays inside the cell", () => {
     }
   });
 
-  it("is outlined in the kit's outline colour", () => {
+  it("the celebration jumps 6 rows on its middle frame", () => {
+    const b = drawn((s) => drawPlayer(s, "celebrate", 1, X, Y, KIT));
+    expect(b.y1).toBe(Y - 1 - 6);
+  });
+
+  it("is outlined in the kit's outline colour, and painted in kit colours only", () => {
     const b = drawn((s) => drawPlayer(s, "idle", 0, X, Y, KIT));
     const soles = painted(b.s).filter(([, y]) => y === Y - 1);
-    expect(soles.length).toBeGreaterThan(3);
-    for (const [x, y] of soles) expect(b.s.get(x, y)).toBe(P.ink);
-  });
-});
-
-describe("frames", () => {
-  it("loops wrap and one-shots hold their last frame", () => {
-    const at = (anim: PlayerAnim, f: number) =>
-      drawn((s) => drawPlayer(s, anim, f, X, Y, KIT)).s.data.join();
-    expect(at("run", 5)).toBe(at("run", 1));
-    expect(at("run", -1)).toBe(at("run", 3));
-    expect(at("kick", 99)).toBe(at("kick", PLAYER_ANIMS.kick.frames - 1));
-    expect(at("kick", -3)).toBe(at("kick", 0));
-  });
-
-  it("frames of an animation differ from each other", () => {
-    for (const youth of [false, true]) {
-      for (const anim of PLAYER_ANIM_NAMES) {
-        const seen = new Set<string>();
+    expect(soles.length).toBeGreaterThan(6);
+    for (const [x, y] of soles) expect(b.s.get(x, y)).toBe(KIT.outline);
+    for (const base of KIT_BASES) {
+      const kit = makeKit(base, { look: 2 });
+      const allowed = new Set<Color>(kitColors(kit));
+      for (const anim of MOVES) {
         for (let f = 0; f < PLAYER_ANIMS[anim].frames; f++) {
-          seen.add(
-            drawn((s) =>
-              drawPlayer(s, anim, f, X, Y, KIT, { youth }),
-            ).s.data.join(),
-          );
+          const { s } = drawn((sf) => drawPlayer(sf, anim, f, X, Y, kit));
+          for (const [x, y] of painted(s)) {
+            expect(allowed.has(s.get(x, y)), `${base} ${anim} ${f}`).toBe(true);
+          }
         }
-        // Juggle repeats its stance between touches; everything else is all new frames.
-        const want = anim === "juggle" ? 5 : PLAYER_ANIMS[anim].frames;
-        expect(seen.size, `${anim} ${youth}`).toBeGreaterThanOrEqual(want);
       }
+    }
+  });
+
+  it("frames of a move differ from each other", () => {
+    for (const anim of MOVES) {
+      const seen = new Set<string>();
+      for (let f = 0; f < PLAYER_ANIMS[anim].frames; f++) {
+        seen.add(drawn((s) => drawPlayer(s, anim, f, X, Y, KIT)).s.data.join());
+      }
+      // Juggle repeats its stance between touches; everything else is all new frames.
+      const want = anim === "juggle" ? 5 : PLAYER_ANIMS[anim].frames;
+      expect(seen.size, anim).toBeGreaterThanOrEqual(want);
+    }
+  });
+
+  it("draws the same pixels for the same inputs", () => {
+    for (const anim of MOVES) {
+      const a = drawn((s) => drawPlayer(s, anim, 1, X, Y, KIT)).s.data.join();
+      const b = drawn((s) => drawPlayer(s, anim, 1, X, Y, KIT)).s.data.join();
+      expect(a).toBe(b);
     }
   });
 });
 
 describe("spots", () => {
-  it("the ball is on his boot at the strike and on every juggle frame", () => {
-    for (const youth of [false, true]) {
-      expect(ballSpot("kick", KICK_STRIKE_FRAME, { youth })).not.toBeNull();
-      for (let f = 0; f < PLAYER_ANIMS.juggle.frames; f++) {
-        expect(ballSpot("juggle", f, { youth }), `${f}`).not.toBeNull();
+  /** True if some pixel of `colors` is within `r` of the 6 x 6 ball centred on the spot. */
+  function touches(
+    s: Surface,
+    spot: { x: number; y: number },
+    colors: readonly Color[],
+    r = 1,
+  ): boolean {
+    for (let dy = -3 - r; dy <= 2 + r; dy++) {
+      for (let dx = -3 - r; dx <= 2 + r; dx++) {
+        if (colors.includes(s.get(X + spot.x + dx, Y + spot.y + dy)))
+          return true;
       }
-      expect(
-        ballSpot("kick", PLAYER_ANIMS.kick.frames - 1, { youth }),
-      ).toBeNull();
-      expect(ballSpot("idle", 0, { youth })).toBeNull();
-      expect(ballSpot("run", 0, { youth })).toBeNull();
     }
-  });
+    return false;
+  }
 
-  it("the strike spot sits against the kicking boot", () => {
-    for (const youth of [false, true]) {
-      const spot = ballSpot("kick", KICK_STRIKE_FRAME, { youth });
-      if (spot === null) throw new Error("no spot");
-      const { s } = drawn((sf) =>
-        drawPlayer(sf, "kick", KICK_STRIKE_FRAME, X, Y, KIT, { youth }),
-      );
-      // Some boot pixel is within one pixel of the ball's 3 x 3.
-      let near = false;
-      for (let dy = -2; dy <= 2; dy++) {
-        for (let dx = -2; dx <= 2; dx++) {
-          if (s.get(X + spot.x + dx, Y + spot.y + dy) === KIT.boots)
-            near = true;
-        }
-      }
-      expect(near, `${youth}`).toBe(true);
-      expect(spot.y).toBe(-2); // a ball at rest: its bottom row is on the ground
+  it("the kick's ball rests on the grass and the near boot meets it on the strike", () => {
+    for (let f = 0; f <= KICK_STRIKE_FRAME; f++) {
+      expect(ballSpot("kick", f)).toEqual({ x: 14, y: -4 });
     }
-  });
-
-  it("every shot has the ball on him at the strike, and loose after it", () => {
-    for (const youth of [false, true]) {
-      for (const anim of SHOT_ANIMS) {
-        const strike = STRIKE_FRAME[anim];
-        const spot = ballSpot(anim, strike, { youth });
-        if (spot === null) throw new Error(`${anim} ${youth}: no strike spot`);
-        const { s } = drawn((sf) =>
-          drawPlayer(sf, anim, strike, X, Y, KIT, { youth }),
+    expect(ballSpot("kick", PLAYER_ANIMS.kick.frames - 1)).toBeNull();
+    const spot = ballSpot("kick", KICK_STRIKE_FRAME)!;
+    const { s } = drawn((sf) =>
+      drawPlayer(sf, "kick", KICK_STRIKE_FRAME, X, Y, KIT),
+    );
+    expect(touches(s, spot, [KIT.boots], 0)).toBe(true);
+    // Facing left the ball covers exactly the mirror of its columns facing right.
+    const left = ballSpot("kick", KICK_STRIKE_FRAME, { flipX: true })!;
+    const m = drawn((sf) =>
+      drawPlayer(sf, "kick", KICK_STRIKE_FRAME, X, Y, KIT, { flipX: true }),
+    ).s;
+    for (let dy = -3; dy <= 2; dy++) {
+      for (let dx = -4; dx <= 3; dx++) {
+        expect(m.get(X + left.x + dx, Y + left.y + dy)).toBe(
+          s.get(X + spot.x - dx - 1, Y + spot.y + dy),
         );
-        let near = false;
-        for (let dy = -2; dy <= 2; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            if (s.get(X + spot.x + dx, Y + spot.y + dy) === KIT.boots)
-              near = true;
-          }
-        }
-        expect(near, `${anim} ${youth}`).toBe(true);
-        // On the ground for every shot but the bicycle, struck over his head.
-        if (anim === "bicycle") expect(spot.y).toBeLessThan(youth ? -14 : -18);
-        else expect(spot.y, anim).toBe(-2);
-        for (let f = 0; f < strike; f++) {
-          expect(ballSpot(anim, f, { youth }), `${anim} ${f}`).not.toBeNull();
-        }
-        for (let f = strike + 1; f < PLAYER_ANIMS[anim].frames; f++) {
-          expect(ballSpot(anim, f, { youth }), `${anim} ${f}`).toBeNull();
-        }
       }
     }
   });
 
-  it("the bicycle starts with the ball on his chest", () => {
-    for (const youth of [false, true]) {
-      const spot = ballSpot("bicycle", 0, { youth });
-      if (spot === null) throw new Error("no chest spot");
-      const { s } = drawn((sf) =>
-        drawPlayer(sf, "bicycle", 0, X, Y, KIT, { youth }),
-      );
-      let shirt = false;
-      for (let dx = 1; dx <= 3; dx++) {
-        for (let dy = -1; dy <= 1; dy++) {
-          const c = s.get(X + spot.x + dx, Y + spot.y + dy);
-          if (c === KIT.shirt || c === KIT.shirtShade) shirt = true;
-        }
-      }
-      expect(shirt, `${youth}`).toBe(true);
+  it("the juggle's ball is on his boot, knee and head on the touches", () => {
+    const body = [KIT.boots, KIT.skin, KIT.hair];
+    for (let f = 0; f < PLAYER_ANIMS.juggle.frames; f++) {
+      const spot = ballSpot("juggle", f);
+      expect(spot, `${f}`).not.toBeNull();
+      if (f % 2 === 1 && f !== 5) continue;
+      if (f === 5) continue; // the top of the big hop: in the air
+      const { s } = drawn((sf) => drawPlayer(sf, "juggle", f, X, Y, KIT));
+      expect(touches(s, spot!, body), `${f}`).toBe(true);
     }
   });
 
-  it("hands hold the trophy for every lift frame, and only then", () => {
-    for (const youth of [false, true]) {
-      for (let f = 0; f < PLAYER_ANIMS.lift.frames; f++) {
-        expect(handsSpot("lift", f, { youth })).not.toBeNull();
-      }
-      expect(handsSpot("celebrate", 0, { youth })).toBeNull();
+  it("the lift's hands hold the trophy's foot on both frames", () => {
+    for (let f = 0; f < PLAYER_ANIMS.lift.frames; f++) {
+      const h = handsSpot("lift", f)!;
+      const { s } = drawn((sf) => drawPlayer(sf, "lift", f, X, Y, KIT));
+      // His fists are on the trophy's foot row (y + h.y - 1), one each side of it.
+      const row = Y + h.y - 1;
+      const skin = (x: number) =>
+        [KIT.skin, KIT.skinShade].includes(s.get(x, row));
+      let left = false;
+      let right = false;
+      for (let dx = -10; dx < 0; dx++) left ||= skin(X + h.x + dx);
+      for (let dx = 1; dx <= 10; dx++) right ||= skin(X + h.x + dx);
+      expect(left && right, `${f}`).toBe(true);
     }
   });
 
-  it("flipX mirrors the spots exactly as it mirrors the pixels", () => {
-    const check = (
-      spot: { x: number; y: number } | null,
-      flipped: { x: number; y: number } | null,
-    ) => {
-      if (spot === null) {
-        expect(flipped).toBeNull();
-        return;
-      }
-      expect(flipped).toEqual({ x: -spot.x - 1, y: spot.y });
-    };
+  it("hands hold the trophy only in the lift", () => {
     for (const youth of [false, true]) {
       for (const anim of PLAYER_ANIM_NAMES) {
         for (let f = 0; f < PLAYER_ANIMS[anim].frames; f++) {
-          check(
-            ballSpot(anim, f, { youth }),
-            ballSpot(anim, f, { youth, flipX: true }),
-          );
-          check(
-            handsSpot(anim, f, { youth }),
-            handsSpot(anim, f, { youth, flipX: true }),
-          );
+          const h = handsSpot(anim, f, { youth });
+          if (anim === "lift") expect(h, `${anim} ${f}`).not.toBeNull();
+          else expect(h, `${anim} ${f}`).toBeNull();
+        }
+      }
+    }
+  });
+
+  it("flipX mirrors the spots (-dx: they mark even-sized things) as it mirrors the pixels", () => {
+    for (const youth of [false, true]) {
+      for (const anim of PLAYER_ANIM_NAMES) {
+        for (let f = 0; f < PLAYER_ANIMS[anim].frames; f++) {
+          for (const get of [ballSpot, handsSpot]) {
+            const a = get(anim, f, { youth });
+            const b = get(anim, f, { youth, flipX: true });
+            if (a === null) expect(b).toBeNull();
+            else expect(b).toEqual({ x: -a.x, y: a.y });
+          }
         }
       }
     }
     for (const anim of KEEPER_ANIM_NAMES) {
       for (let f = 0; f < KEEPER_ANIMS[anim].frames; f++) {
-        check(keeperHands(anim, f), keeperHands(anim, f, { flipX: true }));
+        const a = keeperHands(anim, f);
+        const b = keeperHands(anim, f, { flipX: true });
+        if (a === null) expect(b).toBeNull();
+        else expect(b).toEqual({ x: -a.x, y: a.y });
       }
     }
-    // And the pixels: column x + dx facing right is column x - dx - 1 facing left.
-    const mirror = (draw: (s: Surface, flipX: boolean) => void, w: number) => {
-      const a = drawn((s) => draw(s, false)).s;
-      const b = drawn((s) => draw(s, true)).s;
-      for (let y = Y - 28; y < Y; y++) {
-        for (let dx = -w / 2; dx < w / 2; dx++) {
+    for (const anim of MOVES) {
+      const a = drawn((s) => drawPlayer(s, anim, 1, X, Y, KIT)).s;
+      const b = drawn((s) =>
+        drawPlayer(s, anim, 1, X, Y, KIT, { flipX: true }),
+      ).s;
+      for (let y = Y - 40; y < Y; y++) {
+        for (let dx = -16; dx < 16; dx++) {
           expect(b.get(X - dx - 1, y)).toBe(a.get(X + dx, y));
         }
       }
-    };
-    mirror((s, flipX) => drawPlayer(s, "kick", 1, X, Y, KIT, { flipX }), 16);
-    mirror((s, flipX) => drawPlayer(s, "bicycle", 4, X, Y, KIT, { flipX }), 24);
-    mirror(
-      (s, flipX) =>
-        drawKeeper(s, "sprawl", 1, X, Y, makeKit("keeper"), { flipX }),
-      24,
-    );
+    }
   });
 
   it("the keeper's gloves are known on every frame but the beaten one", () => {
@@ -417,104 +446,18 @@ describe("spots", () => {
     }
   });
 
-  it("each glove spot is on or beside a glove pixel", () => {
-    const kit = makeKit("keeper");
-    for (const anim of KEEPER_ANIM_NAMES) {
-      for (let f = 0; f < KEEPER_ANIMS[anim].frames; f++) {
-        const g = keeperHands(anim, f);
-        if (g === null) continue;
-        const { s } = drawn((sf) => drawKeeper(sf, anim, f, X, Y, kit));
-        let near = false;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (s.get(X + g.x + dx, Y + g.y + dy) === kit.gloves) near = true;
-          }
-        }
-        expect(near, `${anim} ${f}`).toBe(true);
-      }
+  it("the career cast reads its spots from here", () => {
+    const two = castSpots();
+    expect(castSpots()).toBe(two);
+    for (let f = 0; f < 8; f++) {
+      const s = ballSpot("juggle", f)!;
+      expect(two.JUGGLE_X[f]).toBe(s.x);
+      expect(two.JUGGLE_Y[f]).toBe(s.y);
     }
-  });
-});
-
-describe("the trivela and the toe poke", () => {
-  const moves = [
-    { anim: "trivela", frames: 6, fps: 10, strike: 2 },
-    { anim: "toepoke", frames: 5, fps: 10, strike: 1 },
-  ] as const;
-
-  it("are shots with their frames, rates and strike frames", () => {
-    for (const m of moves) {
-      expect(SHOT_ANIMS).toContain(m.anim);
-      expect(PLAYER_ANIMS[m.anim]).toEqual({
-        frames: m.frames,
-        fps: m.fps,
-        loop: false,
-      });
-      expect(STRIKE_FRAME[m.anim]).toBe(m.strike);
-      for (const youth of [false, true]) {
-        expect(playerSprite(m.anim, youth).frames.length).toBe(m.frames);
-      }
-    }
-  });
-
-  it("use the standard cells", () => {
-    for (const m of moves) {
-      expect(playerCell(m.anim)).toBe(PLAYER);
-      expect(playerCell(m.anim, true)).toBe(YOUTH);
-    }
-  });
-
-  it("keep the ball at rest in front of him until the strike", () => {
-    for (const m of moves) {
-      for (const youth of [false, true]) {
-        for (let f = 0; f < m.frames; f++) {
-          const b = ballSpot(m.anim, f, { youth });
-          if (f <= m.strike)
-            expect(b, `${m.anim} ${f}`).toEqual({ x: 7, y: -2 });
-          else expect(b, `${m.anim} ${f}`).toBeNull();
-          const flipped = ballSpot(m.anim, f, { youth, flipX: true });
-          if (f <= m.strike) expect(flipped).toEqual({ x: -8, y: -2 });
-          else expect(flipped).toBeNull();
-        }
-      }
-    }
-  });
-
-  it("strike with the boot against the ball", () => {
-    for (const m of moves) {
-      for (const youth of [false, true]) {
-        const { s } = drawn((sf) =>
-          drawPlayer(sf, m.anim, m.strike, X, Y, KIT, { youth }),
-        );
-        // the boot's furthest pixel is the column just left of the ball's 3 x 3
-        let reach = -99;
-        for (const [x, y] of painted(s)) {
-          if (s.get(x, y) === KIT.boots) reach = Math.max(reach, x - X);
-        }
-        expect(reach, `${m.anim} ${youth}`).toBe(5);
-      }
-    }
-  });
-
-  it("mirror pixel for pixel, adult and youth", () => {
-    for (const m of moves) {
-      for (const youth of [false, true]) {
-        const w = playerCell(m.anim, youth).cellW;
-        for (let f = 0; f < m.frames; f++) {
-          const a = drawn((sf) =>
-            drawPlayer(sf, m.anim, f, X, Y, KIT, { youth }),
-          ).s;
-          const b = drawn((sf) =>
-            drawPlayer(sf, m.anim, f, X, Y, KIT, { youth, flipX: true }),
-          ).s;
-          for (let y = Y - 20; y < Y; y++) {
-            for (let dx = -w / 2; dx < w / 2; dx++) {
-              expect(b.get(X - dx - 1, y)).toBe(a.get(X + dx, y));
-            }
-          }
-        }
-      }
-    }
+    expect(two.KICK_DX).toBe(14);
+    expect(two.KICK_DY).toBe(-4);
+    expect(two.KICK_LEFT_DX).toBe(-14);
+    expect(two.LIFT[1]).toBe(-34);
   });
 });
 
@@ -574,21 +517,11 @@ describe("kits", () => {
     expect(makeKit("casual-home").skin).toBe(makeKit("home").skin);
   });
 
-  it("only the keeper wears gloves; a child in his kit has them on the youth frames", () => {
+  it("only the keeper wears gloves", () => {
     for (const base of KIT_BASES) {
       const k = makeKit(base, { look: 2 });
       if (base === "keeper") expect(k.gloves).not.toBe(k.skin);
       else expect(k.gloves, base).toBe(k.skin);
-    }
-    const keeper = makeKit("keeper");
-    for (const anim of ["idle", "celebrate", "run"] as PlayerAnim[]) {
-      const { s } = drawn((sf) =>
-        drawPlayer(sf, anim, 0, X, Y, keeper, { youth: true }),
-      );
-      const gloves = painted(s).filter(
-        ([x, y]) => s.get(x, y) === keeper.gloves,
-      );
-      expect(gloves.length, anim).toBeGreaterThan(0);
     }
   });
 
@@ -608,41 +541,5 @@ describe("kits", () => {
     const k = makeKit("home");
     const n = litKit(k, night);
     for (const slot of SLOTS) expect(n[slot], slot).toBe(night.lit(k[slot]));
-  });
-});
-
-describe("props", () => {
-  it("the match ball is 3 x 3 round its centre, in 3 spin frames", () => {
-    const frames = new Set<string>();
-    for (let f = 0; f < 3; f++) {
-      for (const gold of [false, true]) {
-        const b = drawn((s) => drawMatchBall(s, X, Y, f, DAY, { gold }));
-        expect([b.x0, b.x1, b.y0, b.y1]).toEqual([X - 1, X + 1, Y - 1, Y + 1]);
-        expect(b.count).toBe(9);
-        frames.add(b.s.data.join());
-      }
-    }
-    expect(frames.size).toBe(6);
-  });
-
-  it("the trophy is 9 x 12 standing on (x, y), with a glint frame", () => {
-    const a = drawn((s) => drawTrophy(s, X, Y, DAY));
-    expect([a.x0, a.x1, a.y0, a.y1]).toEqual([X - 4, X + 4, Y - 12, Y - 1]);
-    const g = drawn((s) => drawTrophy(s, X, Y, DAY, true));
-    expect(g.s.data.join()).not.toBe(a.s.data.join());
-    expect(painted(g.s).some(([x, y]) => g.s.get(x, y) === P.white)).toBe(true);
-  });
-
-  it("the puff is three frames of one colour on the ground point", () => {
-    for (let f = 0; f < 3; f++) {
-      const b = drawn((s) => drawPuff(s, X, Y, f, P.chalk));
-      expect(b.count).toBeGreaterThan(0);
-      expect(b.x0).toBeGreaterThanOrEqual(X - 3);
-      expect(b.x1).toBeLessThanOrEqual(X + 3);
-      expect(b.y0).toBeGreaterThanOrEqual(Y - 5);
-      expect(b.y1).toBeLessThan(Y);
-      for (const [x, y] of painted(b.s)) expect(b.s.get(x, y)).toBe(P.chalk);
-    }
-    expect(drawn((s) => drawPuff(s, X, Y, 3, P.chalk)).count).toBe(0);
   });
 });

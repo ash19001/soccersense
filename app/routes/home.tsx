@@ -1,6 +1,7 @@
 // The home screen: the menu scene on the canvas (a football in front of a stadium, under the
-// player's own sky, and an airship carrying the fact of the day) with the DOM captions under
-// the ball.
+// player's own sky, an airship whose sign tells the player about their day, and now and
+// then a plane towing the fact of the day) with the DOM captions under the ball, the day
+// and the daily streak among them.
 //
 // The page is rendered to HTML at build time, when there is no clock, no address and no
 // storage to read. So the first render shows only what never changes (the captions and
@@ -22,12 +23,20 @@ import { PrefetchPageLinks, useNavigate } from "react-router";
 import { STADIUMS } from "~/data";
 import { factForDay, type Fact } from "~/data/facts";
 import { leaderboardFor } from "~/data/leaderboard";
+import { COFFEE_URL, IDEAS_URL, usableLink } from "~/data/links";
 import {
+  MODES,
   type Mode,
+  type PlayedGame,
   type Today,
+  EPOCH_UTC,
+  MS_PER_DAY,
   loadDay,
+  loadHistory,
   msUntilNextDay,
+  playPath,
   resolveToday,
+  streakFor,
 } from "~/game";
 import { strings } from "~/i18n";
 import { MenuScene } from "~/scenes";
@@ -40,12 +49,19 @@ import {
   MenuCaptions,
   Panel,
   PixelStage,
+  RemindMe,
+  Stats,
+  Support,
+  arrivingThroughFade,
   fetchHeadingFaces,
   useArrivalFocus,
   useDeviceSky,
+  useFadeArrival,
 } from "~/ui";
 import type { Route } from "./+types/home";
+import { signMessages } from "./home-sign";
 import { howToPlayContent } from "./how-to-play-card";
+import { type StatsContent, statsContent } from "./stats-content";
 
 export const meta: Route.MetaFunction = () => [
   { title: strings.home.title },
@@ -71,9 +87,11 @@ const STRANDED_MS = 8000;
  * once when a mode is pointed at or chosen, so the next page has it when it arrives.
  */
 const FACES_AFTER_MS = 1500;
-const MODES: readonly Mode[] = ["home", "away"];
 /** What the rules' pop-up says (the "?" button opens it). */
 const RULES = howToPlayContent();
+/** Where the Support pop-up's buttons go: null while a link is still a placeholder. */
+const IDEAS = usableLink(IDEAS_URL);
+const COFFEE = usableLink(COFFEE_URL);
 
 /**
  * The entrance plays once per page load: the first time the home screen is shown. This
@@ -84,12 +102,21 @@ let entranceShown = false;
 /** What the page knows once it is in a browser. */
 interface Matchday {
   today: Today;
-  /** The fact of the day, on the airship's sign. */
+  /** The fact of the day, on the plane's banner. */
   fact: Fact;
   /** The address's query, debug overrides and all: carried on to the mode's page. */
   search: string;
   /** Today's saved result per mode, or null if it has not been played. */
   scores: Record<Mode, number | null>;
+  /**
+   * Each mode's totals on the last seven days, oldest first and today last (null: not
+   * played that day), for the leaderboard's strip.
+   */
+  week: Record<Mode, (number | null)[]>;
+  /** The daily streak: days in a row with a finished game, up to today (or yesterday). */
+  streak: number;
+  /** The streak went up since this device last showed it: it hops, once. */
+  bump: boolean;
   scene: MenuScene;
   /** `?speed=`: how fast the scene's time runs. 1 unless asked. */
   speed: number;
@@ -151,14 +178,21 @@ function createMatchdayStore(): MatchdayStore {
     const scores = {
       home: saved.home?.total ?? null,
       away: saved.away?.total ?? null,
+      retro: saved.retro?.total ?? null,
+      nextgen: saved.nextgen?.total ?? null,
     };
+    const history = loadHistory(today.dayNumber);
+    const days = history.map((game) => game.day);
+    const streak = streakFor(days, today.dayNumber).current;
+    const week = weekOf(history, today.dayNumber);
     if (
       current &&
       current.today.dayNumber === today.dayNumber &&
       current.fact.id === fact.id &&
       current.search === search &&
-      current.scores.home === scores.home &&
-      current.scores.away === scores.away
+      MODES.every((mode) => current?.scores[mode] === scores[mode]) &&
+      JSON.stringify(current.week) === JSON.stringify(week) &&
+      current.streak === streak
     ) {
       return false;
     }
@@ -170,7 +204,8 @@ function createMatchdayStore(): MatchdayStore {
         seed: today.dayNumber,
         fact: fact.text,
         labels: strings.home.canvas,
-        intro: !entranceShown,
+        // Back from a game through the fade (its MENU), the ball arrives as it fades in.
+        intro: !entranceShown || arrivingThroughFade(),
       });
       entranceShown = true;
       scene.onHover = (mode) => listener?.onHover(mode);
@@ -184,7 +219,22 @@ function createMatchdayStore(): MatchdayStore {
       scene.setFact(fact.text);
     }
     scene.setScores(scores);
-    current = { today, fact, search, scores, scene, speed: speedFrom(search) };
+    // The airship's sign: the player's day, one message after another.
+    scene.setSignMessages(signMessages(today.dayNumber, scores, streak));
+    // The streak hops the first time it is seen after it went up (remembered per device).
+    const seen = readStreakSeen();
+    if (streak !== seen) writeStreakSeen(streak);
+    current = {
+      today,
+      fact,
+      search,
+      scores,
+      week,
+      streak,
+      bump: streak > seen,
+      scene,
+      speed: speedFrom(search),
+    };
     return true;
   };
 
@@ -233,8 +283,50 @@ function serverMatchday(): null {
   return null;
 }
 
+/** Where this device remembers the last streak it showed, for the hop when it goes up. */
+const STREAK_SEEN = "soccersense:streak-seen";
+
+function readStreakSeen(): number {
+  try {
+    const n = Number(window.localStorage.getItem(STREAK_SEEN));
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function writeStreakSeen(days: number): void {
+  try {
+    window.localStorage.setItem(STREAK_SEEN, String(days));
+  } catch {
+    // no storage: it hops again next time, which is no harm
+  }
+}
+
 /** Rows of the day's table on the home screen. */
 const TOP = 10;
+/** Days in the leaderboard's strip of the player's own totals, today included. */
+const WEEK = 7;
+
+/** Each mode's totals on the last WEEK days up to `today`, oldest first (null: not played). */
+function weekOf(
+  history: readonly PlayedGame[],
+  today: number,
+): Record<Mode, (number | null)[]> {
+  const week = Object.fromEntries(
+    MODES.map((mode) => [mode, Array<number | null>(WEEK).fill(null)]),
+  ) as Record<Mode, (number | null)[]>;
+  for (const game of history) {
+    const i = game.day - (today - WEEK + 1);
+    if (i >= 0 && i < WEEK && week[game.mode]) week[game.mode][i] = game.total;
+  }
+  return week;
+}
+
+/** The weekday (0 Sunday) of a game day, day 1 and before too: days change at midnight UTC. */
+function weekdayOf(day: number): number {
+  return new Date(EPOCH_UTC + (day - 1) * MS_PER_DAY).getUTCDay();
+}
 
 /**
  * Today's top ten for each mode, the player placed in it if they have played (mock data for
@@ -243,6 +335,7 @@ const TOP = 10;
 function leaderboards(
   day: number,
   scores: Record<Mode, number | null>,
+  week: Record<Mode, readonly (number | null)[]> | null,
 ): LeaderboardBoard[] {
   const text = strings.home.leaderboard;
   return MODES.map((mode) => {
@@ -270,8 +363,36 @@ function leaderboards(
         board.yourRank === null
           ? undefined
           : text.youSpoken(board.yourRank, board.total),
+      mine:
+        board.yourRank === null
+          ? text.nudge(board.total)
+          : text.mine(board.yourRank, board.total),
+      week: week ? weekBoard(day, label, week[mode]) : undefined,
     };
   });
+}
+
+/** The strip of the player's last seven days in one mode, from its totals. */
+function weekBoard(
+  today: number,
+  label: string,
+  totals: readonly (number | null)[],
+): LeaderboardBoard["week"] {
+  const text = strings.home.leaderboard;
+  const days = totals.map((total, i) => {
+    const weekday = weekdayOf(today - totals.length + 1 + i);
+    return {
+      label: text.weekdays[weekday],
+      total,
+      today: i === totals.length - 1,
+      spoken: text.daySpoken(text.weekdaysSpoken[weekday], total),
+    };
+  });
+  return {
+    heading: text.week,
+    days: days.map((d) => ({ label: d.label, total: d.total, today: d.today })),
+    spoken: text.weekSpoken(label, days.map((d) => d.spoken).join(", ")),
+  };
 }
 
 export default function Home() {
@@ -295,7 +416,7 @@ export default function Home() {
     count: number;
     shown: boolean;
     mode: LockedMode;
-  }>({ count: 0, shown: false, mode: "nextgen" });
+  }>({ count: 0, shown: false, mode: "closest" });
   /**
    * The mode whose page is worth fetching already: the last one pointed at or chosen. Its
    * code is then there when the kick-off ends, and the ink it ends on is one frame long.
@@ -308,6 +429,20 @@ export default function Home() {
   /** The rules are up, over the menu: the "?" button opens them. */
   const [help, setHelp] = useState(false);
   const helpButton = useRef<HTMLButtonElement | null>(null);
+  /** The stats are up, over the menu, with what they say (read from storage on opening). */
+  const [stats, setStats] = useState<StatsContent | null>(null);
+  const statsButton = useRef<HTMLButtonElement | null>(null);
+  /** The daily reminder's pop-up is up (the bell opens it), and Support's (the heart). */
+  const [remind, setRemind] = useState(false);
+  const remindButton = useRef<HTMLButtonElement | null>(null);
+  const [support, setSupport] = useState(false);
+  const supportButton = useRef<HTMLButtonElement | null>(null);
+
+  const streak = matchday?.streak ?? null;
+  const bump = matchday?.bump ?? false;
+
+  // Back from a game through the fade: the ink goes once the picture is up.
+  useFadeArrival(scene !== null && sky !== null);
 
   useEffect(() => {
     if (scene && moonPhase !== undefined) scene.setMoonPhase(moonPhase);
@@ -346,7 +481,7 @@ export default function Home() {
       // Leaving unmounts this page, and the cleanup below stops that clock.
       void Promise.resolve(
         navigate({
-          pathname: `/play/${mode}`,
+          pathname: playPath(mode),
           search: window.location.search,
         }),
       ).catch(comeBack);
@@ -394,15 +529,22 @@ export default function Home() {
   const text = strings.home;
   const fact = matchday?.fact ?? null;
   const day = matchday?.today.dayNumber ?? null;
-  const homeScore = matchday?.scores.home ?? null;
-  const awayScore = matchday?.scores.away ?? null;
+  const scores = matchday?.scores ?? null;
+  const week = matchday?.week ?? null;
   const boards = useMemo(
     () =>
-      day === null
-        ? null
-        : leaderboards(day, { home: homeScore, away: awayScore }),
-    [day, homeScore, awayScore],
+      day === null || scores === null ? null : leaderboards(day, scores, week),
+    [day, scores, week],
   );
+  // The tab shown first: the mode played today, if only one was (the player wants to see
+  // where they came), else HOME.
+  const played = scores ? MODES.filter((mode) => scores[mode] !== null) : [];
+  const firstTab: Mode = played.length === 1 ? played[0] : "home";
+  /** The player's stats, read from storage on the press, never while rendering. */
+  const openStats = () => {
+    const today = store.read()?.today.dayNumber;
+    if (today !== undefined) setStats(statsContent(today));
+  };
 
   return (
     <main>
@@ -423,6 +565,8 @@ export default function Home() {
                 mode,
                 label: text.modes[mode].label,
                 line: text.modes[mode].line,
+                short: text.short[mode],
+                tiny: text.tiny[mode],
                 score,
                 scoreSpoken: score === null ? undefined : text.played(score),
               };
@@ -443,13 +587,42 @@ export default function Home() {
               open: help,
             }}
             howToPlayRef={helpButton}
+            stats={{
+              label: strings.stats.open,
+              onClick: openStats,
+              open: stats !== null,
+            }}
+            statsRef={statsButton}
+            remind={{
+              label: strings.remind.open,
+              onClick: () => setRemind(true),
+              open: remind,
+            }}
+            remindRef={remindButton}
+            support={{
+              label: strings.support.open,
+              onClick: () => setSupport(true),
+              open: support,
+            }}
+            supportRef={supportButton}
             dayLabel={
               matchday ? text.day(matchday.today.dayNumber) : text.dayPending
+            }
+            // no streak yet: nothing (a cold grey flame read as a drop of water)
+            streak={
+              streak === null || streak <= 0
+                ? undefined
+                : {
+                    days: streak,
+                    spoken: text.streak.spoken(streak),
+                    title: text.streak.title,
+                    bump,
+                  }
             }
           />
         }
       >
-        {/* The logo and the airship's sign are only pixels: these are for screen readers. */}
+        {/* The logo, the banner and the sign are only pixels: these are for screen readers. */}
         <h1 ref={heading} tabIndex={-1} className="ss-sr">
           {strings.siteName}
         </h1>
@@ -459,11 +632,9 @@ export default function Home() {
           <Leaderboard
             boards={boards}
             labels={text.leaderboard}
-            // The mode played today, if only one was: the player wants to see where they came.
-            initialMode={
-              awayScore !== null && homeScore === null ? "away" : "home"
-            }
+            initialMode={firstTab}
             stowed={stowed}
+            onStats={openStats}
           />
         )}
         {/* With no script there is no picture and no game: the page says what it is. */}
@@ -473,13 +644,35 @@ export default function Home() {
             <p>{text.description}</p>
           </Panel>
         </noscript>
-        {warm && <PrefetchPageLinks page={`/play/${warm}`} />}
+        {warm && <PrefetchPageLinks page={playPath(warm)} />}
         {/* A modal dialog: while it is up nothing behind it, the ball included, can be reached. */}
         <HowToPlay
           {...RULES}
           open={help}
           onClose={() => setHelp(false)}
           returnFocus={helpButton}
+        />
+        {stats && (
+          <Stats
+            {...stats}
+            open
+            onClose={() => setStats(null)}
+            returnFocus={statsButton}
+          />
+        )}
+        <RemindMe
+          labels={strings.remind}
+          open={remind}
+          onClose={() => setRemind(false)}
+          returnFocus={remindButton}
+        />
+        <Support
+          labels={strings.support}
+          ideas={IDEAS}
+          coffee={COFFEE}
+          open={support}
+          onClose={() => setSupport(false)}
+          returnFocus={supportButton}
         />
       </GameLayout>
     </main>

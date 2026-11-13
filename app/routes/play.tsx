@@ -1,7 +1,7 @@
-// The two mode pages, /play/home and /play/away: one module, registered twice in
-// app/routes.ts. The game itself is in ./play/: the screen (Game.tsx), the referee that
-// runs the rules, the clock and the scene (controller.ts), and the game kept in storage as
-// it goes (progress.ts).
+// The mode pages, /play/home, /play/away, /play/retro and /play/next-gen: one module,
+// registered once per mode in app/routes.ts. The game itself is in ./play/: the screen
+// (Game.tsx), the referee that runs the rules, the clock and the scene (controller.ts),
+// and the game kept in storage as it goes (progress.ts).
 //
 // The page is rendered to HTML at build time, when there is no clock, no address and no
 // storage: that HTML is the ink the home screen's kick-off ends on, with the page's
@@ -11,13 +11,13 @@
 
 import { type MetaFunction, useLocation } from "react-router";
 
-import type { Mode } from "~/game";
+import { type Mode, modeOfPath } from "~/game";
 import { strings } from "~/i18n";
 import { Game } from "./play/Game";
 
-/** The mode is the last part of the address. */
+/** The mode is the last part of the address (`playPath` the other way round). */
 function modeFor(pathname: string): Mode {
-  return /\/away\/?$/.test(pathname) ? "away" : "home";
+  return modeOfPath(pathname);
 }
 
 export const meta: MetaFunction = ({ location }) => {

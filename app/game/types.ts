@@ -1,16 +1,25 @@
 /** Shared game types. Data files and rules both import from here. See docs/GAME_DESIGN.md. */
 
-/** The two modes on the ball that can be played today. */
-export type Mode = "home" | "away";
+/**
+ * The modes on the ball that can be played: HOME and AWAY (ranked by how many players give
+ * an answer), RETRO and NEXT-GEN (ranked by an answer's year). The menu's order is `MODES`.
+ */
+export type Mode = "home" | "away" | "retro" | "nextgen";
+
+/** The two modes ranked by an answer's year: RETRO (the oldest wins), NEXT-GEN (the newest). */
+export type EraMode = "retro" | "nextgen";
 
 /**
  * How a question's answers are ranked, best first.
  * - `common`: the most popular answer wins (HOME).
  * - `niche`: the least popular answer wins (AWAY).
+ * - `oldest`: the answer with the earliest year wins (RETRO): its first year, `years[0]`.
+ * - `newest`: the answer with the latest year wins (NEXT-GEN): its last year.
  * - `closest`: the answer whose place is nearest today's stadium wins (locked mode CLOSEST).
  * - `furthest`: the furthest from today's stadium wins (locked mode FURTHEST).
  */
-export type Rule = "common" | "niche" | "closest" | "furthest";
+export type Rule =
+  "common" | "niche" | "oldest" | "newest" | "closest" | "furthest";
 
 export interface LatLng {
   /** Degrees, north positive. */
@@ -59,6 +68,17 @@ export interface Answer extends LatLng {
    * way. Played under another rule, the answer's shot is worked out again from that rule.
    */
   shot: Shot;
+  /**
+   * Every year that makes this a valid answer (title, final or hosting years), whole and
+   * ascending. Ranks RETRO (the first year, `oldest`) and NEXT-GEN (the last, `newest`), and
+   * is required in their questions (`EraAnswer`); HOME and AWAY questions leave it out.
+   */
+  years?: number[];
+}
+
+/** An answer to a RETRO or NEXT-GEN question: its years are required. */
+export interface EraAnswer extends Answer {
+  years: number[];
 }
 
 export interface Question {
@@ -79,6 +99,15 @@ export interface Question {
    * Equatorial Guinea. The judge never accepts them, or a typo of them.
    */
   decoys?: string[];
+}
+
+/**
+ * A RETRO or NEXT-GEN question: every answer has its years (`EraAnswer`). It is a
+ * `Question`, so it plays through the same rules.
+ */
+export interface EraQuestion extends Omit<Question, "mode" | "answers"> {
+  mode: EraMode;
+  answers: EraAnswer[];
 }
 
 /**
@@ -105,4 +134,9 @@ export interface RankedAnswer {
   points: number;
   /** 1-based position in the table; tied answers share a rank. */
   rank: number;
+  /**
+   * The year the table's rule ranks the answer by: its first (`oldest`, RETRO) or its last
+   * (`newest`, NEXT-GEN). Null under the other rules, and for an answer with no years.
+   */
+  year: number | null;
 }

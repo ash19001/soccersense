@@ -26,7 +26,7 @@ export interface Sun {
 }
 
 export interface ShotContext {
-  /** Requested canvas size in logical pixels (`--w`, `--h`; default 130 x 281). */
+  /** Requested canvas size in logical pixels (`--w`, `--h`; default 260 x 562). */
   w: number;
   h: number;
   /** Time in seconds (`--t`, and advanced per frame by `--strip`). */

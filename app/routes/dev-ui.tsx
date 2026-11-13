@@ -54,7 +54,12 @@ export const meta: Route.MetaFunction = () => [
 
 // --- sample content -------------------------------------------------------------------------
 
-const MODE_LABEL: Record<UiMode, string> = { home: "HOME", away: "AWAY" };
+const MODE_LABEL: Record<UiMode, string> = {
+  home: "HOME",
+  away: "AWAY",
+  retro: "RETRO",
+  nextgen: "NEXT-GEN",
+};
 
 const GRADE_LABEL: Record<UiGrade, string> = {
   worldie: "WORLDIE!",
@@ -668,7 +673,7 @@ function FullTimeScreen({
           }))}
           shareLabel={shared ? "COPIED!" : "SHARE"}
           onShare={() => setShared(true)}
-          otherLabel="PLAY AWAY"
+          otherLabel="AWAY"
           otherMode="away"
           onPlayOther={() => {}}
           menuLabel="MENU"

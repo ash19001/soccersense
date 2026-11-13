@@ -177,9 +177,33 @@ function inGamut(): boolean {
  * One step of a palette ramp is roughly an amount of 0.25.
  *
  * The result is always inside sRGB: chroma is reduced, never clipped per channel.
+ *
+ * Remembered: painters ask for the same few shades thousands of times while they build a
+ * layer (a crowd, a stand), and working one out is a trip through Oklab and back.
  */
 export function shade(c: Color, amount: number): Color {
   if (c === TRANSPARENT || !(amount > 0 || amount < 0)) return c;
+  let byColor = shades.get(amount);
+  if (byColor === undefined) {
+    if (shades.size >= SHADE_AMOUNTS) shades.clear();
+    byColor = new Map();
+    shades.set(amount, byColor);
+  }
+  let out = byColor.get(c);
+  if (out === undefined) {
+    if (byColor.size >= SHADE_COLORS) byColor.clear();
+    out = shadeOf(c, amount);
+    byColor.set(c, out);
+  }
+  return out;
+}
+
+/** What `shade` remembers: so many amounts, so many colours for each (then it starts again). */
+const SHADE_AMOUNTS = 512;
+const SHADE_COLORS = 1024;
+const shades = new Map<number, Map<Color, Color>>();
+
+function shadeOf(c: Color, amount: number): Color {
   const t = Math.min(1, Math.abs(amount));
   const darker = amount < 0;
   labOf(c);

@@ -8,6 +8,7 @@
  *   ./node_modules/.bin/tsx tools/snap.ts "ball/*" --out .snaps/balls.png
  *   ./node_modules/.bin/tsx tools/snap.ts stadium/full --time all --size all
  *   ./node_modules/.bin/tsx tools/snap.ts stadium/full --crop 40,100,60,40 --scale 10
+ *   ./node_modules/.bin/tsx tools/snap.ts stadium/full --w 960 --h 540 --scale 1
  *
  * It finds every app/**\/*.shots.ts, imports each and merges their `shots` maps. A shots
  * file that fails to import is reported and skipped, so one broken file never blocks
@@ -39,10 +40,11 @@ career/*-t3; quote it so the shell leaves it alone). Several ids render into one
 with a label under each.
 
 Options
-  --w <px> --h <px>   logical canvas size passed to the shot (default 130 x 281)
-  --size <WxH|all>    the same in one go (--size 480x270). "all" renders the four
-                      reference sizes: 130x281, 120x222, 160x300 and 480x270
-  --scale <n>         PNG magnification (default 4)
+  --w <px> --h <px>   logical canvas size passed to the shot (default 260 x 562, a
+                      phone)
+  --size <WxH|all>    the same in one go (--size 960x540). "all" renders the four
+                      reference sizes: 260x562, 240x444, 320x600 and 960x540
+  --scale <n>         PNG magnification (default 2)
   --crop <x,y,w,h>    keep only this rectangle of each frame (logical pixels), for a
                       close look at high --scale
   --t <seconds>       time passed to the shot (default 0)
@@ -73,13 +75,18 @@ const TIME_PRESETS: Record<string, Sun> = {
   dawn: { elevation: -3, morning: true },
 };
 
-/** The sizes every painter must hold at (art bible, section 9). */
+/**
+ * The sizes every painter must hold at (art bible, sections 2.1 and 9); the first is the
+ * default canvas.
+ */
 const REFERENCE_SIZES: readonly (readonly [number, number])[] = [
-  [130, 281],
-  [120, 222],
-  [160, 300],
-  [480, 270],
+  [260, 562],
+  [240, 444],
+  [320, 600],
+  [960, 540],
 ];
+/** The default PNG magnification. */
+const DEFAULT_PNG_SCALE = 2;
 
 const LABEL = hex("#9fb0cc");
 const ERROR_INK = hex("#ff5a4d");
@@ -118,7 +125,7 @@ function parseArgs(argv: readonly string[]): Args {
   const args: Args = {
     ids: [],
     sizes: [],
-    scale: 4,
+    scale: DEFAULT_PNG_SCALE,
     crop: undefined,
     t: 0,
     strip: 1,
@@ -131,8 +138,9 @@ function parseArgs(argv: readonly string[]): Args {
     list: false,
     help: false,
   };
-  let w = 130;
-  let h = 281;
+  let w: number | undefined;
+  let h: number | undefined;
+  let allSizes = false;
   let sunDegrees: number | undefined;
   let morning = false;
 
@@ -188,7 +196,7 @@ function parseArgs(argv: readonly string[]): Args {
       case "--size": {
         const text = value();
         if (text === "all") {
-          args.sizes = [...REFERENCE_SIZES];
+          allSizes = true;
           break;
         }
         const parts = text.toLowerCase().split("x");
@@ -199,7 +207,7 @@ function parseArgs(argv: readonly string[]): Args {
         }
         w = toNumber(name, parts[0], 1, true);
         h = toNumber(name, parts[1], 1, true);
-        args.sizes = [];
+        allSizes = false;
         break;
       }
       case "--scale":
@@ -292,7 +300,8 @@ function parseArgs(argv: readonly string[]): Args {
         throw new UsageError(`Unknown option ${name}`);
     }
   }
-  if (args.sizes.length === 0) args.sizes = [[w, h]];
+  const [w0, h0] = REFERENCE_SIZES[0];
+  args.sizes = allSizes ? [...REFERENCE_SIZES] : [[w ?? w0, h ?? h0]];
   if (args.times.length === 0) {
     args.times = [{ name: "", sun: { ...TIME_PRESETS.day } }];
   }

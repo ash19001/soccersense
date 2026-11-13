@@ -21,6 +21,7 @@ export function howToPlayContent(): HowToPlayContent {
       points: text.shots.points,
       career: text.career.heading,
       step: text.career.step,
+      disclaimer: strings.legal.disclaimer,
     },
     shots: SHOT_ORDER.map((shot) => ({
       grade: shot,

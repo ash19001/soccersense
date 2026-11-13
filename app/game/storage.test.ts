@@ -1,15 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { Turn } from "./session";
+import { dayKeyFor } from "./day";
+import type { Session, Turn } from "./session";
 import {
+  HISTORY_DAYS,
+  MODES,
   clearGame,
+  dayOfKey,
   loadDay,
   loadGame,
+  loadHistory,
+  pruneHistory,
   saveGame,
+  saveSession,
   STORAGE_PREFIX,
   storageKey,
 } from "./storage";
-import type { StorageLike, StoredGame } from "./storage";
+import type { ListableStorage, StorageLike, StoredGame } from "./storage";
 
 /** A minimal in-memory Storage. */
 class FakeStorage implements StorageLike {
@@ -216,9 +223,19 @@ describe("with a storage", () => {
 
   it("loads both modes for the menu", () => {
     const storage = new FakeStorage();
-    expect(loadDay(DAY, storage)).toEqual({ home: null, away: null });
+    expect(loadDay(DAY, storage)).toEqual({
+      home: null,
+      away: null,
+      retro: null,
+      nextgen: null,
+    });
     saveGame(DAY, "away", GAME, storage);
-    expect(loadDay(DAY, storage)).toEqual({ home: null, away: GAME });
+    expect(loadDay(DAY, storage)).toEqual({
+      home: null,
+      away: GAME,
+      retro: null,
+      nextgen: null,
+    });
   });
 
   it("clears one game", () => {
@@ -226,7 +243,12 @@ describe("with a storage", () => {
     saveGame(DAY, "home", GAME, storage);
     saveGame(DAY, "away", GAME, storage);
     clearGame(DAY, "home", storage);
-    expect(loadDay(DAY, storage)).toEqual({ home: null, away: GAME });
+    expect(loadDay(DAY, storage)).toEqual({
+      home: null,
+      away: GAME,
+      retro: null,
+      nextgen: null,
+    });
     clearGame(DAY, "home", storage);
     expect(storage.items.size).toBe(1);
   });
@@ -263,7 +285,12 @@ describe("with a storage", () => {
   it("never throws when the storage does", () => {
     expect(saveGame(DAY, "home", GAME, BROKEN)).toBe(false);
     expect(loadGame(DAY, "home", BROKEN)).toBeNull();
-    expect(loadDay(DAY, BROKEN)).toEqual({ home: null, away: null });
+    expect(loadDay(DAY, BROKEN)).toEqual({
+      home: null,
+      away: null,
+      retro: null,
+      nextgen: null,
+    });
     expect(() => clearGame(DAY, "home", BROKEN)).not.toThrow();
   });
 
@@ -281,7 +308,12 @@ describe("with no storage", () => {
   it("does nothing when told there is none", () => {
     expect(saveGame(DAY, "home", GAME, null)).toBe(false);
     expect(loadGame(DAY, "home", null)).toBeNull();
-    expect(loadDay(DAY, null)).toEqual({ home: null, away: null });
+    expect(loadDay(DAY, null)).toEqual({
+      home: null,
+      away: null,
+      retro: null,
+      nextgen: null,
+    });
     expect(() => clearGame(DAY, "home", null)).not.toThrow();
   });
 
@@ -289,7 +321,12 @@ describe("with no storage", () => {
     vi.stubGlobal("localStorage", undefined);
     expect(saveGame(DAY, "home", GAME)).toBe(false);
     expect(loadGame(DAY, "home")).toBeNull();
-    expect(loadDay(DAY)).toEqual({ home: null, away: null });
+    expect(loadDay(DAY)).toEqual({
+      home: null,
+      away: null,
+      retro: null,
+      nextgen: null,
+    });
     expect(() => clearGame(DAY, "home")).not.toThrow();
   });
 
@@ -307,7 +344,12 @@ describe("with no storage", () => {
     try {
       expect(saveGame(DAY, "home", GAME)).toBe(false);
       expect(loadGame(DAY, "home")).toBeNull();
-      expect(loadDay(DAY)).toEqual({ home: null, away: null });
+      expect(loadDay(DAY)).toEqual({
+        home: null,
+        away: null,
+        retro: null,
+        nextgen: null,
+      });
       expect(() => clearGame(DAY, "home")).not.toThrow();
     } finally {
       if (original) Object.defineProperty(globalThis, "localStorage", original);
@@ -329,8 +371,184 @@ describe("with the default localStorage", () => {
     expect(saveGame(DAY, "away", GAME)).toBe(true);
     expect(storage.items.has("soccersense:v1:2026-11-10:away")).toBe(true);
     expect(loadGame(DAY, "away")).toEqual(GAME);
-    expect(loadDay(DAY)).toEqual({ home: null, away: GAME });
+    expect(loadDay(DAY)).toEqual({
+      home: null,
+      away: GAME,
+      retro: null,
+      nextgen: null,
+    });
     clearGame(DAY, "away");
     expect(loadGame(DAY, "away")).toBeNull();
+  });
+});
+
+/** A FakeStorage that can list its keys, as localStorage can. */
+class ListedStorage extends FakeStorage implements ListableStorage {
+  get length(): number {
+    return this.items.size;
+  }
+  key(index: number): string | null {
+    return [...this.items.keys()][index] ?? null;
+  }
+}
+
+/** A finished game of seven questions with these grades (points from the grades). */
+function finished(grades: Turn["grade"][]): StoredGame {
+  const points = {
+    worldie: 100,
+    golazo: 80,
+    trivela: 60,
+    toepoke: 30,
+    tapin: 10,
+  };
+  const turns = grades.map((grade, i): Turn => ({
+    ...TURNS[0],
+    questionId: `q${i + 1}`,
+    grade,
+    points: (points as Record<string, number>)[grade] ?? 0,
+  }));
+  return { total: turns.reduce((s, t) => s + t.points, 0), turns };
+}
+
+describe("dayOfKey", () => {
+  it("is dayKeyFor the other way round", () => {
+    for (const day of [1, 2, 31, 52, 365, 366, 1000]) {
+      expect(dayOfKey(dayKeyFor(day))).toBe(day);
+    }
+    expect(dayOfKey("2026-11-10")).toBe(1);
+    expect(dayOfKey("2026-11-12")).toBe(3);
+  });
+
+  it("is null for anything that is not a day from day 1 on", () => {
+    for (const key of [
+      "2026-11-09",
+      "2026-02-31",
+      "2026-13-01",
+      "26-11-10",
+      "2026-11-10:home",
+      "",
+      "leaderboard",
+    ]) {
+      expect(dayOfKey(key), key).toBeNull();
+    }
+  });
+});
+
+describe("the history", () => {
+  it("lists every finished game in the year up to today, oldest first", () => {
+    const storage = new ListedStorage();
+    saveGame(dayKeyFor(5), "away", finished(["worldie", "miss"]), storage);
+    saveGame(dayKeyFor(5), "home", finished(["golazo"]), storage);
+    saveGame(dayKeyFor(3), "home", finished(["tapin", "timeup"]), storage);
+    // Not finished games: one in progress, the leaderboard's choice, the sound, junk.
+    storage.setItem(`${storageKey(dayKeyFor(6), "home")}:live`, "{}");
+    storage.setItem("soccersense:v1:leaderboard", "closed");
+    storage.setItem("soccersense:v1:sound", "off");
+    storage.setItem(storageKey(dayKeyFor(4), "home"), "{oops");
+    storage.setItem("soccersense:v1:2026-11-12:retro", "{}");
+    expect(loadHistory(5, storage)).toEqual([
+      {
+        day: 3,
+        mode: "home",
+        total: 10,
+        grades: ["tapin", "timeup"],
+        points: [10, 0],
+      },
+      { day: 5, mode: "home", total: 80, grades: ["golazo"], points: [80] },
+      {
+        day: 5,
+        mode: "away",
+        total: 100,
+        grades: ["worldie", "miss"],
+        points: [100, 0],
+      },
+    ]);
+  });
+
+  it("leaves out games after today and before the year", () => {
+    const storage = new ListedStorage();
+    saveGame(dayKeyFor(1), "home", finished(["miss"]), storage);
+    saveGame(dayKeyFor(2), "home", finished(["miss"]), storage);
+    saveGame(dayKeyFor(400), "home", finished(["miss"]), storage);
+    const today = 1 + HISTORY_DAYS;
+    expect(loadHistory(today, storage).map((g) => g.day)).toEqual([2]);
+    expect(loadHistory(1, storage).map((g) => g.day)).toEqual([1]);
+  });
+
+  it("is empty with no storage, broken storage or storage that cannot list", () => {
+    expect(loadHistory(5, null)).toEqual([]);
+    expect(loadHistory(5, BROKEN as ListableStorage)).toEqual([]);
+    const unlisted = new FakeStorage();
+    saveGame(DAY, "home", GAME, unlisted);
+    expect(loadHistory(1, unlisted as unknown as ListableStorage)).toEqual([]);
+    vi.stubGlobal("localStorage", undefined);
+    expect(loadHistory(5)).toEqual([]);
+  });
+
+  it("reads the global localStorage when no storage is passed", () => {
+    const storage = new ListedStorage();
+    vi.stubGlobal("localStorage", storage);
+    saveGame(dayKeyFor(2), "away", finished(["trivela"]), storage);
+    expect(loadHistory(2)).toEqual([
+      { day: 2, mode: "away", total: 60, grades: ["trivela"], points: [60] },
+    ]);
+  });
+
+  it("is pruned to a year as a finished game is saved", () => {
+    const storage = new ListedStorage();
+    saveGame(dayKeyFor(1), "home", finished(["miss"]), storage);
+    saveGame(dayKeyFor(1), "away", finished(["miss"]), storage);
+    saveGame(dayKeyFor(2), "home", finished(["miss"]), storage);
+    storage.setItem(`${storageKey(dayKeyFor(1), "home")}:live`, "{}");
+    storage.setItem("soccersense:v1:leaderboard", "closed");
+    expect(pruneHistory(HISTORY_DAYS, storage)).toBe(0);
+    expect(pruneHistory(HISTORY_DAYS + 1, storage)).toBe(2);
+    expect([...storage.items.keys()].sort()).toEqual([
+      "soccersense:v1:2026-11-10:home:live",
+      `soccersense:v1:${dayKeyFor(2)}:home`,
+      "soccersense:v1:leaderboard",
+    ]);
+    // saveSession prunes from the day of the game it saves.
+    const session = {
+      ...finished(["worldie"]),
+      phase: "done",
+      mode: "home",
+      dayNumber: HISTORY_DAYS + 2,
+    } as unknown as Session;
+    expect(saveSession(session, storage)).toBe(true);
+    expect(loadHistory(HISTORY_DAYS + 2, storage).map((g) => g.day)).toEqual([
+      HISTORY_DAYS + 2,
+    ]);
+  });
+
+  it("prunes from the real day, so a game on a far-off ?day= keeps the real games", () => {
+    const storage = new ListedStorage();
+    saveGame(dayKeyFor(1), "home", finished(["miss"]), storage);
+    saveGame(dayKeyFor(2), "away", finished(["miss"]), storage);
+    const future = {
+      ...finished(["worldie"]),
+      phase: "done",
+      mode: "home",
+      dayNumber: 5000,
+    } as unknown as Session;
+    // Played with ?day=5000 on day 3: nothing of the real year goes.
+    expect(saveSession(future, storage, 3)).toBe(true);
+    expect(loadHistory(5000, storage).map((g) => g.day)).toEqual([5000]);
+    expect(loadHistory(3, storage).map((g) => g.day)).toEqual([1, 2]);
+    // A real day more than a year on prunes them.
+    expect(saveSession(future, storage, 1 + HISTORY_DAYS)).toBe(true);
+    expect(loadHistory(1 + HISTORY_DAYS, storage).map((g) => g.day)).toEqual([
+      2,
+    ]);
+  });
+
+  it("never throws when pruning cannot be done", () => {
+    expect(pruneHistory(500, null)).toBe(0);
+    expect(pruneHistory(500, BROKEN)).toBe(0);
+    expect(pruneHistory(500, new FakeStorage())).toBe(0);
+  });
+
+  it("lists the modes in the menu's order", () => {
+    expect(MODES).toEqual(["home", "away", "retro", "nextgen"]);
   });
 });

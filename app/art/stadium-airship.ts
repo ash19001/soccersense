@@ -11,10 +11,12 @@ import {
   Surface,
   TRANSPARENT,
   shade,
+  wrapText,
+  type BitmapFont,
   type Color,
 } from "~/pixel";
-import type { Zone } from "~/art/layout";
-import { drawLedLine, drawLedPanel } from "~/art/led";
+import { AIRSHIP_SIZE, type Zone } from "~/art/layout";
+import { drawLedLine, drawLedPanel, ledLap, measureLamps } from "~/art/led";
 import type { Lighting } from "~/art/lighting";
 import { P } from "~/art/palette";
 import type { Pose } from "~/art/stadium-airship-poke";
@@ -29,30 +31,61 @@ export interface SignPlace {
   /** The envelope's centre, at rest. */
   x: number;
   y: number;
+  /** Its size against the layout's sign zone: every length of the drawing is scaled by it. */
+  size: number;
 }
 
 /**
- * Where the airship hangs for this view: beside the wordmark on a monitor, under it on a
- * phone. The panel is `menuLayout().scoreboard`; the envelope is built round it.
+ * Where the airship hangs for this view: high in the top left of the sky, beside the
+ * wordmark on a monitor, under it on a phone. The panel is `menuLayout().scoreboard`
+ * shrunk to `AIRSHIP_SIZE`; the envelope is built round it.
  */
 export function signPlace(v: View): SignPlace {
   const panel = { ...v.sign };
-  const roomy = panel.h >= 35;
-  const rx = roomy ? 64 : Math.max(52, Math.min(60, Math.floor(v.w / 2) - 5));
-  const ry = roomy ? 24 : 23;
+  const roomy = panel.h >= 70;
+  const rx = roomy
+    ? 128
+    : Math.max(104, Math.min(120, Math.floor(v.w / 2) - 10));
+  const ry = roomy ? 48 : 46;
+  const x = panel.x + Math.floor(panel.w / 2) + (roomy ? 4 : 0);
+  const y = panel.y + Math.floor(panel.h / 2);
+
+  // Smaller than the zone (the owner's wish), round the same centre and in the same
+  // proportions; the panel keeps whole lamps (even sizes), and is never smaller than
+  // "DID YOU KNOW?" over a big line needs (SIGN_MIN_W x SIGN_MIN_H: 2 px more each way
+  // on a phone).
+  const k = AIRSHIP_SIZE;
+  const even = (n: number): number => 2 * Math.round((n * k) / 2);
+  const w = Math.min(Math.max(SIGN_MIN_W, even(panel.w)), v.w - (v.w % 2));
+  const h = Math.max(SIGN_MIN_H, even(panel.h));
   return {
-    panel,
-    rx,
-    ry,
-    x: panel.x + Math.floor(panel.w / 2) + (roomy ? 2 : 0),
-    y: panel.y + Math.floor(panel.h / 2),
+    panel: {
+      x: x - (roomy ? Math.round(4 * k) : 0) - Math.floor(w / 2),
+      y: y - Math.floor(h / 2),
+      w,
+      h,
+    },
+    rx: Math.round(rx * k),
+    ry: Math.round(ry * k),
+    x,
+    y,
+    size: k,
   };
 }
 
-/** Margins of the airship's own surface round the envelope. */
-const PAD_X = 12;
-const PAD_TOP = 9;
-const PAD_BOTTOM = 10;
+/** How big the airship is against the layout's sign zone (`~/art/layout`). */
+export { AIRSHIP_SIZE };
+
+/**
+ * The panel's least height: its housing and margin (10 px) and 17 rows of lamps on the
+ * 2 px pitch, a header in the small face over a line in the big one.
+ */
+export const SIGN_MIN_H = 44;
+/**
+ * The panel's least width: its housing and margins (12 px) and "DID YOU KNOW?", the
+ * header the fact comes under, in the small face (100 px of lamps), so that never scrolls.
+ */
+export const SIGN_MIN_W = 112;
 
 export interface Airship {
   layer: Surface;
@@ -74,19 +107,14 @@ export interface Airship {
   ridge: { x: number; y: number }[];
 }
 
-/** Paint the airship (everything but the lit text) for this light. */
-export function paintAirship(place: SignPlace, light: Lighting): Airship {
-  const { rx, ry } = place;
-  const w = rx * 2 + 1 + PAD_X * 2;
-  const h = ry * 2 + 1 + PAD_TOP + PAD_BOTTOM;
-  const s = new Surface(w, h);
-  const cx = PAD_X + rx;
-  const cy = PAD_TOP + ry;
-  const env = light.env;
-  const night = light.lightsOn;
+/** Margins of the layer round the envelope (then sized). */
+const PAD_X = 24;
+const PAD_TOP = 18;
+const PAD_BOTTOM = 20;
 
-  // The envelope's half-height at a place along it: blunt nose (left), tapered tail.
-  const half = (dx: number): number => {
+/** The envelope's half-height at a place along it. */
+function halfOf(rx: number, ry: number): (dx: number) => number {
+  return (dx: number): number => {
     const u = dx / rx;
     if (u < -1 || u > 1) return -1;
     const n = u < 0 ? 2.5 : 2.1;
@@ -94,21 +122,56 @@ export function paintAirship(place: SignPlace, light: Lighting): Airship {
     const taper = u > 0.45 ? 1 - 0.34 * ((u - 0.45) / 0.55) ** 2 : 1;
     return ry * body * taper;
   };
+}
 
-  // tail fins first, so the envelope overlaps their roots
+/** Paint the airship (everything but the lit text) for this light. */
+export function paintAirship(place: SignPlace, light: Lighting): Airship {
+  const { rx, ry } = place;
+  // Every length of the drawing at the airship's size (`signPlace`: 7/8 of the layout's),
+  // so it keeps its proportions; 1 and 2 px details stay as they are.
+  const K = (n: number): number => Math.round(n * place.size);
+  const padX = K(PAD_X);
+  const padTop = K(PAD_TOP);
+  const w = rx * 2 + 1 + padX * 2;
+  const h = ry * 2 + 1 + padTop + K(PAD_BOTTOM);
+  const s = new Surface(w, h);
+  const cx = padX + rx;
+  const cy = padTop + ry;
+  const env = light.env;
+  const night = light.lightsOn;
+  const half = halfOf(rx, ry);
+  const topAt = (dx: number): number => cy - Math.round(half(dx));
+  const bottomAt = (dx: number): number => cy + Math.round(half(dx));
+
+  // ---- tail fins first, so the envelope overlaps their roots ----------------------
   const fin = env(P.home);
   const finDark = env(P.homeDark);
   const finLight = env(P.homeLight);
-  for (let i = 0; i < 15; i++) {
-    const x = cx + rx - 19 + i;
-    const up = Math.round(Math.min(i * 0.95, 11) + 4);
-    s.rect(x, cy - Math.round(half(rx - 19 + i)) - up + 3, 1, up, fin);
-    s.px(x, cy - Math.round(half(rx - 19 + i)) - up + 3, finLight);
-    s.rect(x, cy + Math.round(half(rx - 19 + i)) - 3, 1, up, finDark);
+  const FIN = K(30);
+  const HINGE = K(20);
+  for (let i = 0; i < FIN; i++) {
+    const dx = rx - K(38) + i;
+    const x = cx + dx;
+    const up = Math.round(Math.min(i * 0.95, K(22)) + K(8));
+    const t0 = topAt(dx) - up + K(6);
+    s.rect(x, t0, 1, up, fin);
+    // the leading edge catches the light: two pixels where it climbs, one where it is flat
+    s.px(x, t0, finLight);
+    if (i < K(23)) s.px(x, t0 + 1, finLight);
+    // the rudder's hinge, and the elevator's under the envelope
+    if (i === HINGE) s.rect(x, t0 + 2, 1, up - 2, finDark);
+    const b0 = bottomAt(dx) - K(6);
+    s.rect(x, b0, 1, up, finDark);
+    if (i === HINGE) s.rect(x, b0, 1, up - 1, fin);
+    // its lower edge, turned from the light
+    s.px(x, b0 + up - 1, env(P.night));
   }
-  s.rect(cx + rx - 4, cy - Math.round(half(rx - 4)) - 9, 6, 1, finLight);
+  // the little stabiliser across the tail's tip, edge on
+  const capY = topAt(rx - K(8)) - K(18);
+  s.rect(cx + rx - K(8), capY, K(12), 2, finLight);
+  s.rect(cx + rx - K(8), capY + 1, K(12), 1, fin);
 
-  // the envelope: bands of light from the top down
+  // ---- the envelope: bands of light from the top down ----------------------------
   const tones: readonly Color[] = [
     env(P.white),
     env(P.chalk),
@@ -117,40 +180,73 @@ export function paintAirship(place: SignPlace, light: Lighting): Airship {
     env(P.concreteLight),
   ];
   const stops = [-0.62, -0.2, 0.34, 0.74];
+  const turn = rx * 0.72;
+  const bandAt = (dx: number, dy: number, hh: number): number => {
+    const v = hh <= 0 ? 0 : dy / hh;
+    let band = 0;
+    while (band < stops.length && v > stops[band]) band++;
+    // the nose and the tail turn away from the light a little
+    if (dx > turn && band < 4) band++;
+    return band;
+  };
   for (let dx = -rx; dx <= rx; dx++) {
     const hh = half(dx);
     if (hh < 0) continue;
     const top = Math.round(-hh);
     const bottom = Math.round(hh);
+    let above = -1;
     for (let dy = top; dy <= bottom; dy++) {
-      const v = hh <= 0 ? 0 : dy / hh;
-      let band = 0;
-      while (band < stops.length && v > stops[band]) band++;
-      // the nose and the tail turn away from the light a little
-      if (dx > rx * 0.72 && band < 4) band++;
-      s.px(cx + dx, cy + dy, tones[band]);
+      const band = bandAt(dx, dy, hh);
+      let c = tones[band];
+      const x = cx + dx;
+      const y = cy + dy;
+      // where one band meets the next, a row (or a column) of both, chequered
+      const odd = ((x + y) & 1) === 1;
+      if (odd && above >= 0 && band !== above) c = tones[above];
+      else if (odd && dx - 1 <= turn && dx > turn) {
+        c = tones[bandAt(dx - 1, dy, half(dx - 1))];
+      }
+      above = band;
+      s.px(x, y, c);
     }
   }
   // the nose cone and a band round the tail in the club's colour
   for (let dx = -rx; dx <= rx; dx++) {
     const hh = half(dx);
     if (hh < 0) continue;
-    const nose = dx < -rx + 7;
-    const band = dx > rx - 27 && dx < rx - 23;
+    const nose = dx < -rx + K(14);
+    const band = dx > rx - K(54) && dx < rx - K(46);
     if (!nose && !band) continue;
     for (let dy = Math.round(-hh); dy <= Math.round(hh); dy++) {
       const v = hh <= 0 ? 0 : dy / hh;
-      s.px(cx + dx, cy + dy, v < -0.45 ? finLight : v < 0.4 ? fin : finDark);
+      let c = v < -0.45 ? finLight : v < 0.4 ? fin : finDark;
+      // a lit rim along the cone's back edge and the band's front one
+      if (
+        (dx === -rx + K(14) - 1 || dx === rx - K(54) + 1) &&
+        v > -0.75 &&
+        v < 0.4
+      ) {
+        c = finLight;
+      }
+      s.px(cx + dx, cy + dy, c);
     }
   }
-  // seams
+  // the mooring cap on the very nose
+  for (let dx = -rx; dx < -rx + 3; dx++) {
+    const hh = Math.min(3, Math.round(half(dx)));
+    s.rect(cx + dx, cy - hh, 1, hh * 2 + 1, finDark);
+  }
+  s.px(cx - rx + 1, cy - 2, fin);
+
+  // seams: the two the stress pulls taut (1 px, like every line drawn on a surface)
   const seam = env(P.mist);
   const seams: { x: number; y: number }[] = [];
   for (const u of [-0.74, 0.8]) {
     const dx = Math.round(u * rx);
     const hh = half(dx);
     for (let dy = Math.round(-hh * 0.6); dy <= Math.round(hh * 0.3); dy++) {
-      const x = cx + dx + Math.round(Math.abs(dy / ry) ** 2 * (u < 0 ? 3 : -3));
+      const x =
+        cx + dx + Math.round(Math.abs(dy / ry) ** 2 * K(u < 0 ? 6 : -6));
       s.px(x, cy + dy, seam);
       seams.push({ x, y: cy + dy });
     }
@@ -159,88 +255,396 @@ export function paintAirship(place: SignPlace, light: Lighting): Airship {
   // the seam along the top, which only shows when the envelope is stretched taut
   const ridge: { x: number; y: number }[] = [];
   for (let dx = Math.round(-rx * 0.62); dx <= Math.round(rx * 0.6); dx++) {
-    ridge.push({ x: cx + dx, y: cy - Math.round(half(dx)) + 2 });
+    ridge.push({ x: cx + dx, y: cy - Math.round(half(dx)) + 4 });
   }
 
-  // the gondola, slung under the middle, and two engine pods
-  const gy = cy + ry + 1;
-  const gx = cx - 9;
-  s.rect(gx + 2, gy - 2, 1, 2, env(P.steel));
-  s.rect(gx + 15, gy - 2, 1, 2, env(P.steel));
-  s.rect(gx, gy, 18, 5, env(P.slate));
-  s.rect(gx, gy, 18, 1, env(P.steel));
-  s.rect(gx + 1, gy + 5, 16, 1, env(P.night));
-  for (let i = 0; i < 5; i++) {
-    s.rect(gx + 2 + i * 3, gy + 2, 2, 2, night ? P.goldLight : env(P.skyLow));
+  // ---- the gondola, slung under the middle ----------------------------------------
+  const gw = 2 * Math.round(K(36) / 2);
+  const gy = cy + ry + 2;
+  const gx = cx - gw / 2;
+  const steel = env(P.steel);
+  const slate = env(P.slate);
+  // its struts, 2 px each
+  s.rect(gx + 4, gy - 4, 2, 4, steel);
+  s.rect(gx + gw - 6, gy - 4, 2, 4, steel);
+  s.px(gx + 4, gy - 4, env(P.concreteLight));
+  s.px(gx + gw - 6, gy - 4, env(P.concreteLight));
+  // the cabin: a lit roof, the club's stripe, rounded corners, a keel
+  s.rect(gx, gy, gw, 10, slate);
+  s.rect(gx, gy, gw, 2, steel);
+  s.rect(gx + 1, gy, K(12), 1, env(P.concreteLight));
+  s.rect(gx, gy + 8, gw, 1, env(P.home));
+  s.rect(gx + 2, gy + 10, gw - 4, 2, env(P.night));
+  s.erase(gx, gy, 1, 1);
+  s.erase(gx + gw - 1, gy, 1, 1);
+  s.erase(gx, gy + 9, 1, 1);
+  s.erase(gx + gw - 1, gy + 9, 1, 1);
+  // the windscreen at the front (the nose is to the left), then four windows
+  const glass = night ? P.goldLight : env(P.skyLow);
+  const glassLow = night ? P.gold : env(P.skyMid);
+  const glint = night ? P.white : env(P.white);
+  const windows = Math.floor((gw - 6) / 6);
+  for (let i = 0; i < windows; i++) {
+    const wx = gx + 4 + i * 6;
+    const wy = gy + 3;
+    s.rect(wx, wy, 4, 4, glass);
+    s.rect(wx, wy + 3, 4, 1, glassLow);
+    s.px(wx, wy, glint);
   }
+  // the windscreen leans back: its top front corner is the cabin's
+  s.rect(gx + 1, gy + 3, 2, 3, glass);
+  s.px(gx + 1, gy + 3, glint);
+  s.px(gx + 1, gy + 6, glassLow);
+
+  // ---- two engine pods on pylons ---------------------------------------------------
   const props: { x: number; y: number }[] = [];
-  for (const ex of [cx + 16, cx + 30]) {
-    const ey = cy + Math.round(half(ex - cx)) + 1;
-    s.rect(ex, ey, 6, 3, env(P.steel));
-    s.rect(ex, ey, 6, 1, env(P.concreteLight));
-    props.push({ x: ex + 6, y: ey + 1 });
+  for (const ex of [cx + K(32), cx + K(60)]) {
+    const ey = cy + Math.round(half(ex - cx)) + 2;
+    s.rect(ex + 4, ey - 2, 4, 2, steel);
+    s.rect(ex, ey, 12, 6, steel);
+    s.rect(ex, ey, 12, 2, env(P.concreteLight));
+    s.rect(ex + 1, ey, 6, 1, env(P.steelHi));
+    s.rect(ex, ey + 5, 12, 1, slate);
+    // rounded intake at the front, the exhaust behind
+    s.erase(ex, ey, 1, 1);
+    s.erase(ex, ey + 5, 1, 1);
+    s.rect(ex, ey + 2, 1, 2, env(P.night));
+    s.rect(ex + 11, ey + 2, 1, 2, slate);
+    props.push({ x: ex + 12, y: ey + 2 });
   }
 
-  // the panel on the flank
-  const px = place.panel.x - (place.x - rx - PAD_X);
-  const py = place.panel.y - (place.y - ry - PAD_TOP);
-  s.rect(
-    px - 1,
-    py - 1,
-    place.panel.w + 2,
-    place.panel.h + 2,
-    env(P.concreteDark),
-  );
-  drawLedPanel(s, px, py, place.panel.w, place.panel.h, { grade: env });
+  // ---- the panel on the flank, in a 2 px housing ------------------------------------
+  const px = place.panel.x - (place.x - rx - padX);
+  const py = place.panel.y - (place.y - ry - padTop);
+  const pw = place.panel.w;
+  const ph = place.panel.h;
+  s.rect(px - 2, py - 2, pw + 4, ph + 4, env(P.concreteDark));
+  s.rect(px - 2, py - 2, pw + 4, 1, env(P.concrete));
+  // bolts at its corners
+  const bolt = env(P.steel);
+  for (const [bx, by] of [
+    [px - 1, py - 1],
+    [px + pw, py - 1],
+    [px - 1, py + ph],
+    [px + pw, py + ph],
+  ]) {
+    s.px(bx, by, bolt);
+  }
+  drawLedPanel(s, px, py, pw, ph, { grade: env });
 
   return {
     layer: s,
-    x: place.x - rx - PAD_X,
-    y: place.y - ry - PAD_TOP,
+    x: place.x - rx - padX,
+    y: place.y - ry - padTop,
     place,
     props,
     nose: { x: cx - rx, y: cy },
-    tail: { x: cx + rx - 2, y: cy - Math.round(half(rx - 4)) - 10 },
+    tail: { x: cx + rx - 4, y: capY - 2 },
     centre: { x: cx, y: cy },
-    gondola: { x: gx, y: gy - 2, w: 18, h: 8 },
+    gondola: { x: gx, y: gy - 4, w: gw, h: 16 },
     seams,
     ridge,
   };
 }
 
+// ---------------------------------------------------------------------------
+// In the air: propellers, lamps, the pilot at his window
+// ---------------------------------------------------------------------------
+
+/**
+ * The propellers on `s` with the layer at (x, y): a spinner, and a blade of two columns
+ * (its lit face and its shaded one) that flips between full length (10) and edge on (6).
+ */
+function drawProps(
+  s: Surface,
+  x: number,
+  y: number,
+  ship: Airship,
+  light: Lighting,
+  flip: boolean,
+): void {
+  const lit = light.env(P.steelHi);
+  const dim = light.env(P.mist);
+  const hub = light.env(P.concrete);
+  for (const p of ship.props) {
+    const X = x + p.x;
+    const Y = y + p.y;
+    if (flip) {
+      s.rect(X + 1, Y - 4, 1, 10, lit);
+      s.rect(X + 2, Y - 4, 1, 10, dim);
+      s.px(X + 1, Y - 4, dim);
+      s.px(X + 2, Y + 5, hub);
+    } else {
+      s.rect(X + 1, Y - 2, 1, 6, dim);
+      s.rect(X + 2, Y - 2, 1, 6, lit);
+      s.px(X + 2, Y + 3, dim);
+    }
+    s.rect(X, Y, 1, 2, hub);
+    s.rect(X + 1, Y, 2, 2, hub);
+    s.px(X + 1, Y, lit);
+  }
+}
+
+/** The navigation lamps at night: green on the nose, red on the tail (when it blinks on). */
+function drawNavLights(
+  s: Surface,
+  x: number,
+  y: number,
+  ship: Airship,
+  red: boolean,
+): void {
+  if (red) {
+    s.rect(x + ship.tail.x, y + ship.tail.y, 2, 2, P.ledRed);
+    s.px(x + ship.tail.x, y + ship.tail.y, P.white);
+  }
+  s.rect(x + ship.nose.x - 2, y + ship.nose.y - 1, 2, 2, P.ledGreen);
+  s.px(x + ship.nose.x - 2, y + ship.nose.y - 1, P.white);
+}
+
+/** The pilot leaning out of the windscreen and waving (the airship is about to go). */
+function drawPilotWave(
+  s: Surface,
+  ship: Airship,
+  light: Lighting,
+  up: boolean,
+): void {
+  const g = ship.gondola;
+  const skin = light.env(P.skinB);
+  const coat = light.env(P.home);
+  const cap = light.env(P.woodDark);
+  // his head in the front window
+  const hx = g.x + 4;
+  const hy = g.y + 7;
+  s.rect(hx, hy, 3, 1, cap);
+  s.rect(hx, hy + 1, 3, 2, skin);
+  s.px(hx, hy + 1, cap);
+  s.px(hx + 2, hy + 2, light.env(P.skinBShade));
+  // his arm out of the windscreen, waving
+  s.rect(g.x - 1, g.y + 9, 3, 2, coat);
+  if (up) {
+    s.rect(g.x - 2, g.y + 5, 1, 4, coat);
+    s.rect(g.x - 3, g.y + 3, 2, 2, skin);
+  } else {
+    s.rect(g.x - 3, g.y + 8, 2, 2, coat);
+    s.rect(g.x - 4, g.y + 6, 2, 2, skin);
+  }
+}
+
 /** How far the airship has drifted from its rest at time t: whole pixels. */
 export function airshipDrift(t: number): { dx: number; dy: number } {
   return {
-    dx: Math.round(2 * Math.sin((2 * Math.PI * t) / 31)),
-    dy: Math.round(1.2 * Math.sin((2 * Math.PI * t) / 9)),
+    dx: Math.round(4 * Math.sin((2 * Math.PI * t) / 31)),
+    dy: Math.round(2.4 * Math.sin((2 * Math.PI * t) / 9)),
   };
 }
 
+/** One message on the sign: a header in green over a line in amber, capitals. */
 export interface SignText {
-  /** The first line, in green: capitals, short enough to fit. */
+  /** The first line, in the small font, in green: short enough to fit. */
   header: string;
-  /** The fact of the day, in amber: capitals. It scrolls. */
+  /**
+   * Under it, in amber: in the big font when it fits, else in the small one (on two lines
+   * if need be), else in the big one as a marquee (the fact of the day did that).
+   */
   text: string;
 }
 
 /**
- * The fact's marquee. It starts flush left and rests SIGN_PAUSE seconds so its beginning
- * can be read, then runs left at SIGN_SPEED pixels a second (one pixel every third frame
- * at 60 Hz) until it has gone and come round again after a blank SIGN_GAP pixels wide.
- * The longest fact (110 characters, 560 px) takes 28 s to pass, the shortest 17 s.
+ * A line that is too long for the sign runs as a marquee. It starts flush left and rests
+ * SIGN_PAUSE seconds so its beginning can be read, then runs left at SIGN_SPEED lamps a
+ * second (a lamp every third frame at 60 Hz) until it has gone and come round again after
+ * a blank SIGN_GAP lamps wide.
  */
 export const SIGN_SPEED = 20;
 export const SIGN_PAUSE = 2.5;
 export const SIGN_GAP = 36;
+/**
+ * With several messages the sign shows each for SIGN_HOLD seconds (or until its marquee
+ * has gone round once, if that is longer), then rolls it up out of the panel and the next
+ * one up into it, a lamp at a time, in SIGN_ROLL seconds: an LED sign's change, not a fade.
+ */
+export const SIGN_HOLD = 4;
+export const SIGN_ROLL = 0.6;
+
+/** The amber line, as it is drawn. */
+interface SignLine {
+  text: string;
+  font: BitmapFont;
+}
+
+const MARQUEE = {
+  font: FONT_5x7,
+  speed: SIGN_SPEED,
+  pause: SIGN_PAUSE,
+  gap: SIGN_GAP,
+} as const;
+
+/** A message as it sits on the sign. */
+interface SignLayout {
+  lines: SignLine[];
+  /** Rows of lamps it takes, the header and the gaps included. */
+  rows: number;
+  /** Seconds it wants to be shown. */
+  hold: number;
+}
+
+/** Each message laid out once per panel width (they are drawn every frame). */
+const layouts = new WeakMap<SignText, { key: string; layout: SignLayout }>();
+
+/** The header's marquee, when it is too long for the panel: the small face, the same pace. */
+const HEADER = { ...MARQUEE, font: FONT_3x5 } as const;
+
+/** Rows of lamps a panel `h` tall has: its housing and margins take 10 px. */
+function lampRows(h: number): number {
+  return Math.floor((h - 10) / 2);
+}
 
 /**
- * The airship and the sign. `signT` is the marquee's own clock (seconds since the fact
- * started at the left).
+ * How a message sits on a panel `w` wide and `h` tall (the lamps' window is `w - 12`):
+ * its amber text in the big font if it fits, else in the small one, on one line or two
+ * (if the panel is tall enough for two), else in the big one scrolling; how many rows of
+ * lamps it takes; and how long it wants to be shown. A header too long for the window
+ * scrolls too, in step with the line under it.
+ */
+function layoutSign(m: SignText, w: number, h: number): SignLayout {
+  const key = `${w}x${h}/${m.header}/${m.text}`;
+  const hit = layouts.get(m);
+  if (hit?.key === key) return hit.layout;
+  const layout = layOut(m, w, h);
+  layouts.set(m, { key, layout });
+  return layout;
+}
+
+/** Rows of lamps a message takes: the header (5) and a gap, then its lines. */
+function rowsOf(header: string, lines: readonly SignLine[]): number {
+  const big = lines[0].font === FONT_5x7;
+  const head = header === "" ? 0 : big ? 10 : 9;
+  return head + (big ? 7 : lines.length * 5 + (lines.length - 1) * 2);
+}
+
+function layOut(m: SignText, w: number, h: number): SignLayout {
+  const fw = w - 12;
+  let lines: SignLine[];
+  if (measureLamps(m.text, FONT_5x7) <= fw) {
+    lines = [{ text: m.text, font: FONT_5x7 }];
+  } else if (measureLamps(m.text, FONT_3x5) <= fw) {
+    lines = [{ text: m.text, font: FONT_3x5 }];
+  } else {
+    const two = wrapText(m.text, Math.floor(fw / 2), { font: FONT_3x5 });
+    const small = two.map((text) => ({ text, font: FONT_3x5 }));
+    lines =
+      two.length === 2 &&
+      two.every((l) => measureLamps(l, FONT_3x5) <= fw) &&
+      rowsOf(m.header, small) <= lampRows(h)
+        ? small
+        : [{ text: m.text, font: FONT_5x7 }];
+  }
+  const big = lines[0].font === FONT_5x7;
+  const lap = Math.max(
+    ledLap(m.header, fw, HEADER),
+    big ? ledLap(m.text, fw, MARQUEE) : 0,
+  );
+  return {
+    lines,
+    rows: rowsOf(m.header, lines),
+    hold: Math.max(SIGN_HOLD, lap > 0 ? lap + 0.5 : 0),
+  };
+}
+
+/**
+ * Whether a message fits a panel `w` wide and `h` tall (default: tall enough for any) as
+ * it is, with no line scrolling.
+ */
+export function signFits(m: SignText, w: number, h = 70): boolean {
+  const fw = w - 12;
+  const { lines, rows } = layoutSign(m, w, h);
+  return (
+    rows <= lampRows(h) &&
+    measureLamps(m.header, FONT_3x5) <= fw &&
+    lines.every((l) => measureLamps(l.text, l.font) <= fw)
+  );
+}
+
+/**
+ * Whether a message shows whole on a panel `w` x `h`: every line of it in the panel's
+ * height, a line too long for its width scrolling through it.
+ */
+export function signShows(m: SignText, w: number, h: number): boolean {
+  return layoutSign(m, w, h).rows <= lampRows(h);
+}
+
+/**
+ * Which message is up at `signT` on a panel `w` x `h`, as a pure function of the clock:
+ * its index, the seconds it has been up, and how far the roll to the next has gone (0 at
+ * rest, up to 1).
+ */
+export function signAt(
+  messages: readonly SignText[],
+  w: number,
+  h: number,
+  signT: number,
+): { index: number; since: number; roll: number } {
+  const n = messages.length;
+  const t = Number.isFinite(signT) ? Math.max(0, signT) : 0;
+  if (n <= 1) return { index: 0, since: t, roll: 0 };
+  const holds = messages.map((m) => layoutSign(m, w, h).hold);
+  const period = holds.reduce((a, b) => a + b + SIGN_ROLL, 0);
+  let tau = t % period;
+  for (let i = 0; i < n; i++) {
+    if (tau < holds[i]) return { index: i, since: tau, roll: 0 };
+    tau -= holds[i];
+    if (tau < SIGN_ROLL) {
+      return { index: i, since: holds[i] + tau, roll: tau / SIGN_ROLL };
+    }
+    tau -= SIGN_ROLL;
+  }
+  return { index: 0, since: 0, roll: 0 };
+}
+
+/**
+ * The sign's messages on a panel whose top left is (x, y), by the sign's clock `signT`:
+ * one at a time, each rolled up and out by the next (`signAt`). One message is simply shown.
+ */
+export function drawSignBoard(
+  s: Surface,
+  messages: readonly SignText[],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  signT: number,
+): void {
+  if (messages.length === 0) return;
+  const at = signAt(messages, w, h, signT);
+  if (at.roll <= 0) {
+    drawSignText(s, messages[at.index], x, y, w, h, at.since);
+    return;
+  }
+  // the roll: both in the field, moving up a whole lamp at a time
+  const frame = 4;
+  const lamp = 2;
+  const travel = Math.floor((h - 2 * frame) / lamp);
+  const up = Math.min(travel, Math.floor(at.roll * travel)) * lamp;
+  const next = messages[(at.index + 1) % messages.length];
+  s.pushClip(x + frame, y + frame, w - 2 * frame, h - 2 * frame);
+  drawSignText(s, messages[at.index], x, y - up, w, h, 0);
+  drawSignText(s, next, x, y - up + travel * lamp, w, h, 0);
+  s.popClip();
+}
+
+/** One message or several. */
+function asMessages(text: SignText | readonly SignText[]): readonly SignText[] {
+  return "header" in text ? [text] : (text as readonly SignText[]);
+}
+
+/**
+ * The airship and the sign. `signT` is the sign's own clock (seconds since its first
+ * message came up).
  */
 export function drawAirship(
   s: Surface,
   ship: Airship,
-  text: SignText,
+  text: SignText | readonly SignText[],
   light: Lighting,
   t: number,
   signT: number,
@@ -249,28 +653,21 @@ export function drawAirship(
   const x = ship.x + dx;
   const y = ship.y + dy;
   s.blit(ship.layer, x, y);
-  // propellers: a blade that flips
-  const blade = light.env(P.steelHi);
   const flip = Math.floor(t * 8) % 2 === 0;
-  for (const p of ship.props) {
-    if (flip) s.rect(x + p.x, y + p.y - 2, 1, 5, blade);
-    else s.rect(x + p.x, y + p.y - 1, 1, 3, blade);
-  }
-  // navigation lights
+  const messages = asMessages(text);
+
+  drawProps(s, x, y, ship, light, flip);
   if (light.lightsOn) {
-    if (Math.floor(t * 1.25) % 2 === 0) {
-      s.px(x + ship.tail.x, y + ship.tail.y, P.ledRed);
-    }
-    s.px(x + ship.nose.x - 1, y + ship.nose.y, P.ledGreen);
+    drawNavLights(s, x, y, ship, Math.floor(t * 1.25) % 2 === 0);
   }
-  const z = ship.place.panel;
-  drawSignText(s, text, z.x + dx, z.y + dy, z.w, z.h, signT);
+  const p = ship.place.panel;
+  drawSignBoard(s, messages, p.x + dx, p.y + dy, p.w, p.h, signT);
 }
 
 /**
- * The sign's two lines on a panel whose top left is (x, y), centred in its height: the
- * header in the small font, and under it the fact in the big one, scrolling by the
- * marquee's clock `signT`.
+ * One message on a panel whose top left is (x, y), centred in its height: the header in
+ * the small font, and under it the amber text (`layoutSign`), a marquee by the clock
+ * `signT` if it is too long.
  */
 export function drawSignText(
   s: Surface,
@@ -281,23 +678,31 @@ export function drawSignText(
   h: number,
   signT: number,
 ): void {
-  const fx = x + 3;
-  const fw = w - 6;
-  // the lamp field is h - 4 tall; the two lines and the gap between them are 17
-  const top = y + 2 + Math.max(0, Math.floor((h - 4 - 17) / 2));
-  drawLedLine(s, text.header, fx, top, fw, {
-    font: FONT_3x5,
-    color: P.ledGreen,
-  });
-  drawLedLine(s, text.text, fx, top + 10, fw, {
-    font: FONT_5x7,
-    color: P.amber,
-    align: "left",
-    t: signT,
-    speed: SIGN_SPEED,
-    pause: SIGN_PAUSE,
-    gap: SIGN_GAP,
-  });
+  // Every offset from the lamp field is even, so the lit lamps land on the panel's unlit
+  // ones; the marquee's speed and gap are in lamps (drawLedLine).
+  const fx = x + 6;
+  const fw = w - 12;
+  const { lines, rows } = layoutSign(text, w, h);
+  // the lamps are on the field's even rows, clear of its first and last (lampRows)
+  let top = y + 6 + Math.max(0, Math.floor((lampRows(h) - rows) / 2)) * 2;
+  const big = lines[0].font === FONT_5x7;
+  if (text.header !== "") {
+    drawLedLine(s, text.header, fx, top, fw, {
+      ...HEADER,
+      color: P.ledGreen,
+      t: signT,
+    });
+    top += (big ? 10 : 9) * 2;
+  }
+  for (const line of lines) {
+    drawLedLine(s, line.text, fx, top, fw, {
+      ...MARQUEE,
+      font: line.font,
+      color: P.amber,
+      t: signT,
+    });
+    top += 14;
+  }
 }
 
 export interface Warp {
@@ -418,7 +823,7 @@ export function warpBlit(dst: Surface, src: Surface, wp: Warp): void {
 export function drawAirshipPosed(
   s: Surface,
   ship: Airship,
-  text: SignText,
+  text: SignText | readonly SignText[],
   light: Lighting,
   t: number,
   pose: Pose,
@@ -428,48 +833,43 @@ export function drawAirshipPosed(
   const { dx, dy } = airshipDrift(t);
   work.clear();
   work.blit(ship.layer, 0, 0);
-  const blade = light.env(P.steelHi);
   const flip = Math.floor(t * (8 + pose.stress * 10)) % 2 === 0;
-  for (const p of ship.props) {
-    if (flip) work.rect(p.x, p.y - 2, 1, 5, blade);
-    else work.rect(p.x, p.y - 1, 1, 3, blade);
-  }
+  drawProps(work, 0, 0, ship, light, flip);
   if (light.lightsOn) {
-    if (Math.floor(t * (1.25 + pose.stress * 4)) % 2 === 0) {
-      work.px(ship.tail.x, ship.tail.y, P.ledRed);
-    }
-    work.px(ship.nose.x - 1, ship.nose.y, P.ledGreen);
+    const red = Math.floor(t * (1.25 + pose.stress * 4)) % 2 === 0;
+    drawNavLights(work, 0, 0, ship, red);
   }
   const z = ship.place.panel;
   if (!pose.flicker) {
-    drawSignText(work, text, z.x - ship.x, z.y - ship.y, z.w, z.h, signT);
+    const messages = asMessages(text);
+    drawSignBoard(work, messages, z.x - ship.x, z.y - ship.y, z.w, z.h, signT);
   }
-  // under stress the seams go taut: pale, then stitched in red
+  // under stress the seams go taut: pale, then stitched in red (each stitch two pixels
+  // long)
   if (pose.stress > 0.3) {
     const hard = pose.stress > 0.6;
     const taut = light.env(P.mist);
     const red = light.env(P.homeLight);
+    const step = 2;
     for (let i = 0; i < ship.seams.length; i++) {
       const q = ship.seams[i];
-      work.px(q.x, q.y, hard && i % 2 === 0 ? red : taut);
+      const stitch = hard && Math.floor(i / step) % 2 === 0;
+      work.px(q.x, q.y, stitch ? red : taut);
     }
     // the top seam shows, then strains: stitches pulling apart in red
     for (let i = 0; i < ship.ridge.length; i++) {
       const q = ship.ridge[i];
       if (work.get(q.x, q.y) === TRANSPARENT) continue;
-      const stitch = hard && i % 3 === 0;
+      const stitch = hard && Math.floor(i / step) % 3 === 0;
       work.px(q.x, q.y, stitch ? red : taut);
-      if (stitch && pose.stress > 0.8) work.px(q.x, q.y + 1, red);
+      if (stitch && pose.stress > 0.8) {
+        work.rect(q.x, q.y + 1, 1, 2, red);
+      }
     }
   }
   // and the pilot waves out of the gondola's front window
   if (pose.stress > 0.5) {
-    const g = ship.gondola;
-    const up = Math.floor(t * 5) % 2 === 0;
-    const skin = light.env(P.skinB);
-    work.px(g.x + 2, g.y + 4, skin);
-    work.px(g.x - 1, g.y + (up ? 1 : 3), skin);
-    work.px(g.x, g.y + 3, light.env(P.home));
+    drawPilotWave(work, ship, light, Math.floor(t * 5) % 2 === 0);
   }
   const c = ship.centre;
   warpBlit(s, work, {
@@ -501,8 +901,9 @@ export function airshipHit(
   const lx = Math.floor(x) - ship.x - ox;
   const ly = Math.floor(y) - ship.y - oy;
   const L = ship.layer;
-  for (let j = -1; j <= 1; j++) {
-    for (let i = -1; i <= 1; i++) {
+  const r = 2;
+  for (let j = -r; j <= r; j++) {
+    for (let i = -r; i <= r; i++) {
       const X = lx + i;
       const Y = ly + j;
       if (X < 0 || Y < 0 || X >= L.w || Y >= L.h) continue;
@@ -510,7 +911,7 @@ export function airshipHit(
     }
   }
   for (const p of ship.props) {
-    if (Math.abs(lx - p.x) <= 1 && Math.abs(ly - p.y) <= 3) return true;
+    if (Math.abs(lx - p.x) <= r && Math.abs(ly - p.y) <= 6) return true;
   }
   return false;
 }

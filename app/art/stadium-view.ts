@@ -139,9 +139,13 @@ export function depthAtRow(v: View, sy: number): number {
   return VF + LF * (1 / rem - 1);
 }
 
-/** 0 far (a texture), 1 middle, 2 near: which of the three sprite sizes to draw. */
+/**
+ * 0 far (a texture), 1 middle, 2 near: which of the three sprite sizes to draw, for
+ * something at `s` pixels per map unit. (traffic-steps.ts splits them into five for the
+ * traffic and the people.)
+ */
 export function sizeClass(s: number): 0 | 1 | 2 {
-  return s < 0.74 ? 0 : s < 1.42 ? 1 : 2;
+  return s < 1.48 ? 0 : s < 2.84 ? 1 : 2;
 }
 
 /**

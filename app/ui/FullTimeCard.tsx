@@ -4,6 +4,7 @@ import { Button } from "./Button";
 import { cx } from "./cx";
 import { LedNumber } from "./LedNumber";
 import { Pip } from "./Pips";
+import { Streak, type StreakProps } from "./Streak";
 import type { UiGrade, UiMode } from "./types";
 
 export interface FullTimeResult {
@@ -33,14 +34,23 @@ export interface FullTimeCardProps {
   earnedTitleSpoken?: string;
   /** "PERFECT GAME", only on a 700. */
   perfectLine?: string;
+  /** The daily streak this game kept going: a flame and "STREAK 4" under the title. */
+  streak?: StreakProps;
   results: readonly FullTimeResult[];
   /** Name of the list of answers for screen readers: "Your answers". */
   resultsLabel?: string;
-  /** "SHARE" (swap the label to "COPIED!" after a successful copy). */
+  /** "SHARE" (swap the label to say how it went: "COPIED!", "SENT!"). */
   shareLabel: string;
+  /**
+   * The share picture is being made: the button says so (`shareLabel`, "MAKING"), is
+   * marked busy and does nothing when pressed, but keeps its place and the focus.
+   */
+  shareBusy?: boolean;
   onShare: () => void;
-  /** "PLAY AWAY" */
+  /** "AWAY" */
   otherLabel: string;
+  /** Its name for screen readers, when the label alone is not enough: "Play AWAY". */
+  otherSpoken?: string;
   /** The mode that button starts, so it takes that mode's colour. */
   otherMode: UiMode;
   onPlayOther: () => void;
@@ -65,11 +75,14 @@ export function FullTimeCard({
   earnedTitle,
   earnedTitleSpoken,
   perfectLine,
+  streak,
   results,
   resultsLabel,
   shareLabel,
+  shareBusy = false,
   onShare,
   otherLabel,
+  otherSpoken,
   otherMode,
   onPlayOther,
   menuLabel,
@@ -105,6 +118,11 @@ export function FullTimeCard({
           </p>
         )}
         {perfectLine && <p className="ss-full__perfect">{perfectLine}</p>}
+        {streak && streak.days > 0 && (
+          <p className="ss-full__streak">
+            <Streak {...streak} />
+          </p>
+        )}
       </div>
       <ol
         className="ss-full__list"
@@ -124,10 +142,21 @@ export function FullTimeCard({
         ))}
       </ol>
       <div className="ss-full__actions">
-        <Button variant="primary" onClick={onShare}>
+        {/* Busy, it is not `disabled`: that would drop the focus from it. */}
+        <Button
+          variant="primary"
+          onClick={shareBusy ? undefined : onShare}
+          aria-busy={shareBusy || undefined}
+          aria-disabled={shareBusy || undefined}
+        >
           {shareLabel}
         </Button>
-        <Button variant="mode" mode={otherMode} onClick={onPlayOther}>
+        <Button
+          variant="mode"
+          mode={otherMode}
+          onClick={onPlayOther}
+          aria-label={otherSpoken}
+        >
           {otherLabel}
         </Button>
         <Button variant="secondary" onClick={onMenu}>

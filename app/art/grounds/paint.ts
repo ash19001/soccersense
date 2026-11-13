@@ -9,10 +9,14 @@
  */
 
 import type { Mode } from "~/game/types";
+import type { Era } from "~/art/era";
 import { careerLayout } from "~/art/layout";
 import { distant, skyFor, type Lighting, type SkySpec } from "~/art/lighting";
 import { P } from "~/art/palette";
 import { hash2, type Color } from "~/pixel";
+import { nextgenColors, nextgenShirts } from "./nextgen-people";
+import { retroGrade, retroWarm } from "./retro-grade";
+import { STAND } from "./stand";
 import type { GroundLabels, Tier } from "./types";
 
 export type Grade = (c: Color) => Color;
@@ -51,19 +55,19 @@ export interface Geo {
 }
 
 /** A terraced house is this wide. */
-export const HOUSE_W = 16;
+export const HOUSE_W = 32;
 
 /** Rows from the street's foot (B) up: wall top, roof ridge, chimney top. */
-export const WALL_H = 17;
-export const ROOF_H = 5;
-export const CHIMNEY_H = 4;
+export const WALL_H = 34;
+export const ROOF_H = 10;
+export const CHIMNEY_H = 8;
 
 export function geoFor(w: number, h: number): Geo {
   const c = careerLayout(w, h);
   const k = c.stageScale;
   const F = c.farTouchY;
   // Lines across the pitch lean like the goal's posts: 4 px in 5 rows at the goal line.
-  const reach = Math.max(8, (c.goalX - c.cx) / 0.8);
+  const reach = Math.max(16, (c.goalX - c.cx) / 0.8);
   const sx = (off: number): number => c.cx + Math.round(off * k);
   return {
     w: c.w,
@@ -73,7 +77,7 @@ export function geoFor(w: number, h: number): Geo {
     gy: c.groundY,
     F,
     N: c.nearTouchY,
-    B: F - 8,
+    B: F - 16,
     goalX: c.goalX,
     heroX: c.heroX,
     stageL: c.stageLeft,
@@ -108,6 +112,8 @@ export interface Paint {
   mode: Mode;
   seed: number;
   labels: GroundLabels;
+  /** The era the ground is drawn in (`~/art/era`): "today" is HOME's and AWAY's look. */
+  era: Era;
   /** Lit by the sky. */
   E: Grade;
   /** The ground's own structures: under the floodlights from tier 2 (lit), else the sky (env). */
@@ -127,8 +133,29 @@ export function paintFor(
   mode: Mode,
   seed: number,
   labels: GroundLabels,
+  era: Era = "today",
 ): Paint {
   const flood = tier >= 2 && light.lightsOn;
+  const S = tier >= 2 ? light.lit : light.env;
+  const D = (c: Color, depth: number): Color => distant(light, c, depth);
+  // RETRO is warmed a little towards a faded sepia at every tier (retro-grade.ts)
+  if (era === "retro") {
+    return {
+      g,
+      light,
+      spec: skyFor(light),
+      tier,
+      mode,
+      seed,
+      labels,
+      era,
+      E: retroGrade(light.env),
+      S: retroGrade(S),
+      flood,
+      lamps: light.lightsOn,
+      D: (c, depth) => D(retroWarm(c), depth),
+    };
+  }
   return {
     g,
     light,
@@ -137,11 +164,12 @@ export function paintFor(
     mode,
     seed,
     labels,
+    era,
     E: light.env,
-    S: tier >= 2 ? light.lit : light.env,
+    S,
     flood,
     lamps: light.lightsOn,
-    D: (c, depth) => distant(light, c, depth),
+    D,
   };
 }
 
@@ -199,6 +227,35 @@ const NATIONAL: Weighted = [
   [P.gold, 2],
 ];
 
+/**
+ * RETRO's crowd: his club's old gold (the shirt he wears, RETRO's colour) where today's
+ * wears red, and the nation's brick red with chalk from tier 5 (retro.ts's kits). At the
+ * small grounds most of them are in overcoats anyway (retro-people.ts).
+ */
+function retroShirts(tier: number, share: number): Weighted {
+  if (tier >= 5) {
+    return [
+      [P.chalk, 40],
+      [P.white, 6],
+      [P.brick, 22],
+      [P.brickDark, 6],
+      [P.mist, 6],
+      [P.steel, 4],
+      [P.slate, 3],
+      [P.retro, 2],
+    ];
+  }
+  // his old gold, light and bright, with chalk and cream (no brown: retroDark and goldDark
+  // muddy a stand, and goldDark is his own shirt, which must stand off the crowd)
+  return [
+    ...NEUTRAL.map(([c, wgt]) => [c, wgt * (1 - share)] as const),
+    [P.retro, 14 * share],
+    [P.gold, 18 * share],
+    [P.retroLight, 16 * share],
+    [P.chalk, 14 * share],
+  ];
+}
+
 /** The hostile crowd away from home: the rival's plum, with chalk. */
 function hostileShirts(share: number): Weighted {
   return [
@@ -246,6 +303,8 @@ const SHARE: readonly number[] = [0.2, 0.3, 0.4, 0.6, 0.8, 0.85, 0.9, 0.9];
 /** The shirts of the crowd at this tier and mode (not counting the travelling pocket). */
 export function crowdShirts(p: Paint): Weighted {
   const share = SHARE[p.tier];
+  if (p.era === "nextgen") return nextgenShirts(p.tier, share);
+  if (p.era === "retro") return retroShirts(p.tier, share);
   if (p.mode === "away") return hostileShirts(share);
   return p.tier >= 5 ? NATIONAL : clubShirts(share);
 }
@@ -253,6 +312,9 @@ export function crowdShirts(p: Paint): Weighted {
 /** Scarves and flags held up: the crowd's two colours. */
 export function crowdColors(p: Paint, travelling: boolean): [Color, Color] {
   if (travelling) return [P.away, P.chalk];
+  if (p.era === "nextgen") return nextgenColors(p.tier);
+  if (p.era === "retro")
+    return p.tier >= 5 ? [P.chalk, P.brick] : [P.retro, P.chalk];
   if (p.mode === "away") return [P.duskMid, P.chalk];
   return p.tier >= 5 ? [P.chalk, P.home] : [P.home, P.chalk];
 }
@@ -265,8 +327,8 @@ export function crowdColors(p: Paint, travelling: boolean): [Color, Color] {
 export function pocket(p: Paint): [number, number, number] {
   if (p.mode !== "away") return [0, 0, 0];
   const x0 = sx(p.g, -64);
-  const yEnd = p.tier >= 4 ? p.g.F - 39 : p.g.F;
-  return [x0, x0 + Math.round(26 * p.g.k) + 6, yEnd];
+  const yEnd = p.tier >= 4 ? p.g.F - STAND.balcony : p.g.F;
+  return [x0, x0 + Math.round(26 * p.g.k) + 12, yEnd];
 }
 
 /** Is this place in the travelling fans' pocket? */

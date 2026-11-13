@@ -467,7 +467,8 @@ describe("FullTimeCard", () => {
         }))}
         shareLabel="SHARE"
         onShare={onShare}
-        otherLabel="PLAY AWAY"
+        otherLabel="AWAY"
+        otherSpoken="Play AWAY"
         otherMode="away"
         onPlayOther={onPlayOther}
         menuLabel="MENU"
@@ -488,12 +489,12 @@ describe("FullTimeCard", () => {
     expect(screen.getAllByText("TRIVELA")).toHaveLength(1);
     expect(screen.getByText("TRIVELA")).toHaveClass("ss-full__shot");
     fireEvent.click(screen.getByRole("button", { name: "SHARE" }));
-    fireEvent.click(screen.getByRole("button", { name: "PLAY AWAY" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play AWAY" }));
     fireEvent.click(screen.getByRole("button", { name: "MENU" }));
     expect(onShare).toHaveBeenCalledTimes(1);
     expect(onPlayOther).toHaveBeenCalledTimes(1);
     expect(onMenu).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "PLAY AWAY" })).toHaveAttribute(
+    expect(screen.getByRole("button", { name: "Play AWAY" })).toHaveAttribute(
       "data-mode",
       "away",
     );

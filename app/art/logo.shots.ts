@@ -95,4 +95,12 @@ export const shots: ShotMap = {
     return s;
   },
   "logo/glint": (ctx) => plain({ ...STACKED, t: ctx.t }),
+  "logo/glint-line": (ctx) => {
+    const opts = { maxWidth: 400, t: ctx.t };
+    const size = logoSize(opts);
+    const s = new Surface(size.w + 16, size.h + 16);
+    s.clear(P.skyMid);
+    drawLogo(s, Math.round(s.w / 2), 8, opts);
+    return s;
+  },
 };

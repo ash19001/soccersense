@@ -21,6 +21,17 @@
  *   40   the away side kicks off again: the same instant as 0
  *
  * Everybody not on the ball keeps their place in a 4-4-2 that slides with the play.
+ *
+ * The script says where each player means to be; the players run there as people do
+ * (`track`): no faster than a sprint (RUN units a second), speeding up and slowing down
+ * over a few strides (PUSH), never standing on one another (ROOM), so nobody jumps
+ * across the pitch when the shape slides after a long ball, the ball goes in or the
+ * teams line up again. The runs are worked out once, three times round the loop so the
+ * last lap starts where it ends, and kept as a table (SAMPLES a second) that `matchAt`
+ * reads between rows: a player's place is smooth in time, the seam included. Each
+ * player's `stride` says whether he stands (-1) or which foot leads in his run (0, 1),
+ * changing once a stride's length of ground (STRIDE) and only when he really moves.
+ *
  * Everything is a pure function of the time, and the loop closes exactly.
  */
 
@@ -202,12 +213,15 @@ export interface MatchState {
   cheer: number;
   /** Seconds since the goal went in, or -1. */
   sinceGoal: number;
+  /** Each player's legs: -1 standing, else which foot leads in his run (0 or 1). */
+  stride: Int8Array;
 }
 
 export function makeMatchState(): MatchState {
   return {
     x: new Float32Array(PLAYERS),
     v: new Float32Array(PLAYERS),
+    stride: new Int8Array(PLAYERS).fill(-1),
     ballX: 0,
     ballV: 0,
     ballH: 0,
@@ -339,13 +353,11 @@ function playerAt(p: number, t: number, bx: number, bv: number): void {
   }
 }
 
-/** The whole match at time `t` (any number: it loops every MATCH_PERIOD seconds). */
-export function matchAt(state: MatchState, time: number): MatchState {
-  const t = wrap(Number.isFinite(time) ? time : 0);
+/** Where the script puts every player at loop time `t` (0..PERIOD), into `xs`, `vs`. */
+function scriptAt(t: number, xs: Float64Array, vs: Float64Array): void {
   ballAt(t);
   const bx = spot.X;
   const bv = spot.V;
-  const bh = spot.H;
   // the shape follows where the ball was a moment ago, so a long pass does not jerk it
   ballAt(wrap(t - 0.9));
   const sx = (bx + spot.X) / 2;
@@ -361,12 +373,268 @@ export function matchAt(state: MatchState, time: number): MatchState {
   for (let p = 0; p < PLAYERS; p++) {
     if (p === REFEREE) playerAt(p, t, rx, rv);
     else playerAt(p, t, sx, sv);
-    state.x[p] = Math.max(-HALF_X - 3, Math.min(HALF_X + 3, place.X));
-    state.v[p] = Math.max(-HALF_V + 1, Math.min(HALF_V - 1, place.V));
+    xs[p] = Math.max(-HALF_X - 3, Math.min(HALF_X + 3, place.X));
+    vs[p] = Math.max(-HALF_V + 1, Math.min(HALF_V - 1, place.V));
   }
-  state.ballX = bx;
-  state.ballV = bv;
-  state.ballH = bh;
+}
+
+/** Is player p on the ball or on a scripted run at loop time t (or about to be)? */
+function onBeat(p: number, t: number): boolean {
+  for (const e of OF[p]) if (t >= e.t0 - 0.3 && t <= e.t1) return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// The runs: the script's places, run as people run them
+// ---------------------------------------------------------------------------
+
+/** Rows of the table a second. */
+const SAMPLES = 30;
+/** Steps of the run worked out per row. */
+const SUB = 1;
+/** A sprint, in units a second (a unit is about three quarters of a metre). */
+const RUN = 11;
+/** The referee's best pace. */
+const REF_RUN = 8;
+/** How fast a player picks up or loses pace, in units a second each second. */
+const PUSH = 34;
+/** Seconds to close a gap to where he means to be, on top of keeping up with it. */
+const CATCH = 0.3;
+/** How close two players may come: across (X) and up the pitch (V), in units. */
+const ROOM_X = 1.7;
+const ROOM_V = 3.6;
+/** Slower than this (units a second, over a fifth of a second) a player stands. */
+const STILL = 2.4;
+/** The ground a stride covers, in units, before the other foot leads. */
+const STRIDE = 1.5;
+
+interface Track {
+  /** Row r, player p: x at [r * PLAYERS + p]; one row more than the loop, equal to the first. */
+  x: Float32Array;
+  v: Float32Array;
+  /** The ground each has covered at a run since the loop began, at each row. */
+  d: Float32Array;
+  /** Each player's stride, so a whole number of pairs of them fills the loop. */
+  stride: Float32Array;
+}
+
+let table: Track | null = null;
+
+/** Work the runs out (once): three laps of the loop, the last kept, its seam closed. */
+function track(): Track {
+  if (table) return table;
+  const rows = MATCH_PERIOD * SAMPLES;
+  const dt = 1 / (SAMPLES * SUB);
+  const x = new Float64Array(PLAYERS);
+  const v = new Float64Array(PLAYERS);
+  const vx = new Float64Array(PLAYERS);
+  const vv = new Float64Array(PLAYERS);
+  const tx = new Float64Array(PLAYERS);
+  const tv = new Float64Array(PLAYERS);
+  const px = new Float64Array(PLAYERS);
+  const pv = new Float64Array(PLAYERS);
+  const pinned = new Uint8Array(PLAYERS);
+  scriptAt(0, x, v);
+  scriptAt(MATCH_PERIOD - dt, px, pv);
+  const outX = new Float32Array((rows + 1) * PLAYERS);
+  const outV = new Float32Array((rows + 1) * PLAYERS);
+  const laps = 2;
+  for (let lap = 0; lap < laps; lap++) {
+    for (let r = 0; r < rows; r++) {
+      if (lap === laps - 1) {
+        for (let p = 0; p < PLAYERS; p++) {
+          outX[r * PLAYERS + p] = x[p];
+          outV[r * PLAYERS + p] = v[p];
+        }
+      }
+      for (let k = 0; k < SUB; k++) {
+        const t = (r * SUB + k + 1) * dt;
+        const lt = t >= MATCH_PERIOD ? t - MATCH_PERIOD : t;
+        scriptAt(lt, tx, tv);
+        for (let p = 0; p < PLAYERS; p++) {
+          pinned[p] = onBeat(p, lt) ? 1 : 0;
+          // keep up with where he means to be, and close the gap
+          let wx = (tx[p] - px[p]) / dt + (tx[p] - x[p]) / CATCH;
+          let wv = (tv[p] - pv[p]) / dt + (tv[p] - v[p]) / CATCH;
+          const top = p === REFEREE ? REF_RUN : RUN;
+          const want = Math.sqrt(wx * wx + wv * wv);
+          if (want > top) {
+            wx *= top / want;
+            wv *= top / want;
+          }
+          // pick up or lose pace over a few strides
+          let ax = wx - vx[p];
+          let av = wv - vv[p];
+          const a = Math.sqrt(ax * ax + av * av);
+          if (a > PUSH * dt) {
+            ax *= (PUSH * dt) / a;
+            av *= (PUSH * dt) / a;
+          }
+          vx[p] += ax;
+          vv[p] += av;
+          x[p] += vx[p] * dt;
+          v[p] += vv[p] * dt;
+          px[p] = tx[p];
+          pv[p] = tv[p];
+        }
+        // room: two players too close step apart (one on the ball keeps his line)
+        for (let i = 0; i < PLAYERS; i++) {
+          for (let j = i + 1; j < PLAYERS; j++) {
+            const ex = x[j] - x[i];
+            if (ex >= ROOM_X || ex <= -ROOM_X) continue;
+            const dx = ex / ROOM_X;
+            const dv = (v[j] - v[i]) / ROOM_V;
+            const d2 = dx * dx + dv * dv;
+            if (d2 >= 1) continue;
+            const d = Math.sqrt(d2);
+            const ux = d > 1e-6 ? dx / d : i % 2 ? 1 : -1;
+            const uv = d > 1e-6 ? dv / d : 0;
+            const gap = 1 - d;
+            const wi = pinned[i] === pinned[j] ? 0.5 : pinned[i] ? 0 : 1;
+            const wj = 1 - wi;
+            x[i] -= ux * gap * ROOM_X * wi;
+            v[i] -= uv * gap * ROOM_V * wi;
+            x[j] += ux * gap * ROOM_X * wj;
+            v[j] += uv * gap * ROOM_V * wj;
+          }
+        }
+      }
+    }
+  }
+  // the lap ends a hair from where it began: spread the difference over the lap
+  for (let p = 0; p < PLAYERS; p++) {
+    const ex = x[p] - outX[p];
+    const ev = v[p] - outV[p];
+    for (let r = 0; r < rows; r++) {
+      outX[r * PLAYERS + p] -= (ex * r) / rows;
+      outV[r * PLAYERS + p] -= (ev * r) / rows;
+    }
+    outX[rows * PLAYERS + p] = outX[p];
+    outV[rows * PLAYERS + p] = outV[p];
+  }
+  // the ground each covers at a run, and his stride, so that the loop holds whole pairs
+  const d = new Float32Array((rows + 1) * PLAYERS);
+  const strideOf = new Float32Array(PLAYERS);
+  for (let p = 0; p < PLAYERS; p++) {
+    let sum = 0;
+    for (let r = 1; r <= rows; r++) {
+      if (paceAt(outX, outV, r - 1, p, rows) >= STILL) {
+        sum += Math.hypot(
+          outX[r * PLAYERS + p] - outX[(r - 1) * PLAYERS + p],
+          outV[r * PLAYERS + p] - outV[(r - 1) * PLAYERS + p],
+        );
+      }
+      d[r * PLAYERS + p] = sum;
+    }
+    const pairs = Math.max(1, Math.round(sum / (2 * STRIDE)));
+    strideOf[p] = sum > 0 ? sum / (2 * pairs) : STRIDE;
+  }
+  table = { x: outX, v: outV, d, stride: strideOf };
+  return table;
+}
+
+/** Player p's pace about row r: units a second, over a tenth of a second either side. */
+function paceAt(
+  xs: Float32Array,
+  vs: Float32Array,
+  r: number,
+  p: number,
+  rows: number,
+): number {
+  const h = SAMPLES / 10;
+  const a = (((r - h) % rows) + rows) % rows;
+  const b = (r + h) % rows;
+  const span = (2 * h) / SAMPLES;
+  return (
+    Math.hypot(
+      xs[b * PLAYERS + p] - xs[a * PLAYERS + p],
+      vs[b * PLAYERS + p] - vs[a * PLAYERS + p],
+    ) / span
+  );
+}
+
+const at = { X: 0, V: 0 };
+
+/** Where player p has run to at loop time t (0..PERIOD), into `at`. */
+function trackedAt(tr: Track, p: number, t: number): void {
+  const rows = MATCH_PERIOD * SAMPLES;
+  const f = Math.max(0, Math.min(wrap(t) * SAMPLES, rows - 1e-6));
+  const r = Math.floor(f);
+  const u = f - r;
+  const a = r * PLAYERS + p;
+  const b = a + PLAYERS;
+  at.X = tr.x[a] + (tr.x[b] - tr.x[a]) * u;
+  at.V = tr.v[a] + (tr.v[b] - tr.v[a]) * u;
+}
+
+/** Where a beat's ball is at time t: at the feet of whoever has it, as he really runs. */
+function beatBall(tr: Track, e: Beat, t: number): void {
+  if (e.p < 0) {
+    at.X = e.a[0];
+    at.V = e.a[1];
+  } else trackedAt(tr, e.p, t);
+  at.X += stride(e);
+}
+
+/**
+ * The ball as the script plays it (`ballAt`), but at the feet of the players where they
+ * have really run to: a pass goes from where the passer is to where the taker is.
+ */
+function ballOnTrack(tr: Track, t: number): void {
+  const n = BALL.length;
+  for (let i = 0; i < n; i++) {
+    const e = BALL[i];
+    if (t >= e.t0 && t <= e.t1) {
+      beatBall(tr, e, t);
+      spot.X = at.X;
+      spot.V = at.V;
+      spot.H = 0;
+      return;
+    }
+    const next = BALL[(i + 1) % n];
+    const until = i + 1 < n ? next.t0 : next.t0 + MATCH_PERIOD;
+    if (t > e.t1 && t < until) {
+      const u = (t - e.t1) / (until - e.t1);
+      beatBall(tr, e, e.t1);
+      const fx = at.X;
+      const fv = at.V;
+      beatBall(tr, next, next.t0);
+      spot.X = fx + (at.X - fx) * u;
+      spot.V = fv + (at.V - fv) * u;
+      spot.H = (next.loft ?? 0) * 4 * u * (1 - u);
+      return;
+    }
+  }
+  beatBall(tr, BALL[0], BALL[0].t0);
+  spot.X = at.X;
+  spot.V = at.V;
+  spot.H = 0;
+}
+
+/** The whole match at time `t` (any number: it loops every MATCH_PERIOD seconds). */
+export function matchAt(state: MatchState, time: number): MatchState {
+  const t = wrap(Number.isFinite(time) ? time : 0);
+  const tr = track();
+  const rows = MATCH_PERIOD * SAMPLES;
+  const f = Math.min(t * SAMPLES, rows - 1e-6);
+  const r = Math.floor(f);
+  const u = f - r;
+  const near = u < 0.5 ? r : (r + 1) % rows;
+  for (let p = 0; p < PLAYERS; p++) {
+    const a = r * PLAYERS + p;
+    const b = a + PLAYERS;
+    state.x[p] = tr.x[a] + (tr.x[b] - tr.x[a]) * u;
+    state.v[p] = tr.v[a] + (tr.v[b] - tr.v[a]) * u;
+    if (paceAt(tr.x, tr.v, near, p, rows) < STILL) state.stride[p] = -1;
+    else {
+      const d = tr.d[a] + (tr.d[b] - tr.d[a]) * u;
+      state.stride[p] = Math.floor(d / tr.stride[p]) % 2;
+    }
+  }
+  ballOnTrack(tr, t);
+  state.ballX = spot.X;
+  state.ballV = spot.V;
+  state.ballH = spot.H;
   const gasp = t >= 14.95 && t < 16.6 ? 0.42 * (1 - (t - 14.95) / 1.65) : 0;
   const buzz = Math.max(
     ramp(t, 12.6, 14.6) * (t < 14.95 ? 0.14 : 0),

@@ -3,7 +3,7 @@
  * identical to `Mode` and `Grade` in app/game/types.ts, so game values can be passed
  * straight in without app/ui importing the rules.
  */
-export type UiMode = "home" | "away";
+export type UiMode = "home" | "away" | "retro" | "nextgen";
 
 /** The six shots, best first, then no answer: the clock ran out, or a pass. */
 export type UiGrade =

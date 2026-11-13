@@ -1,35 +1,35 @@
 /**
- * Cars and coaches seen from the air, pointing any way on screen.
+ * Cars and coaches seen from the air, pointing any way on screen (docs/ART_BIBLE.md 5).
  *
  * The picture is an aerial view, so a road or a bay that runs north on the map leans on
  * screen (towards the vanishing point above the stadium). A car is drawn along the way it
- * points on screen, from a set of HEADINGS hand-placed sprites: 0 points east (right),
- * a quarter of the set points up the screen, half points west. Only the headings from
- * east round to north (0 to 90 degrees) are drawn; the rest are those mirrored, or turned
- * round (the same outline with the windscreen at the other end, so the side towards the
- * camera stays in shade).
+ * points on screen, from a set of HEADINGS drawn headings. A near car is about 14 x 8
+ * pointing east, with a windscreen, side windows, wheels with hubs, head and tail lamps,
+ * sills and bumpers; a coach has its windows, doors, roof pods and hatches.
  *
- * A sprite is a grid of letters and a second grid of the lamps, the same size:
+ * The drawings are data (stadium-cars-grids.ts). A coach has 14 drawn headings per size
+ * class (0 to 90 and 180 to 270 degrees) and the rest are mirrored. A car has 7 (0 to 90):
+ * a car is the same box at either end, so the 180-to-270 set is the same drawing turned
+ * round (windscreen and rear window, headlamps and tail lamps swapped: `turned`), and
+ * the rest are mirrored.
  *
- *   day    .  nothing            lamps  .  nothing
- *          b  body                      F  headlight, or the tail light turned round
- *          l  roof                      R  tail light, or the headlight turned round
- *          d  side in shade             H  headlight only     h  headlight turned round
- *          g  glass                     T  tail light only    t  tail light turned round
- *          k  tyre                      a  beam ahead          z  beam turned round
- *          f  glass at the front only (body when turned round)
- *          r  glass at the back only (glass when turned round)
+ * Five sizes (traffic-steps.ts): the three size classes are steps 0, 2 and 4, and
+ * stadium-cars-steps.ts draws steps 1 and 3 between them, so a car or a coach shrinks a
+ * step at a time as it drives away (a car 6, 8, 10, 12, 14 px long pointing east).
  *
- * Coaches use the same grids with o roof, i roof highlight, s side, e stripe for the
- * body letters.
+ * The anchor is the ground point under the vehicle's middle; a mirrored pixel at column c
+ * of a grid lands at `x + ax - c`.
  *
  * Everything here is pure: headings are worked out from the camera (stadium-view.ts).
  */
 
 import type { Color } from "~/pixel";
 import { P } from "~/art/palette";
+import { CARS, COACHES, type Grid } from "~/art/stadium-cars-grids";
+import { CARS_STEPS, COACHES_STEPS } from "~/art/stadium-cars-steps";
 import type { CarLook, CoachLook, Ink } from "~/art/stadium-things";
 import { projectRaw, type View } from "~/art/stadium-view";
+import { stepOfClass, type Step } from "~/art/traffic-steps";
 
 /** How many ways a car can point on screen. */
 export const HEADINGS = 24;
@@ -92,333 +92,165 @@ export function mapHeading(
   return groundHeading(view, X, V, d[0], d[1]);
 }
 
-interface Sprite {
-  day: readonly string[];
-  lamp: readonly string[];
-  /** The ground point under the middle of the car, in the grid. */
-  ax: number;
-  ay: number;
-}
-
-function sprite(
-  day: readonly string[],
-  lamp: readonly string[],
-  ax: number,
-  ay: number,
-): Sprite {
-  return { day, lamp, ax, ay };
-}
-
-// ---- cars, nearest size (cls 2) --------------------------------------------------
-// About 7 px long pointing east and 8 rows pointing north; the slanted ones in between.
-
-const CAR2: readonly Sprite[] = [
-  // 0: east (as the cars on Stadium Road have always been)
-  sprite(
-    ["bglllgb..", "bblllgb..", "ddddddd..", ".kdddk..."],
-    [".........", "T......Ha", ".........", "........."],
-    3,
-    2,
-  ),
-  // 15
-  sprite(
-    [".......gb..", "....lllfb..", "..bgllldd..", "..brddd....", "..dd......."],
-    ["...........", "........tHa", "...........", "zhT........", "..........."],
-    5,
-    3,
-  ),
-  // 30
-  sprite(
-    [
-      "......fbb..",
-      "....bbggb..",
-      "...rlllfd..",
-      "..bglbbd...",
-      "..bbrdd....",
-      "..ddd......",
-    ],
-    [
-      "..........a",
-      "........tH.",
-      "...........",
-      "...........",
-      "..T........",
-      "zh.........",
-    ],
-    5,
-    4,
-  ),
-  // 45
-  sprite(
-    [
-      "...........",
-      "......bb...",
-      ".....fgbb..",
-      "....blggb..",
-      "...blllfd..",
-      "..brllbd...",
-      "..bbgbd....",
-      "..dbbd.....",
-      "...dd......",
-      "...........",
-    ],
-    [
-      ".........a.",
-      ".......tH..",
-      "...........",
-      "...........",
-      "...........",
-      "...........",
-      "..T........",
-      ".h.........",
-      "z..........",
-      "...........",
-    ],
-    5,
-    5,
-  ),
-  // 60
-  sprite(
-    [
-      "...........",
-      ".....bbb...",
-      ".....fgbb..",
-      "....blggd..",
-      "...blllb...",
-      "...rllbd...",
-      "..bbgrd....",
-      "..dbbb.....",
-      "...ddd.....",
-      "...........",
-    ],
-    [
-      "......a....",
-      ".....F.F...",
-      "...........",
-      "...........",
-      "...........",
-      "...........",
-      "...........",
-      "...R.R.....",
-      "...........",
-      "....z......",
-    ],
-    5,
-    5,
-  ),
-  // 75
-  sprite(
-    [
-      ".....",
-      ".bbbb",
-      ".fggf",
-      ".bllb",
-      "bbllb",
-      "bllb.",
-      "rggr.",
-      "bbbb.",
-      "dddd.",
-      ".....",
-    ],
-    [
-      "..a..",
-      ".F..F",
-      ".....",
-      ".....",
-      ".....",
-      ".....",
-      ".....",
-      ".....",
-      "R..R.",
-      ".z...",
-    ],
-    2,
-    5,
-  ),
-  // 90: north
-  sprite(
-    [
-      "....",
-      "bbbb",
-      "fggf",
-      "bllb",
-      "bllb",
-      "rggr",
-      "bbbb",
-      "bbbb",
-      "dddd",
-      "....",
-    ],
-    [
-      ".a..",
-      "F..F",
-      "....",
-      "....",
-      "....",
-      "....",
-      "....",
-      "....",
-      "R..R",
-      ".z..",
-    ],
-    1,
-    5,
-  ),
-];
-
-// ---- cars, middle size (cls 1) ---------------------------------------------------
-
-const CAR1: readonly Sprite[] = [
-  // 0: east
-  sprite(
-    ["bllgb..", "bbbbb..", "ddddd.."],
-    [".......", "T....Ha", "......."],
-    2,
-    2,
-  ),
-  // 15
-  sprite(
-    [".....gb..", "..rllbb..", "..bbbdd..", "..ddd...."],
-    [".........", "......tHa", "zhT......", "........."],
-    4,
-    3,
-  ),
-  // 30
-  sprite(
-    [".....gb..", "...llbb..", "..rbbdd..", "..bdd....", "..d......"],
-    ["........a", "......tH.", ".........", ".hT......", "z........"],
-    4,
-    3,
-  ),
-  // 45
-  sprite(
-    [
-      "........",
-      ".....b..",
-      "....fbb.",
-      "...rlgd.",
-      "..bbgd..",
-      "..dbd...",
-      "...d....",
-      "........",
-    ],
-    [
-      ".......a",
-      ".....tH.",
-      "........",
-      "........",
-      "..T.....",
-      ".h......",
-      "z.......",
-      "........",
-    ],
-    4,
-    4,
-  ),
-  // 60
-  sprite(
-    [
-      "......",
-      "...bb.",
-      "...fgb",
-      "..rlgd",
-      ".brgd.",
-      ".dbb..",
-      "..dd..",
-      "......",
-    ],
-    [
-      "....a.",
-      "...FF.",
-      "......",
-      "......",
-      "......",
-      "..RR..",
-      "......",
-      "..z...",
-    ],
-    3,
-    4,
-  ),
-  // 75
-  sprite(
-    ["......", "...bbb", "...fgf", "..bllb", "..rgr.", "..ddd.", "......"],
-    ["....a.", "...F.F", "......", "......", "......", "..R.R.", "...z.."],
-    3,
-    4,
-  ),
-  // 90: north
-  sprite(
-    [".....", ".bbb.", ".fgf.", ".blb.", ".rgr.", ".ddd.", "....."],
-    ["..a..", ".F.F.", ".....", ".....", ".....", ".R.R.", "..z.."],
-    2,
-    4,
-  ),
-];
-
-// ---- cars, far (cls 0): a few pixels ---------------------------------------------
-
-const CAR0: readonly Sprite[] = [
-  sprite(["lll.", "ddd."], ["T..H", "...."], 1, 1),
-  sprite(["...ll.", ".lldd.", ".dd..."], ["....F.", ".R....", "......"], 2, 2),
-  sprite(
-    ["....l", "..lld", "lld..", "dd..."],
-    ["....F", ".....", "R....", "....."],
-    2,
-    2,
-  ),
-  sprite(["..l", ".ld", "ld.", "d.."], ["..F", "...", "R..", "..."], 1, 2),
-  sprite(["..l", ".ll", "ld.", "d.."], ["..F", "...", "R..", "..."], 1, 2),
-  sprite([".l", "ll", "dd"], [".F", "..", "RR"], 0, 2),
-  sprite(["ll", "ll", "dd"], ["FF", "..", "RR"], 0, 2),
-];
-
-const CARS: readonly (readonly Sprite[])[] = [CAR0, CAR1, CAR2];
-
-/** Which drawn sprite a heading uses, and whether it is mirrored and turned round. */
-interface Pick {
+/** Which drawn grid a heading uses (index into a class's 14), and whether it is mirrored. */
+interface Slot {
   i: number;
   mirror: boolean;
-  back: boolean;
 }
 
-const pickOut: Pick = { i: 0, mirror: false, back: false };
-function pick(heading: number): Pick {
-  let h = ((Math.round(heading) % HEADINGS) + HEADINGS) % HEADINGS;
-  pickOut.back = h > HALF;
-  if (pickOut.back) h -= HALF;
-  pickOut.mirror = h > QUARTER;
-  pickOut.i = pickOut.mirror ? HALF - h : h;
-  return pickOut;
+const slotOut: Slot = { i: 0, mirror: false };
+/** heading 0-6 drawn; 7-11 mirror 5-1; 12-18 drawn; 19-23 mirror 17-13. */
+export function slotOf(heading: number): Slot {
+  const h = ((Math.round(heading) % HEADINGS) + HEADINGS) % HEADINGS;
+  if (h <= 6) {
+    slotOut.i = h;
+    slotOut.mirror = false;
+  } else if (h < 12) {
+    slotOut.i = 12 - h;
+    slotOut.mirror = true;
+  } else if (h <= 18) {
+    slotOut.i = h - 5;
+    slotOut.mirror = false;
+  } else {
+    slotOut.i = 31 - h;
+    slotOut.mirror = true;
+  }
+  return slotOut;
 }
 
-type Paint = (ch: string, back: boolean) => Color | null;
+type Paint = (ch: string, mirror: boolean) => Color | null;
 
-/** Draws a sprite's day pixels with `paint` choosing each letter's colour. */
 function stamp(
   s: Ink,
-  sp: Sprite,
+  g: Grid,
   x: number,
   y: number,
   mirror: boolean,
-  back: boolean,
   paint: Paint,
 ): void {
-  for (let r = 0; r < sp.day.length; r++) {
-    const row = sp.day[r];
+  for (let r = 0; r < g.day.length; r++) {
+    const row = g.day[r];
+    const yy = y + r - g.ay;
     for (let c = 0; c < row.length; c++) {
-      const ch = row.charCodeAt(c);
-      if (ch === 46) continue; // "."
-      const col = paint(row[c], back);
+      if (row.charCodeAt(c) === 46) continue; // "."
+      const col = paint(row[c], mirror);
       if (col === null) continue;
-      const dx = mirror ? sp.ax - c : c - sp.ax;
-      s.px(x + dx, y + r - sp.ay, col);
+      s.px(mirror ? x + g.ax - c : x + c - g.ax, yy, col);
     }
   }
 }
 
-const carPaint = (k: CarLook): Paint => {
-  return (ch, back) => {
+function lamps(
+  s: Ink,
+  g: Grid,
+  x: number,
+  y: number,
+  mirror: boolean,
+  beam: boolean,
+  reversing: boolean,
+): void {
+  const tail = reversing ? P.white : P.ledRed;
+  for (let r = 0; r < g.day.length; r++) {
+    const row = g.day[r];
+    for (let c = 0; c < row.length; c++) {
+      const ch = row[c];
+      // a headlamp (y, H, Y) or a tail lamp (q, T, Q)
+      const col =
+        ch === "y" || ch === "H" || ch === "Y"
+          ? P.goldLight
+          : ch === "q" || ch === "T" || ch === "Q"
+            ? tail
+            : null;
+      if (col === null) continue;
+      s.px(mirror ? x + g.ax - c : x + c - g.ax, y + r - g.ay, col);
+    }
+  }
+  if (!beam) return;
+  for (const [dx, dy] of g.beam) s.px(mirror ? x - dx : x + dx, y + dy, P.gold);
+}
+
+/** A car drawing turned round: the same outline pointing the other way. */
+function turned(g: Grid): Grid {
+  const swap: Record<string, string> = {
+    f: "r",
+    r: "f",
+    y: "q",
+    q: "y",
+    H: "T",
+    T: "H",
+    Y: "Q",
+    Q: "Y",
+  };
+  const day = g.day.map((row) => row.replace(/[fryqHTYQ]/g, (c) => swap[c]));
+  return { day, ax: g.ax, ay: g.ay, beam: beamAhead(g, day) };
+}
+
+/**
+ * The beam of a car turned round: the drawn beam through the anchor, then drawn back
+ * along itself until it starts right at the car's new front (G2: the ground point is
+ * below the middle of an angled car, so the beam through it alone fell a pixel or two
+ * short of the bonnet at night).
+ */
+function beamAhead(
+  g: Grid,
+  day: readonly string[],
+): readonly (readonly [number, number])[] {
+  if (g.beam.length === 0) return [];
+  const solid = (x: number, y: number): boolean => {
+    const row = day[y + g.ay];
+    const ch = row === undefined ? undefined : row[x + g.ax];
+    return ch !== undefined && ch !== ".";
+  };
+  const touches = (x: number, y: number): boolean => {
+    for (let j = -1; j <= 1; j++) {
+      for (let i = -1; i <= 1; i++) if (solid(x + i, y + j)) return true;
+    }
+    return false;
+  };
+  const [x0, y0] = g.beam[0];
+  const len = Math.hypot(x0, y0);
+  let back = 0;
+  for (let k = 0; k < len; k++) {
+    const x = Math.round(-x0 + (x0 / len) * k);
+    const y = Math.round(-y0 + (y0 / len) * k);
+    if (solid(x, y)) break;
+    back = k;
+    if (touches(x, y)) break;
+  }
+  const dx = Math.round(-x0 + (x0 / len) * back) + x0;
+  const dy = Math.round(-y0 + (y0 / len) * back) + y0;
+  return g.beam.map(([x, y]) => [-x + dx, -y + dy] as const);
+}
+
+/**
+ * The drawings of each size step, the furthest first (traffic-steps.ts): the three size
+ * classes are steps 0, 2 and 4; stadium-cars-steps.ts has steps 1 and 3.
+ */
+const CAR_SIZES: readonly (readonly Grid[])[] = [
+  CARS[0],
+  CARS_STEPS[0],
+  CARS[1],
+  CARS_STEPS[1],
+  CARS[2],
+];
+const COACH_SIZES: readonly (readonly Grid[])[] = [
+  COACHES[0],
+  COACHES_STEPS[0],
+  COACHES[1],
+  COACHES_STEPS[1],
+  COACHES[2],
+];
+
+/** Every step's 14 car drawings: the drawn 7, then the same turned round (made once). */
+let carSets: (readonly Grid[])[] | null = null;
+function cars(step: Step): readonly Grid[] {
+  carSets ??= CAR_SIZES.map((set) => [...set, ...set.map(turned)]);
+  return carSets[step];
+}
+
+const carPaint =
+  (k: CarLook): Paint =>
+  (ch) => {
     switch (ch) {
       case "b":
         return k.b;
@@ -426,23 +258,102 @@ const carPaint = (k: CarLook): Paint => {
         return k.l;
       case "d":
         return k.d;
+      case "n":
+        return k.n ?? k.d;
       case "g":
+      case "f":
+      case "r":
         return k.g;
+      case "w":
+        return k.w ?? k.l;
       case "k":
         return k.k;
-      case "f":
-        return back ? k.b : k.g;
-      case "r":
-        return back ? k.g : k.b;
+      case "m":
+        return k.m ?? k.d;
+      case "y":
+        return k.y ?? k.l;
+      case "q":
+        return k.q ?? k.d;
+      // the small cars' lamps, dark by day: on the top, on an end
+      case "Y":
+      case "Q":
+        return k.b;
+      case "H":
+      case "T":
+        return k.d;
       default:
         return null;
     }
   };
-};
+
+const coachPaint =
+  (k: CoachLook): Paint =>
+  (ch, mirror) => {
+    switch (ch) {
+      case "o":
+        return k.roof;
+      case "i":
+        return k.roofHi;
+      case "j":
+        return mirror ? k.roof : k.roofHi;
+      case "J":
+        return mirror ? k.roofHi : k.roof;
+      case "s":
+        return k.side;
+      case "e":
+        return k.stripe;
+      case "g":
+      case "f":
+      case "r":
+        return k.glass;
+      case "w":
+        return k.glassHi ?? k.glass;
+      case "k":
+        return k.tyre;
+      case "m":
+        return k.hub ?? k.side;
+      case "n":
+        return k.deep ?? k.tyre;
+      case "y":
+        return k.lamp ?? k.roofHi;
+      case "q":
+        return k.tail ?? k.stripe;
+      // the small coaches lamps, dark by day: on the roof, on an end
+      case "Y":
+      case "Q":
+        return k.roof;
+      case "H":
+      case "T":
+        return k.side;
+      default:
+        return null;
+    }
+  };
+
+/** The car grid for a size class and a heading (for tests and sheets). */
+export function carGrid(cls: 0 | 1 | 2, heading: number): Grid {
+  return cars(cls === 0 ? 0 : cls === 1 ? 2 : 4)[slotOf(heading).i];
+}
+
+/** The coach grid for a size class and a heading (for tests and sheets). */
+export function coachGrid(cls: 0 | 1 | 2, heading: number): Grid {
+  return COACHES[cls][slotOf(heading).i];
+}
+
+/** The car grid for a size step and a heading (for tests and sheets). */
+export function carStepGrid(step: Step, heading: number): Grid {
+  return cars(step)[slotOf(heading).i];
+}
+
+/** The coach grid for a size step and a heading (for tests and sheets). */
+export function coachStepGrid(step: Step, heading: number): Grid {
+  return COACH_SIZES[step][slotOf(heading).i];
+}
 
 /**
  * A car from above with its ground point at (x, y), pointing `heading` on screen
- * (0 east, HEADINGS / 4 up the screen).
+ * (0 east, HEADINGS / 4 up the screen). `step`: which of the five sizes
+ * (traffic-steps.ts `sizeStep`); without it, the one that stands for `cls`.
  */
 export function carSprite(
   s: Ink,
@@ -451,9 +362,10 @@ export function carSprite(
   cls: 0 | 1 | 2,
   heading: number,
   k: CarLook,
+  step?: Step,
 ): void {
-  const p = pick(heading);
-  stamp(s, CARS[cls][p.i], x, y, p.mirror, p.back, carPaint(k));
+  const p = slotOf(heading);
+  stamp(s, cars(step ?? stepOfClass(cls))[p.i], x, y, p.mirror, carPaint(k));
 }
 
 /**
@@ -467,345 +379,18 @@ export function carLamps(
   cls: 0 | 1 | 2,
   heading: number,
   state: 1 | 2,
+  step?: Step,
 ): void {
-  const p = pick(heading);
-  lamps(
-    s,
-    CARS[cls][p.i],
-    x,
-    y,
-    p.mirror,
-    p.back,
-    cls > 0 && state === 1,
-    state === 2,
-  );
-}
-
-function lamps(
-  s: Ink,
-  sp: Sprite,
-  x: number,
-  y: number,
-  mirror: boolean,
-  back: boolean,
-  beam: boolean,
-  reversing: boolean,
-): void {
-  const tail = reversing ? P.white : P.ledRed;
-  for (let r = 0; r < sp.lamp.length; r++) {
-    const row = sp.lamp[r];
-    for (let c = 0; c < row.length; c++) {
-      const ch = row[c];
-      if (ch === ".") continue;
-      let col: Color | null = null;
-      switch (ch) {
-        case "F":
-          col = back ? tail : P.goldLight;
-          break;
-        case "R":
-          col = back ? P.goldLight : tail;
-          break;
-        case "H":
-          col = back ? null : P.goldLight;
-          break;
-        case "h":
-          col = back ? P.goldLight : null;
-          break;
-        case "T":
-          col = back ? null : tail;
-          break;
-        case "t":
-          col = back ? tail : null;
-          break;
-        case "a":
-          col = !back && beam ? P.gold : null;
-          break;
-        case "z":
-          col = back && beam ? P.gold : null;
-          break;
-      }
-      if (col === null) continue;
-      const dx = mirror ? sp.ax - c : c - sp.ax;
-      s.px(x + dx, y + r - sp.ay, col);
-    }
-  }
-}
-
-// ---- coaches -------------------------------------------------------------------
-// The east-west and north-south coaches are hand-placed; the slanted ones are sheared
-// from them (a coach is a long box, so a sheared column or row is how it would be drawn
-// by hand), shortened to the length it shows at that angle.
-
-const COACH_EW: readonly Sprite[] = [
-  sprite(
-    ["oooooo..", "oooooo..", "eeeeee.."],
-    ["........", "T......H", "........"],
-    3,
-    2,
-  ),
-  sprite(
-    [
-      "oiiiiiiiiio..",
-      "ooogooogooo..",
-      "ooooooooooo..",
-      "ggggggggggg..",
-      "eeeeeeeeeee..",
-    ],
-    [
-      ".............",
-      ".............",
-      "T..........Ha",
-      ".............",
-      ".............",
-    ],
-    5,
-    3,
-  ),
-  sprite(
-    [
-      "oiiiiiiiiiiiiiiio..",
-      "ooooggoooooggoooo..",
-      "ooooooooooooooooo..",
-      "ooooooooooooooooo..",
-      "ggggggggggggggggg..",
-      "sssssssssssssssss..",
-      "eeeeeeeeeeeeeeeee..",
-      "...k.........k.....",
-    ],
-    [
-      "...................",
-      "...................",
-      "...................",
-      "T................Ha",
-      "...................",
-      "...................",
-      "...................",
-      "...................",
-    ],
-    8,
-    4,
-  ),
-];
-
-const COACH_NS: readonly Sprite[] = [
-  sprite(
-    ["..", "oo", "oo", "oo", "oo", "ee"],
-    ["FF", "..", "..", "..", "..", "RR"],
-    0,
-    4,
-  ),
-  sprite(
-    [
-      "....",
-      "ffff",
-      "iooo",
-      "iooo",
-      "iooo",
-      "iooo",
-      "iooo",
-      "iooo",
-      "rrrr",
-      "eeee",
-    ],
-    [
-      "F..F",
-      "....",
-      "....",
-      "....",
-      "....",
-      "....",
-      "....",
-      "....",
-      "....",
-      "R..R",
-    ],
-    1,
-    6,
-  ),
-  sprite(
-    [
-      "......",
-      "iooooo",
-      "iffffo",
-      "iooooo",
-      "iooooo",
-      "iooooo",
-      "ioggoo",
-      "ioggoo",
-      "iooooo",
-      "iooooo",
-      "iooooo",
-      "iooooo",
-      "irrrro",
-      "iooooo",
-      "ssssss",
-      "eeeeee",
-    ],
-    [
-      ".F..F.",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      "......",
-      ".R..R.",
-    ],
-    2,
-    9,
-  ),
-];
-
-/** A sprite from a list of lettered pixels, the anchor given in the same coordinates. */
-function fromPixels(
-  day: { x: number; y: number; ch: string }[],
-  lamp: { x: number; y: number; ch: string }[],
-  ax: number,
-  ay: number,
-): Sprite {
-  let x0 = Infinity;
-  let y0 = Infinity;
-  let x1 = -Infinity;
-  let y1 = -Infinity;
-  for (const p of [...day, ...lamp]) {
-    x0 = Math.min(x0, p.x);
-    y0 = Math.min(y0, p.y);
-    x1 = Math.max(x1, p.x);
-    y1 = Math.max(y1, p.y);
-  }
-  const grid = (list: typeof day): string[] => {
-    const rows: string[][] = [];
-    for (let y = y0; y <= y1; y++) rows.push(new Array(x1 - x0 + 1).fill("."));
-    for (const p of list) rows[p.y - y0][p.x - x0] = p.ch;
-    return rows.map((r) => r.join(""));
-  };
-  return sprite(grid(day), grid(lamp), ax - x0, ay - y0);
+  const size = step ?? stepOfClass(cls);
+  const p = slotOf(heading);
+  const beam = size > 0 && state === 1;
+  lamps(s, cars(size)[p.i], x, y, p.mirror, beam, state === 2);
 }
 
 /**
- * An east-west sprite slanted up to the right: `n` of its body's columns (`bodyW` wide),
- * each lifted so the front end stands `rise` rows above the back.
+ * A coach or a bus from above, its ground point at (x, y), pointing `heading`. `step` as
+ * `carSprite`'s.
  */
-function shearColumns(
-  base: Sprite,
-  bodyW: number,
-  n: number,
-  rise: number,
-): Sprite {
-  const lift = (j: number): number => Math.round((rise * j) / (n - 1));
-  const day: { x: number; y: number; ch: string }[] = [];
-  const lamp: { x: number; y: number; ch: string }[] = [];
-  const width = base.day[0].length;
-  for (let j = 0; j < n + width - bodyW; j++) {
-    const src = j < n ? Math.round((j * (bodyW - 1)) / (n - 1)) : bodyW + j - n;
-    for (let r = 0; r < base.day.length; r++) {
-      const d = base.day[r][src];
-      const l = base.lamp[r][src];
-      if (d !== ".") day.push({ x: j, y: r - lift(j), ch: d });
-      if (l !== ".") lamp.push({ x: j, y: r - lift(j), ch: l });
-    }
-  }
-  const mid = Math.round((n - 1) / 2);
-  return fromPixels(day, lamp, mid, base.ay - lift(mid));
-}
-
-/**
- * A north-south sprite leant over to the right at the top: `n` of its rows, each moved
- * along so the top stands `shift` columns right of the bottom.
- */
-function shearRows(base: Sprite, n: number, shift: number): Sprite {
-  const h = base.day.length;
-  // row 0 holds only lamps; the body is rows 1 to h - 1
-  const along = (i: number): number =>
-    Math.round((shift * (n - 1 - i)) / (n - 1));
-  const day: { x: number; y: number; ch: string }[] = [];
-  const lamp: { x: number; y: number; ch: string }[] = [];
-  let ay = 0;
-  let ax = base.ax;
-  let best = Infinity;
-  for (let i = -1; i < n; i++) {
-    const src = i < 0 ? 0 : 1 + Math.round((i * (h - 2)) / (n - 1));
-    const dx = i < 0 ? along(0) + 1 : along(i);
-    if (i >= 0 && Math.abs(src - base.ay) < best) {
-      best = Math.abs(src - base.ay);
-      ay = i;
-      ax = base.ax + dx;
-    }
-    const row = base.day[src];
-    for (let c = 0; c < row.length; c++) {
-      if (row[c] !== ".") day.push({ x: c + dx, y: i, ch: row[c] });
-      const l = base.lamp[src][c];
-      if (l !== ".") lamp.push({ x: c + dx, y: i, ch: l });
-    }
-  }
-  return fromPixels(day, lamp, ax, ay);
-}
-
-/** The coaches at every drawn heading, far, middle and near. */
-const COACHES: readonly (readonly Sprite[])[] = [
-  [
-    COACH_EW[0],
-    shearColumns(COACH_EW[0], 6, 6, 1),
-    shearColumns(COACH_EW[0], 6, 5, 2),
-    shearColumns(COACH_EW[0], 6, 4, 3),
-    shearRows(COACH_NS[0], 4, 2),
-    shearRows(COACH_NS[0], 5, 1),
-    COACH_NS[0],
-  ],
-  [
-    COACH_EW[1],
-    shearColumns(COACH_EW[1], 11, 11, 2),
-    shearColumns(COACH_EW[1], 11, 10, 4),
-    shearColumns(COACH_EW[1], 11, 8, 6),
-    shearRows(COACH_NS[1], 7, 5),
-    shearRows(COACH_NS[1], 8, 3),
-    COACH_NS[1],
-  ],
-  [
-    COACH_EW[2],
-    shearColumns(COACH_EW[2], 17, 16, 4),
-    shearColumns(COACH_EW[2], 17, 15, 7),
-    shearColumns(COACH_EW[2], 17, 11, 8),
-    shearRows(COACH_NS[2], 12, 8),
-    shearRows(COACH_NS[2], 14, 4),
-    COACH_NS[2],
-  ],
-];
-
-const coachPaint = (k: CoachLook): Paint => {
-  return (ch, back) => {
-    switch (ch) {
-      case "o":
-        return k.roof;
-      case "i":
-        return k.roofHi;
-      case "s":
-        return k.side;
-      case "e":
-        return k.stripe;
-      case "g":
-        return k.glass;
-      case "k":
-        return k.tyre;
-      case "f":
-        return back ? k.roof : k.glass;
-      case "r":
-        return back ? k.glass : k.roof;
-      default:
-        return null;
-    }
-  };
-};
-
-/** A coach or a bus from above, its ground point at (x, y), pointing `heading`. */
 export function coachSprite(
   s: Ink,
   x: number,
@@ -813,9 +398,11 @@ export function coachSprite(
   cls: 0 | 1 | 2,
   heading: number,
   k: CoachLook,
+  step?: Step,
 ): void {
-  const p = pick(heading);
-  stamp(s, COACHES[cls][p.i], x, y, p.mirror, p.back, coachPaint(k));
+  const p = slotOf(heading);
+  const set = COACH_SIZES[step ?? stepOfClass(cls)];
+  stamp(s, set[p.i], x, y, p.mirror, coachPaint(k));
 }
 
 /** A coach's lamps at night (as `carLamps`; a coach shows no beam). */
@@ -826,7 +413,25 @@ export function coachLamps(
   cls: 0 | 1 | 2,
   heading: number,
   state: 1 | 2,
+  step?: Step,
 ): void {
-  const p = pick(heading);
-  lamps(s, COACHES[cls][p.i], x, y, p.mirror, p.back, false, state === 2);
+  const p = slotOf(heading);
+  const set = COACH_SIZES[step ?? stepOfClass(cls)];
+  lamps(s, set[p.i], x, y, p.mirror, false, state === 2);
+}
+
+/**
+ * How big a car (or with `bus`, a coach) is drawn at size step `step` and
+ * `heading`: its grid's width and height, round its ground point in the middle. For the
+ * shadows the street lamps throw (stadium-life.ts).
+ */
+export function vehicleSize(
+  bus: boolean,
+  step: Step,
+  heading: number,
+): { w: number; h: number } {
+  const g = (bus ? COACH_SIZES[step] : cars(step))[slotOf(heading).i];
+  let w = 0;
+  for (const row of g.day) w = Math.max(w, row.length);
+  return { w, h: g.day.length };
 }

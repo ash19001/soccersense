@@ -84,12 +84,14 @@ export function paintSkyline(
   const { hy, cx, w, k } = view;
   const beacons: { x: number; y: number }[] = [];
   if (hy < 6) return beacons;
-  // Whole pixels at every size: buildings are sized from a unit, never scaled as pictures.
-  const u = Math.max(0.42, Math.min(1.5, k));
+  // Whole pixels at every size: buildings are sized from a unit, never scaled as pictures,
+  // and a choice made on the unit is made on half of it (`u1`).
+  const u = Math.max(0.84, Math.min(3, k));
+  const u1 = u / 2;
   const night = light.lightsOn;
-  const px = (n: number): number => Math.max(1, Math.round(n * u));
+  const px = (n: number): number => Math.max(2, Math.round(n * u));
   const tall = (n: number): number =>
-    Math.max(2, Math.min(hy - view.logoH - 3, Math.round(n * u)));
+    Math.max(4, Math.min(hy - view.logoH - 6, Math.round(n * u)));
 
   // ---- the back plane: a run of roofs, paler --------------------------------
   // In a low light the city is a dark shape against the glow; by day it is pale with haze.
@@ -110,12 +112,12 @@ export function paintSkyline(
       Math.max(0, 1 - Math.abs(mid + 70) / 62) * 5;
     const bw = px(3 + r * 5);
     const bh = Math.max(
-      1,
+      2,
       Math.round((2.5 + r2 * 4 + lift * (0.5 + r2 * 0.5)) * u),
     );
     if (x + bw > 0 && x < w) {
       s.rect(x, hy - bh, bw, bh, backFace);
-      if (bw >= 3)
+      if (bw >= 6)
         s.rect(
           x + bw - Math.max(1, Math.floor(bw / 3)),
           hy - bh,
@@ -123,7 +125,7 @@ export function paintSkyline(
           bh,
           backSide,
         );
-      if (night && bh >= 3) {
+      if (night && bh >= 6) {
         for (let wy = hy - bh + 1; wy < hy - 1; wy += 2) {
           for (let wx = x; wx < x + bw; wx += 2) {
             if (hash2(wx, wy, seed + 5) < 0.22) s.px(wx, wy, P.amberDim);
@@ -156,9 +158,9 @@ export function paintSkyline(
   ): void => {
     if (bw <= 0 || bh <= 0) return;
     s.rect(bx, top, bw, bh, a);
-    const sw = bw >= 3 ? Math.max(1, Math.floor(bw / 3)) : 0;
+    const sw = bw >= 6 ? Math.max(2, Math.floor(bw / 3)) : 0;
     if (sw > 0) s.rect(bx + bw - sw, top, sw, bh, b);
-    if (!windows || bw < 3) return;
+    if (!windows || bw < 6) return;
     if (night) {
       for (let wy = top + 1; wy < top + bh - 1; wy += 2) {
         for (let wx = bx + 1; wx < bx + bw - 1; wx += 2) {
@@ -167,10 +169,13 @@ export function paintSkyline(
             s.px(wx, wy, r < 0.08 ? P.goldLight : r < 0.27 ? P.gold : P.amber);
         }
       }
-    } else if (bh >= 8 && bw - sw >= 3) {
-      // floors of glass on the lit face
-      for (let wy = top + 2; wy < top + bh - 1; wy += 2) {
-        s.rect(bx + 1, wy, bw - sw - 1, 1, glass);
+    } else if (bh >= 16 && bw - sw >= 6) {
+      // floors of glass on the lit face (finer: a floor every 2 px, and the
+      // glass divided into panes by a frame every 3 px)
+      for (let wy = top + 4; wy < top + bh - 2; wy += 2) {
+        s.rect(bx + 2, wy, bw - sw - 2, 1, glass);
+
+        for (let wx = bx + 4; wx < bx + bw - sw - 1; wx += 3) s.px(wx, wy, a);
       }
     }
   };
@@ -180,40 +185,40 @@ export function paintSkyline(
     const bx = Math.round(cx + b.x * u);
     const bw = px(b.w);
     const bh = tall(b.h);
-    if (bx > w + 12 || bx + bw < -12) continue;
+    if (bx > w + 24 || bx + bw < -24) continue;
     const top = hy - bh;
     let peak = top;
     switch (b.kind) {
       case "slab": {
         body(bx, top, bw, bh, face, side, n, true);
-        if (n % 2 === 0 && bw >= 4) {
-          s.rect(bx + 1, top - 1, Math.max(1, Math.floor(bw / 3)), 1, side);
+        if (n % 2 === 0 && bw >= 8) {
+          s.rect(bx + 2, top - 2, Math.max(2, Math.floor(bw / 3)), 2, side);
         }
         break;
       }
       case "block": {
         // a tower block: pale concrete, a lift house on the roof
         body(bx, top, bw, bh, stone, stoneSide, n, true);
-        if (bw >= 4)
-          s.rect(bx + Math.floor(bw / 2) - 1, top - 1, 2, 1, stoneSide);
+        if (bw >= 8)
+          s.rect(bx + Math.floor(bw / 2) - 2, top - 2, 4, 2, stoneSide);
         break;
       }
       case "step": {
-        const inset = Math.max(1, Math.round(bw / 4));
-        const upper = Math.max(1, Math.round(bh * 0.28));
+        const inset = Math.max(2, Math.round(bw / 4));
+        const upper = Math.max(2, Math.round(bh * 0.28));
         body(bx, top + upper, bw, bh - upper, face, side, n, true);
         body(bx + inset, top, bw - inset * 2, upper, face, side, n + 50, false);
-        if (u >= 0.7) {
-          s.rect(bx + Math.floor(bw / 2), top - 3, 1, 3, frame);
-          peak = top - 3;
+        if (u1 >= 0.7) {
+          s.rect(bx + Math.floor(bw / 2), top - 6, 2, 6, frame);
+          peak = top - 6;
         }
         break;
       }
       case "slant": {
         // the roof falls to the right, a row at a time
-        const fall = Math.max(1, Math.min(4, bw - 2));
+        const fall = Math.max(2, Math.min(8, bw - 4));
         body(bx, top + fall, bw, bh - fall, face, side, n, true);
-        const sw = bw >= 3 ? Math.max(1, Math.floor(bw / 3)) : 0;
+        const sw = bw >= 6 ? Math.max(2, Math.floor(bw / 3)) : 0;
         for (let j = 0; j < bw; j++) {
           const drop = Math.round((j / Math.max(1, bw - 1)) * fall);
           s.rect(
@@ -227,10 +232,10 @@ export function paintSkyline(
         break;
       }
       case "spire": {
-        const crownH = Math.max(2, Math.round(bh * 0.2));
+        const crownH = Math.max(4, Math.round(bh * 0.2));
         body(bx, top + crownH, bw, bh - crownH, face, side, n, true);
         // setbacks up to a point, then a mast
-        let cw = bw - 2;
+        let cw = bw - 4;
         let cyy = top + crownH - 1;
         while (cw > 0 && cyy >= top) {
           s.rect(
@@ -238,53 +243,53 @@ export function paintSkyline(
             cyy,
             cw,
             1,
-            cw > 2 ? face : side,
+            cw > 4 ? face : side,
           );
-          if ((top + crownH - 1 - cyy) % 2 === 1 || cw <= 3) cw -= 2;
+          if ((top + crownH - 1 - cyy) % 2 === 1 || cw <= 6) cw -= 2;
           cyy--;
         }
-        const mast = Math.max(2, Math.round(4 * u));
-        s.rect(bx + Math.floor(bw / 2), top - mast, 1, mast + 1, frame);
+        const mast = Math.max(4, Math.round(4 * u));
+        s.rect(bx + Math.floor(bw / 2) - 1, top - mast, 2, mast + 1, frame);
         peak = top - mast;
         break;
       }
       case "crown": {
         body(bx, top, bw, bh, face, side, n, true);
         // plant on the roof and two masts
-        s.rect(bx + 1, top - 1, bw - 2, 1, side);
-        if (u >= 0.7) {
-          s.rect(bx + 2, top - 4, 1, 3, frame);
-          s.rect(bx + bw - 3, top - 3, 1, 2, frame);
-          peak = top - 4;
+        s.rect(bx + 2, top - 2, bw - 4, 2, side);
+        if (u1 >= 0.7) {
+          s.rect(bx + 4, top - 8, 2, 6, frame);
+          s.rect(bx + bw - 6, top - 6, 2, 4, frame);
+          peak = top - 8;
         } else {
-          peak = top - 1;
+          peak = top - 2;
         }
         break;
       }
       case "dome": {
         // the cathedral: a nave, a drum and a dome with a lantern, a west tower
         body(bx, top, bw, bh, stone, stoneSide, n, false);
-        const r = Math.max(2, Math.round(bw * 0.24));
+        const r = Math.max(4, Math.round(bw * 0.24));
         const dcx = bx + Math.round(bw * 0.58);
         for (let j = 0; j <= r; j++) {
           const half = Math.round(Math.sqrt(Math.max(0, r * r - j * j)));
           s.rect(dcx - half, top - 1 - j, half + 1, 1, stone);
           if (half > 0) s.rect(dcx + 1, top - 1 - j, half, 1, stoneSide);
         }
-        s.rect(dcx, top - r - 3, 1, 2, frame);
-        const tw = Math.max(2, Math.round(bw * 0.2));
-        const th = Math.max(2, Math.round(bh * 0.75));
+        s.rect(dcx, top - r - 6, 2, 4, frame);
+        const tw = Math.max(4, Math.round(bw * 0.2));
+        const th = Math.max(4, Math.round(bh * 0.75));
         body(bx, top - th, tw, th, stone, stoneSide, n, false);
         if (night) {
-          s.px(dcx - 1, top - 1, P.gold);
-          s.px(bx + 2, top + 2, P.amber);
-          if (bw > 10) s.px(bx + bw - 4, top + 2, P.amber);
+          s.rect(dcx - 2, top - 2, 2, 2, P.gold);
+          s.rect(bx + 4, top + 4, 2, 2, P.amber);
+          if (bw > 20) s.rect(bx + bw - 8, top + 4, 2, 2, P.amber);
         }
-        peak = top - r - 3;
+        peak = top - r - 6;
         break;
       }
       case "church": {
-        const base = Math.max(2, Math.round(bh * 0.45));
+        const base = Math.max(4, Math.round(bh * 0.45));
         body(bx, hy - base, bw, base, stone, stoneSide, n, false);
         const mid = bx + Math.floor(bw / 2);
         for (let y = top; y < hy - base; y++) {
@@ -298,57 +303,66 @@ export function paintSkyline(
       }
       case "needle": {
         // the television tower: a shaft, a pod two thirds of the way up, an aerial
-        const shaft = u >= 0.9 ? 2 : 1;
+        const shaft = (u1 >= 0.9 ? 2 : 1) * 2;
         s.rect(bx, top, shaft, bh, stone);
-        if (shaft === 2) s.rect(bx + 1, top, 1, bh, stoneSide);
+        if (shaft >= 2) s.rect(bx + shaft / 2, top, shaft / 2, bh, stoneSide);
         const py = top + Math.round(bh * 0.3);
-        const pw = Math.max(1, Math.round(2.4 * u));
-        s.rect(bx - pw, py, pw * 2 + shaft, 1, stone);
-        s.rect(bx - pw + 1, py + 1, pw * 2 + shaft - 2, 1, stoneSide);
+        const pw = Math.max(2, Math.round(2.4 * u));
+        s.rect(bx - pw, py, pw * 2 + shaft, 2, stone);
+        s.rect(bx - pw + 2, py + 2, pw * 2 + shaft - 4, 2, stoneSide);
         s.rect(
-          bx - pw + 1,
-          py - 1,
-          pw * 2 + shaft - 2,
-          1,
+          bx - pw + 2,
+          py - 2,
+          pw * 2 + shaft - 4,
+          2,
           night ? P.gold : glass,
         );
-        s.rect(bx, top - Math.round(4 * u), 1, Math.round(4 * u), frame);
+        s.rect(bx, top - Math.round(4 * u), 2, Math.round(4 * u), frame);
         peak = top - Math.round(4 * u);
         break;
       }
       case "crane": {
         // a tower crane: mast, jib, counter-jib, the cab where they meet
         const dir = b.left ? -1 : 1;
-        const jib = Math.max(3, Math.round(11 * u));
-        const back = Math.max(1, Math.round(4 * u));
-        s.rect(bx, top, 1, bh, crane);
+        const jib = Math.max(6, Math.round(11 * u));
+        const back = Math.max(2, Math.round(4 * u));
+        s.rect(bx, top, 2, bh, crane);
         const x0 = dir > 0 ? bx - back : bx - jib;
-        s.rect(x0, top + 1, jib + back + 1, 1, crane);
-        s.px(bx, top - 1, crane);
-        if (u >= 0.7) {
-          s.px(bx + dir, top, crane);
-          s.px(bx - dir * back, top + 2, frame);
-          s.rect(bx + dir * Math.round(jib * 0.7), top + 2, 1, 2, frame);
+        s.rect(x0, top + 2, jib + back + 2, 2, crane);
+        s.rect(bx, top - 2, 2, 2, crane);
+
+        // a lattice: the mast and the jib are open frames
+        for (let y = top + 4; y < hy - 1; y += 3) s.px(bx + (y % 2), y, frame);
+        for (let j = 1; j < jib + back + 2; j += 3)
+          s.px(x0 + j, top + 3, frame);
+
+        if (u1 >= 0.7) {
+          s.rect(bx + dir * 2, top, 2, 2, crane);
+          s.rect(bx - dir * back, top + 4, 2, 2, frame);
+          s.rect(bx + dir * Math.round(jib * 0.7), top + 4, 1, 4, frame);
+          s.rect(bx + dir * Math.round(jib * 0.7) - 1, top + 8, 3, 1, frame);
         }
-        peak = top - 1;
+        peak = top - 2;
         break;
       }
       case "gas": {
         // the gasholder: a drum in a frame of posts
-        const drum = Math.max(1, bh - Math.max(1, Math.round(2 * u)));
+        const drum = Math.max(2, bh - Math.max(2, Math.round(2 * u)));
         s.rect(bx, hy - drum, bw, drum, stoneSide);
         s.rect(bx, hy - drum, Math.ceil(bw * 0.6), drum, stone);
-        const posts = bw >= 9 ? 4 : 3;
+        const posts = bw >= 18 ? 4 : 3;
         for (let j = 0; j < posts; j++) {
           s.rect(
-            bx + Math.round((j * (bw - 1)) / (posts - 1)),
+            bx + Math.round((j * (bw - 2)) / (posts - 1)),
             top,
-            1,
+            2,
             bh,
             frame,
           );
         }
-        s.rect(bx, top, bw, 1, frame);
+        s.rect(bx, top, bw, 2, frame);
+        // a girder halfway up joins the posts
+        s.rect(bx, top + Math.round(bh / 2), bw, 1, frame);
         break;
       }
     }
@@ -357,7 +371,7 @@ export function paintSkyline(
         x:
           bx +
           (b.kind === "crown"
-            ? 2
+            ? 4
             : b.kind === "crane" || b.kind === "needle"
               ? 0
               : Math.floor(bw / 2)),

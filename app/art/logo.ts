@@ -1,18 +1,20 @@
 /**
  * The soccersense wordmark, drawn at the top of the home screen over the sky.
  *
- * Custom block lettering, 12 px tall: 3 px stems, 2 px bars, clipped corners. The O of
- * SOCCER is a little football. Chalk faces sit on one solid ink plate with a hard drop
- * shadow, so the word reads over any sky from noon to midnight.
+ * Custom block lettering, 24 px tall: 6 px stems and 4 px bars, chamfered corners and
+ * filleted counters, a 1 px bevel (lit on the top and left, shaded on the bottom and right)
+ * over two bands (a lit top, a darker foot). The O of SOCCER is the menu's ball, 26 px
+ * across. Chalk faces sit on one solid ink plate, 2 px round every letter, with a hard 4 px
+ * drop shadow, so the word reads over any sky from noon to midnight.
  *
  *   const opts = { maxWidth: 104, maxHeight: m.logo.h, t, tagline };
  *   const size = logoSize(opts);
  *   drawLogo(s, m.cx, Math.floor((m.logo.h - size.h) / 2), opts);
  *
- * Two layouts from the same letters: one line (132 x 17) when `maxWidth` has room for
- * it, otherwise SOCCER over SENSE (74 x 31). Sizes include the 2 px shadow, which hangs
+ * Two layouts from the same letters: one line (264 x 34) when `maxWidth` has room for
+ * it, otherwise SOCCER over SENSE (148 x 62). Sizes include the 4 px shadow, which hangs
  * off the right and the bottom; the letters themselves are centred on `cx`. The tagline
- * is an amber line on an ink strip fixed under the plate, 7 rows taller.
+ * is an amber line on an ink strip fixed under the plate, 14 rows taller.
  *
  * Everything is raw palette colour: the wordmark is interface, not scenery, so it is not
  * graded by the lighting.
@@ -26,7 +28,9 @@ import {
   sprite,
   type Color,
   type Sprite,
+  type TextOptions,
 } from "~/pixel";
+import { paintedFont } from "./lettering";
 import { P } from "./palette";
 
 export interface LogoOptions {
@@ -46,168 +50,10 @@ export interface LogoOptions {
 // The letters
 // ---------------------------------------------------------------------------
 
-// '#' face, 's' the ball's shaded side, 'm' a seam, 'p' a patch.
-const LEGEND = "#smp";
-const CAP_H = 12;
-
-const GLYPHS: Readonly<Record<string, Sprite>> = {
-  S: sprite(
-    `
-.########.
-##########
-###....###
-###.......
-###.......
-#########.
-.#########
-.......###
-.......###
-###....###
-##########
-.########.
-`,
-    LEGEND,
-  ),
-  // The ball: a pixel taller than the capitals, standing on their baseline.
-  O: sprite(
-    `
-....#ppp#....
-..####m####..
-.#####m#####.
-.#####p#####.
-p###ppppp###p
-pmm#ppppp#mmp
-#####ppp####s
-####m###m###s
-###m#####m#ss
-.#p#######ps.
-.pp#######pp.
-..p#####ssp..
-....##sss....
-`,
-    LEGEND,
-  ),
-  C: sprite(
-    `
-.########.
-##########
-###....###
-###....###
-###.......
-###.......
-###.......
-###.......
-###....###
-###....###
-##########
-.########.
-`,
-    LEGEND,
-  ),
-  E: sprite(
-    `
-#########
-#########
-###......
-###......
-###......
-#######..
-#######..
-###......
-###......
-###......
-#########
-#########
-`,
-    LEGEND,
-  ),
-  R: sprite(
-    `
-########..
-#########.
-###....###
-###....###
-###....###
-#########.
-########..
-###.###...
-###..###..
-###...###.
-###....###
-###....###
-`,
-    LEGEND,
-  ),
-  N: sprite(
-    `
-####...###
-####...###
-#####..###
-#####..###
-######.###
-######.###
-###.######
-###.######
-###..#####
-###..#####
-###...####
-###...####
-`,
-    LEGEND,
-  ),
-};
-
-/** Ink columns between two letters. The ball is round, so it sits a pixel closer. */
-function gap(a: string, b: string): number {
-  return a === "O" || b === "O" ? 1 : 2;
-}
 /** Ink rows between the two lines of the stacked layout. */
-const LINE_GAP = 2;
+const LINE_GAP = 4;
 /** The drop shadow: this many pixels down and right. */
-const SHADOW = 2;
-/** The top rows of each letter catch the light. */
-const TOP_ROWS = 1;
-/** The bottom rows of each letter are a tone darker: the light comes from above. */
-const FOOT_ROWS = 2;
-
-// What each pixel of the built logo is, as stored in `Built.tone`.
-const NONE = 0;
-const FACE = 1;
-const FOOT = 2;
-const TOP = 3;
-const BALL_WHITE = 4;
-const BALL_SHADE = 5;
-const SEAM = 6;
-const PATCH = 7;
-const PLATE = 8;
-
-/** Glyph cell value (legend index + 1) to tone, for the ball. */
-const BALL_TONES = [NONE, BALL_WHITE, BALL_SHADE, SEAM, PATCH];
-
-const TONE_COLORS: readonly Color[] = [
-  P.ink,
-  P.chalk,
-  P.steelHi,
-  P.white,
-  P.white,
-  P.mist,
-  P.mist,
-  P.slate,
-  P.ink,
-];
-
-/** What the glint turns each tone into: one step up its ramp. `undefined`: no change. */
-const GLINT_COLORS: readonly (Color | undefined)[] = [
-  undefined,
-  P.white,
-  P.chalk,
-  undefined,
-  undefined,
-  P.white,
-  undefined,
-  undefined,
-  P.slate,
-];
+const SHADOW = 4;
 
 interface Built {
   /** Size with the shadow. */
@@ -219,99 +65,407 @@ interface Built {
   tone: Uint8Array;
 }
 
+// Built once per layout, on first use.
+const builtArt: { stacked?: Built; line?: Built } = {};
+
+function built(stacked: boolean): Built {
+  if (stacked) return (builtArt.stacked ??= build(["SOCCER", "SENSE"]));
+  return (builtArt.line ??= build(["SOCCERSENSE"]));
+}
+
+const GLYPHS: Readonly<Record<string, Sprite>> = {
+  S: sprite(
+    `
+...##############...
+..################..
+.##################.
+####################
+#######......#######
+######........######
+######..............
+######..............
+######..............
+#######.............
+##################..
+.##################.
+.##################.
+..##################
+.............#######
+..............######
+..............######
+..............######
+######........######
+#######......#######
+####################
+.##################.
+..################..
+...##############...
+`,
+    "#",
+  ),
+  C: sprite(
+    `
+...##############...
+..################..
+.##################.
+####################
+#######......#######
+######........######
+######........######
+######........######
+######..............
+######..............
+######..............
+######..............
+######..............
+######..............
+######..............
+######..............
+######........######
+######........######
+######........######
+#######......#######
+####################
+.##################.
+..################..
+...##############...
+`,
+    "#",
+  ),
+  E: sprite(
+    `
+##################
+##################
+##################
+##################
+#######...........
+######............
+######............
+######............
+######............
+#######...........
+##############....
+##############....
+##############....
+##############....
+#######...........
+######............
+######............
+######............
+######............
+#######...........
+##################
+##################
+##################
+##################
+`,
+    "#",
+  ),
+  R: sprite(
+    `
+################....
+#################...
+##################..
+###################.
+#######......#######
+######........######
+######........######
+######........######
+######........######
+#######......#######
+###################.
+##################..
+#################...
+################....
+######..######......
+######..######......
+######...######.....
+######....######....
+######.....######...
+######......######..
+######.......######.
+######........######
+######........######
+######........######
+`,
+    "#",
+  ),
+  N: sprite(
+    `
+########......######
+########......######
+#########.....######
+#########.....######
+##########....######
+##########....######
+###########...######
+###########...######
+###########...######
+############..######
+############..######
+######.######.######
+######.######.######
+######..############
+######..############
+######...###########
+######...###########
+######...###########
+######....##########
+######....##########
+######.....#########
+######.....#########
+######......########
+######......########
+`,
+    "#",
+  ),
+};
+
+/** The capitals' height, and the ball's diameter (it stands 2 px taller). */
+const CAP_H = 24;
+const BALL_D = 26;
+
+// Tones: indices into TONE_COLORS (0 is nothing, 8 the ink plate).
+const T_WHITE = 1;
+const T_CHALK = 2;
+const T_STEELHI = 3;
+const T_PLATE = 8;
+const TONE_COLORS: readonly Color[] = [
+  P.ink,
+  P.white,
+  P.chalk,
+  P.steelHi,
+  P.mist,
+  P.steel,
+  P.slate,
+  P.night,
+  P.ink,
+];
+/** The glint lifts every tone one step up its ramp (white stays white). */
+const GLINT_COLORS: readonly (Color | undefined)[] = [
+  undefined,
+  undefined,
+  P.white,
+  P.chalk,
+  P.steelHi,
+  P.mist,
+  P.steel,
+  P.slate,
+  P.slate,
+];
+
+/**
+ * The O: a letter first and a ball second. A disc 26 px
+ * across (2 px taller than the capitals, on their baseline) in the capitals' chalk, lit on
+ * its top left and a tone darker on its bottom right like their bands; its counter is the
+ * ball's front pentagon, point up, dark and a little above the middle, where an O's hole is;
+ * five seams run out from its corners to the neighbouring pentagons, which show only as
+ * dark caps round the rim. Its ink outline is the plate's. As tones (TONE_COLORS).
+ */
+function oTones(): Uint8Array {
+  const d = BALL_D;
+  const c = (d - 1) / 2;
+  const r = d / 2;
+  const NIGHT = TONE_COLORS.indexOf(P.night);
+  const SLATE = TONE_COLORS.indexOf(P.slate);
+  const MIST = TONE_COLORS.indexOf(P.mist);
+  const STEEL = TONE_COLORS.indexOf(P.steel);
+  const out = new Uint8Array(d * d);
+  // the counter: the front pentagon
+  const pc = { x: c, y: c - O_LIFT };
+  const corners = [0, 1, 2, 3, 4].map((k) => {
+    const a = -Math.PI / 2 + (k * 2 * Math.PI) / 5;
+    return {
+      x: pc.x + O_PENT * Math.cos(a),
+      y: pc.y + O_PENT * Math.sin(a),
+      a,
+    };
+  });
+  const inPent = (x: number, y: number): boolean =>
+    corners.every((p, i) => {
+      const q = corners[(i + 1) % 5];
+      return (q.x - p.x) * (y - p.y) - (q.y - p.y) * (x - p.x) >= 0;
+    });
+  // the neighbours beyond each corner, seen edge on at the rim
+  const inCap = (x: number, y: number): boolean =>
+    corners.some((p) => {
+      const ux = Math.cos(p.a);
+      const uy = Math.sin(p.a);
+      const dx = x - (pc.x + ux * O_CAP_AT);
+      const dy = y - (pc.y + uy * O_CAP_AT);
+      const along = dx * ux + dy * uy;
+      const across = dy * ux - dx * uy;
+      return (along / O_CAP_DEEP) ** 2 + (across / O_CAP_WIDE) ** 2 <= 1;
+    });
+  for (let y = 0; y < d; y++) {
+    for (let x = 0; x < d; x++) {
+      if ((x - c) ** 2 + (y - c) ** 2 > r * r - 2) continue;
+      const i = y * d + x;
+      if (inPent(x, y)) {
+        out[i] = NIGHT;
+        continue;
+      }
+      // the neighbours at the rim a tone lighter, so the ball keeps its round edge on the plate
+      if (inCap(x, y)) {
+        out[i] = SLATE;
+        continue;
+      }
+      // towards the light (top left): 1 at the lit rim, -1 at the shaded one
+      const lit = -(x - c + (y - c)) / (r * Math.SQRT2);
+      let t = T_CHALK;
+      if (lit > 0.7) t = T_WHITE;
+      else if (lit < -0.78) t = MIST;
+      else if (lit < -0.42) t = T_STEELHI;
+      // the capitals' foot band
+      if (y >= d - 4 && t === T_CHALK) t = T_STEELHI;
+      out[i] = t;
+    }
+  }
+  // the seams, from each corner of the counter out to its neighbour
+  for (const p of corners) {
+    const ux = Math.cos(p.a);
+    const uy = Math.sin(p.a);
+    for (let k = 0.5; k < O_CAP_AT - O_PENT; k += 0.25) {
+      const i = Math.round(p.y + uy * k) * d + Math.round(p.x + ux * k);
+      const v = out[i];
+      if (v === T_WHITE || v === T_CHALK) out[i] = MIST;
+      else if (v === T_STEELHI || v === MIST) out[i] = STEEL;
+    }
+  }
+  // the dark patches catch the light along their top-left edges
+  const was = out.slice();
+  for (let y = 1; y < d; y++) {
+    for (let x = 1; x < d; x++) {
+      const i = y * d + x;
+      if (was[i] !== NIGHT || x + y > d - 2) continue;
+      const lit = (v: number): boolean => v === T_WHITE || v === T_CHALK;
+      if (lit(was[i - d]) || lit(was[i - 1])) out[i] = SLATE;
+    }
+  }
+  return out;
+}
+/** The counter's size (the pentagon's corners from its middle), and how far above the middle. */
+const O_PENT = 6.4;
+const O_LIFT = 0.5;
+/** Where the neighbouring pentagons sit (from the counter's middle), how deep and wide. */
+const O_CAP_AT = 14.6;
+const O_CAP_DEEP = 3.2;
+const O_CAP_WIDE = 4.8;
+
 function build(lines: readonly string[]): Built {
-  let over = 0;
+  const gap = (a: string, b: string): number =>
+    a === "O" || b === "O" ? 2 : 4;
+  const lineGap = LINE_GAP;
+  const shadow = SHADOW;
+  const over = BALL_D - CAP_H;
+  const widthOf = (ch: string): number => (ch === "O" ? BALL_D : GLYPHS[ch].w);
   const widths = lines.map((line) => {
     let w = 0;
     for (let i = 0; i < line.length; i++) {
-      const g = GLYPHS[line[i]];
-      w += g.w + (i > 0 ? gap(line[i - 1], line[i]) : 0);
-      over = Math.max(over, g.h - CAP_H);
+      w += widthOf(line[i]) + (i > 0 ? gap(line[i - 1], line[i]) : 0);
     }
     return w;
   });
   const inner = Math.max(...widths);
-  const w = inner + 2 + SHADOW;
-  const h = over + lines.length * (CAP_H + LINE_GAP) - LINE_GAP + 2 + SHADOW;
+  const w = inner + 4 + shadow;
+  const h = over + lines.length * (CAP_H + lineGap) - lineGap + 4 + shadow;
   const tone = new Uint8Array(w * h);
   const plate = new Uint8Array(w * h);
+  const ball = oTones();
 
   lines.forEach((line, row) => {
-    const x0 = 1 + Math.floor((inner - widths[row]) / 2);
-    const y0 = 1 + over + row * (CAP_H + LINE_GAP);
-    // One solid slab behind the row and a pixel above and below it, so no sky shows
-    // inside or between letters and the plate's edges run straight.
-    for (let j = -1; j <= CAP_H; j++) {
+    const x0 = 2 + Math.floor((inner - widths[row]) / 2);
+    const y0 = 2 + over + row * (CAP_H + lineGap);
+    for (let j = -2; j <= CAP_H + 1; j++) {
       for (let i = 0; i < widths[row]; i++) plate[(y0 + j) * w + x0 + i] = 1;
     }
     let x = x0;
     for (let n = 0; n < line.length; n++) {
       const ch = line[n];
+      if (n > 0) x += gap(line[n - 1], ch);
+      if (ch === "O") {
+        const y = y0 + CAP_H - BALL_D;
+        for (let j = 0; j < BALL_D; j++) {
+          for (let i = 0; i < BALL_D; i++) {
+            const v = ball[j * BALL_D + i];
+            if (v !== 0) tone[(y + j) * w + x + i] = v;
+          }
+        }
+        x += BALL_D;
+        continue;
+      }
       const g = GLYPHS[ch];
       const cells = g.frames[0];
-      if (n > 0) x += gap(line[n - 1], ch);
-      const y = y0 + CAP_H - g.h;
+      const at = (i: number, j: number): boolean =>
+        i >= 0 && j >= 0 && i < g.w && j < g.h && cells[j * g.w + i] !== 0;
       for (let j = 0; j < g.h; j++) {
         for (let i = 0; i < g.w; i++) {
-          const v = cells[j * g.w + i];
-          if (v === 0) continue;
-          let t = FACE;
-          if (ch === "O") t = BALL_TONES[v];
-          else if (j < TOP_ROWS) t = TOP;
-          else if (j >= CAP_H - FOOT_ROWS) t = FOOT;
-          tone[(y + j) * w + x + i] = t;
+          if (!at(i, j)) continue;
+          // the bands, and a 1 px bevel round every edge
+          let t = T_CHALK;
+          if (j < 2) t = T_WHITE;
+          else if (j >= CAP_H - 4) t = T_STEELHI;
+          if (!at(i, j - 1) || !at(i - 1, j)) t = T_WHITE;
+          if (!at(i, j + 1) || !at(i + 1, j)) t = T_STEELHI;
+          if (j >= CAP_H - 4 && (!at(i, j + 1) || !at(i + 1, j))) {
+            t = TONE_COLORS.indexOf(P.mist);
+          }
+          tone[(y0 + j) * w + x + i] = t;
         }
       }
       x += g.w;
     }
   });
 
-  // The plate also follows every painted pixel, grown by one: the ink outline.
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (tone[y * w + x] === NONE) continue;
-      plate[y * w + x] = 1;
-      if (x > 0) plate[y * w + x - 1] = 1;
-      if (x < w - 1) plate[y * w + x + 1] = 1;
-      if (y > 0) plate[(y - 1) * w + x] = 1;
-      if (y < h - 1) plate[(y + 1) * w + x] = 1;
+  // The plate also follows every painted pixel, grown by two: the ink outline.
+  let from = Uint8Array.from(tone, (v) => (v === 0 ? 0 : 1));
+  for (let pass = 0; pass < 2; pass++) {
+    const grown = from.slice();
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const k = y * w + x;
+        if (from[k] === 0) continue;
+        if (x > 0) grown[k - 1] = 1;
+        if (x < w - 1) grown[k + 1] = 1;
+        if (y > 0) grown[k - w] = 1;
+        if (y < h - 1) grown[k + w] = 1;
+      }
     }
+    from = grown;
   }
+  for (let k = 0; k < w * h; k++) if (from[k] === 1) plate[k] = 1;
 
   const art = new Surface(w, h);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       if (plate[y * w + x] === 0) continue;
-      if (tone[y * w + x] === NONE) tone[y * w + x] = PLATE;
-      for (let d = 0; d <= SHADOW; d++) art.px(x + d, y + d, P.ink);
+      if (tone[y * w + x] === 0) tone[y * w + x] = T_PLATE;
+      for (let d = 0; d <= shadow; d++) art.px(x + d, y + d, P.ink);
     }
   }
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const v = tone[y * w + x];
-      if (v !== NONE) art.px(x, y, TONE_COLORS[v]);
+      if (v !== 0) art.px(x, y, TONE_COLORS[v]);
     }
   }
   return { w, h, art, tone };
-}
-
-let stackedArt: Built | undefined;
-let lineArt: Built | undefined;
-
-function built(stacked: boolean): Built {
-  if (stacked) return (stackedArt ??= build(["SOCCER", "SENSE"]));
-  return (lineArt ??= build(["SOCCERSENSE"]));
 }
 
 // ---------------------------------------------------------------------------
 // The tagline: amber on an ink strip, like a scoreboard ticker, fixed under the plate
 // ---------------------------------------------------------------------------
 
-const TAG = { font: FONT_3x5, align: "center" } as const;
 /** Ink columns either side of the tagline's text. */
-const TAG_PAD = 2;
-/** The strip: the text's 5 rows and one ink row above and below. */
-const TAG_H = 7;
+const TAG_PAD = 4;
+/** The strip: the text's 10 rows and two ink rows above and below. */
+const TAG_H = 14;
+
+let tagOptions: TextOptions | undefined;
+/** The tagline's text options: the small painted face, made on first use. */
+function tagOpts(): TextOptions {
+  return (tagOptions ??= { font: paintedFont(FONT_3x5), align: "center" });
+}
 
 interface Plan {
   art: Built;
@@ -328,7 +482,7 @@ function plan(opts: LogoOptions): Plan {
   let h = art.h;
   let tagline: string | undefined;
   if (opts.tagline !== undefined && opts.tagline !== "") {
-    const tw = measureText(opts.tagline, TAG) + 2 * TAG_PAD + SHADOW;
+    const tw = measureText(opts.tagline, tagOpts()) + 2 * TAG_PAD + SHADOW;
     const th = art.h + TAG_H;
     if (tw <= opts.maxWidth && th <= (opts.maxHeight ?? Infinity)) {
       tagline = opts.tagline;
@@ -362,7 +516,7 @@ const GLINT_TIME = 0.9;
 /** Steps per second: the streak moves in whole jumps. */
 const GLINT_FPS = 20;
 /** The streak is this many pixels wide. */
-const GLINT_W = 2;
+const GLINT_W = 4;
 
 /**
  * Draw the wordmark centred on column `cx` with its top row at `top`. Returns the size it
@@ -379,17 +533,21 @@ export function drawLogo(
   cx = Math.round(cx);
   top = Math.round(top);
   // The faces are centred, the shadow hangs off to the right.
-  const x0 = cx - Math.floor((art.w - SHADOW) / 2);
+  const shadow = SHADOW;
+  const x0 = cx - Math.floor((art.w - shadow) / 2);
 
   s.blit(art.art, x0, top);
 
   if (p.tagline !== undefined) {
-    const tw = measureText(p.tagline, TAG);
-    const bw = tw + 2 * TAG_PAD;
-    const bx = cx - Math.floor(tw / 2) - TAG_PAD;
-    const by = top + art.h - SHADOW;
-    for (let d = SHADOW; d >= 0; d--) s.rect(bx + d, by + d, bw, TAG_H, P.ink);
-    drawText(s, p.tagline, cx, by + 1, P.amber, TAG);
+    const tag = tagOpts();
+    const pad = TAG_PAD;
+    const tagH = TAG_H;
+    const tw = measureText(p.tagline, tag);
+    const bw = tw + 2 * pad;
+    const bx = cx - Math.floor(tw / 2) - pad;
+    const by = top + art.h - shadow;
+    for (let d = shadow; d >= 0; d--) s.rect(bx + d, by + d, bw, tagH, P.ink);
+    drawText(s, p.tagline, cx, by + 2, P.amber, tag);
   }
 
   // The glint: a streak that lifts every tone it crosses one step up its ramp. It starts
@@ -397,15 +555,17 @@ export function drawLogo(
   const t = opts.t ?? 0;
   const phase = t >= GLINT_START ? (t - GLINT_START) % GLINT_PERIOD : Infinity;
   if (opts.reducedMotion !== true && phase < GLINT_TIME) {
+    const glintW = GLINT_W;
+    const glints = GLINT_COLORS;
     const steps = Math.round(GLINT_TIME * GLINT_FPS);
     const step = Math.min(steps - 1, Math.floor(phase * GLINT_FPS));
-    const span = art.w + art.h + GLINT_W;
-    const g = Math.round((step / (steps - 1)) * span) - GLINT_W;
+    const span = art.w + art.h + glintW;
+    const g = Math.round((step / (steps - 1)) * span) - glintW;
     for (let y = 0; y < art.h; y++) {
-      for (let k = 0; k < GLINT_W; k++) {
+      for (let k = 0; k < glintW; k++) {
         const x = g - y + k;
         if (x < 0 || x >= art.w) continue;
-        const c = GLINT_COLORS[art.tone[y * art.w + x]];
+        const c = glints[art.tone[y * art.w + x]];
         if (c !== undefined) s.px(x0 + x, top + y, c);
       }
     }

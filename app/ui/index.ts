@@ -54,7 +54,41 @@ export { PixelRoot } from "./PixelRoot";
 export type { PixelRootProps } from "./PixelRoot";
 export { PixelStage } from "./PixelStage";
 export type { PixelStageProps } from "./PixelStage";
+export { Popup, PopupButton } from "./Popup";
+export type { PopupButtonProps, PopupProps } from "./Popup";
+export { BELL, RemindMe } from "./RemindMe";
+export type { RemindMeLabels, RemindMeProps } from "./RemindMe";
+export {
+  DEFAULT_REMINDER_TIME,
+  REMINDER_FILE,
+  REMINDER_TIMES,
+  firstReminder,
+  googleCalendarUrl,
+  outlookCalendarUrl,
+  reminderIcs,
+} from "./reminder";
+export type { ReminderEvent } from "./reminder";
+export { BULB, CUP, HEART, Support } from "./Support";
+export type { SupportLabels, SupportProps } from "./Support";
+export {
+  STATS_BAR_CELLS,
+  STATS_ICON,
+  Stats,
+  StatsButton,
+  StatsCard,
+} from "./Stats";
+export type {
+  StatsButtonProps,
+  StatsCardProps,
+  StatsLabels,
+  StatsModeView,
+  StatsProps,
+  StatsShot,
+  StatsTally,
+} from "./Stats";
 export { SoundToggle, SPEAKER_OFF, SPEAKER_ON } from "./SoundToggle";
+export { FLAME, SPARKS, Streak } from "./Streak";
+export type { StreakProps } from "./Streak";
 export type { SoundToggleLabels, SoundToggleProps } from "./SoundToggle";
 export { Pip, Pips } from "./Pips";
 export type { PipProps, PipState, PipsProps } from "./Pips";
@@ -72,6 +106,7 @@ export {
   PixelScaleContext,
   WIDE_ROW_CP,
   WIDE_ROW_PX,
+  canvasDpFor,
   deviceToCss,
   isWide,
   noticeDevicePixelRatio,
@@ -81,6 +116,7 @@ export {
   usePixelScale,
 } from "./scale";
 export type { PixelScale } from "./scale";
+export { OLD_DETAIL_STORAGE_KEY, forgetDetailChoice } from "./forget-detail";
 export {
   SLIDE_MS,
   type Slider,
@@ -89,6 +125,14 @@ export {
   snapToDevice,
 } from "./slide";
 export { useArrivalFocus } from "./useArrivalFocus";
+export {
+  ARRIVAL_PATIENCE_MS,
+  FADE_MS,
+  arrivingThroughFade,
+  fadeArrived,
+  fadeThrough,
+  useFadeArrival,
+} from "./fade";
 export { HEADING_FACES, fetchHeadingFaces } from "./fonts";
 export { useDeviceSky } from "./useDeviceSky";
 export type { DeviceSky } from "./useDeviceSky";

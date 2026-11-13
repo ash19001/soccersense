@@ -50,11 +50,13 @@ describe("the source of app/game", () => {
       "geo.ts",
       "index.ts",
       "judge.ts",
+      "modes.ts",
       "reveal.ts",
       "scoring.ts",
       "session.ts",
       "share.ts",
       "shots.ts",
+      "stats.ts",
       "storage.ts",
       "test-fixtures.ts",
       "titles.ts",
@@ -246,7 +248,7 @@ describe("with every impure global booby-trapped", () => {
     expect(out).toEqual({
       saved: false,
       loaded: null,
-      day: { home: null, away: null },
+      day: { home: null, away: null, retro: null, nextgen: null },
       cleared: true,
     });
   });

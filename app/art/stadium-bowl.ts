@@ -153,12 +153,36 @@ const BOARDS: readonly Color[] = [
   P.white,
 ];
 
-/** Paint the stadium for this view. Colours are final (already graded). */
-export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
+/**
+ * Where the camera's line of sight lands for every pixel of the bowl's box: the shape of
+ * the stadium for one view (and whether the sun casts the roof's shadow). It does not
+ * depend on the light's colours, so it is made once per view and a change of light only
+ * colours it again (the home picture repaints every couple of minutes).
+ */
+interface BowlShape {
+  key: string;
+  top: number;
+  x0: number;
+  w: number;
+  h: number;
+  zone: Uint8Array;
+  rho: Float32Array;
+  ang: Float32Array;
+  hgt: Float32Array;
+  shadow: Uint8Array;
+  px: Float32Array;
+}
+const shapes: BowlShape[] = [];
+
+/** The bowl's shape for a view, worked out a band of rows at a time (it is cached). */
+function* bowlShape(
+  view: View,
+  sunny: boolean,
+): Generator<void, BowlShape, void> {
   const { k, cx, yc } = view;
-  const club = tones.club ?? DEFAULT_SCHEME;
-  const raw = tones.raw ?? ((c: Color): Color => c);
-  const FANS_HOME = fansHome(club);
+  const key = `${view.w}x${view.h}:${k}:${cx}:${yc}:${sunny}`;
+  const known = shapes.find((b) => b.key === key);
+  if (known) return known;
   // The screen box: the roof's far edge to the wall's foot, the widest part either side.
   const top = Math.floor(project(view, 0, OUT_B * ROOF_OUT, HR).y) - 1;
   const bottom = Math.ceil(project(view, 0, -OUT_B, 0).y) + 2;
@@ -167,7 +191,6 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
   const x0 = cx - half;
   const w = Math.max(1, half * 2 + 1);
   const h = Math.max(1, bottom - top + 1);
-  const layer = new Surface(w, h);
   const n = w * h;
   const zone = new Uint8Array(n);
   const rho = new Float32Array(n);
@@ -175,7 +198,6 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
   const hgt = new Float32Array(n);
   const shadow = new Uint8Array(n);
   const px = new Float32Array(n);
-  const pv = new Float32Array(n);
 
   const kA = k * A;
   // Unproject a pixel onto the plane H units up.
@@ -201,7 +223,10 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
     return HF + sRho * (HS - HF);
   };
 
+  // about 8,000 pixels a slice (each one a few searches along the line of sight)
+  const rows = Math.max(1, Math.floor(8000 / w));
   for (let j = 0; j < h; j++) {
+    if (j > 0 && j % rows === 0) yield;
     const sy = top + j;
     for (let i = 0; i < w; i++) {
       const sx = x0 + i;
@@ -246,7 +271,6 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
       unproject(sx, sy, lo);
       const sh = standHeight(uX, uV);
       px[at] = uX;
-      pv[at] = uV;
       hgt[at] = lo;
       if (sRho < 0) {
         zone[at] =
@@ -262,7 +286,7 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
         rho[at] = sRho;
         ang[at] = Math.atan2(uV / OUT_B, uX / OUT_A);
       }
-      if (tones.sunny) {
+      if (sunny) {
         // The roof's shadow: step towards the sun, up to the roof plane.
         const up = HR - lo;
         const qx = uX - up * 0.62;
@@ -278,9 +302,65 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
       }
     }
   }
+  const shape: BowlShape = {
+    key,
+    top,
+    x0,
+    w,
+    h,
+    zone,
+    rho,
+    ang,
+    hgt,
+    shadow,
+    px,
+  };
+  shapes.unshift(shape);
+  if (shapes.length > 2) shapes.length = 2;
+  return shape;
+}
+
+/** Paint the stadium for this view. Colours are final (already graded). */
+export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
+  const steps = paintBowlSteps(view, tones, seed);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+/**
+ * `paintBowl` in slices of rows, for a picture built over several frames (stadium-town.ts
+ * `paintTown`): run it to the end and it returns the same bowl, pixel for pixel.
+ */
+export function* paintBowlSteps(
+  view: View,
+  tones: BowlTones,
+  seed: number,
+): Generator<void, Bowl, void> {
+  const club = tones.club ?? DEFAULT_SCHEME;
+  const raw = tones.raw ?? ((c: Color): Color => c);
+  const FANS_HOME = fansHome(club);
+  const { top, x0, w, h, zone, rho, ang, hgt, shadow, px } = yield* bowlShape(
+    view,
+    tones.sunny,
+  );
+  const layer = new Surface(w, h);
 
   // ---- colour ---------------------------------------------------------------
-  const { lit, env } = tones;
+  // the grades, remembered: a few dozen colours over a hundred thousand pixels
+  const memo = (grade: (c: Color) => Color): ((c: Color) => Color) => {
+    const seen = new Map<Color, Color>();
+    return (c) => {
+      let o = seen.get(c);
+      if (o === undefined) {
+        o = grade(c);
+        seen.set(c, o);
+      }
+      return o;
+    };
+  };
+  const lit = memo(tones.lit);
+  const env = memo(tones.env);
   const TWO_PI = Math.PI * 2;
   const bayOf = (a: number): number =>
     Math.floor(((a + Math.PI) / TWO_PI) * BAYS + 0.5) % BAYS;
@@ -307,7 +387,10 @@ export function paintBowl(view: View, tones: BowlTones, seed: number): Bowl {
     return o;
   };
 
+  // about 20,000 pixels a slice
+  const slice = Math.max(1, Math.floor(20000 / w));
   for (let j = 0; j < h; j++) {
+    if (j > 0 && j % slice === 0) yield;
     for (let i = 0; i < w; i++) {
       const at = j * w + i;
       const z = zone[at];
@@ -491,7 +574,7 @@ function paintMarkings(view: View, bowl: Bowl, tones: BowlTones): void {
   };
   box(-PITCH_X, -PITCH_V, PITCH_X, PITCH_V);
   seg(0, -PITCH_V, 0, PITCH_V);
-  if (view.k >= 0.34) {
+  if (view.k >= 0.68) {
     // the centre circle
     let prev = at(12, 0);
     for (let i = 1; i <= 24; i++) {
@@ -503,7 +586,7 @@ function paintMarkings(view: View, bowl: Bowl, tones: BowlTones): void {
     for (const side of [-1, 1]) {
       const gx = side * PITCH_X;
       box(gx, -26, gx - side * 21, 26);
-      if (view.k >= 0.7) box(gx, -12, gx - side * 7, 12);
+      if (view.k >= 1.4) box(gx, -12, gx - side * 7, 12);
     }
   }
   const spot = at(0, 0);
@@ -522,5 +605,10 @@ function paintMarkings(view: View, bowl: Bowl, tones: BowlTones): void {
     s.line(t0[0], t0[1], t1[0], t1[1], tones.lit(P.white));
     s.line(p0[0], p0[1], t0[0], t0[1], tones.lit(P.white));
     s.line(p1[0], p1[1], t1[0], t1[1], tones.lit(P.white));
+    // the frame is a thing, not a marking: twice as thick (DECISIONS.md 2)
+    const post = tones.lit(P.steelHi);
+    s.line(t0[0], t0[1] + 1, t1[0], t1[1] + 1, post);
+    s.line(p0[0] + 1, p0[1], t0[0] + 1, t0[1] + 1, post);
+    s.line(p1[0] + 1, p1[1], t1[0] + 1, t1[1] + 1, post);
   }
 }

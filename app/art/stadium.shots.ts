@@ -37,6 +37,7 @@ import { lightingFor } from "~/art/lighting";
 import { drawLogo, logoSize } from "~/art/logo";
 import { MODE_COLORS, P } from "~/art/palette";
 import { MenuBackdrop } from "~/art/stadium";
+import { signPlace } from "~/art/stadium-airship";
 import { SCHEMES, schemeForDay } from "~/art/stadium-club";
 import { TRICKS } from "~/art/stadium-mascot";
 import { factForDay } from "~/data/facts";
@@ -175,7 +176,7 @@ export const shots: ShotMap = {
 
   "stadium/sign": (ctx) => {
     const { s } = composed(ctx);
-    const b = menuLayout(s.w, s.h).scoreboard;
+    const b = signPlace(makeView(s.w, s.h)).panel;
     const pad = 10;
     const out = new Surface(b.w + pad * 2, b.h + pad * 2);
     out.blit(s, pad - b.x, pad - b.y);
@@ -205,7 +206,7 @@ export const shots: ShotMap = {
 
   "stadium/airship": (ctx) => {
     const backdrop = scene(ctx);
-    const sign = menuLayout(ctx.w, ctx.h).scoreboard;
+    const sign = signPlace(makeView(ctx.w, ctx.h)).panel;
     const frames: number[] = [];
     let popAt = Number.NaN;
     let previous = 0;

@@ -5,8 +5,9 @@
  * sky, and an airship over the town carries the fact of the day.
  * It is the menu, not a ball on a pitch: it floats, and nothing in this scene knows of
  * any ground. Its black patches are the buttons: HOME on the left patch, AWAY on the
- * right, and two locked patches above and below. Choosing a mode strikes the ball where
- * it hangs.
+ * right, NEXT-GEN on the patch above and RETRO on the one below (each framed in its
+ * mode's colour), and four locked patches round the back and the rim. Choosing a mode
+ * strikes the ball where it hangs.
  *
  * HOME goes home. The ball is driven up and into the picture, shrinking fast, climbs over
  * the stadium, hangs for a beat above its far side and drops onto the centre spot, a tiny
@@ -17,6 +18,12 @@
  * stadium at once, and curls up over the town towards the horizon, a speck by the time it
  * crosses the roofs of the city into the sky. A last twinkle, and it is gone: no roar. The
  * iris closes on where it went.
+ *
+ * NEXT-GEN goes into the future: struck from below, it lights up and climbs faster and
+ * faster into the high sky beside the wordmark, a comet with a long trail in its colours,
+ * and goes out in a flare. RETRO goes back in time: chopped down onto the road, it bounces
+ * and rolls back into the old town spinning backwards, ghosts of it following, while the
+ * picture tears like a tape being rewound under an old recorder's rewind sign.
  *
  *   const menu = new MenuScene({ seed, fact, labels });
  *   menu.onKickoff = (mode) => hideTheCaptions();
@@ -75,6 +82,7 @@ import {
   ballSlotAt,
   ballSlotCenter,
   drawBall,
+  type BallIcon,
   type BallPatch,
   type BallSlot,
   type BallState,
@@ -83,7 +91,8 @@ import { menuLayout } from "~/art/layout";
 import { lightingFor, type Lighting } from "~/art/lighting";
 import { drawLogo, logoSize, type LogoOptions } from "~/art/logo";
 import { MODE_COLORS, P } from "~/art/palette";
-import { MenuBackdrop } from "~/art/stadium";
+import { MenuBackdrop, type MenuSign } from "~/art/stadium";
+import { bannerWords } from "~/art/stadium-plane";
 import { schemeForDay } from "~/art/stadium-club";
 import { BEDS, HOME_PAGE } from "~/audio/mix";
 import type { Mode } from "~/game";
@@ -109,19 +118,22 @@ import type {
 // ---------------------------------------------------------------------------
 
 /**
- * The modes that are not open yet. Each has a patch of its own on the ball: NEXT-GEN on
- * the top patch and RETRO on the bottom one, CLOSEST and FURTHEST on the back, directly
- * behind AWAY and HOME, so that half a turn of the ball brings CLOSEST round to where HOME
- * was and FURTHEST to where AWAY was, and GUESS WHO and SHOOTOUT on the rim out past HOME
- * and AWAY, a quarter turn round (a drag to the right brings GUESS WHO to the front, a
- * drag to the left SHOOTOUT).
+ * The modes that can be played, each on its own patch of the ball: HOME on the left patch,
+ * AWAY on the right, NEXT-GEN on the top patch and RETRO on the bottom one (both opened on
+ * 2026-11-13).
  */
-export type LockedMode =
-  "nextgen" | "retro" | "closest" | "furthest" | "guesswho" | "shootout";
+export const OPEN_MODES: readonly Mode[] = ["home", "away", "nextgen", "retro"];
+
+/**
+ * The modes that are not open yet. Each has a patch of its own on the ball: CLOSEST and
+ * FURTHEST on the back, directly behind AWAY and HOME, so that half a turn of the ball
+ * brings CLOSEST round to where HOME was and FURTHEST to where AWAY was, and GUESS WHO and
+ * SHOOTOUT on the rim out past HOME and AWAY, a quarter turn round (a drag to the right
+ * brings GUESS WHO to the front, a drag to the left SHOOTOUT).
+ */
+export type LockedMode = "closest" | "furthest" | "guesswho" | "shootout";
 
 export const LOCKED_MODES: readonly LockedMode[] = [
-  "nextgen",
-  "retro",
   "closest",
   "furthest",
   "guesswho",
@@ -140,14 +152,23 @@ export const MODE_SLOTS: Readonly<Record<Mode | LockedMode, BallSlot>> = {
   shootout: "rimRight",
 };
 
+/** Each open mode's picture on its patch. */
+const MODE_ICONS: Readonly<Record<Mode, BallIcon>> = {
+  home: "home",
+  away: "away",
+  nextgen: "forward",
+  retro: "rewind",
+};
+
 export interface MenuLabels {
   /** The word on the left patch, for example "HOME". */
   home: string;
   /** The word on the right patch, for example "AWAY". */
   away: string;
-  /** The words on the locked patches, for example "NEXT-GEN". */
+  /** The words on the top and bottom patches: "NEXT-GEN", "RETRO". */
   nextgen: string;
   retro: string;
+  /** The words on the locked patches, for example "CLOSEST". */
   closest: string;
   furthest: string;
   guesswho: string;
@@ -161,8 +182,13 @@ export interface MenuLabels {
 export interface MenuSceneOptions {
   /** The day number: it seeds the picture and picks the stadium's club colours. */
   seed: number;
-  /** The fact of the day, on the airship's sign. Any case: the sign shows capitals. */
+  /**
+   * The fact of the day: on the plane's banner (and on the airship's sign when there are
+   * no messages). Any case: both show capitals.
+   */
   fact: string;
+  /** The airship's sign's messages (`setSignMessages`). */
+  messages?: readonly MenuSign[];
   labels: MenuLabels;
   /** Play the entrance. Default true. */
   intro?: boolean;
@@ -172,6 +198,10 @@ export type MenuPhase = "intro" | "idle" | "kickoff" | "done";
 
 // ---------------------------------------------------------------------------
 // Timing (seconds)
+//
+// Lengths in pixels (a radius, a gap, a hop, a shake, a speed in pixels a second, the
+// press's DRAG and STILL) are logical canvas pixels. Fractions of the ball or the canvas
+// need nothing.
 // ---------------------------------------------------------------------------
 
 const TAU = Math.PI * 2;
@@ -224,7 +254,7 @@ const IN_OVER_AT = 0.25;
 /** How far round the ball is turned as it appears (radians of yaw), and the radius at
  * which it has come round to face us. */
 const IN_TURN = -1.4;
-const IN_FACING_R = 36;
+const IN_FACING_R = 72;
 /**
  * The star it comes out of: four points, behind the ball, whose arms keep just ahead of
  * the swelling ball. This long in ball radii, frame by frame at IN_STAR_FPS; the last frame
@@ -251,7 +281,7 @@ const REST_HOLD = 4.5;
  * patch: the ball breathes and rocks a few pixels under it, and neither the highlight nor
  * a press may be lost to that.
  */
-const STILL = 0.5;
+const STILL = 1;
 
 /**
  * The kick-off, from the moment a mode is chosen. The patch flashes until K_HIT, the ball
@@ -279,7 +309,7 @@ const K_END = K_INK + 0.05;
 /** With reduced motion the kick-off is a cut: the patch lights for this long, then ink. */
 const K_REDUCED = 0.15;
 /** The screen shake of the strike, one entry a thirtieth of a second. */
-const SHAKE: readonly number[] = [2, -2, 1, -1];
+const SHAKE: readonly number[] = [4, -4, 2, -2];
 /** HOME: the ground starts to roar this long before the ball is down, and is at full voice
  * ROAR_RAMP later, swelling a little every frame. */
 const ROAR_LEAD = 0.05;
@@ -299,7 +329,7 @@ const BALL_T_LIT = 0.125;
  * A press on the ball that moves more than DRAG pixels (logical: 12 CSS pixels on the
  * reference monitor) is a drag and never a click, wherever it is let go.
  */
-const DRAG = 3;
+const DRAG = 6;
 /**
  * While the pointer is within GRIP of the ball's radius from its middle, the point that
  * was grabbed stays under it: the ball turns about the axis that carries the one onto the
@@ -364,6 +394,10 @@ const LAND: SoundCue = { kind: "land", power: HOME_PAGE.land };
 const LAND_HOP: SoundCue = { kind: "land", power: HOME_PAGE.hop };
 /** AWAY's last twinkle. */
 const SPARKLE: SoundCue = { kind: "sparkle" };
+/** RETRO's ball coming to a stop in the old town: a light touch. */
+const STOP: SoundCue = { kind: "touch", level: HOME_PAGE.press };
+/** NEXT-GEN's wind as it leaves the boot, a share of the strike's: it rises from there. */
+const NEXT_WIND_START = HOME_PAGE.homeWindEnd;
 /**
  * AWAY's sparkle rises to its brightest SPARKLE_RISE seconds after it starts (the recording's
  * second, brighter chime), and the twinkle flares TWINKLE_FLARE seconds after the ball
@@ -398,7 +432,7 @@ const WIND_LIFE = 0.36;
 const WIND_LAG = 0.16;
 /** The streaks run at this share of the rim's speed, and never faster than WIND_FAST px/s. */
 const WIND_PACE = 0.45;
-const WIND_FAST = 230;
+const WIND_FAST = 460;
 /** They move on in steps, WIND_FPS a second. */
 const WIND_FPS = 24;
 /** Below this speed (a share of SPIN_MAX) there is no wind to see. */
@@ -406,7 +440,7 @@ const WIND_SHOW = 0.05;
 /** A streak is born only where the rim's air is at least this share of its fastest. */
 const WIND_WHERE = 0.4;
 /** How far outside the rim they run: from WIND_GAP pixels, WIND_SPREAD more at most. */
-const WIND_GAP = 3;
+const WIND_GAP = 6;
 const WIND_SPREAD = 0.16;
 /** The gust as the ball is flicked: GUST seconds of more streaks, and longer ones. */
 const GUST = 0.35;
@@ -426,16 +460,16 @@ const RUSH_FROM = 0.35;
 // ---------------------------------------------------------------------------
 
 /** Below this radius the ball is drawn as a few hand-placed pixels. */
-const TINY_R = 4.5;
+const TINY_R = 9;
 
 /**
  * There are two pictures. On a screen at least OPEN_W wide (a monitor) the stadium stands
- * in the middle of its town with open sky over it and out to both sides. On a narrower one
- * (a phone) the stadium is as wide as the screen and the matchday sign hangs under the
- * wordmark, right over it: the only open sky is beside the wordmark. Each flight has its
- * numbers for both.
+ * in the middle of its town with open sky over
+ * it and out to both sides. On a narrower one (a phone) the stadium is as wide as the
+ * screen and the matchday sign hangs under the wordmark, right over it: the only open sky
+ * is beside the wordmark. Each flight has its numbers for both.
  */
-const OPEN_W = 200;
+const OPEN_W = 400;
 
 /**
  * HOME: the ball goes home. Struck from below, it is driven up and into the picture. It
@@ -462,11 +496,11 @@ const HOME_HANG = 0.07;
 const HOME_RISE_W = 0.1;
 const HOME_RISE_H = 0.178;
 const HOME_RISE_TALL = 0.072;
-const HOME_HOP = 3;
+const HOME_HOP = 6;
 const HOME_HOP_AT = 0.066;
 const HOME_HOP_LEN = 0.134;
 /** The thump of the landing, one entry a thirtieth of a second. */
-const THUMP: readonly number[] = [1, -1];
+const THUMP: readonly number[] = [2, -2];
 /**
  * The ripple that runs out over the pitch from where it landed: half this wide in ball
  * radii, frame by frame at RIPPLE_FPS (RIPPLE_TALL of that on a phone, where the pitch is
@@ -506,19 +540,104 @@ const AWAY_X = 2.6;
 const AWAY_X_WIDE = 0.33;
 const AWAY_X_MAX = 0.4;
 const AWAY_Y = 0.36;
-const AWAY_CLEAR = 7;
-const AWAY_EDGE = 6;
+const AWAY_CLEAR = 14;
+const AWAY_EDGE = 12;
 const AWAY_SWING = 1.6;
 const AWAY_SWING_Y = 0.15;
 
+/**
+ * NEXT-GEN: the ball goes into the future. Struck from below on AWAY's side, it lights up
+ * and goes up, faster and faster (`u` of the flight is NEXT_EASE + (1 - NEXT_EASE) u of the
+ * way, times u), almost straight up into the high sky, a comet with a
+ * long trail in the mode's colours, NEXT_TRAIL seconds of its way. It ends NEXT_FAR + 1
+ * times as far off as it began and goes out in a flare: a ring and a cross of light, then a
+ * twinkle. It flies for NEXT_FLIGHT seconds, less than the others: it is the fastest.
+ *
+ * On a monitor it is last seen NEXT_X of the width beyond the wordmark's right end (the
+ * airship is beside its left end) and NEXT_Y of the logo zone's height down, high over
+ * the spot where AWAY's ball sinks to the horizon, on a curve whose corner is NEXT_LEAN
+ * ball radii right of the middle and NEXT_RISE of the way up: it climbs almost straight up
+ * first, then leans over, clear of the wordmark. On a phone the only open sky is beside the
+ * wordmark: it flies out of the left edge in front of the stadium (the corner NEXT_SWING
+ * ball radii beyond it, NEXT_SWING_Y of the way up) and comes back in small at the top,
+ * beside the wordmark or just under it, the mirror of AWAY.
+ */
+const NEXT_FLIGHT = 0.46;
+const NEXT_EASE = 0.35;
+const NEXT_FAR = 9;
+const NEXT_X = 0.1;
+const NEXT_Y = 0.42;
+const NEXT_LEAN = 0.6;
+const NEXT_RISE = 0.7;
+const NEXT_SWING = 1.1;
+const NEXT_SWING_Y = 0.45;
+/** The comet's trail: this many seconds of the way behind the ball, in this many pieces,
+ * as wide as the ball (NEXT_TRAIL_W pixels at most) where it leaves it. */
+const NEXT_TRAIL = 0.16;
+const NEXT_TRAIL_N = 12;
+const NEXT_TRAIL_W = 10;
+/** The flare it goes out in: frames NEXT_FLARE_FPS a second. */
+const NEXT_FLARE_FPS = 20;
+
+/**
+ * RETRO: the ball goes back in time. Struck from above, it drops onto the road in front of
+ * the stadium (RETRO_ROAD ball radii below its spot, RETRO_LAND_X of the width left of the
+ * middle; RETRO_LAND_X_TALL on a phone), shrinking as it falls away from us for RETRO_DROP
+ * of the flight, to RETRO_LAND_R of its radius. It bounces once (RETRO_HOP pixels, for
+ * RETRO_HOP_LEN seconds) and rolls back along the road into the old town at the left of
+ * the picture, slowing to a stop RETRO_END_X of the width from the left edge and
+ * RETRO_END_UP of the height above the road, RETRO_END_R pixels in radius. It spins
+ * backwards all the way, as a tape does that is being rewound, and the picture is a tape
+ * being rewound: ghosts of the ball follow it (RETRO_GHOSTS seconds behind), bands of the
+ * screen tear sideways and roll up it (RETRO_BANDS), and the rewind sign of an old video
+ * recorder stands in the corner.
+ */
+const RETRO_FLIGHT = 0.68;
+const RETRO_DROP = 0.3;
+const RETRO_FAR = 3;
+const RETRO_ROAD = 0.55;
+const RETRO_LAND_X = 0.1;
+const RETRO_LAND_X_TALL = 0.2;
+const RETRO_LAND_R = 0.2;
+const RETRO_HOP = 5;
+const RETRO_HOP_LEN = 0.12;
+const RETRO_END_X = 0.13;
+const RETRO_END_UP = 0.025;
+const RETRO_END_R = 5;
+const RETRO_GHOSTS: readonly number[] = [0.05, 0.1, 0.15];
+/** A ghost no bigger than this share of the ball's radius is a see-through ball; a
+ * bigger one is only its outline. */
+const RETRO_GHOST_SOLID = 0.35;
+/**
+ * The tearing bands: each this many pixels tall, torn this far sideways, and rolling up
+ * the screen at this share of its height a second (stepped, RETRO_BAND_FPS a second).
+ */
+const RETRO_BANDS: readonly { at: number; h: number; dx: number }[] = [
+  { at: 0.1, h: 4, dx: 3 },
+  { at: 0.45, h: 2, dx: -2 },
+  { at: 0.72, h: 6, dx: 2 },
+];
+const RETRO_BAND_SPEED = 0.9;
+const RETRO_BAND_FPS = 30;
+
 /** The ring the iris slows onto, in ball radii: HOME's shows the pitch and the
- * crowd round it, AWAY's a little sky. */
+ * crowd round it, AWAY's and NEXT-GEN's a little sky, RETRO's the corner of the old town
+ * it rolled into. */
 const HOME_RING = 0.75;
 const AWAY_RING = 0.22;
+const RETRO_RING = 0.45;
+
+/** How long each mode's ball is in the air. */
+const FLIGHT: Readonly<Record<Mode, number>> = {
+  home: HOME_FLIGHT,
+  away: AWAY_FLIGHT,
+  nextgen: NEXT_FLIGHT,
+  retro: RETRO_FLIGHT,
+};
 
 /** The streak behind the ball once it is small: samples this many seconds apart. */
 const TRAIL_GAP = 0.035;
-const TRAIL_BELOW_R = 8;
+const TRAIL_BELOW_R = 16;
 
 /**
  * How near a ball still is, `u` of the way through a flight straight away from us at a
@@ -648,15 +767,19 @@ function drawBurst(
 ): void {
   if (frame < 0 || frame > 2) return;
   if (frame === 0) {
+    // (the cross is five pixels wide, three of them core, and the diagonals two)
     const long = Math.round(size);
     const k = Math.round(size * 0.55 * Math.SQRT1_2);
-    for (let w = -1; w <= 1; w++) {
-      s.line(x - long, y + w, x + long, y + w, w === 0 ? core : rays);
-      s.line(x + w, y - long, x + w, y + long, w === 0 ? core : rays);
+    for (let w = -2; w <= 2; w++) {
+      const c = Math.abs(w) < 2 ? core : rays;
+      s.line(x - long, y + w, x + long, y + w, c);
+      s.line(x + w, y - long, x + w, y + long, c);
     }
-    s.line(x - k, y - k, x + k, y + k, rays);
-    s.line(x - k, y + k, x + k, y - k, rays);
-    s.disc(x, y, Math.max(1, Math.round(size * 0.3)), core);
+    for (let w = 0; w < 2; w++) {
+      s.line(x - k + w, y - k, x + k + w, y + k, rays);
+      s.line(x - k + w, y + k, x + k + w, y - k, rays);
+    }
+    s.disc(x, y, Math.max(2, Math.round(size * 0.3)), core);
     return;
   }
   if (frame === 1) drawRays(s, x, y, size * 0.7, size * 1.25, core);
@@ -715,12 +838,15 @@ function drawStrike(
     // still glowing inside, and throwing its rays clear of the ring
     s.disc(x, y, r, light, 0.25);
     s.disc(x, y, Math.round(size * 0.45), light, 0.5);
-    s.circle(x, y, r, light);
-    s.circle(x, y, r - 1, light);
-    s.disc(x, y, Math.max(1, Math.round(size * 0.2)), core);
+    for (let i = 0; i < 4; i++) s.circle(x, y, r - i, light);
+    // a hot core line runs round the middle of the ring
+    s.circle(x, y, r - 1, core);
+    s.disc(x, y, Math.max(2, Math.round(size * 0.2)), core);
     drawRays(s, x, y, size * 1.05, size * 1.45, core);
   } else if (frame === 2) {
-    s.circle(x, y, Math.round(size * 1.15), light);
+    for (let i = 0; i < 2; i++) {
+      s.circle(x, y, Math.round(size * 1.15) - i, light);
+    }
     drawRays(s, x, y, size * 1.4, size * 1.65, light);
   } else if (frame === 3) {
     const r = size * 1.4;
@@ -752,10 +878,15 @@ function drawStrike(
     const px = Math.round(x + Math.cos(ang) * d);
     const py = Math.round(y + Math.sin(ang) * d);
     // each a little four-point star with a white heart, smaller before it goes out
-    const arm = p < life * 0.5 ? 2 : 1;
-    s.hline(px - arm, py, arm * 2 + 1, light);
-    s.vline(px, py - arm, arm * 2 + 1, light);
-    s.px(px, py, core);
+
+    // a real little star, its arms tapering to a point round a white heart
+    // two pixels across
+    const arm = p < life * 0.5 ? 4 : 2;
+    s.hline(px - arm, py, arm * 2 + 2, light);
+    s.hline(px - arm + 1, py + 1, arm * 2, light);
+    s.vline(px, py - arm, arm * 2 + 2, light);
+    s.vline(px + 1, py - arm + 1, arm * 2, light);
+    s.rect(px, py, 2, 2, core);
   }
 }
 
@@ -775,25 +906,26 @@ function drawArrival(
   const a = Math.round(arm);
   if (a < 1) return;
   if (last) {
-    const from = a - 2;
-    s.hline(x - a, y, 3, tips);
-    s.hline(x + from, y, 3, tips);
-    s.vline(x, y - a, 3, tips);
-    s.vline(x, y + from, 3, tips);
+    const tip = 6;
+    const from = a - tip + 1;
+    s.hline(x - a, y, tip, tips);
+    s.hline(x + from, y, tip, tips);
+    s.vline(x, y - a, tip, tips);
+    s.vline(x, y + from, tip, tips);
     const d = Math.round(arm * 0.78);
-    s.px(x - d, y - d, tips);
-    s.px(x + d, y - d, tips);
-    s.px(x - d, y + d, tips);
-    s.px(x + d, y + d, tips);
+    s.rect(x - d, y - d, 2, 2, tips);
+    s.rect(x + d - 2 + 1, y - d, 2, 2, tips);
+    s.rect(x - d, y + d - 2 + 1, 2, 2, tips);
+    s.rect(x + d - 2 + 1, y + d - 2 + 1, 2, 2, tips);
     return;
   }
-  star(s, x, y, a, Math.max(1, Math.round(arm * 0.16)), tips);
+  star(s, x, y, a, Math.max(2, Math.round(arm * 0.16)), tips);
   star(
     s,
     x,
     y,
     Math.round(arm * 0.8),
-    Math.max(1, Math.round(arm * 0.1)),
+    Math.max(2, Math.round(arm * 0.1)),
     core,
   );
 }
@@ -837,22 +969,34 @@ function drawRipple(
   stage: number,
   c: Color,
 ): void {
+  // a ring two pixels deep
   const steps = Math.max(8, Math.ceil(rx * 7));
-  const dashes = Math.max(6, Math.round(rx * 0.45));
+  const dashes = Math.max(6, Math.round((rx / 2) * 0.45));
   // of each dash and its gap, this much is drawn
   const on = stage <= 0 ? 1 : stage === 1 ? 0.75 : stage === 2 ? 0.5 : 0.3;
   for (let j = 0; j < steps; j++) {
     const turn = j / steps;
     if ((turn * dashes) % 1 >= on) continue;
     const a = turn * TAU;
-    s.px(Math.round(x + Math.cos(a) * rx), Math.round(y + Math.sin(a) * ry), c);
+    for (let i = 0; i < 2; i++) {
+      s.px(
+        Math.round(x + Math.cos(a) * (rx - i)),
+        Math.round(y + Math.sin(a) * (ry - i)),
+        c,
+      );
+    }
   }
 }
 
 /** How long the arms of the twinkle are, frame by frame. */
 const TWINKLE: readonly number[] = [1, 3, 6, 5, 3, 1];
 
-/** A four-point twinkle: it opens, flares and closes to a point. */
+/**
+ * A four-point twinkle: it opens, flares and closes to a point. Its arms are twice
+ * TWINKLE's (frame by frame) long: fine 1 px rays with a white core that runs most of their
+ * length, a heart three pixels across and sparkles on the diagonals; by day the dark star
+ * behind it.
+ */
 function drawTwinkle(
   s: Surface,
   x: number,
@@ -863,23 +1007,26 @@ function drawTwinkle(
   edge: Color | null,
 ): void {
   const arm = frame >= 0 && frame < TWINKLE.length ? TWINKLE[frame] : 0;
+  const A = arm * 2;
   if (edge !== null && frame >= 0) {
-    // against a pale sky: a dark star behind it, no bigger than the twinkle is at night
     if (arm >= 3) {
-      star(s, x, y, arm, arm >= 5 ? 2 : 1, edge);
+      star(s, x, y, A + 1, arm >= 5 ? 3 : 2, edge);
     } else {
-      s.hline(x - arm - 1, y, arm * 2 + 3, edge);
-      s.vline(x, y - arm - 1, arm * 2 + 3, edge);
-      if (arm === 1) s.rect(x - 1, y - 1, 3, 3, edge);
+      s.rect(x - A - 2, y - 1, 2 * A + 5, 3, edge);
+      s.rect(x - 1, y - A - 2, 3, 2 * A + 5, edge);
+      if (arm === 1) s.rect(x - 2, y - 2, 5, 5, edge);
     }
   }
   if (arm >= 3) {
-    const a = edge === null ? arm : arm - 1;
+    const a = edge === null ? A : A - 2;
     s.hline(x - a, y, a * 2 + 1, tips);
     s.vline(x, y - a, a * 2 + 1, tips);
-    s.hline(x - a + 2, y, a * 2 - 3, core);
-    s.vline(x, y - a + 2, a * 2 - 3, core);
-    for (let d = 1; d <= (a >= 5 ? 2 : 1); d++) {
+    s.hline(x - a + 3, y, a * 2 - 5, core);
+    s.vline(x, y - a + 3, a * 2 - 5, core);
+    s.rect(x - 1, y - 1, 3, 3, tips);
+    s.hline(x - 1, y, 3, core);
+    s.vline(x, y - 1, 3, core);
+    for (let d = 2; d <= (arm >= 5 ? 4 : 3); d++) {
       s.px(x - d, y - d, tips);
       s.px(x + d, y - d, tips);
       s.px(x - d, y + d, tips);
@@ -888,6 +1035,10 @@ function drawTwinkle(
     return;
   }
   if (arm === 1) {
+    s.hline(x - 2, y, 5, tips);
+    s.vline(x, y - 2, 5, tips);
+  } else {
+    // between winks: a speck with four points
     s.hline(x - 1, y, 3, tips);
     s.vline(x, y - 1, 3, tips);
   }
@@ -895,8 +1046,150 @@ function drawTwinkle(
 }
 
 /**
- * The ball when it is too small for its panels: a disc with an outline, one dark patch
- * and one pixel of the mode's colour that change places as it spins.
+ * NEXT-GEN's flare as its ball goes out: a hot heart, a ring that opens and a cross of
+ * light, long across and short up and down, frame by frame (five), in the mode's colours.
+ */
+function drawFlare(
+  s: Surface,
+  x: number,
+  y: number,
+  frame: number,
+  core: Color,
+  ramp: { dark: Color; base: Color; light: Color },
+): void {
+  if (frame < 0 || frame > 4) return;
+  const ring = [5, 8, 11, 13, 14][frame];
+  const across = [12, 20, 26, 30, 0][frame];
+  const up = [8, 12, 14, 0, 0][frame];
+  const hot = [6, 10, 12, 0, 0][frame];
+  const outer = frame < 2 ? ramp.light : frame < 4 ? ramp.base : ramp.dark;
+  if (frame < 3) {
+    for (let i = 0; i < (frame < 2 ? 2 : 1); i++)
+      s.circle(x, y, ring - i, outer);
+  } else {
+    // in pieces: every other dash of the ring
+    const steps = Math.ceil(ring * 7);
+    for (let j = 0; j < steps; j++) {
+      if (Math.floor((j / steps) * 16) % 2 === 1) continue;
+      const a = (j / steps) * TAU;
+      s.px(
+        Math.round(x + Math.cos(a) * ring),
+        Math.round(y + Math.sin(a) * ring),
+        outer,
+      );
+    }
+  }
+  if (across > 0) {
+    if (frame < 3) {
+      s.hline(x - across, y, across * 2 + 1, outer);
+    } else {
+      for (let i = -across; i <= across; i += 2) s.px(x + i, y, outer);
+    }
+  }
+  if (up > 0) s.vline(x, y - up, up * 2 + 1, outer);
+  if (hot > 0) {
+    s.hline(x - hot, y, hot * 2 + 1, core);
+    s.vline(x, y - (hot >> 1), (hot >> 1) * 2 + 1, core);
+  }
+  if (frame === 0) s.disc(x, y, 3, core);
+  else if (frame === 1) s.disc(x, y, 2, core);
+  else if (frame === 2) s.rect(x - 1, y - 1, 3, 3, core);
+}
+
+/**
+ * RETRO's tape being rewound: bands of the picture torn sideways, rolling up the screen,
+ * each with a ragged line of snow along its top. `t` is seconds since the strike; the
+ * bands move on RETRO_BAND_FPS times a second.
+ */
+function tearBands(s: Surface, t: number, seed: number): void {
+  const { w, h, data } = s;
+  const step = Math.floor(t * RETRO_BAND_FPS);
+  const at = step / RETRO_BAND_FPS;
+  for (let b = 0; b < RETRO_BANDS.length; b++) {
+    const band = RETRO_BANDS[b];
+    const u = (((band.at - at * RETRO_BAND_SPEED) % 1) + 1) % 1;
+    const top = Math.floor(u * h);
+    for (let y = top; y < Math.min(h, top + band.h); y++) {
+      const row = y * w;
+      const dx = band.dx;
+      if (dx > 0) {
+        data.copyWithin(row + dx, row, row + w - dx);
+        data.fill(data[row + dx], row, row + dx);
+      } else if (dx < 0) {
+        const k = -dx;
+        data.copyWithin(row, row + k, row + w);
+        data.fill(data[row + w - k - 1], row + w - k, row + w);
+      }
+    }
+    // the snow along its top
+    if (top < h) {
+      const row = top * w;
+      for (let x = 0; x < w; x++) {
+        const v = hash2(x >> 1, step * 7 + b, seed);
+        if (v > 0.9) data[row + x] = P.white;
+        else if (v > 0.72) data[row + x] = P.mist;
+      }
+    }
+  }
+}
+
+/**
+ * The rewind sign of an old video recorder: two arrows pointing back, with an ink shadow,
+ * `k` pixels a step, its top left at (x, y). It blinks off for a moment twice a second.
+ */
+function drawRewindSign(
+  s: Surface,
+  x: number,
+  y: number,
+  k: number,
+  t: number,
+  c: Color,
+  shadow: Color,
+): void {
+  if ((t * 2) % 1 > 0.8) return;
+  for (const [ox, oy, col] of [
+    [k, k, shadow],
+    [0, 0, c],
+  ] as const) {
+    for (let a = 0; a < 2; a++) {
+      // each arrow 5 steps across and 9 down, its point to the left
+      const left = x + ox + a * 5 * k;
+      for (let j = 0; j < 9; j++) {
+        const wide = 5 - Math.abs(j - 4);
+        s.rect(left + (5 - wide) * k, y + oy + j * k, wide * k, k, col);
+      }
+    }
+  }
+}
+
+/** A line `w` pixels thick, thickened across its way. */
+function thickLine(
+  s: Surface,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  w: number,
+  c: Color,
+): void {
+  const steep = Math.abs(y1 - y0) > Math.abs(x1 - x0);
+  const from = -((w - 1) >> 1);
+  for (let o = from; o < from + w; o++) {
+    s.line(
+      x0 + (steep ? o : 0),
+      y0 + (steep ? 0 : o),
+      x1 + (steep ? o : 0),
+      y1 + (steep ? 0 : o),
+      c,
+    );
+  }
+}
+
+/**
+ * The ball when it is too small for its panels, 2 to 18 px across: a speck with a white
+ * heart; from 6 px an outlined ball with its shaded side (a crescent at the
+ * bottom right), a dark panel that crosses it as it spins and a stripe of the mode's
+ * colour following it.
  */
 function drawTinyBall(
   s: Surface,
@@ -912,32 +1205,48 @@ function drawTinyBall(
 ): void {
   const cx = Math.round(x);
   const cy = Math.round(y);
-  if (r < 1.5) {
-    // a speck: no room for an outline
-    s.disc(cx, cy, 1, ink);
+  if (r < 3) {
+    // a speck: an ink dot with a white heart
+    s.disc(cx, cy, r < 2 ? 1 : 1.5, ink);
     s.px(cx, cy, white);
+    if (r >= 2) s.px(cx + 1, cy, white);
     return;
   }
   s.disc(cx, cy, r, ink);
   s.disc(cx, cy, r - 1, white);
+  // the shaded side: the white pixels far enough to the bottom right
+  const reach = Math.ceil(r);
+  const edge = (r - 1) * (r < 5 ? 0.7 : 0.62);
+  for (let dy = -reach; dy <= reach; dy++) {
+    for (let dx = -reach; dx <= reach; dx++) {
+      const px = cx + dx;
+      const py = cy + dy;
+      if (px < s.clipX0 || px >= s.clipX1 || py < s.clipY0 || py >= s.clipY1) {
+        continue;
+      }
+      if (s.data[py * s.w + px] !== white) continue;
+      if ((dx + dy) * Math.SQRT1_2 >= edge) s.px(px, py, shade);
+    }
+  }
   const f = ((frame % 4) + 4) % 4;
-  if (r < 2.5) {
-    // 4 or 5 px across: one pixel of each, swapping sides
-    if (f === 0) s.px(cx, cy, dark);
-    else if (f === 1) s.px(cx, cy - 1 + (r > 1.5 ? 0 : 1), accent);
-    else if (f === 2) s.px(cx + (r > 1.5 ? 1 : 0), cy, dark);
-    else s.px(cx, cy + (r > 1.5 ? 1 : 0), accent);
+  const k = Math.max(1, Math.round(r) - 3);
+  if (r < 5) {
+    // 6 to 9 px across: a 2 x 2 panel and two pixels of colour, swapping places
+    const oy = f === 0 ? -k : f === 1 ? -1 : f === 2 ? k - 1 : 0;
+    if (f !== 3) s.rect(cx - 1, cy + oy, 2, 2, dark);
+    const ay = f === 0 ? k : f === 1 ? -k : f === 2 ? -1 : 0;
+    s.hline(cx - 1, cy + ay, 2, accent);
     return;
   }
-  // 6 to 9 px across: the shaded side, a dark patch that crosses, the colour following it
-  const k = Math.round(r) - 2;
-  s.px(cx + k, cy + k, shade);
-  s.px(cx + k, cy + k - 1, shade);
-  s.px(cx + k - 1, cy + k, shade);
-  const oy = f === 0 ? -k : f === 1 ? -1 : f === 2 ? k - 1 : 0;
-  if (f !== 3) s.rect(cx - 1, cy + oy, 2, 2, dark);
-  const ay = f === 0 ? k - 1 : f === 1 ? -k : f === 2 ? -1 : 0;
-  s.hline(cx - k, cy + ay, 2, accent);
+  // 10 to 18 px across: a rounded panel three across, the colour a stripe of three
+  const oy = f === 0 ? -k : f === 1 ? -1 : f === 2 ? k - 2 : 0;
+  if (f !== 3) {
+    s.hline(cx - 1, cy + oy, 3, dark);
+    s.rect(cx - 2, cy + oy + 1, 4, 2, dark);
+    s.hline(cx - 1, cy + oy + 3, 2, dark);
+  }
+  const ay = f === 0 ? k : f === 1 ? -k + 1 : f === 2 ? -2 : 1;
+  s.hline(cx - k + 1, cy + ay, 3, accent);
 }
 
 // ---------------------------------------------------------------------------
@@ -964,6 +1273,7 @@ function drawArc(
   const span = a1 - a0;
   const steps = Math.ceil((Math.abs(span) * rho) / 0.7);
   if (!(steps >= 1) || steps > 4000) return;
+  // the streak 2 px thick and its head 4; broken up, it is every other pair of pixels
   let lx = Number.NaN;
   let ly = Number.NaN;
   let n = 0;
@@ -976,29 +1286,32 @@ function drawArc(
     lx = x;
     ly = y;
     n++;
-    if (broken && n % 2 === 0) continue;
+    if (broken && Math.floor(n / 2) % 2 === 0) continue;
     const c = f >= 0.7 ? (broken ? body : head) : f >= 0.35 ? body : tail;
     s.px(x, y, c);
-    // the head is two pixels thick, the second just outside
-    if (!broken && f >= 0.7) {
+    // the head is four pixels thick and the rest two, thickened outwards
+    const isHead = !broken && f >= 0.7;
+    const extra = isHead ? 3 : 1;
+    if (extra > 0) {
       const a2 = Math.atan2(y - cy, x - cx);
       const ex = Math.cos(a2);
       const ey = Math.sin(a2);
-      s.px(
-        x + (Math.abs(ex) >= Math.abs(ey) ? Math.sign(ex) : 0),
-        y + (Math.abs(ey) > Math.abs(ex) ? Math.sign(ey) : 0),
-        body,
-      );
+      const sx = Math.abs(ex) >= Math.abs(ey) ? Math.sign(ex) : 0;
+      const sy = Math.abs(ey) > Math.abs(ex) ? Math.sign(ey) : 0;
+      for (let e = 1; e <= extra; e++) {
+        s.px(x + sx * e, y + sy * e, isHead ? (e < 2 ? head : body) : c);
+      }
     }
   }
 }
 
 function slotOf(mode: Mode | null): BallSlot | null {
-  return mode === "home" ? "left" : mode === "away" ? "right" : null;
+  return mode === null || !isMode(mode) ? null : MODE_SLOTS[mode];
 }
 
 function modeOf(slot: BallSlot | null): Mode | null {
-  return slot === "left" ? "home" : slot === "right" ? "away" : null;
+  for (const mode of OPEN_MODES) if (MODE_SLOTS[mode] === slot) return mode;
+  return null;
 }
 
 function lockedOf(slot: BallSlot | null): LockedMode | null {
@@ -1007,7 +1320,7 @@ function lockedOf(slot: BallSlot | null): LockedMode | null {
 }
 
 function isMode(v: unknown): v is Mode {
-  return v === "home" || v === "away";
+  return (OPEN_MODES as readonly unknown[]).includes(v);
 }
 
 function freshBall(): BallState {
@@ -1026,7 +1339,7 @@ function freshBall(): BallState {
 }
 
 export class MenuScene implements Scene {
-  /** The pointer's hover changed (null: it is over neither HOME nor AWAY). */
+  /** The pointer's hover changed (null: it is over no open mode's patch). */
   onHover: ((mode: Mode | null) => void) | null = null;
   /** A mode was chosen and the transition starts now. */
   onKickoff: ((mode: Mode) => void) | null = null;
@@ -1046,11 +1359,19 @@ export class MenuScene implements Scene {
   private readonly logo: LogoOptions = { maxWidth: 1, maxHeight: 1, t: 0 };
   private logoTop = 0;
   private light: Lighting = lightingFor({ elevation: 45, morning: false });
+  /**
+   * For one frame after a change of light the ball keeps the last light, so the
+   * sky, the ball and the picture under it are each redrawn in a frame of their own.
+   */
+  private ballLight: Lighting | null = null;
+  private drawn = false;
   private reduced = false;
 
   // The canvas, and the five numbers the scene takes from menuLayout.
   private w = 1;
   private h = 1;
+  /** Whether `resize` has laid the scene out yet. */
+  private sized = false;
   private cx = 0;
   /** The ball's radius and its spot: the row its centre hovers about. */
   private R = 0;
@@ -1070,6 +1391,20 @@ export class MenuScene implements Scene {
   /** AWAY: where the ball is last seen. */
   private ax = 0;
   private ay = 0;
+  /** NEXT-GEN: where the ball goes out in its flare. */
+  private ngX = 0;
+  private ngY = 0;
+  /** RETRO: where the ball lands on the road (and its radius there), and where it stops. */
+  private rtLandX = 0;
+  private rtLandY = 0;
+  private rtLandR = 8;
+  private rtX = 0;
+  private rtY = 0;
+  private rtEndR = RETRO_END_R;
+  /** RETRO: the rewind sign in the corner: its top left and its size (pixels a step). */
+  private osdX = 0;
+  private osdY = 0;
+  private osdK = 2;
   /** `backdrop.target()` for this size: where the HOME ball comes down. */
   private tx = 0;
   private ty = 0;
@@ -1183,13 +1518,16 @@ export class MenuScene implements Scene {
       seed: opts.seed,
       sign: { header: this.header, text: this.fact },
     });
+    // A plane tows the fact across the sky, and the sign shows the messages.
+    this.backdrop.setBanner(bannerWords(this.header, this.fact));
+    if (opts.messages) this.backdrop.setMessages(opts.messages);
     // The stadium wears the day's club colours (the seed is the day number).
     this.backdrop.setScheme(schemeForDay(opts.seed).id);
     this.patches = {
       left: { label: "", icon: "home", accent: MODE_COLORS.home },
       right: { label: "", icon: "away", accent: MODE_COLORS.away },
-      top: { label: "", icon: "forward", locked: true },
-      bottom: { label: "", icon: "rewind", locked: true },
+      top: { label: "", icon: "forward", accent: MODE_COLORS.nextgen },
+      bottom: { label: "", icon: "rewind", accent: MODE_COLORS.retro },
       backRight: { label: "", icon: "pin", locked: true },
       backLeft: { label: "", icon: "globe", locked: true },
       rimLeft: { label: "", icon: "shirt", locked: true },
@@ -1211,9 +1549,10 @@ export class MenuScene implements Scene {
   resize(w: number, h: number): void {
     const W = Math.max(1, Math.round(w) || 1);
     const H = Math.max(1, Math.round(h) || 1);
-    if (W === this.w && H === this.h) return;
+    if (this.sized && W === this.w && H === this.h) return;
     this.w = W;
     this.h = H;
+    this.sized = true;
     const m = menuLayout(W, H);
     this.cx = m.cx;
     this.R = m.ballR;
@@ -1221,14 +1560,14 @@ export class MenuScene implements Scene {
     this.logoH = m.logo.h;
     this.open = W >= OPEN_W;
     this.rise = Math.max(
-      4,
+      8,
       Math.round(
         this.open
           ? Math.min(W * HOME_RISE_W, H * HOME_RISE_H)
           : W * HOME_RISE_TALL,
       ),
     );
-    this.endR = this.open ? clamp(Math.round(this.R * HOME_END_R), 2, 4) : 2;
+    this.endR = this.open ? clamp(Math.round(this.R * HOME_END_R), 4, 8) : 4;
     const side = 2 * this.R + 5;
     if (this.pad.w !== side) this.pad = new Surface(side, side);
     this.backdrop.resize(W, H);
@@ -1243,7 +1582,10 @@ export class MenuScene implements Scene {
   }
 
   setLighting(light: Lighting): void {
-    if (light !== this.light) this.aimStale = true;
+    if (light !== this.light) {
+      this.aimStale = true;
+      if (this.drawn && true) this.ballLight ??= this.light;
+    }
     this.light = light;
     this.backdrop.setLighting(light);
   }
@@ -1290,7 +1632,10 @@ export class MenuScene implements Scene {
   }
 
   draw(s: Surface): void {
-    if (s.w !== this.w || s.h !== this.h) this.resize(s.w, s.h);
+    if (!this.sized || s.w !== this.w || s.h !== this.h) {
+      this.resize(s.w, s.h);
+    }
+    this.drawn = true;
     const kick = this.state === "kickoff";
     const kt = kick && !this.reduced ? this.phaseT : -1;
     if (this.state === "done" || kt >= K_INK) {
@@ -1299,10 +1644,11 @@ export class MenuScene implements Scene {
     }
     const cx = this.cx;
     const R = this.R;
-    const home = this.mode === "home";
-    const accent = MODE_COLORS[this.mode];
+    const mode = this.mode;
+    const home = mode === "home";
+    const accent = MODE_COLORS[mode];
     // when the ball is down, or gone
-    const land = K_FLY + (home ? HOME_FLIGHT : AWAY_FLIGHT);
+    const land = K_FLY + FLIGHT[mode];
 
     // HOME: the ground erupts as the ball drops in
     let roar = 0;
@@ -1318,9 +1664,16 @@ export class MenuScene implements Scene {
     if (this.aimStale) this.aim();
     this.compose();
 
+    if (mode === "nextgen" && kt >= K_FLY) {
+      // the comet's trail, drawn on after the ball has gone, drawing in to the flare
+      this.drawComet(s, kt, accent);
+    }
+    if (mode === "retro" && kt >= K_FLY) this.drawGhosts(s, kt, accent);
     if (kt >= K_FLY && kt < land && this.ballOn) {
       if (this.ball.r < TRAIL_BELOW_R) {
-        this.drawTrail(s, kt, accent.light, accent.base);
+        if (mode === "home" || mode === "away") {
+          this.drawTrail(s, kt, accent.light, accent.base);
+        }
       } else if (this.ball.r >= this.R * RUSH_FROM) {
         this.drawRush(s, kt);
       }
@@ -1342,7 +1695,23 @@ export class MenuScene implements Scene {
         );
       }
       const frame = Math.floor((kt - land) * 15);
-      drawBurst(s, this.tx, this.ty, frame, 5, P.white, P.goldLight);
+      drawBurst(s, this.tx, this.ty, frame, 10, P.white, P.goldLight);
+    }
+    // RETRO: a puff where it bounces on the road
+    if (mode === "retro") {
+      const bounce = K_FLY + RETRO_FLIGHT * RETRO_DROP;
+      if (kt >= bounce) {
+        const frame = Math.floor((kt - bounce) * 15);
+        drawBurst(
+          s,
+          this.rtLandX,
+          this.rtLandY + Math.round(this.rtLandR),
+          frame,
+          Math.max(6, Math.round(this.rtLandR * 0.6)),
+          P.white,
+          accent.light,
+        );
+      }
     }
     if (this.state === "intro") {
       const frame = Math.floor(this.phaseT * IN_STAR_FPS);
@@ -1364,36 +1733,60 @@ export class MenuScene implements Scene {
 
     // in front of the ball
     if (kt >= K_HIT) {
-      // HOME is struck from in front and below, AWAY from below on HOME's side
+      // HOME is struck from in front and below, AWAY from below on HOME's side, NEXT-GEN
+      // from below on AWAY's side and RETRO from above
       const reach = Math.round(R * Math.SQRT1_2);
+      const sx =
+        mode === "away" ? cx - reach : mode === "nextgen" ? cx + reach : cx;
+      const sy =
+        mode === "home"
+          ? this.spotY + R - 1
+          : mode === "retro"
+            ? this.spotY - R + 1
+            : this.spotY + reach;
       drawStrike(
         s,
-        home ? cx : cx - reach,
-        home ? this.spotY + R - 1 : this.spotY + reach,
-        home ? 0 : -Math.SQRT1_2,
-        home ? 1 : Math.SQRT1_2,
+        sx,
+        sy,
+        mode === "away" ? -Math.SQRT1_2 : mode === "nextgen" ? Math.SQRT1_2 : 0,
+        mode === "retro" ? -1 : mode === "home" ? 1 : Math.SQRT1_2,
         Math.floor((kt - K_HIT) * STRIKE_FPS),
-        Math.max(3, R * 0.4),
+        Math.max(6, R * 0.4),
         this.seed,
         P.white,
         accent.light,
         accent.base,
       );
-      if (!home && kt >= land) {
+      if ((mode === "away" || mode === "nextgen") && kt >= land) {
+        const x = mode === "away" ? this.ax : this.ngX;
+        const y = mode === "away" ? this.ay : this.ngY;
+        // NEXT-GEN goes out in a flare first
+        const flare = Math.floor((kt - land) * NEXT_FLARE_FPS);
+        if (mode === "nextgen") drawFlare(s, x, y, flare, P.white, accent);
         // the last of it: a twinkle, which goes on winking in the closing iris
-        const frame = Math.floor((kt - land) * 20);
-        const wink = frame < TWINKLE.length ? frame : frame % 4 < 2 ? 0 : -1;
+        const frame =
+          Math.floor((kt - land) * 20) - (mode === "nextgen" ? 3 : 0);
+        const wink =
+          frame < 0
+            ? -2
+            : frame < TWINKLE.length
+              ? frame
+              : frame % 4 < 2
+                ? 0
+                : -1;
         // by day the sky behind it is pale, and it needs an edge to show
         const day = !this.light.lightsOn;
-        drawTwinkle(
-          s,
-          this.ax,
-          this.ay,
-          wink,
-          P.white,
-          day ? accent.base : accent.light,
-          day ? accent.dark : null,
-        );
+        if (wink > -2) {
+          drawTwinkle(
+            s,
+            x,
+            y,
+            wink,
+            P.white,
+            day ? accent.base : accent.light,
+            day ? accent.dark : null,
+          );
+        }
       }
     }
 
@@ -1403,12 +1796,20 @@ export class MenuScene implements Scene {
     if (this.shakeY !== 0) shiftRows(s, this.shakeY);
     if (this.shakeX !== 0) shiftCols(s, this.shakeX);
 
+    // RETRO: the tape being rewound
+    if (mode === "retro" && kt >= K_HIT) {
+      tearBands(s, kt - K_HIT, this.seed);
+      drawRewindSign(s, this.osdX, this.osdY, this.osdK, kt, P.white, P.ink);
+    }
+
     if (kt >= K_IRIS) {
-      const fx = home ? this.tx : this.ax;
-      const fy = home ? this.ty : this.ay;
+      const fx = this.irisX();
+      const fy = this.irisY();
       const hold = home
-        ? Math.max(10, Math.round(R * HOME_RING))
-        : Math.max(7, Math.round(R * AWAY_RING));
+        ? Math.max(20, Math.round(R * HOME_RING))
+        : mode === "retro"
+          ? Math.max(18, Math.round(R * RETRO_RING))
+          : Math.max(14, Math.round(R * AWAY_RING));
       const far =
         Math.ceil(
           Math.hypot(Math.max(fx, this.w - fx), Math.max(fy, this.h - fy)),
@@ -1417,6 +1818,29 @@ export class MenuScene implements Scene {
       const r = Math.round(irisRadius(kt, far, hold));
       iris(s, fx, fy, r >= 1 ? r : -1, P.ink);
     }
+  }
+
+  /** Where the iris closes: where the ball came down, or went. */
+  private irisX(): number {
+    const m = this.mode;
+    return m === "home"
+      ? this.tx
+      : m === "away"
+        ? this.ax
+        : m === "nextgen"
+          ? this.ngX
+          : this.rtX;
+  }
+
+  private irisY(): number {
+    const m = this.mode;
+    return m === "home"
+      ? this.ty
+      : m === "away"
+        ? this.ay
+        : m === "nextgen"
+          ? this.ngY
+          : this.rtY;
   }
 
   pointer(p: PointerInfo): void {
@@ -1550,22 +1974,36 @@ export class MenuScene implements Scene {
   // For the page
   // -------------------------------------------------------------------------
 
-  /** A new fact for the airship's sign. */
+  /** A new fact: on the plane's banner (and, with no messages, the sign). */
   setFact(text: string): void {
     if (text === this.fact) return;
     this.fact = text;
     this.backdrop.setSign({ header: this.header, text });
+    this.backdrop.setBanner(bannerWords(this.header, text));
+  }
+
+  /**
+   * What the airship's sign says, one message after another: the player's day
+   * (today's totals, their place, the streak, how many played), words from the page.
+   * None: the fact.
+   */
+  setSignMessages(messages: readonly MenuSign[]): void {
+    this.backdrop.setMessages(messages);
   }
 
   setLabels(labels: MenuLabels): void {
-    this.patches.left.label = labels.home;
-    this.patches.right.label = labels.away;
+    for (const mode of OPEN_MODES) {
+      const patch = this.patches[MODE_SLOTS[mode]];
+      patch.label = labels[mode];
+      patch.icon = MODE_ICONS[mode];
+    }
     for (const mode of LOCKED_MODES) {
       this.patches[MODE_SLOTS[mode]].label = labels[mode];
     }
     if (labels.header !== this.header) {
       this.header = labels.header;
       this.backdrop.setSign({ header: this.header, text: this.fact });
+      this.backdrop.setBanner(bannerWords(this.header, this.fact));
     }
     if (labels.tagline === undefined || labels.tagline === "") {
       delete this.logo.tagline;
@@ -1577,8 +2015,9 @@ export class MenuScene implements Scene {
 
   /** Today's result per mode, shown as that patch's badge. `null` takes it off again. */
   setScores(scores: Partial<Record<Mode, number | null>>): void {
-    this.setScore(this.patches.left, scores.home);
-    this.setScore(this.patches.right, scores.away);
+    for (const mode of OPEN_MODES) {
+      this.setScore(this.patches[MODE_SLOTS[mode]], scores[mode]);
+    }
   }
 
   /** 0 new, 0.5 full. */
@@ -1800,12 +2239,15 @@ export class MenuScene implements Scene {
    * strike, the wind of the flight, falling as HOME's ball drops in and dying away after
    * AWAY's vanishes, HOME's landing (a thump as it drops onto the spot and a softer one as
    * its bounce comes down) or AWAY's sparkle as it twinkles out, and the transition as the
-   * iris starts to close. No cheer and no horns. Each is heard once, however long the step.
-   * With reduced motion there is no flight, and so no landing and no twinkle.
+   * iris starts to close. NEXT-GEN's wind rises as it speeds up, and it goes out with
+   * AWAY's sparkle at its flare; RETRO's falls as it drops, bounces with HOME's soft thump
+   * and dies away as it rolls, and a light touch is heard as it comes to a stop. No cheer
+   * and no horns. Each is heard once, however long the step. With reduced motion there is
+   * no flight, and so no landing and no twinkle.
    */
   private kickSounds(before: number, after: number): void {
     const at = (t: number): boolean => before <= t && t < after;
-    const home = this.mode === "home";
+    const mode = this.mode;
     if (this.reduced) {
       // a cut: the strike as it starts, and the page closing on it
       if (at(0)) {
@@ -1816,20 +2258,46 @@ export class MenuScene implements Scene {
     }
     if (at(K_HIT)) this.sound(STRIKE);
     if (at(K_IRIS)) this.closeSound();
-    const len = home ? HOME_FLIGHT : AWAY_FLIGHT;
+    const len = FLIGHT[mode];
     const land = K_FLY + len;
-    if (home) {
+    const bounce = K_FLY + len * RETRO_DROP;
+    if (mode === "home") {
       if (at(land)) this.sound(LAND);
       if (at(land + HOME_HOP_AT + HOME_HOP_LEN)) this.sound(LAND_HOP);
-    } else if (at(land + TWINKLE_FLARE - SPARKLE_RISE)) {
-      this.sound(SPARKLE);
+    } else if (mode === "away") {
+      if (at(land + TWINKLE_FLARE - SPARKLE_RISE)) this.sound(SPARKLE);
+    } else if (mode === "nextgen") {
+      // at its brightest with the flare
+      if (at(land - SPARKLE_RISE)) this.sound(SPARKLE);
+    } else {
+      if (at(bounce)) this.sound(LAND_HOP);
+      if (at(land)) this.sound(STOP);
     }
     let speed = 0;
     if (after >= K_FLY && after < land) {
       const u = (after - K_FLY) / len;
-      speed = WIND_STRIKE * lerp(1, home ? HOME_WIND_END : AWAY_WIND_END, u);
-    } else if (!home && after >= land && after < land + WIND_TAIL) {
-      speed = WIND_STRIKE * AWAY_WIND_END * (1 - (after - land) / WIND_TAIL);
+      if (mode === "nextgen") {
+        speed = WIND_STRIKE * lerp(NEXT_WIND_START, 1, u * u);
+      } else if (mode === "retro") {
+        // falling as it drops, and dying away as it rolls
+        speed =
+          after < bounce
+            ? WIND_STRIKE * lerp(1, HOME_WIND_END, u / RETRO_DROP)
+            : WIND_STRIKE *
+              HOME_WIND_END *
+              (1 - (u - RETRO_DROP) / (1 - RETRO_DROP));
+      } else {
+        speed =
+          WIND_STRIKE *
+          lerp(1, mode === "home" ? HOME_WIND_END : AWAY_WIND_END, u);
+      }
+    } else if (
+      (mode === "away" || mode === "nextgen") &&
+      after >= land &&
+      after < land + WIND_TAIL
+    ) {
+      const end = mode === "away" ? AWAY_WIND_END : 1;
+      speed = WIND_STRIKE * end * (1 - (after - land) / WIND_TAIL);
     }
     if (speed > 0) this.sound({ kind: "wind", speed });
   }
@@ -2209,7 +2677,7 @@ export class MenuScene implements Scene {
   // -------------------------------------------------------------------------
 
   private layoutLogo(): void {
-    this.logo.maxWidth = Math.min(this.w - 26, 132);
+    this.logo.maxWidth = Math.min(this.w - 52, 264);
     this.logo.maxHeight = this.logoH;
     const size = logoSize(this.logo);
     this.logoTop = Math.max(0, Math.floor((this.logoH - size.h) / 2));
@@ -2232,7 +2700,7 @@ export class MenuScene implements Scene {
       this.ax = Math.min(Math.round(this.w * AWAY_LOW_X), last);
       const below = Math.max(0, this.ty - this.logoH);
       this.ay = Math.min(
-        this.logoH + Math.max(4, Math.round(below * AWAY_LOW_Y)),
+        this.logoH + Math.max(8, Math.round(below * AWAY_LOW_Y)),
         Math.max(0, this.h - 1),
       );
     } else if (clear <= last) {
@@ -2242,6 +2710,55 @@ export class MenuScene implements Scene {
       this.ax = Math.min(want, last);
       this.ay = Math.min(this.logoBottom + AWAY_CLEAR, Math.max(0, this.h - 1));
     }
+    this.aimEras();
+  }
+
+  /**
+   * NEXT-GEN and RETRO: where their balls end. NEXT-GEN's high in the sky on the far side
+   * of the wordmark from AWAY (on a phone AWAY's mirror image); RETRO's on the road in the
+   * old town at the left, after a bounce in front of the stadium. And RETRO's rewind sign,
+   * in the top left corner, clear of the wordmark.
+   */
+  private aimEras(): void {
+    const W = this.w;
+    const H = this.h;
+    const first = Math.min(AWAY_EDGE, Math.max(0, W - 1));
+    const left = this.cx - Math.ceil(this.logoW / 2) - AWAY_CLEAR;
+    if (this.open) {
+      // up in the logo zone's sky, right of the wordmark (the airship is on its left)
+      const right = this.cx + Math.ceil(this.logoW / 2) + AWAY_CLEAR;
+      const last = Math.max(first, W - 1 - AWAY_EDGE);
+      this.ngX = clamp(right + Math.round(W * NEXT_X), first, last);
+      this.ngY = Math.max(4, Math.round(this.logoH * NEXT_Y));
+    } else {
+      const reach = Math.max(this.R * AWAY_X, W * AWAY_X_WIDE);
+      const want = this.cx - Math.round(Math.min(W * AWAY_X_MAX, reach));
+      if (left >= first) {
+        this.ngX = clamp(want, first, left);
+        this.ngY = Math.round(this.logoH * AWAY_Y);
+      } else {
+        this.ngX = Math.max(want, first);
+        this.ngY = Math.min(this.logoBottom + AWAY_CLEAR, Math.max(0, H - 1));
+      }
+    }
+    const road = Math.min(
+      Math.max(0, H - 1 - RETRO_END_R),
+      this.cy0 + Math.round(this.R * RETRO_ROAD),
+    );
+    this.rtLandX = Math.round(
+      this.cx - W * (this.open ? RETRO_LAND_X : RETRO_LAND_X_TALL),
+    );
+    this.rtLandY = road;
+    this.rtLandR = Math.max(RETRO_END_R + 2, this.R * RETRO_LAND_R);
+    this.rtEndR = this.open ? RETRO_END_R : RETRO_END_R - 1;
+    this.rtX = Math.max(first, Math.round(W * RETRO_END_X));
+    this.rtY = Math.max(0, road - Math.round(H * RETRO_END_UP));
+    // the sign, in the top right corner (the airship has the top left): two pixels a step
+    // on a monitor, one beside a phone's wordmark
+    this.osdK = this.open ? 2 : 1;
+    const margin = this.open ? 16 : 6;
+    this.osdX = Math.max(0, W - margin - 11 * this.osdK);
+    this.osdY = margin;
   }
 
   /** Ask the backdrop where a ball struck at the stadium comes down. */
@@ -2284,7 +2801,7 @@ export class MenuScene implements Scene {
     this.lift = 0;
     this.nod = 0;
     if (this.reduced) return;
-    this.lift = Math.max(1, Math.round(this.R * BOB)) * this.breathAt(t, 1);
+    this.lift = Math.max(2, Math.round(this.R * BOB)) * this.breathAt(t, 1);
     this.nod = NOD * this.breathAt(t - NOD_LAG * BOB_PERIOD, DEEP_NOD);
   }
 
@@ -2328,7 +2845,7 @@ export class MenuScene implements Scene {
       const v = clamp((t - IN_OVER_AT) / (INTRO_LEN - IN_OVER_AT));
       const over = Math.sin(Math.PI * v);
       const above =
-        Math.max(1, R * IN_OVER) * over * over - R * IN_BELOW * k * k;
+        Math.max(2, R * IN_OVER) * over * over - R * IN_BELOW * k * k;
       b.cy = this.cy0 - Math.round(this.lift + above);
       // facing us by the time there is room for a word on a patch
       const side = 1 - clamp(b.r / Math.min(R, IN_FACING_R));
@@ -2354,7 +2871,7 @@ export class MenuScene implements Scene {
         // "no": the ball shakes its head, less each time
         const u = this.noT / NO_LEN;
         const swing = Math.sin(u * TAU * 3) * (1 - u);
-        b.cx = cx + Math.round(swing * Math.max(2, R * 0.09));
+        b.cx = cx + Math.round(swing * Math.max(4, R * 0.09));
         if (this.spin === "still") {
           b.yaw = clamp(b.yaw + swing * 0.1, -ROCK, ROCK);
         }
@@ -2371,42 +2888,59 @@ export class MenuScene implements Scene {
         if (kt >= K_HIT) {
           const f = Math.floor((kt - K_HIT) * 30);
           const shake = f < SHAKE.length ? SHAKE[f] : 0;
-          // HOME is hit upwards and the picture jumps up and down, AWAY sideways
-          if (this.mode === "home") this.shakeY = shake;
-          else this.shakeX = shake;
+          // AWAY is hit sideways and the picture jumps from side to side; the others are hit
+          // up or down and it jumps up and down
+          if (this.mode === "away") this.shakeX = shake;
+          else this.shakeY = shake;
         }
         if (kt >= K_HIT && kt < K_FLY) {
           // pressed flat against the boot, and springing back already
-          const deep = Math.max(1, Math.round(R * SQUASH));
-          this.squash = kt < K_HIT + K_DEEP ? deep : Math.max(1, deep >> 1);
-          // and it gives a pixel
-          b.cy -= 1;
-          if (this.mode === "away") b.cx += 1;
+          const deep = Math.max(2, Math.round(R * SQUASH));
+          this.squash = kt < K_HIT + K_DEEP ? deep : Math.max(2, deep >> 1);
+          // and it gives a pixel, away from the boot
+          if (this.mode === "retro") b.cy += 2;
+          else b.cy -= 2;
+          if (this.mode === "away") b.cx += 2;
+          else if (this.mode === "nextgen") b.cx -= 2;
         } else if (kt >= K_FLY) {
-          const home = this.mode === "home";
-          const len = home ? HOME_FLIGHT : AWAY_FLIGHT;
+          const mode = this.mode;
+          const len = FLIGHT[mode];
           const after = kt - K_FLY - len;
           this.flightAt(clamp((kt - K_FLY) / len));
           if (after >= 0) {
-            if (home) {
+            if (mode === "home") {
               // down: the picture jumps, and the ball bounces once and lies still
               const f = Math.floor(after * 30);
               if (f < THUMP.length) this.shakeY = THUMP[f];
               const hop = clamp((after - HOME_HOP_AT) / HOME_HOP_LEN);
               this.fy -= Math.round(HOME_HOP * Math.sin(Math.PI * hop));
-            } else {
+            } else if (mode !== "retro") {
+              // AWAY and NEXT-GEN are gone; RETRO's lies still where it stopped
               this.ballOn = false;
             }
           }
           // spin in steps: a retro ball turns a notch at a time
-          const air = home ? Math.min(kt - K_FLY, len) : kt - K_FLY;
+          const lands = mode === "home" || mode === "retro";
+          const air = lands ? Math.min(kt - K_FLY, len) : kt - K_FLY;
           const turn = Math.floor(air * 30) / 30;
           this.spinFrame = Math.floor(air * 14);
           b.r = Math.round(this.fr * 2) / 2;
           b.cx = Math.round(this.fx);
           b.cy = Math.round(this.fy);
-          if (this.mode === "home") {
+          if (mode === "home") {
             b.pitch += turn * 11;
+          } else if (mode === "nextgen") {
+            // top spin, fast, as it climbs
+            b.pitch += turn * 16;
+            b.roll = turn * -4;
+            this.spinFrame = Math.floor(air * 24);
+          } else if (mode === "retro") {
+            // spinning backwards as it rolls left: clockwise, and the tiny ball's frames
+            // run backwards; it slows with the ball
+            const spun = this.retroSpin(clamp(air / len));
+            b.roll = spun * 10;
+            b.yaw = spun * 1.5;
+            this.spinFrame = -Math.floor(spun * 9);
           } else {
             b.yaw = turn * -3;
             b.roll = turn * 9;
@@ -2414,6 +2948,21 @@ export class MenuScene implements Scene {
         }
       }
     }
+  }
+
+  /**
+   * RETRO: how far round its backspin has taken the ball, in seconds of spin at full speed,
+   * `u` of the way through its flight: at full speed as it falls, slowing as it rolls to
+   * its stop. Stepped like the other balls' turns.
+   */
+  private retroSpin(u: number): number {
+    const len = RETRO_FLIGHT;
+    const drop = RETRO_DROP * len;
+    const t = u * len;
+    const v = (t - drop) / (len - drop);
+    const spun =
+      t <= drop ? t : drop + ((len - drop) / 2) * (1 - (1 - v) * (1 - v));
+    return Math.floor(spun * 30) / 30;
   }
 
   /**
@@ -2439,8 +2988,8 @@ export class MenuScene implements Scene {
       this.fr = lerp(rApex, R, near);
       this.fx = lerp(tx, cx, near);
       const peak = Math.min(
-        ty - 2,
-        Math.max(this.logoBottom + rApex + 2, ty - this.rise),
+        ty - 4,
+        Math.max(this.logoBottom + rApex + 4, ty - this.rise),
       );
       const fall = HOME_UP + HOME_HANG;
       if (u < HOME_UP) {
@@ -2455,6 +3004,43 @@ export class MenuScene implements Scene {
         this.fy = lerp(peak, ty, k * k);
         this.fr = lerp(rApex, rEnd, k * k);
         this.fx = tx;
+      }
+    } else if (this.mode === "nextgen") {
+      const nx = this.ngX;
+      const ny = this.ngY;
+      // faster and faster, as if something lit under it
+      const t = u * (NEXT_EASE + (1 - NEXT_EASE) * u);
+      const near = nearAt(t, NEXT_FAR);
+      // the corner: almost straight up first, then over to the left; on a phone out of
+      // the left edge and back in at the top
+      const kx = this.open ? cx + R * NEXT_LEAN : -R * NEXT_SWING;
+      const ky = lerp(y0, ny, this.open ? NEXT_RISE : NEXT_SWING_Y);
+      const a = (1 - t) * (1 - t);
+      const c = 2 * t * (1 - t);
+      const d = t * t;
+      this.fr = lerp(1.5, R, near);
+      this.fx = a * cx + c * kx + d * nx;
+      this.fy = a * y0 + c * ky + d * ny;
+    } else if (this.mode === "retro") {
+      const bx = this.rtLandX;
+      const by = this.rtLandY;
+      const rLand = this.rtLandR;
+      if (u < RETRO_DROP) {
+        // chopped down: it drops away from us onto the road, faster and faster
+        const v = u / RETRO_DROP;
+        const near = nearAt(v, RETRO_FAR);
+        this.fr = lerp(rLand, R, near);
+        this.fx = lerp(cx, bx, 1 - near);
+        this.fy = lerp(y0, by, v * v);
+      } else {
+        // and rolls back into the old town, slowing to a stop, after one small bounce
+        const v = (u - RETRO_DROP) / (1 - RETRO_DROP);
+        const k = 1 - (1 - v) * (1 - v);
+        const since = (u - RETRO_DROP) * RETRO_FLIGHT;
+        const hop = Math.sin(Math.PI * clamp(since / RETRO_HOP_LEN));
+        this.fr = lerp(rLand, this.rtEndR, k);
+        this.fx = lerp(bx, this.rtX, k);
+        this.fy = lerp(by, this.rtY, k) - RETRO_HOP * hop;
       }
     } else {
       const ax = this.ax;
@@ -2476,9 +3062,82 @@ export class MenuScene implements Scene {
       const a = near * near;
       const c = 2 * e * near;
       const d = e * e;
-      this.fr = lerp(1, R, near);
+      this.fr = lerp(2, R, near);
       this.fx = a * cx + c * kx + d * ax;
       this.fy = a * y0 + c * ky + d * ay;
+    }
+  }
+
+  /**
+   * NEXT-GEN's comet: the last NEXT_TRAIL seconds of the ball's way behind it, as wide as
+   * the ball where it leaves it (NEXT_TRAIL_W at most) and thinning to a pixel, white hot
+   * near the ball, then the mode's light, base and dark tones. Once the ball has gone it
+   * draws in to the flare. A small ball has a glow round it.
+   */
+  private drawComet(
+    s: Surface,
+    kt: number,
+    ramp: { dark: Color; base: Color; light: Color },
+  ): void {
+    const len = NEXT_FLIGHT;
+    const land = K_FLY + len;
+    const head = Math.min(kt, land);
+    const tail = Math.max(K_FLY, kt - NEXT_TRAIL);
+    if (!(head - tail > 0.004)) return;
+    this.flightAt(clamp((head - K_FLY) / len));
+    const hr = this.fr;
+    let px = Math.round(this.fx);
+    let py = Math.round(this.fy);
+    const w0 = clamp(Math.round(hr * 1.6), 2, NEXT_TRAIL_W);
+    for (let i = 1; i <= NEXT_TRAIL_N; i++) {
+      const f = i / NEXT_TRAIL_N;
+      this.flightAt(clamp((head - (head - tail) * f - K_FLY) / len));
+      const x = Math.round(this.fx);
+      const y = Math.round(this.fy);
+      const w = Math.max(1, Math.round(w0 * (1 - f * 0.8)));
+      const outer = f < 0.5 ? ramp.light : f < 0.8 ? ramp.base : ramp.dark;
+      thickLine(s, px, py, x, y, w, outer);
+      if (w >= 3) {
+        thickLine(s, px, py, x, y, w - 2, f < 0.4 ? P.white : ramp.light);
+      }
+      px = x;
+      py = y;
+    }
+    if (kt < land && hr < TRAIL_BELOW_R) {
+      this.flightAt(clamp((kt - K_FLY) / len));
+      s.disc(
+        Math.round(this.fx),
+        Math.round(this.fy),
+        Math.round(hr) + 3,
+        ramp.light,
+        0.5,
+      );
+    }
+  }
+
+  /**
+   * RETRO's ghosts: where the ball was RETRO_GHOSTS seconds ago, each a see-through ball of
+   * the mode's colour (only its outline while it is big), nearest first in its light tone.
+   * None once the ball has stopped.
+   */
+  private drawGhosts(
+    s: Surface,
+    kt: number,
+    ramp: { dark: Color; base: Color; light: Color },
+  ): void {
+    const tones = [ramp.light, ramp.base, ramp.dark];
+    for (let g = RETRO_GHOSTS.length - 1; g >= 0; g--) {
+      const u = (kt - RETRO_GHOSTS[g] - K_FLY) / RETRO_FLIGHT;
+      if (!(u > 0) || u >= 1) continue;
+      this.flightAt(u);
+      const r = Math.round(this.fr);
+      if (r < 2) continue;
+      const x = Math.round(this.fx);
+      const y = Math.round(this.fy);
+      // a big ghost (the ball still near) is only its outline, or it would hide the picture
+      if (r <= this.R * RETRO_GHOST_SOLID) s.disc(x, y, r, tones[g], 0.5);
+      s.circle(x, y, r, tones[g]);
+      if (r > this.R * RETRO_GHOST_SOLID) s.circle(x, y, r - 1, tones[g]);
     }
   }
 
@@ -2490,23 +3149,23 @@ export class MenuScene implements Scene {
     let px = this.ball.cx;
     let py = this.ball.cy;
     for (let i = 1; i <= 2; i++) {
-      const u =
-        (kt - i * TRAIL_GAP - K_FLY) /
-        (this.mode === "home" ? HOME_FLIGHT : AWAY_FLIGHT);
+      const u = (kt - i * TRAIL_GAP - K_FLY) / FLIGHT[this.mode];
       if (u <= 0) return;
       this.flightAt(clamp(u));
       const x = Math.round(this.fx);
       const y = Math.round(this.fy);
       s.line(px, py, x, y, i === 1 ? near : far);
-      // two pixels thick next to the ball, one at its tail
-      if (i === 1) {
-        const steep = Math.abs(y - py) > Math.abs(x - px);
+      // four pixels thick next to the ball, two at its tail, the thick part with a pale
+      // edge
+      const steep = Math.abs(y - py) > Math.abs(x - px);
+      const thick = i === 1 ? 4 : 2;
+      for (let o = 1; o < thick; o++) {
         s.line(
-          px + (steep ? 1 : 0),
-          py + (steep ? 0 : 1),
-          x + (steep ? 1 : 0),
-          y + (steep ? 0 : 1),
-          near,
+          px + (steep ? o : 0),
+          py + (steep ? 0 : o),
+          x + (steep ? o : 0),
+          y + (steep ? 0 : o),
+          i === 1 && o === 3 ? far : i === 1 ? near : far,
         );
       }
       px = x;
@@ -2544,7 +3203,7 @@ export class MenuScene implements Scene {
     const head = P.white;
     const body = day ? P.skyMid : P.skyLow;
     const tail = day ? P.skyLow : P.mist;
-    const spread = Math.max(2, Math.round(R * WIND_SPREAD));
+    const spread = Math.max(4, Math.round(R * WIND_SPREAD));
     s.pushClip(0, this.logoH, s.w, s.h - this.logoH);
     for (let k = 0; k < WIND_SLOTS; k++) {
       const strength = clamp(count - k);
@@ -2588,7 +3247,7 @@ export class MenuScene implements Scene {
     const x = b.cx;
     const y = b.cy;
     const r = b.r;
-    const len = this.mode === "home" ? HOME_FLIGHT : AWAY_FLIGHT;
+    const len = FLIGHT[this.mode];
     const u = (kt - K_FLY) / len;
     const back = (kt - RUSH_BACK - K_FLY) / len;
     if (!(u > 0)) return;
@@ -2597,7 +3256,7 @@ export class MenuScene implements Scene {
     let dy = y - this.fy;
     this.flightAt(clamp(u));
     const d = Math.hypot(dx, dy);
-    if (!(d >= 2)) return;
+    if (!(d >= 4)) return;
     dx /= d;
     dy /= d;
     const day = !this.light.lightsOn;
@@ -2617,6 +3276,13 @@ export class MenuScene implements Scene {
       const ym = Math.round(y0 - dy * l * 0.4);
       const x1 = Math.round(x0 - dx * l);
       const y1 = Math.round(y0 - dy * l);
+
+      // twice as thick: a pale edge on the far side of each streak
+      const ox = Math.abs(dx) > Math.abs(dy) ? 0 : 1;
+      const oy = 1 - ox;
+      s.line(xm + ox, ym + oy, x1 + ox, y1 + oy, far);
+      s.line(x0 + ox, y0 + oy, xm + ox, ym + oy, far);
+
       s.line(xm, ym, x1, y1, far);
       s.line(x0, y0, xm, ym, near);
     }
@@ -2625,7 +3291,8 @@ export class MenuScene implements Scene {
 
   private drawBallNow(s: Surface): void {
     const b = this.ball;
-    const light = this.light;
+    const light = this.ballLight ?? this.light;
+    this.ballLight = null;
     if (b.r < TINY_R) {
       const lit = light.lit;
       drawTinyBall(
@@ -2659,15 +3326,24 @@ export class MenuScene implements Scene {
     drawBall(pad, b, this.patches, light);
     b.cx = x;
     b.cy = y;
-    // HOME's flat is level, under the ball. AWAY's is a diagonal, below on HOME's side.
-    const home = this.mode === "home";
+    // HOME's flat is level, under the ball, and RETRO's level over it. AWAY's is a
+    // diagonal, below on HOME's side, and NEXT-GEN's below on AWAY's side.
+    const mode = this.mode;
+    const level = mode === "home" || mode === "retro";
     const reach = this.R - this.squash;
-    const edge = home ? reach : Math.round(reach * Math.SQRT2);
+    const edge = level ? reach : Math.round(reach * Math.SQRT2);
     const ink = light.lit(P.ink);
     const data = pad.data;
     for (let j = 0; j < side; j++) {
       for (let i = 0; i < side; i++) {
-        const k = home ? j - mid : j - i;
+        const k =
+          mode === "home"
+            ? j - mid
+            : mode === "retro"
+              ? mid - j
+              : mode === "away"
+                ? j - i
+                : j + i - 2 * mid;
         const at = j * side + i;
         if (k < edge || data[at] === TRANSPARENT) continue;
         data[at] = k === edge ? ink : TRANSPARENT;

@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
 
+import { MODES } from "~/game/storage";
+import { hash2 } from "~/pixel";
+
 import {
   LEADERBOARD_MAX,
   MOCK_FIELD,
@@ -23,9 +26,30 @@ describe("leaderboardFor (mock)", () => {
     );
   });
 
+  test("has its own field for each of the four modes, HOME's and AWAY's as they were", () => {
+    const tops = MODES.map((mode) =>
+      JSON.stringify(leaderboardFor(7, mode).rows.slice(0, 20)),
+    );
+    expect(new Set(tops).size).toBe(4);
+    for (const mode of ["retro", "nextgen"] as const) {
+      expect(leaderboardFor(7, mode)).toEqual(leaderboardFor(7, mode));
+      const mine = leaderboardFor(7, mode, 560);
+      expect(mine.yourRank).not.toBeNull();
+      expect(mine.total).toBe(fieldSize(7, mode) + 1);
+    }
+    // The fields HOME and AWAY had before RETRO and NEXT-GEN joined (their old hashes).
+    const before = (salt: number) =>
+      MOCK_FIELD.min +
+      Math.floor(
+        hash2(1, salt, 0xf1e1d) * (MOCK_FIELD.max - MOCK_FIELD.min + 1),
+      );
+    expect(fieldSize(1, "home")).toBe(before(11));
+    expect(fieldSize(1, "away")).toBe(before(12));
+  });
+
   test("counts a few hundred to a couple of thousand players, deterministically", () => {
     for (const day of DAYS) {
-      for (const mode of ["home", "away"] as const) {
+      for (const mode of MODES) {
         const board = leaderboardFor(day, mode);
         expect(board.total).toBe(board.rows.length);
         expect(board.total).toBe(fieldSize(day, mode));

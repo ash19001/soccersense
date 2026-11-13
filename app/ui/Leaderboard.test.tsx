@@ -169,6 +169,131 @@ describe("Leaderboard on a monitor", () => {
   });
 });
 
+/** Four modes, RETRO with the player's line and last seven days (2026-11-13). */
+const WEEK_DAYS = ["FR", "SA", "SU", "MO", "TU", "WE", "TH"];
+const FOUR: LeaderboardBoard[] = [
+  ...BOARDS,
+  {
+    mode: "retro",
+    label: "RETRO",
+    caption: "Today's top 10, RETRO",
+    played: "900 played today",
+    rows: rows(TEN),
+    you: { rank: 120, name: "", points: 300, you: true },
+    youSpoken: "You: 120th of 900",
+    mine: "You're 120th of 900",
+    week: {
+      heading: "LAST 7 DAYS",
+      days: WEEK_DAYS.map((label, i) => ({
+        label,
+        total: i % 3 === 0 ? i * 100 : null,
+        today: i === 6,
+      })),
+      spoken:
+        "Your last 7 days of RETRO: Friday 0 points, Saturday not played, ...",
+    },
+  },
+  {
+    mode: "nextgen",
+    label: "NEXT-GEN",
+    caption: "Today's top 10, NEXT-GEN",
+    played: "700 played today",
+    rows: rows(TEN),
+    mine: "700 played. Your turn!",
+  },
+];
+
+describe("Leaderboard with four modes", () => {
+  test("has a tab for each, and RETRO's shows its own line, seven bars and the link", () => {
+    const onStats = vi.fn();
+    render(
+      at(
+        MONITOR,
+        <Leaderboard
+          boards={FOUR}
+          labels={{ ...LABELS, more: "ALL STATS" }}
+          initialMode="retro"
+          onStats={onStats}
+        />,
+      ),
+    );
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      "HOME",
+      "AWAY",
+      "RETRO",
+      "NEXT-GEN",
+    ]);
+    const panel = screen.getByRole("tabpanel", { name: "RETRO" });
+    expect(panel).toHaveAttribute("data-mode", "retro");
+    // the player's line takes the place of the count
+    expect(within(panel).getByText("You're 120th of 900")).toHaveClass(
+      "is-mine",
+    );
+    expect(within(panel).queryByText("900 played today")).toBeNull();
+    // seven days, today last, the days not played empty; read out as one line
+    const days = panel.querySelectorAll(".ss-lb__day");
+    expect(days).toHaveLength(7);
+    expect(days[6]).toHaveClass("is-today");
+    expect([...days].map((d) => d.classList.contains("is-empty"))).toEqual([
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+    ]);
+    expect([...days].map((d) => d.textContent)).toEqual(WEEK_DAYS);
+    expect(panel.querySelector(".ss-lb__bars")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(within(panel).getByText(/Your last 7 days of RETRO/)).toHaveClass(
+      "ss-sr",
+    );
+    // a bar's height is its share of 700
+    const bar = days[3].querySelector<HTMLElement>(".ss-lb__bar");
+    expect(bar?.style.getPropertyValue("--v")).toBe(String(300 / 700));
+    fireEvent.click(within(panel).getByRole("button", { name: "ALL STATS" }));
+    expect(onStats).toHaveBeenCalledTimes(1);
+  });
+
+  test("a mode not played shows the nudge, and no link without a way to the stats", () => {
+    render(
+      at(
+        MONITOR,
+        <Leaderboard boards={FOUR} labels={LABELS} initialMode="nextgen" />,
+      ),
+    );
+    const panel = screen.getByRole("tabpanel", { name: "NEXT-GEN" });
+    expect(within(panel).getByText("700 played. Your turn!")).toBeTruthy();
+    expect(panel.querySelector(".ss-lb__week")).toBeNull();
+    expect(within(panel).queryByRole("button")).toBeNull();
+  });
+
+  test("on a phone the link closes the sheet and opens the stats", () => {
+    const onStats = vi.fn();
+    render(
+      at(
+        DEFAULT_SCALE,
+        <Leaderboard
+          boards={FOUR}
+          labels={{ ...LABELS, more: "ALL STATS" }}
+          initialMode="retro"
+          onStats={onStats}
+        />,
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: LABELS.open }));
+    const sheet = document.querySelector("dialog") as HTMLElement;
+    expect(within(sheet).getAllByRole("tab")).toHaveLength(4);
+    fireEvent.click(within(sheet).getByRole("button", { name: "ALL STATS" }));
+    expect(onStats).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("dialog")).toBeNull();
+  });
+});
+
 describe("Leaderboard on a monitor: sliding it away", () => {
   beforeEach(() => window.localStorage.clear());
   afterEach(() => {

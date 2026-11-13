@@ -11,6 +11,9 @@
  *   ./node_modules/.bin/tsx tools/snap.ts menu/intro --size 480x270 --strip 10 --dt 0.1 --scale 1
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-home --size 480x270 --strip 12 --dt 0.14 --scale 2
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-away --size 480x270 --strip 12 --dt 0.14 --scale 2 --time night
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-nextgen --size 960x540 --t 0.3 --strip 6 --dt 0.1 --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-retro --size 960x540 --t 0.3 --strip 6 --dt 0.1 --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-retro --size 260x562 --t 0.3 --strip 8 --dt 0.1 --scale 1    (a phone)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-home --t 0.2 --strip 10 --dt 0.0167 --scale 2    (the strike)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-home --size 480x270 --t 0.6 --strip 10 --dt 0.0333 --crop 180,60,120,110 --scale 4    (the drop and the landing)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-away --size 480x270 --t 0.3 --strip 12 --dt 0.06 --crop 300,30,180,180 --scale 2    (over the town)
@@ -285,10 +288,41 @@ export const shots: ShotMap = {
     return frame(ctx, scene);
   },
 
-  // A locked patch pressed and released at t = 0: --strip 8 --dt 0.05.
-  "menu/locked": (ctx) => {
+  // NEXT-GEN: a rising strike into the sky, a comet with a trail, gone in a flare.
+  "menu/kickoff-nextgen": (ctx) => {
     const scene = make(ctx);
-    const p = patchAt(ctx, "top");
+    scene.choose("nextgen");
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+
+  // RETRO: chopped down onto the road, it rolls back into the old town, spinning
+  // backwards, while the picture is rewound like a tape.
+  "menu/kickoff-retro": (ctx) => {
+    const scene = make(ctx);
+    scene.choose("retro");
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+
+  // A locked patch (GUESS WHO, a quarter turn round) pressed and released at t = 0: the
+  // ball says no. --strip 8 --dt 0.05.
+  "menu/locked": (ctx) => {
+    const scene = shown(ctx, "rimLeft", 0.5);
+    const m = menuLayout(ctx.w, ctx.h);
+    const p = ballSlotCenter(
+      {
+        cx: m.cx,
+        cy: m.ballCy,
+        r: m.ballR,
+        ...ballShowPose("rimLeft"),
+        hovered: null,
+        pressed: null,
+        chosen: null,
+        t: 0,
+      },
+      "rimLeft",
+    );
     scene.pointer({ type: "down", x: p.x, y: p.y, touch: true });
     scene.pointer({ type: "up", x: p.x, y: p.y, touch: true });
     advance(scene, ctx.t);

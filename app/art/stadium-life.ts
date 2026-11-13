@@ -27,6 +27,8 @@ import {
   type Stop,
   type WalkPlace,
 } from "~/art/stadium-crossing";
+import { drawGull } from "~/art/sky";
+
 import type { Zone } from "~/art/layout";
 import {
   GOAL_AT,
@@ -54,24 +56,41 @@ import {
   coachLamps,
   coachSprite,
   groundHeading,
-  headingAngle,
 } from "~/art/stadium-cars";
 import {
   car,
+  carShadow,
+  drawFlag,
+  drawPuff,
+  drawTinyPlayer,
   person,
   shadowBlob,
   type CarLook,
   type Ink,
   type PersonLook,
 } from "~/art/stadium-things";
-import { carLook, coachLook, personLook, type Town } from "~/art/stadium-town";
+import { sizeStep } from "~/art/traffic-steps";
+import {
+  personLampShadow as castPersonShadow,
+  vehicleLampShadow as castVehicleShadow,
+} from "~/art/lamp-shadows";
+import {
+  advanceTown,
+  carLook,
+  coachLook,
+  personLook,
+  type Town,
+} from "~/art/stadium-town";
+import { drawDog, drawDuck, drawParkBall } from "~/art/stadium-people";
 import { clubOf, clubRaw } from "~/art/stadium-club";
 import {
   hazeAt,
   project,
+  projectRaw,
   rowAt,
   scaleAt,
   sizeClass,
+  type Spot,
   type View,
 } from "~/art/stadium-view";
 
@@ -87,6 +106,11 @@ class MaskedInk implements Ink {
 
   target(s: Surface): void {
     this.s = s;
+  }
+
+  /** The surface it draws on now. */
+  get surface(): Surface {
+    return this.s;
   }
 
   px(x: number, y: number, c: Color): void {
@@ -175,14 +199,30 @@ function wayPoint(way: Way, d: number, lat: number): { X: number; V: number } {
   return wayOut;
 }
 
+/**
+ * Whether someone `d` along a way is walking away from the camera, up the screen (more
+ * up than across): they are drawn from behind. It reuses wayPoint's result.
+ */
+function awayFrom(way: Way, d: number, lat = 0): boolean {
+  const a = wayPoint(way, d, lat);
+  const X = a.X;
+  const V = a.V;
+  const b = wayPoint(way, d + 0.5, lat);
+  return b.V - V > 0.35 * Math.abs(b.X - X);
+}
+
 interface Stander {
   X: number;
   V: number;
   x: number;
   y: number;
   cls: 0 | 1 | 2;
+  /** The scale there, pixels a unit: for the size step (traffic-steps.ts). */
+  s: number;
   look: PersonLook;
   key: number;
+  /** Facing away from the camera (a queue facing the turnstiles). */
+  back: boolean;
 }
 
 interface Flag {
@@ -195,6 +235,8 @@ interface Flag {
   a: Color;
   b: Color;
   post: Color;
+  /** The pole's shaded side (the pole is two pixels wide). */
+  postShade: Color;
   key: number;
 }
 
@@ -208,11 +250,13 @@ export interface Life {
   /**
    * Everybody on foot who walks a way at time `t`: where they are on the map, and whether
    * they are standing at a kerb, and who they are (the same number all the way along).
-   * For tests (nobody is ever under a car).
+   * For tests (nobody is ever under a car). `everyone`: the day's walkers whatever the
+   * light (at night most stay in), for the ways they take.
    */
   people(
     t: number,
     fn: (X: number, V: number, waiting: boolean, who: number) => void,
+    everyone?: boolean,
   ): void;
   /**
    * Everybody standing about who never moves from the spot (the queues at the
@@ -426,8 +470,37 @@ export function makeLife(
   addRoute(ROAD.laneX1 - 2.6, ROAD.sideEnd, ROAD.laneX1 - 2.6, -226, 7, 80, 24);
 
   /**
-   * A car or a bus on the ground at (X, V), pointing `heading` on screen (stadium-cars.ts).
-   * `state`: 0 parked, 1 driving, 2 reversing.
+   * Where something moving along the map by (dX, dV) is drawn at (X, V) (G2). It moves
+   * along its line on screen a whole pixel at a time: the column (or, when it goes more up
+   * the screen than across, the row) is rounded, and the other is read off the line at that
+   * column, so a step across and a step up land in the same frame, at an even beat like the
+   * train's, instead of each on its own rounding (a stagger of half steps). Still, it is
+   * `project`'s place.
+   */
+  const glide = { x: 0, y: 0, s: 0 };
+  const along = (X: number, V: number, dX: number, dV: number): Spot => {
+    if (dX === 0 && dV === 0) return project(view, X, V);
+    const a = projectRaw(view, X, V);
+    const b = projectRaw(view, X + dX * 0.5, V + dV * 0.5);
+    const ex = b.x - a.x;
+    const ey = b.y - a.y;
+    // (nearer than the camera's nearest depth the map stands still on screen)
+    if (Math.abs(ex) < 1e-9 && Math.abs(ey) < 1e-9) return project(view, X, V);
+    glide.s = a.s;
+    if (Math.abs(ex) >= Math.abs(ey)) {
+      glide.x = Math.round(a.x);
+      glide.y = Math.round(a.y + ((glide.x - a.x) * ey) / ex);
+    } else {
+      glide.y = Math.round(a.y);
+      glide.x = Math.round(a.x + ((glide.y - a.y) * ex) / ey);
+    }
+    return glide;
+  };
+
+  /**
+   * A car or a bus on the ground at (X, V), pointing `heading` on screen (stadium-cars.ts),
+   * moving along (dX, dV) on the map (for `along`). `state`: 0 parked, 1 driving,
+   * 2 reversing.
    */
   const drawCar = (
     X: number,
@@ -436,27 +509,33 @@ export function makeLife(
     paint: number,
     bus: boolean,
     state: number,
+    dX = 0,
+    dV = 0,
   ): void => {
-    const p = project(view, X, V);
-    if (p.x < -12 || p.x > w + 12 || p.y > h + 8 || p.y < hy) return;
+    const p = along(X, V, dX, dV);
+    if (p.x < -24 || p.x > w + 24 || p.y > h + 16 || p.y < hy) {
+      return;
+    }
     const cls = sizeClass(p.s);
+    //, one of five sizes (traffic-steps.ts), so it shrinks a step at a time
+    const step = sizeStep(p.s);
     ink.V = V;
     const lit = night && state !== 0;
+    vehicleLampShadow(p.x, p.y, bus, step, heading);
     if (bus) {
       const look = coachLook(tone, V, paint < 0.5 ? 3 : 0);
-      coachSprite(ink, p.x, p.y, cls, heading, look);
-      if (lit) coachLamps(ink, p.x, p.y, cls, heading, state === 2 ? 2 : 1);
+      coachSprite(ink, p.x, p.y, cls, heading, look, step);
+      if (lit) {
+        coachLamps(ink, p.x, p.y, cls, heading, state === 2 ? 2 : 1, step);
+      }
       return;
     }
     // its shadow goes through the depth mask like the car: never over a tree or a roof
     // that stands in front of it
-    if (cls === 2) {
-      if (Math.abs(Math.sin((headingAngle(heading) * Math.PI) / 180)) < 0.5) {
-        ink.shadow(p.x + 1, p.y + 2, 4, 1);
-      } else ink.shadow(p.x + 2, p.y + 3, 3, 1);
-    }
-    car(ink, p.x, p.y, cls, heading, carLook(tone, V, paint));
-    if (lit) carLamps(ink, p.x, p.y, cls, heading, state === 2 ? 2 : 1);
+    const sh = carShadow(heading, cls, step);
+    if (sh) ink.shadow(p.x + sh[0], p.y + sh[1], sh[2], sh[3]);
+    car(ink, p.x, p.y, cls, heading, carLook(tone, V, paint), step);
+    if (lit) carLamps(ink, p.x, p.y, cls, heading, state === 2 ? 2 : 1, step);
   };
 
   const drawTraffic = (s: Surface, t: number): void => {
@@ -469,7 +548,7 @@ export function makeLife(
         const X = r.X0 + (r.X1 - r.X0) * u;
         const V = r.V0 + (r.V1 - r.V0) * u;
         const heading = groundHeading(view, X, V, r.dX, r.dV);
-        drawCar(X, V, heading, cr.paint, cr.bus, 1);
+        drawCar(X, V, heading, cr.paint, cr.bus, 1, r.dX, r.dV);
       }
     }
   };
@@ -565,19 +644,56 @@ export function makeLife(
     gate(165, 1.03),
   ]);
   const COACH_FANS = 14;
+  /**
+   * A near person's shadow on the ground at their feet, a little to the right (through
+   * the depth mask, as the cars' are): the two nearest of the five sizes (G2,
+   * traffic-steps.ts), at `sc` pixels a unit.
+   */
+  const footShadow = (x: number, y: number, sc: number): void => {
+    const size = sizeStep(sc);
+    if (size === 4) ink.shadow(x + 1.5, y, 2.5, 0.5);
+    else if (size === 3) ink.shadow(x + 1, y, 2, 0.5);
+    personLampShadow(x, y, sc);
+  };
+  /** The lamps lit: a person's shadow from a street lamp (lamp-shadows.ts). */
+  const personLampShadow = (x: number, y: number, sc: number): void => {
+    if (town.pools.length > 0) {
+      castPersonShadow(ink.surface, town, x, y, sizeStep(sc));
+    }
+  };
+  /** The lamps lit: a car's or a coach's shadow from a street lamp. */
+  const vehicleLampShadow = (
+    x: number,
+    y: number,
+    bus: boolean,
+    step: ReturnType<typeof sizeStep>,
+    heading: number,
+  ): void => {
+    if (town.pools.length > 0) {
+      castVehicleShadow(ink.surface, town, x, y, bus, step, heading);
+    }
+  };
+  /**
+   * How high a walker jumps for a goal, in canvas pixels: 4 near, 3 for the size between
+   * (G2), else 2.
+   */
+  const leap = (size: number): number => (size === 4 ? 4 : size === 3 ? 3 : 2);
   const coachPaint = coachLook(tone, COACH_BAY.V, 1);
   const drawCoach = (s: Surface, t: number, roar: number): void => {
     const tau = coachTau(t);
     coachAt(tau);
     const { X, V } = coachPose;
-    const p = project(view, X, V);
-    if (p.x > -12 && p.x < w + 12 && p.y < h + 10 && p.y >= hy) {
+    const p = along(X, V, coachPose.fX, coachPose.fV);
+    if (p.x > -24 && p.x < w + 24 && p.y < h + 20 && p.y >= hy) {
       const cls = sizeClass(p.s);
+      const step = sizeStep(p.s);
       ink.V = V;
       const heading = groundHeading(view, X, V, coachPose.fX, coachPose.fV);
-      coachSprite(ink, p.x, p.y, cls, heading, coachPaint);
+      vehicleLampShadow(p.x, p.y, true, step, heading);
+      coachSprite(ink, p.x, p.y, cls, heading, coachPaint, step);
       if (night && coachPose.moving) {
-        coachLamps(ink, p.x, p.y, cls, heading, coachPose.back ? 2 : 1);
+        const state = coachPose.back ? 2 : 1;
+        coachLamps(ink, p.x, p.y, cls, heading, state, step);
       }
     }
     // the fans off it, one after another
@@ -590,7 +706,9 @@ export function makeLife(
       if (d < 0 || d >= coachWay.len) continue;
       const q = wayPoint(coachWay, d, (h2(j, 640) - 0.5) * 2.4);
       const fp = project(view, q.X, q.V);
-      if (fp.x < -4 || fp.x > w + 4 || fp.y > h + 6 || fp.y < hy) continue;
+      if (fp.x < -8 || fp.x > w + 8 || fp.y > h + 12 || fp.y < hy) {
+        continue;
+      }
       ink.V = q.V;
       const look = personLook(
         (c) => tone(c, q.V),
@@ -598,8 +716,20 @@ export function makeLife(
         j % 7 === 0 ? 2 : 1,
         club,
       );
-      const jump = roar > 0 && h2(j, beat + 11) < roar * 0.7 ? 1 : 0;
-      person(ink, fp.x, fp.y, sizeClass(fp.s), look, (beat + j) % 2, jump);
+      const jump = roar > 0 && h2(j, beat + 11) < roar * 0.7 ? 2 : 0;
+      footShadow(fp.x, fp.y, fp.s);
+      // they walk off up the screen to the away turnstiles: seen from behind
+      person(
+        ink,
+        fp.x,
+        fp.y,
+        sizeClass(fp.s),
+        look,
+        (beat + j) % 2,
+        jump,
+        awayFrom(coachWay, d),
+        sizeStep(fp.s),
+      );
     }
   };
 
@@ -609,6 +739,52 @@ export function makeLife(
   /** Seconds a train stands at Stadium Halt, and seconds it takes to brake or pull away. */
   const DWELL = 8;
   const BRAKE = 3;
+  /**
+   * One carriage, `len` px long from x0 with its wheels on row y - 1: a lit
+   * roof edge, the roof, a band of windows between pillars (lit at night), the body and
+   * the dark underframe; 6 rows tall when near, else 4. Car 0 carries the
+   * nose and its lamp.
+   */
+  const trainCar = (
+    x0: number,
+    len: number,
+    y: number,
+    near: boolean,
+    line: number,
+    i: number,
+    V: number,
+  ): void => {
+    const roof = tone(line === 0 ? P.steelHi : P.chalk, V);
+    const roofShade = tone(line === 0 ? P.mist : P.steelHi, V);
+    const body = tone(line === 0 ? P.awayDark : P.goldDark, V);
+    const under = tone(P.night, V);
+    const glass = tone(P.slate, V);
+    const tall = near ? 6 : 4;
+    const top = y - tall;
+    ink.rect(x0, top, len, 1, roof);
+    if (near) ink.rect(x0, top + 1, len, 1, roofShade);
+    const band = near ? top + 2 : top + 1;
+    const rows = near ? 2 : 1;
+    ink.rect(x0, band, len, rows, body);
+    // windows two wide with a pillar between, clear of the ends
+    for (let x = x0 + 2; x + 1 < x0 + len - 1; x += 4) {
+      if (night) {
+        ink.rect(x, band, 2, rows, P.goldLight);
+      } else {
+        ink.rect(x, band, 2, rows, glass);
+        if (near) ink.px(x, band, roofShade);
+      }
+    }
+    ink.rect(x0, band + rows, len, 1, body);
+    ink.rect(x0, y - 1, len, 1, under);
+    if (i === 0) {
+      const nose = line === 0 ? x0 + len - 1 : x0;
+      // the cab's windscreen at the nose end, and its lamp below
+      ink.rect(nose, band, 1, rows, glass);
+      ink.px(nose, band + rows, night ? P.white : tone(P.gold, V));
+    }
+  };
+
   const drawTrain = (s: Surface, t: number): void => {
     for (const line of [0, 1]) {
       const V = RAIL.mid + (line === 0 ? -1.3 : 1.3);
@@ -644,33 +820,9 @@ export function makeLife(
         const Xa = head - (line === 0 ? 1 : -1) * i * (carLen + 1);
         const x0 = Math.round(view.cx + (Xa - carLen / 2) * sc);
         const x1 = Math.round(view.cx + (Xa + carLen / 2) * sc) - 1;
-        if (x1 < -2 || x0 > w + 2) continue;
-        const len = Math.max(2, x1 - x0);
-        const tall = sc > 0.8 ? 3 : 2;
-        ink.rect(
-          x0,
-          y - tall,
-          len,
-          1,
-          tone(line === 0 ? P.steelHi : P.chalk, V),
-        );
-        ink.rect(
-          x0,
-          y - tall + 1,
-          len,
-          tall - 1,
-          tone(line === 0 ? P.awayDark : P.goldDark, V),
-        );
-        if (night) {
-          for (let x = x0 + 1; x < x0 + len - 1; x += 2)
-            ink.px(x, y - 1, P.goldLight);
-        } else if (tall === 3) {
-          ink.rect(x0 + 1, y - 2, len - 2, 1, tone(P.slate, V));
-        }
-        if (i === 0) {
-          const nose = line === 0 ? x0 + len - 1 : x0;
-          ink.px(nose, y - 1, night ? P.white : tone(P.gold, V));
-        }
+
+        if (x1 < -4 || x0 > w + 4) continue;
+        trainCar(x0, Math.max(4, x1 - x0), y, sc > 1.6, line, i, V);
       }
     }
   };
@@ -770,14 +922,16 @@ export function makeLife(
   );
   // along Stadium Road from the west and the east
   addPath(
-    [[-rs, ROAD.stadiumV1 + 1.6], [-150, ROAD.stadiumV1 + 1.6], gate(-150)],
+    [[-rs, ROAD.stadiumV1 + 1.6], [-162, ROAD.stadiumV1 + 1.6], gate(-150)],
     5,
     0,
     true,
     1.2,
   );
+  // (it keeps to the kerb a little longer: the mascot stands on the lawn just inside the
+  // corner, stadium-mascot.ts)
   addPath(
-    [[-rs, ROAD.stadiumV1 + 1.4], [-120, ROAD.stadiumV1 + 2], gate(-127.5)],
+    [[-rs, ROAD.stadiumV1 + 1.4], [-111, ROAD.stadiumV1 + 2], gate(-127.5)],
     4,
     0,
     true,
@@ -883,8 +1037,9 @@ export function makeLife(
     path: Path,
     wk: Path["walkers"][number],
     t: number,
+    everyone = false,
   ): boolean => {
-    if (walking < 1) {
+    if (walking < 1 && !everyone) {
       const lap = Math.floor((t + wk.shift) / wk.lap);
       if (h2(wk.key, lap + 31337) >= walking) return false;
     }
@@ -903,13 +1058,14 @@ export function makeLife(
         const X = wayOut.X;
         const V = wayOut.V;
         const p = project(view, X, V);
-        if (p.x < -4 || p.x > w + 4 || p.y > h + 6 || p.y < hy) continue;
+        if (p.x < -8 || p.x > w + 8 || p.y > h + 12 || p.y < hy) {
+          continue;
+        }
         const cls = sizeClass(p.s);
+        const size = sizeStep(p.s);
         ink.V = V;
-        const jump =
-          roar > 0 && h2(wi, beat + 7) < roar * 0.7
-            ? 1 + (cls === 2 ? 1 : 0)
-            : 0;
+        const jump = roar > 0 && h2(wi, beat + 7) < roar * 0.7 ? leap(size) : 0;
+        footShadow(p.x, p.y, p.s);
         person(
           ink,
           p.x,
@@ -918,6 +1074,8 @@ export function makeLife(
           lookFor(wk, path.lit, V),
           step.waiting ? 0 : (beat + wi) % 2,
           jump,
+          awayFrom(path, step.d, wk.lat),
+          size,
         );
       }
     }
@@ -926,9 +1084,15 @@ export function makeLife(
   // ---- supporters standing about --------------------------------------------
   const standers: Stander[] = [];
   let standKey = 500;
-  const stand = (X: number, V: number, kind: number, lit: boolean): void => {
+  const stand = (
+    X: number,
+    V: number,
+    kind: number,
+    lit: boolean,
+    back = false,
+  ): void => {
     const p = project(view, X, V);
-    if (p.x < -4 || p.x > w + 4 || p.y > h + 6 || p.y < hy) return;
+    if (p.x < -8 || p.x > w + 8 || p.y > h + 12 || p.y < hy) return;
     const key = standKey++;
     // Nobody stands about on Stadium Road: the cars would drive through them, and some of
     // the groups by the wall reach that far out. (The key is still used up, so everybody
@@ -940,6 +1104,7 @@ export function makeLife(
       x: p.x,
       y: p.y,
       cls: sizeClass(p.s),
+      s: p.s,
       look: personLook(
         lit ? light.lit : (c) => tone(c, V),
         h2(key, 3),
@@ -947,6 +1112,7 @@ export function makeLife(
         club,
       ),
       key,
+      back,
     });
   };
   // queues at the turnstiles, a steward at each
@@ -958,11 +1124,14 @@ export function makeLife(
       for (const col of [-0.75, 0.75]) {
         if (h2(b * 9 + j, col > 0 ? 1 : 2) < 0.12) continue;
         const q = wallPoint(a, 1.018 + j * 0.0125);
+        // facing the turnstile: from behind on the near side of the ground
+        const facing = Math.sin(a) < 0;
         stand(
           q.X + col * Math.sin(a),
           q.V - col * Math.cos(a),
           awayGate ? 1 : 0,
           true,
+          facing,
         );
       }
     }
@@ -996,7 +1165,7 @@ export function makeLife(
   }
   // at the bus stops, in the park, by the coaches
   for (let i = 0; i < 5; i++)
-    stand(-96 - i * 1.7, ROAD.stadiumV0 - 1.8, i === 1 ? 3 : 0, false);
+    stand(-96 - i * 1.7, ROAD.stadiumV0 - 1.8, i === 1 ? 3 : 0, false, true);
   for (let i = 0; i < 4; i++) stand(212 + i * 3, 86 + (i % 2) * 5, 3, false);
   for (let i = 0; i < 6; i++)
     stand(-196 + (i % 3) * 2, 34 - Math.floor(i / 3) * 14, 1, false);
@@ -1008,13 +1177,13 @@ export function makeLife(
     for (const p of standers) {
       ink.V = p.V;
       const shuffle = h2(p.key, beat) < 0.14 ? 1 : 0;
+      const size = sizeStep(p.s);
       const jump =
-        roar > 0 && h2(p.key, fast + 3) < roar * 0.75
-          ? p.cls === 2
-            ? 2
-            : 1
-          : 0;
-      person(ink, p.x, p.y, p.cls, p.look, shuffle, jump);
+        roar > 0 && h2(p.key, fast + 3) < roar * 0.75 ? leap(size) : 0;
+      footShadow(p.x, p.y, p.s);
+      // (a jump for a goal turns them round to cheer)
+      const back = p.back && !jump;
+      person(ink, p.x, p.y, p.cls, p.look, shuffle, jump, back, size);
     }
   };
 
@@ -1065,6 +1234,8 @@ export function makeLife(
   /** How many of them can be on their way at once. */
   const PIE_MOST = Math.ceil((pieWay.len / PIE_PACE + CYCLE) / SERVE);
   /** Everybody walking off with a pie at time t: fn(how many turns ago, which turn, X, V, waiting). */
+  /** How far along the pie's way the one pieWalkers is telling of is. */
+  let pieAt = 0;
   const pieWalkers = (
     t: number,
     fn: (
@@ -1082,6 +1253,7 @@ export function makeLife(
       walkAt(piePlans[mod(served + 1, PIE_PLANS)], PIE_PACE, tau, place);
       if (place.d >= pieWay.len) continue;
       const q = wayPoint(pieWay, place.d, 0);
+      pieAt = place.d;
       fn(ago, served, q.X, q.V, place.waiting);
     }
   };
@@ -1099,10 +1271,14 @@ export function makeLife(
       const X = a.X + (b.X - a.X) * move + (j === QUEUE ? (1 - move) * 5 : 0);
       const V = a.V + (b.V - a.V) * move;
       const p = project(view, X, V);
-      if (p.x < -4 || p.x > w + 4 || p.y > h + 6 || p.y < hy) continue;
+      if (p.x < -8 || p.x > w + 8 || p.y > h + 12 || p.y < hy) {
+        continue;
+      }
       ink.V = V;
       const who = (((turn + j) % 16) + 16) % 16;
-      const jump = roar > 0 && h2(who, beat + 3) < roar * 0.7 ? 1 : 0;
+      const jump = roar > 0 && h2(who, beat + 3) < roar * 0.7 ? 2 : 0;
+      footShadow(p.x, p.y, p.s);
+      // facing the hatch, up the screen
       person(
         ink,
         p.x,
@@ -1111,6 +1287,8 @@ export function makeLife(
         queueLooks[who],
         move > 0 && move < 1 ? beat % 2 : 0,
         jump,
+        jump === 0,
+        sizeStep(p.s),
       );
     }
     // those who have been served walk off with a pie, one every turn
@@ -1120,7 +1298,8 @@ export function makeLife(
       if (p.x < 0 || p.x >= w || p.y >= h || p.y < hy) return;
       ink.V = V;
       const who = mod(served, 16);
-      const jump = roar > 0 && h2(who, beat + 3) < roar * 0.7 ? 1 : 0;
+      const jump = roar > 0 && h2(who, beat + 3) < roar * 0.7 ? 2 : 0;
+      footShadow(p.x, p.y, p.s);
       person(
         ink,
         p.x,
@@ -1129,6 +1308,8 @@ export function makeLife(
         queueLooks[who],
         waiting ? 0 : (stride + ago) % 2,
         jump,
+        jump === 0 && awayFrom(pieWay, pieAt),
+        sizeStep(p.s),
       );
     });
   };
@@ -1147,6 +1328,7 @@ export function makeLife(
       const p = project(view, kd.X + ((step + i) % 3) - 1, kd.V);
       if (p.x < 0 || p.x >= w || p.y >= h) continue;
       ink.V = kd.V;
+      personLampShadow(p.x, p.y, p.s);
       person(
         ink,
         p.x,
@@ -1154,6 +1336,9 @@ export function makeLife(
         sizeClass(p.s),
         personLook((c) => tone(c, kd.V), 0.13 * (i + 1), kd.kind, club),
         step % 2,
+        0,
+        false,
+        sizeStep(p.s),
       );
     }
     const leg = t / 1.7;
@@ -1167,7 +1352,16 @@ export function makeLife(
       0.6 + 2 * u * (1 - u),
     );
     ink.V = from.V - 20;
-    ink.px(bp.x, bp.y, tone(P.white, 80));
+
+    // a ball two pixels across, lit at the top left, over its shadow on the grass
+    const gp = project(
+      view,
+      from.X + (to.X - from.X) * u,
+      from.V + (to.V - from.V) * u,
+    );
+    ink.shadow(gp.x + 0.5, gp.y, 0.5, 0);
+    drawParkBall(ink, bp.x - 1, bp.y - 1, tone(P.white, 80), tone(P.mist, 80));
+
     // the dog walker goes round the pond; the dog runs ahead
     const a = -t / 26;
     for (const [lag, isDog] of [
@@ -1179,11 +1373,24 @@ export function makeLife(
       const p = project(view, X, V);
       if (p.x < 0 || p.x >= w || p.y >= h) continue;
       ink.V = V;
-      if (isDog) {
+      if (isDog && true) {
+        drawDog(
+          ink,
+          p.x,
+          p.y,
+          sizeClass(p.s) > 0,
+          Math.sin(a - lag) < 0,
+          step % 2,
+          tone(P.wood, V),
+          tone(P.woodDark, V),
+          tone(P.ink, V),
+        );
+      } else if (isDog) {
         ink.px(p.x, p.y - 1, tone(P.wood, V));
         if (sizeClass(p.s) > 0)
           ink.px(p.x + (step % 2 === 0 ? 1 : -1), p.y - 1, tone(P.woodDark, V));
       } else {
+        personLampShadow(p.x, p.y, p.s);
         person(
           ink,
           p.x,
@@ -1191,6 +1398,9 @@ export function makeLife(
           sizeClass(p.s),
           personLook((c) => tone(c, V), 0.77, 3, club),
           step % 2,
+          0,
+          false,
+          sizeStep(p.s),
         );
       }
     }
@@ -1200,7 +1410,18 @@ export function makeLife(
       const p = project(view, X, POND.v - 4 + i * 2);
       if (p.x < 0 || p.x >= w || p.y >= h) continue;
       ink.V = POND.v;
-      ink.px(p.x, p.y, tone(i === 1 ? P.white : P.wood, POND.v));
+
+      const white = i === 1;
+      drawDuck(
+        ink,
+        p.x,
+        p.y,
+        Math.cos(t / (5 + i) + i) < 0,
+        tone(white ? P.white : P.wood, POND.v),
+        tone(white ? P.steelHi : P.woodDark, POND.v),
+        tone(white ? P.white : P.grassDark, POND.v),
+        tone(P.gold, POND.v),
+      );
     }
   };
 
@@ -1216,7 +1437,7 @@ export function makeLife(
     floodlit: boolean,
   ): void => {
     const p = project(view, X, V, H);
-    if (p.x < 2 || p.x > w - 2) return;
+    if (p.x < 4 || p.x > w - 4) return;
     const key = flagKey++;
     const pair = [
       [P.home, P.homeLight],
@@ -1236,23 +1457,25 @@ export function makeLife(
       a: g(pair[0]),
       b: g(pair[1]),
       post: g(P.steelHi),
+      postShade: g(P.mist),
       key,
     });
   };
-  // round the far rim of the roof
+  // round the far rim of the roof (sizes chosen on half the scale: `k1`)
+  const k1 = k / 2;
   for (let deg = 12; deg <= 168; deg += 13) {
     const q = wallPoint((deg * Math.PI) / 180, 1.03);
-    addFlag(q.X, q.V, HR, k > 0.7 ? 5 : 3, k > 0.7, false);
+    addFlag(q.X, q.V, HR, (k1 > 0.7 ? 5 : 3) * 2, k1 > 0.7, false);
   }
   // down both edges of the plaza
   for (let V = ROAD.stadiumV0 - 19; V > -240; V -= 18) {
     for (const side of [-1, 1]) {
-      const sc = scaleAt(view, V);
+      const sc = scaleAt(view, V) / 2;
       addFlag(
         side * (PLAZA_HALF - 3),
         V,
         0,
-        Math.round(Math.min(18, 8.5 * sc)),
+        Math.round(Math.min(18, 8.5 * sc)) * 2,
         sc > 1.4,
         true,
       );
@@ -1261,24 +1484,11 @@ export function makeLife(
   const drawFlags = (s: Surface, t: number, roar: number): void => {
     const rate = roar > 0.3 ? 7 : 3;
     for (const f of flags) {
-      ink.V = f.V - (f.pole > 6 ? 0 : 60);
+      ink.V = f.V - (f.pole > 12 ? 0 : 60);
       const step = (Math.floor(t * rate) + f.key) % 4;
-      ink.rect(f.x, f.y - f.pole, 1, f.pole, f.post);
-      const top = f.y - f.pole;
-      if (f.big) {
-        // 6 x 4, the fly end lifts and drops
-        const lift = step === 1 ? -1 : step === 3 ? 1 : 0;
-        ink.rect(f.x + 1, top, 3, 4, f.a);
-        ink.rect(f.x + 4, top + lift, 3, 4, f.a);
-        ink.rect(f.x + 1, top, 3, 1, f.b);
-        ink.rect(f.x + 4, top + lift, 3, 1, f.b);
-        ink.rect(f.x + 1, top + 2, 6, 1, f.b);
-      } else {
-        const lift = step % 2;
-        ink.rect(f.x + 1, top, 2, 2, f.a);
-        ink.rect(f.x + 3, top + lift, 1, 2, f.a);
-        ink.px(f.x + 1, top, f.b);
-      }
+
+      const { x, y, pole, big, a, b, post, postShade } = f;
+      drawFlag(ink, x, y, pole, big, step, a, b, post, postShade);
     }
   };
 
@@ -1304,32 +1514,44 @@ export function makeLife(
     shade: light.lit(P.grassDeep),
     ball: light.lit(P.white),
     rim: light.lit(P.ink),
+    hair: light.lit(P.hairBrown),
   };
-  const taken = new Int32Array(PLAYERS + 1);
+  const spotX = new Int32Array(PLAYERS);
+  const spotY = new Int32Array(PLAYERS);
+  const order = Array.from({ length: PLAYERS }, (_, i) => i);
   const drawMatch = (s: Surface, t: number, roar: number): number => {
-    if (k < 0.3) return 0;
-    // stepped: eight moves a second
-    matchAt(game, Math.floor(t * 8) / 8);
+    if (k1 < 0.3) return 0;
+    // every frame: they move a whole pixel at a time, as smoothly as they run
+    matchAt(game, t);
     ink.V = -400;
-    const tall = k >= 0.8;
+    const tall = k1 >= 0.8;
+    drawPlayers(tall);
+    return crowdMurmur(s, t, roar);
+  };
+  /**
+   * The match: the players, 2 x 6 each (drawTinyPlayer), standing or in their stride,
+   * the far ones first so the near ones stand in front, and the ball 2 x 2 with a dark
+   * ring on the grass, in its place among them. Nobody is moved to make room: the runs
+   * keep the players apart (stadium-match.ts), so nobody jumps.
+   */
+  const drawPlayers = (tall: boolean): void => {
     for (let i = 0; i < PLAYERS; i++) {
       const p = project(view, game.x[i], game.v[i]);
-      // never two on one pixel
-      let x = p.x;
-      let key = p.y * 4096 + x;
-      for (let tries = 0; tries < 3; tries++) {
-        let clash = false;
-        for (let j = 0; j < i; j++) {
-          if (taken[j] === key) {
-            clash = true;
-            break;
-          }
-        }
-        if (!clash) break;
-        x += tries === 1 ? -2 : 1;
-        key = p.y * 4096 + x;
+      spotX[i] = p.x;
+      spotY[i] = p.y;
+    }
+    order.sort((a, b) => spotY[a] - spotY[b] || spotX[a] - spotX[b] || a - b);
+    const g = project(view, game.ballX, game.ballV);
+    const b = project(view, game.ballX, game.ballV, game.ballH);
+    if (b.y < g.y - 2) ink.rect(g.x, g.y, 2, 1, kit.shade);
+    // the ball on the grass is drawn among the players at its depth; in the air, over them
+    const ballRow = b.y < g.y - 2 ? Infinity : g.y;
+    let ballDrawn = false;
+    for (const i of order) {
+      if (!ballDrawn && spotY[i] > ballRow) {
+        drawMatchBall(tall, b.x, b.y);
+        ballDrawn = true;
       }
-      taken[i] = key;
       const j = i % 11;
       const shirt =
         i === REFEREE
@@ -1341,55 +1563,51 @@ export function makeLife(
             : i < 11
               ? kit.home
               : kit.away;
-      if (tall) {
-        ink.px(x + 1, p.y, kit.shade);
-        ink.px(x, p.y - 2, kit.heads[i % kit.heads.length]);
-        ink.px(x, p.y - 1, shirt);
-        ink.px(
-          x,
-          p.y,
-          i === REFEREE || j === 0
-            ? kit.dark
-            : i < 11
-              ? kit.homeShorts
-              : kit.awayShorts,
-        );
-      } else {
-        ink.px(x, p.y - 1, shirt);
-      }
+      const shorts =
+        i === REFEREE || j === 0
+          ? kit.dark
+          : i < 11
+            ? kit.homeShorts
+            : kit.awayShorts;
+      const skin = kit.heads[i % 4];
+      const hair =
+        i % 3 === 0
+          ? kit.heads[4]
+          : skin === kit.heads[2]
+            ? kit.heads[4]
+            : kit.hair;
+      drawTinyPlayer(
+        ink,
+        spotX[i],
+        spotY[i],
+        tall,
+        skin,
+        hair,
+        shirt,
+        shorts,
+        kit.shade,
+        game.stride[i],
+      );
     }
-    const g = project(view, game.ballX, game.ballV);
-    const b = project(view, game.ballX, game.ballV, game.ballH);
-    if (b.y < g.y - 1) ink.px(g.x, g.y, kit.shade);
-    // keep the ball off the shirts
-    let bx = b.x;
-    const by = tall ? b.y : b.y - 1;
-    for (let j = 0; j < PLAYERS; j++) {
-      const py = Math.floor(taken[j] / 4096);
-      const px = taken[j] - py * 4096;
-      if (px === bx && (py - 1 === by || (tall && py - 2 === by))) {
-        bx += game.ballX >= game.x[j] ? 1 : -1;
-        break;
-      }
-    }
+    if (!ballDrawn) drawMatchBall(tall, b.x, b.y);
+  };
+  /** The ball, 2 x 2, its bottom left on (x, y + 1) seen from above; near, a dark ring on the grass round it. */
+  const drawMatchBall = (tall: boolean, x: number, y: number): void => {
+    const by = tall ? y - 1 : y - 3;
     if (tall) {
-      // One white pixel is lost on pale grass and on the lines: it gets a dark edge all
-      // round, on the grass only (never over a player).
-      for (let n = 0; n < 4; n++) {
-        const x = bx + (n === 0 ? -1 : n === 1 ? 1 : 0);
-        const y = by + (n === 2 ? -1 : n === 3 ? 1 : 0);
-        let free = true;
-        for (let j = 0; j < PLAYERS && free; j++) {
-          const py = Math.floor(taken[j] / 4096);
-          const px = taken[j] - py * 4096;
-          if (px === x && y <= py && y >= py - 2) free = false;
-        }
-        if (free) ink.px(x, y, kit.rim);
+      for (let n = 0; n < 8; n++) {
+        ink.px(
+          x + [-1, -1, 2, 2, 0, 1, 0, 1][n],
+          by + [0, 1, 0, 1, -1, -1, 2, 2][n],
+          kit.rim,
+        );
       }
     }
-    ink.px(bx, by, kit.ball);
+    ink.rect(x, by, 2, 2, kit.ball);
+  };
+  /** The crowd: a murmur, a gasp, and for a goal arms up all round with a wave through it. */
+  const crowdMurmur = (s: Surface, t: number, roar: number): number => {
     if (roar > 0 || game.cheer <= 0) return game.cheer;
-    // the crowd: a murmur, a gasp, and for a goal arms up all round with a wave through it
     const data = s.data;
     const beat = Math.floor(t * 8);
     const n = bowl.crowdAt.length;
@@ -1397,7 +1615,7 @@ export function makeLife(
     const wave = game.sinceGoal >= 0.4;
     const span = Math.max(1, bowl.layer.w);
     const front = bowl.x + ((game.sinceGoal * 0.42) % 1) * span;
-    const band = Math.max(3, span * 0.07);
+    const band = Math.max(6, span * 0.07);
     // it is the home side's goal: the away end keeps its arms down and its cameras away
     const goal = game.sinceGoal >= 0;
     for (let i = 0; i < n; i++) {
@@ -1430,14 +1648,16 @@ export function makeLife(
       for (let j = 0; j < n; j++) {
         const age =
           (((t * (ch.big ? 0.16 : 0.24) + j / n + h2(i, 90)) % 1) + 1) % 1;
-        const rise = Math.round(age * (ch.big ? 15 : 8));
-        const x = ch.x + Math.round(age * age * (ch.big ? 9 : 5));
+        const rise = Math.round(age * (ch.big ? 15 : 8) * 2);
+        const x = ch.x + Math.round(age * age * (ch.big ? 9 : 5) * 2);
         const y = ch.y - rise;
         if (age > 0.86) continue;
         const col = age < 0.5 ? smokeA : smokeB;
-        if (age < 0.3) s.px(x, y, col);
-        else if (age < 0.6 || !ch.big) s.rect(x, y - 1, 2, 2, col);
-        else s.rect(x - 1, y - 1, 3, 2, col);
+
+        // the same puffs with twice the pixels: 2 x 2, then rounder and bigger
+        if (age < 0.3) drawPuff(s, x, y, 0, col);
+        else if (age < 0.6 || !ch.big) drawPuff(s, x, y - 2, 1, col);
+        else drawPuff(s, x - 2, y - 2, 2, col);
       }
     }
     const blade = distant(light, P.white, 0.7);
@@ -1448,32 +1668,33 @@ export function makeLife(
         s.line(
           tb.x,
           tb.y,
-          tb.x + Math.round(Math.sin(a) * 3.4),
-          tb.y - Math.round(Math.cos(a) * 3.4),
+          tb.x + Math.round(Math.sin(a) * 3.4 * 2),
+          tb.y - Math.round(Math.cos(a) * 3.4 * 2),
           blade,
         );
       }
+      // the hub, the nacelle behind it
+      s.rect(tb.x - 1, tb.y - 1, 2, 2, blade);
     }
     if (night && Math.floor(t * 1.1) % 2 === 0) {
-      for (const b of town.beacons) s.px(b.x, b.y, P.ledRed);
+      for (const b of town.beacons) s.rect(b.x, b.y, 2, 2, P.ledRed);
     }
     if (sky.birds) {
       // gulls below the camera, crossing the town
       const wing = Math.floor(t * 4) % 2;
       const gull = light.env(P.white);
-      const lap = w + 80;
+      const lap = w + 160;
       for (let f = 0; f < 2; f++) {
-        const bx = ((t * (5 + f * 2) + f * lap * 0.6) % lap) - 40;
+        const bx = ((t * (5 + f * 2) * 2 + f * lap * 0.6) % lap) - 80;
         const by =
           hy +
           Math.round((0.16 + f * 0.19) * (h - hy)) +
-          Math.round(3 * Math.sin(t / 4 + f));
+          Math.round(6 * Math.sin(t / 4 + f));
         for (let i = 0; i < 4 + f; i++) {
-          const x = Math.round(bx - i * 6 - (i % 2) * 2);
-          const y = by + (i % 3) * 3 - i;
-          s.px(x, y, gull);
-          s.px(x - 1, y - 1 + wing, gull);
-          s.px(x + 1, y - 1 + wing, gull);
+          const x = Math.round(bx - (i * 6 + (i % 2) * 2) * 2);
+          const y = by + ((i % 3) * 3 - i) * 2;
+
+          drawGull(s, x, y, wing === 0, gull);
         }
       }
     }
@@ -1492,12 +1713,12 @@ export function makeLife(
   const drawCloudShadows = (s: Surface, t: number): void => {
     if (!sunny) return;
     const landH = h - hy;
-    const lap = w + 260;
+    const lap = w + 520;
     for (let i = 0; i < 3; i++) {
-      const rx = Math.round(Math.max(26, w * (0.11 + 0.03 * i)));
-      const ry = Math.max(4, Math.round(landH * (0.05 + 0.02 * i)));
+      const rx = Math.round(Math.max(52, w * (0.11 + 0.03 * i)));
+      const ry = Math.max(8, Math.round(landH * (0.05 + 0.02 * i)));
       const cx = Math.round(
-        ((t * 1.6 + i * lap * 0.37 + h2(i, 70) * lap) % lap) - 130,
+        ((t * 1.6 * 2 + i * lap * 0.37 + h2(i, 70) * lap) % lap) - 260,
       );
       const cy = hy + Math.round(landH * (0.2 + 0.27 * i + 0.1 * h2(i, 71)));
       for (let y = Math.max(hy, cy - ry); y <= Math.min(h - 1, cy + ry); y++) {
@@ -1548,18 +1769,17 @@ export function makeLife(
     const top = project(view, 0, OUT_B, HR);
     const foot = project(view, 0, -PITCH_V - 8, 0);
     const halfW = Math.round(OUT_A * k * 0.82);
+    // the caps are on half the scale (`k1`), and the sizes twice that
+    const grow = Math.min(1.3, k1 + 0.3) * 2;
     // flares in the home end: red smoke climbing
     if (roar > 0.25) {
       for (let i = 0; i < 3; i++) {
         const base = project(view, -PITCH_X - 20 - i * 4, -18 + i * 18, 5);
         for (let j = 0; j < 5; j++) {
           const age = (((t * 0.5 + j / 5 + i * 0.13) % 1) + 1) % 1;
-          const r = Math.max(
-            1,
-            Math.round((1 + age * 4) * Math.min(1.3, k + 0.3) * roar),
-          );
-          const x = base.x + Math.round(age * 6);
-          const y = base.y - Math.round(age * 16 * Math.min(1.3, k + 0.3));
+          const r = Math.max(2, Math.round((1 + age * 4) * grow * roar));
+          const x = base.x + Math.round(age * 6 * 2);
+          const y = base.y - Math.round(age * 16 * grow);
           s.disc(
             x,
             y,
@@ -1568,8 +1788,8 @@ export function makeLife(
             age < 0.35 ? 1 : age < 0.7 ? 0.5 : 0.25,
           );
         }
-        s.px(base.x, base.y, P.white);
-        s.px(base.x, base.y - 1, P.ledRed);
+        s.rect(base.x, base.y, 2, 2, P.white);
+        s.rect(base.x, base.y - 2, 2, 2, P.ledRed);
       }
     }
     // ticker tape over the bowl
@@ -1577,14 +1797,17 @@ export function makeLife(
     const span = Math.max(8, foot.y - top.y);
     for (let i = 0; i < pieces; i++) {
       const fall =
-        (((t * (9 + h2(i, 61) * 9) + h2(i, 62) * span) % span) + span) % span;
+        (((t * (9 + h2(i, 61) * 9) * 2 + h2(i, 62) * span) % span) + span) %
+        span;
       const x =
         view.cx +
-        Math.round((h2(i, 63) - 0.5) * 2 * halfW + Math.sin(t * 2 + i) * 2);
+        Math.round((h2(i, 63) - 0.5) * 2 * halfW + Math.sin(t * 2 + i) * 2 * 2);
       const y = top.y + Math.round(fall);
       const c = TAPE[i % TAPE.length];
-      s.px(x, y, c);
-      if (i % 3 === 0) s.px(x + (Math.floor(t * 6 + i) % 2), y + 1, c);
+
+      // a strip of paper turning as it falls: flat, then edge on
+      if (Math.floor(t * 6 + i) % 2 === 0) s.rect(x, y, 2, 1, c);
+      else s.rect(x, y, 1, 2, c);
     }
     // fireworks from the roof, over the far rim (never into the logo's sky)
     if (roar > 0.45) {
@@ -1597,17 +1820,16 @@ export function makeLife(
         const deg = 28 + ((i * 31 + shot * 47) % 124);
         const q = wallPoint((deg * Math.PI) / 180, 1.0);
         const base = project(view, q.X, q.V, HR);
-        const rise = Math.round(
-          (16 + ((i * 7 + shot * 5) % 12)) * Math.min(1.25, k + 0.35),
-        );
+        const burst = Math.min(1.25, k1 + 0.35) * 2;
+        const rise = Math.round((16 + ((i * 7 + shot * 5) % 12)) * burst);
         const colors = BURSTS[mod(i + shot, BURSTS.length)];
         if (u < 0.3) {
           const y = base.y - Math.round((u / 0.3) * rise);
-          s.rect(base.x, y, 1, 3, P.goldLight);
+          s.rect(base.x, y, 1, 6, P.goldLight);
         } else {
           const e = (u - 0.3) / 0.7;
-          const r = (3 + e * 9) * Math.min(1.25, k + 0.35) * (0.6 + 0.4 * roar);
-          const cy = base.y - rise + Math.round(e * e * 4);
+          const r = (3 + e * 9) * burst * (0.6 + 0.4 * roar);
+          const cy = base.y - rise + Math.round(e * e * 4 * 2);
           const rays = 12;
           for (let a = 0; a < rays; a++) {
             const an = (a / rays) * TAU + i;
@@ -1622,7 +1844,7 @@ export function makeLife(
               );
             }
           }
-          if (e < 0.2) s.disc(base.x, cy, 1, P.white);
+          if (e < 0.2) s.disc(base.x, cy, 2, P.white);
         }
       }
       s.popClip();
@@ -1630,8 +1852,8 @@ export function makeLife(
     // the floodlights flare
     if (beat % 4 < 2) {
       for (const pl of town.pylons) {
-        s.disc(pl.x, pl.y, Math.round(2 + roar * 5), P.white, 0.25);
-        s.disc(pl.x, pl.y, Math.round(1 + roar * 3), P.white, 0.5);
+        s.disc(pl.x, pl.y, Math.round((2 + roar * 5) * 2), P.white, 0.25);
+        s.disc(pl.x, pl.y, Math.round((1 + roar * 3) * 2), P.white, 0.5);
       }
     }
   };
@@ -1640,7 +1862,7 @@ export function makeLife(
   // A few small rockets go up from the roof over the far stands when the home side
   // scores, and burst in the club's colours and gold; bigger and longer by night. Each
   // goes up where its burst stays clear of the logo's sky and of the airship.
-  const fwScale = Math.min(1.25, k + 0.35);
+  const fwScale = Math.min(1.25, k1 + 0.35) * 2;
   const burstFor = night ? BURST_NIGHT : BURST_DAY;
   const rockets: ({ x: number; y: number; top: number; r: number } | null)[] =
     [];
@@ -1662,16 +1884,18 @@ export function makeLife(
       const base = project(view, q.X, q.V, HR);
       const top = base.y - rise;
       const box: Zone = {
-        x: base.x - r - 1,
-        y: top - r - 1,
-        w: r * 2 + 3,
-        h: base.y - top + r + 2,
+        x: base.x - r - 2,
+        y: top - r - 2,
+        w: r * 2 + 6,
+        h: base.y - top + r + 4,
       };
-      if (box.y <= view.logoH + 1 || box.x < 1 || box.x + box.w >= w - 1) {
+      if (box.y <= view.logoH + 2 || box.x < 2 || box.x + box.w >= w - 2) {
         continue;
       }
       if (clear.some((z) => meets(z, box))) continue;
-      if (rockets.some((o) => o && Math.abs(o.x - base.x) < r + 2)) continue;
+      if (rockets.some((o) => o && Math.abs(o.x - base.x) < r + 4)) {
+        continue;
+      }
       found = { x: base.x, y: base.y, top, r };
     }
     rockets.push(found);
@@ -1709,9 +1933,11 @@ export function makeLife(
         // the climb slows as it goes
         const u = a / RISE;
         const y = rk.y - Math.round(u * (2 - u) * (rk.y - rk.top));
-        s.px(rk.x, y, P.goldLight);
-        s.px(rk.x, y + 1, P.gold);
-        if (night) s.px(rk.x, y + 2, P.goldDark);
+
+        // a 2 x 2 spark and a thin trail behind it
+        s.rect(rk.x, y, 2, 2, P.goldLight);
+        s.rect(rk.x, y + 2, 1, 2, P.gold);
+        if (night) s.rect(rk.x, y + 4, 1, 2, P.goldDark);
         continue;
       }
       const e = (a - RISE) / burstFor;
@@ -1726,7 +1952,7 @@ export function makeLife(
         const glow = Math.max(1, Math.round(r * 0.9));
         s.disc(rk.x, cy, glow, P.goldLight, e < 0.2 ? 0.3 : 0.15);
       }
-      if (e < 0.16) s.disc(rk.x, cy, e < 0.08 ? 2 : 1, P.white);
+      if (e < 0.16) s.disc(rk.x, cy, (e < 0.08 ? 2 : 1) * 2, P.white);
       const n = night ? 12 : 10;
       for (let j = 0; j < n; j++) {
         // the last of it twinkles out
@@ -1739,10 +1965,10 @@ export function makeLife(
         const head = (night && e < 0.45 ? SPARK_A : SPARK_B)[pal][j % 2];
         const tail = (night ? SPARK_B : SPARK_C)[pal][j % 2];
         // a streak from the middle outwards: bright at its head
-        const len = e < 0.55 ? (night ? 3 : 2) : 1;
+        const len = (e < 0.55 ? (night ? 3 : 2) : 1) * 2;
         for (let q = len; q >= 1; q--) {
           const d = r - (q - 1) * 1.2;
-          if (d < 1) continue;
+          if (d < 2) continue;
           s.px(
             rk.x + Math.round(c * d),
             cy + Math.round(sn * d),
@@ -1763,13 +1989,15 @@ export function makeLife(
       s.px(l.x, l.y, P.goldLight);
     }
     for (const pl of town.pylons) {
-      if ((beat + pl.x) % 5 === 0) s.px(pl.x + 1, pl.y, P.goldLight);
+      if ((beat + pl.x) % 5 === 0) s.rect(pl.x + 2, pl.y, 2, 2, P.goldLight);
     }
   };
 
   return {
     launches: rockets.flatMap((r, i) => (r ? [launchOf(i)] : [])),
     draw(s: Surface, t: number, roar: number): void {
+      // a town still being built after a change of light: one more slice of it
+      advanceTown(town);
       ink.target(s);
       drawCloudShadows(s, t);
       drawMatch(s, t, roar);
@@ -1787,10 +2015,10 @@ export function makeLife(
       drawRoar(s, t, roar);
       drawFireworks(s, t, roar);
     },
-    people(t, fn): void {
+    people(t, fn, everyone = false): void {
       for (const path of paths) {
         for (const wk of path.walkers) {
-          if (walkerAt(path, wk, t)) {
+          if (walkerAt(path, wk, t, everyone)) {
             fn(wayOut.X, wayOut.V, step.waiting, wk.key);
           }
         }

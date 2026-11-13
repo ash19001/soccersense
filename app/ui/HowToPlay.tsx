@@ -35,6 +35,8 @@ export interface HowToPlayLabels {
   career: string;
   /** Read out for each step of the ladder: "SUNDAY LEAGUE, from 90 points". */
   step: (tier: string, from: number) => string;
+  /** Small print at the foot of the card: that the game is independent (`strings.legal`). */
+  disclaimer?: string;
 }
 
 export interface HowToPlayShot {
@@ -172,6 +174,8 @@ function Card({
             </p>
           )}
         </section>
+
+        {labels.disclaimer && <p className="ss-legal">{labels.disclaimer}</p>}
       </div>
     </div>
   );

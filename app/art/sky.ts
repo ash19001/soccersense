@@ -77,7 +77,7 @@ function eveningColumn(w: number, sunX: number | undefined): number {
 /**
  * Where the sun is on a sky `w` wide with its horizon at `horizonY`. On the horizon line
  * at 0 degrees, then climbing on a sine, so it is still in view at noon: its highest
- * centre is `clearTop + r + 2`. It rises and sets in one column: about three quarters of
+ * centre is `clearTop + r + 4`. It rises and sets in one column: about three quarters of
  * the way across in the evening (or `sunX`), and the mirror image of that in the morning.
  * Below 0 degrees it sinks under the horizon and is gone by about -3.
  */
@@ -89,13 +89,13 @@ export function sunPosition(
   sunX?: number,
 ): SkyBody {
   const { elevation, morning } = light.sun;
-  const r = clamp(Math.round(3 + w / 40), 6, 10);
-  const top = clamp(clearTop, 0, horizonY) + r + 2;
+  const r = clamp(Math.round(6 + w / 40), 12, 20);
+  const top = clamp(clearTop, 0, horizonY) + r + 4;
   const track = Math.max(r, horizonY - top);
   const rise =
     elevation >= 0
       ? Math.sin((Math.min(elevation, 90) * Math.PI) / 180) * track
-      : elevation * Math.max(track / 57.3, (r + 2) / 3);
+      : elevation * Math.max(track / 57.3, (r + 4) / 3);
   const column = eveningColumn(w, sunX);
   return {
     x: morning ? w - column : column,
@@ -113,12 +113,13 @@ export function moonPosition(
   horizonY: number,
   clearTop = 0,
 ): SkyBody {
-  const r = clamp(Math.round(3 + w / 45), 6, 9);
+  // the same radius as menuLayout's `moonR` (layout.ts)
+  const r = clamp(Math.round(6 + w / 45), 12, 18);
   return {
     x: w - eveningColumn(w, undefined),
     y: Math.max(
       Math.round(horizonY * 0.4),
-      Math.round(clamp(clearTop, 0, horizonY)) + r + 2,
+      Math.round(clamp(clearTop, 0, horizonY)) + r + 4,
     ),
     r,
   };
@@ -155,11 +156,11 @@ export function drawSky(s: Surface, opts: SkyOptions): void {
     // The columns the clouds start clear of, each with the room it wants either side:
     // where the sun climbs in the evening and in the morning, and the moon.
     const eveningX = eveningColumn(w, opts.sunX);
-    const room = sun.r + 3;
+    const room = sun.r + 6;
     const clear: ClearColumn[] = [
       [eveningX, room],
       [w - eveningX, room],
-      [moon.x, moon.r + 2],
+      [moon.x, moon.r + 4],
     ];
     drawClouds(s, spec.cloudFar, t, seed, horizonY, density, FAR, clear);
     drawClouds(s, spec.cloudNear, t, seed, horizonY, density, NEAR, clear);
@@ -226,8 +227,11 @@ function backdrop(
   for (let i = 0; i < n - 1; i++) {
     const above = (i === 0 ? horizonY : edge[i - 1]) - edge[i];
     const below = edge[i] - (i === n - 2 ? 0 : edge[i + 1]);
-    soft.push(Math.min(2, Math.floor(Math.min(above, below) / 4)));
+    soft.push(Math.min(4, Math.floor(Math.min(above, below) / 4)));
   }
+  // How many of a boundary's dithered rows are checkerboard (the rest one dot in four): the
+  // first half of them.
+  const half = (k: number): number => Math.ceil(k / 2);
 
   const data = layer.data;
   for (let y = 0; y < horizonY; y++) {
@@ -256,7 +260,7 @@ function backdrop(
         const k = soft[i];
         if (up < k) {
           const other = bands[i + 1];
-          if (up < k - 1 || k === 1) {
+          if (up < half(k) || k === 1) {
             if (((x + y) & 1) === 0) c = other;
           } else if (((x - y) & 3) === 0) c = other;
         }
@@ -264,7 +268,7 @@ function backdrop(
         const k = soft[i - 1] ?? 0;
         if (down <= k) {
           const other = bands[i - 1];
-          if (down <= k - 1 || k === 1) {
+          if (down <= half(k) || k === 1) {
             if (((x + y) & 1) === 1) c = other;
           } else if (((x - y) & 3) === 1) c = other;
         }
@@ -301,9 +305,9 @@ function drawSun(
   // The glow draws in as the disc sinks under the horizon.
   const reach = 1 - clamp((y - horizonY) / (r + 1), 0, 1);
   if (reach > 0) {
-    s.disc(x, y, r + Math.round(6 * reach), outer, 0.25);
-    s.disc(x, y, r + Math.round(4 * reach), outer, 0.5);
-    s.disc(x, y, r + Math.round(2 * reach), inner);
+    s.disc(x, y, r + Math.round(12 * reach), outer, 0.25);
+    s.disc(x, y, r + Math.round(8 * reach), outer, 0.5);
+    s.disc(x, y, r + Math.round(4 * reach), inner);
   }
   s.disc(x, y, r, spec.sunDisc);
 }
@@ -324,28 +328,22 @@ function drawMoon(
   if (k > 0.97) return; // new moon: nothing to see
 
   // Halo and disc are built on their own layer in full-strength colours...
-  const reach = r + 6;
+  const reach = r + 12;
   const size = reach * 2 + 1;
   const layer = new Surface(size, size);
-  layer.disc(reach, reach, r + 6, spec.moonHalo, 0.25);
-  layer.disc(reach, reach, r + 4, spec.moonHalo, 0.5);
-  layer.disc(reach, reach, r + 2, spec.moonHalo);
+  layer.disc(reach, reach, r + 12, spec.moonHalo, 0.25);
+  layer.disc(reach, reach, r + 8, spec.moonHalo, 0.5);
+  layer.disc(reach, reach, r + 4, spec.moonHalo);
 
   const disc = r * 2 + 1;
   const m = new Surface(disc, disc);
   m.disc(r, r, r, spec.moonShade);
   // Lit from the top left: the shade is a thin limb on the bottom right.
   const face = new Surface(disc, disc);
-  face.disc(r - 1, r - 1, r, spec.moon);
+  face.disc(r - 2, r - 2, r, spec.moon);
   face.mask(m);
   m.blit(face, 0, 0);
-  // Two seas on a diagonal and one small crater: never two eyes and a mouth.
-  m.rect(r - 3, r - 4, 3, 1, spec.moonShade);
-  m.rect(r - 4, r - 3, 3, 2, spec.moonShade);
-  m.rect(r + 1, r + 1, 2, 1, spec.moonShade);
-  m.rect(r, r + 2, 3, 1, spec.moonShade);
-  m.px(r + 3, r - 2, spec.moonShade);
-  if (r >= 8) m.rect(r - 4, r + 3, 2, 1, spec.moonShade);
+  drawMoonSeas(m, r, spec.moon, spec.moonShade);
 
   // Cut the phase: each row keeps only its lit part.
   if (k > -0.97) {
@@ -394,11 +392,43 @@ function drawMoon(
   }
 }
 
+/**
+ * The moon's face, on its own layer `m` (radius `r`, centre (r, r)): two seas
+ * running on a diagonal from the upper left, a third low on the right, a ray crater and a
+ * few small ones. Never two eyes and a mouth. The seas are flat shade; a crater is a dark
+ * bowl lit on its lower right rim (the light comes from the top left).
+ */
+function drawMoonSeas(m: Surface, r: number, lit: Color, shade: Color): void {
+  const u = r / 18;
+  const at = (f: number): number => Math.round(f * u);
+  // the big sea, upper left, and the one joined to it below
+  m.ellipse(r - at(5), r - at(6), at(4.5), at(3), shade, true);
+  m.ellipse(r - at(8), r - at(2), at(3), at(2.5), shade, true);
+  m.ellipse(r - at(1), r - at(2), at(2.5), at(2), shade, true);
+  // a bay of light biting into it
+  m.rect(r - at(6), r - at(5), at(2), 1, lit);
+  // the sea low on the right
+  m.ellipse(r + at(4), r + at(4), at(4), at(2.5), shade, true);
+  m.ellipse(r + at(1), r + at(6), at(2.5), at(1.5), shade, true);
+  // a crater high on the right: a dark bowl, its lower right rim catching the light
+  const cx = r + at(6);
+  const cy = r - at(5);
+  m.disc(cx, cy, Math.max(1, at(2)), shade);
+  m.px(cx + Math.max(1, at(2)), cy + 1, lit);
+  m.px(cx + 1, cy + Math.max(1, at(2)), lit);
+  // small craters
+  m.rect(r - at(9), r + at(6), 2, 2, shade);
+  m.px(r - at(9) + 2, r + at(6) + 1, lit);
+  m.rect(r + at(9), r + at(1), 2, 1, shade);
+  m.px(r - at(2), r + at(10), shade);
+  m.px(r + at(2), r - at(11), shade);
+}
+
 // ---------------------------------------------------------------------------
 // Stars
 // ---------------------------------------------------------------------------
 
-const STAR_CELL = 6;
+const STAR_CELL = 12;
 
 function drawStars(
   s: Surface,
@@ -410,24 +440,25 @@ function drawStars(
 ): void {
   const [bright, medium, dim, warm] = spec.starColors;
   const w = s.w;
-  const cols = Math.ceil(w / STAR_CELL);
-  const rows = Math.ceil(horizonY / STAR_CELL);
+  const cell = STAR_CELL;
+  const cols = Math.ceil(w / cell);
+  const rows = Math.ceil(horizonY / cell);
   // A loose river of stars runs down the sky from the upper right.
   const riverX = w * 0.72;
-  const riverWidth = 10 + horizonY * 0.1;
+  const riverWidth = 20 + horizonY * 0.1;
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < cols; cx++) {
       const h = hash2(cx, cy, seed);
-      // One pixel of margin in every cell, so two stars never touch.
-      const x = cx * STAR_CELL + 1 + Math.floor(hash2(cx, cy, seed + 1) * 4);
-      const y = cy * STAR_CELL + 1 + Math.floor(hash2(cx, cy, seed + 2) * 4);
+      // Two pixels of margin in every cell, so two stars never touch.
+      const x = cx * cell + 2 + Math.floor(hash2(cx, cy, seed + 1) * 8);
+      const y = cy * cell + 2 + Math.floor(hash2(cx, cy, seed + 2) * 8);
       const depth = y / horizonY; // 0 zenith, 1 horizon
       const off = (x - riverX + y * 0.9) / riverWidth;
       const river = Math.exp(-off * off);
       // Fewer stars towards the horizon, more in the river.
       if (h > (0.13 + 0.3 * river) * (1 - 0.85 * depth * depth)) continue;
       if (moon) {
-        const reach = moon.r + 6;
+        const reach = moon.r + 12;
         if (Math.abs(x - moon.x) <= reach && Math.abs(y - moon.y) <= reach) {
           continue;
         }
@@ -451,15 +482,41 @@ function drawStars(
       if (blink) level++;
       if (level > 2) continue;
       const tint = level === 0 && kind > 0.1 ? warm : bright;
-      s.px(x, y, level === 0 ? tint : level === 1 ? medium : dim);
-      if (plus && !blink) {
-        s.px(x - 1, y, medium);
-        s.px(x + 1, y, medium);
-        s.px(x, y - 1, medium);
-        s.px(x, y + 1, medium);
-      }
+      drawStar(s, x, y, level, plus && !blink, tint, medium, dim);
     }
   }
+}
+
+/**
+ * One star. Level 0 (the brightest) is a 2 x 2 block, and the very brightest (`plus`)
+ * have a cross of light round it; levels 1 and 2 are single pixels.
+ */
+function drawStar(
+  s: Surface,
+  x: number,
+  y: number,
+  level: number,
+  plus: boolean,
+  tint: Color,
+  medium: Color,
+  dim: Color,
+): void {
+  if (level === 0) {
+    s.rect(x, y, 2, 2, tint);
+    if (plus) {
+      s.rect(x - 2, y, 2, 1, medium);
+      s.rect(x + 2, y + 1, 2, 1, medium);
+      s.rect(x, y - 2, 1, 2, medium);
+      s.rect(x + 1, y + 2, 1, 2, medium);
+    }
+    return;
+  }
+  if (level === 1) {
+    s.px(x, y, medium);
+    s.px(x + 1, y + 1, dim);
+    return;
+  }
+  s.px(x, y, dim);
 }
 
 /** Seconds between chances of a shooting star, and how long one lasts. */
@@ -483,13 +540,35 @@ function drawShootingStar(
   const dir = hash2(cycle, 13, seed) < 0.5 ? -1 : 1;
   const x0 = Math.round(s.w * (0.2 + 0.6 * hash2(cycle, 14, seed)));
   const y0 = Math.round(horizonY * (0.06 + 0.3 * hash2(cycle, 15, seed)));
-  // Two across for every one down, in whole pixels, 12 steps a second.
-  const head = Math.floor(p * 12) * 2;
-  const tail = [bright, bright, medium, medium, dim, dim];
-  for (let i = 0; i < tail.length; i++) {
-    const along = head - i;
-    if (along < 0) break;
-    s.px(x0 + dir * along, y0 + (along >> 1), tail[i]);
+  // Four across and two down a step, 12 steps a second.
+  const along = Math.floor(p * 12) * 4;
+  shootingTail(s, x0, y0, dir, along, bright, medium, dim);
+}
+
+/**
+ * The shooting star's streak: its head `along` pixels from (x0, y0), going
+ * `dir` (1 right, -1 left) two across for every one down, a 2 x 2 head and a tail that
+ * thins and fades behind it.
+ */
+function shootingTail(
+  s: Surface,
+  x0: number,
+  y0: number,
+  dir: number,
+  along: number,
+  bright: Color,
+  medium: Color,
+  dim: Color,
+): void {
+  for (let i = 11; i >= 0; i--) {
+    const a = along - i;
+    if (a < 0) continue;
+    const c = i < 4 ? bright : i < 8 ? medium : dim;
+    const x = x0 + dir * a;
+    const y = y0 + (a >> 1);
+    s.px(x, y, c);
+    // the head is two pixels deep, and so is the first of the tail
+    if (i < 3) s.px(x, y + 1, i === 0 ? bright : medium);
   }
 }
 
@@ -502,7 +581,10 @@ interface CloudLayer {
   salt: number;
   /** Pixels per second. */
   speed: number;
-  /** Cloud widths. The widest grows by `grow` px for every px the sky is wider than 130. */
+  /**
+   * Cloud widths. The widest grows by `2 * grow` px for every 2 px the sky is wider than
+   * 260, in steps of 2 px.
+   */
   minW: number;
   maxW: number;
   grow: number;
@@ -515,24 +597,24 @@ interface CloudLayer {
 
 const FAR: CloudLayer = {
   salt: 101,
-  speed: 0.4,
-  minW: 13,
-  maxW: 24,
+  speed: 0.8,
+  minW: 26,
+  maxW: 48,
   grow: 0.02,
   top: 0.66,
   bottom: 0.87,
-  every: 38,
+  every: 76,
 };
 
 const NEAR: CloudLayer = {
   salt: 202,
-  speed: 1,
-  minW: 24,
-  maxW: 46,
+  speed: 2,
+  minW: 48,
+  maxW: 92,
   grow: 0.07,
   top: 0.27,
   bottom: 0.57,
-  every: 62,
+  every: 124,
 };
 
 const cloudCache = new Map<string, Surface>();
@@ -565,19 +647,19 @@ export function cloudSprite(
   if (hit) return hit;
 
   const r = rng(seed);
-  const want = Math.max(8, Math.round(width));
+  const want = Math.max(16, Math.round(width));
   // Small clouds are stubby, big ones stretch out.
   const tall =
-    want >= 40
+    want >= 80
       ? r.range(0.33, 0.4)
-      : want >= 20
+      : want >= 40
         ? r.range(0.38, 0.45)
         : r.range(0.42, 0.5);
-  const height = clamp(Math.round(want * tall), 5, 26);
+  const height = clamp(Math.round(want * tall), 10, 52);
   // The big puff is as tall as the cloud. The rest are built outwards from it, each
   // smaller than the one before, until the cloud is as wide as asked.
-  const peakRy = Math.max(2, Math.round(height * 0.52));
-  const peakRx = Math.max(3, Math.round(peakRy / 0.84));
+  const peakRy = Math.max(4, Math.round(height * 0.52));
+  const peakRx = Math.max(6, Math.round(peakRy / 0.84));
   const puffs: Puff[] = [
     {
       x: 0,
@@ -601,16 +683,16 @@ export function cloudSprite(
       Math.round(Math.max(from.rx * r.range(0.6, 0.86), peakRx * 0.42)),
       Math.floor(fit),
     );
-    if (rx < 2) {
+    if (rx < 4) {
       // No room on this side: try the other, and stop when neither has any.
       stuck++;
       side = -side;
       continue;
     }
     stuck = 0;
-    const ry = Math.max(2, Math.round(rx * 0.86));
+    const ry = Math.max(4, Math.round(rx * 0.86));
     const puff: Puff = {
-      x: from.x + side * Math.max(2, Math.round((from.rx + rx) * overlap)),
+      x: from.x + side * Math.max(4, Math.round((from.rx + rx) * overlap)),
       // Sitting low keeps the ends round.
       lift: Math.min(
         Math.round(ry * r.range(0.5, 0.8)),
@@ -627,14 +709,14 @@ export function cloudSprite(
     if (i === 0 || !r.chance(0.3)) side = -side;
   }
   // A crown on the shoulder of the big puff makes a broader, two-headed cloud.
-  if (want >= 26 && r.chance(0.5)) {
+  if (want >= 52 && r.chance(0.5)) {
     const big = puffs[0];
-    const rx = Math.max(3, Math.round(big.rx * r.range(0.55, 0.7)));
+    const rx = Math.max(6, Math.round(big.rx * r.range(0.55, 0.7)));
     puffs.push({
       x: big.x + (r.chance(0.5) ? -1 : 1) * Math.round(big.rx * 0.6),
       lift: big.lift + Math.round(big.ry * 0.35),
       rx,
-      ry: Math.max(2, Math.round(rx * 0.86)),
+      ry: Math.max(4, Math.round(rx * 0.86)),
       grounded: false,
     });
   }
@@ -673,14 +755,14 @@ export function cloudSprite(
     }
   }
   // Round the two bottom corners.
-  trimCorners(shape, base, 1);
+  trimCorners(shape, base, 2);
 
-  const baseRows = h >= 12 ? 2 : 1;
+  const baseRows = h >= 24 ? 4 : 2;
   // The belly: each puff bulges down into it as a round lobe, so its top edge is a row
   // of scallops. Light comes from the top left, so the belly also climbs the right end.
-  if (h >= 6) {
-    const floor = baseRows + (h >= 12 ? 2 : h >= 8 ? 1 : 0);
-    const cap = floor + (h >= 14 ? 3 : 2);
+  if (h >= 12) {
+    const floor = baseRows + (h >= 24 ? 4 : h >= 16 ? 2 : 0);
+    const cap = floor + (h >= 28 ? 6 : 4);
     const rows: number[] = [];
     for (let cx = 0; cx < w; cx++) {
       let edge = cx < left.x ? floor : h;
@@ -688,7 +770,7 @@ export function cloudSprite(
         if (!p.grounded) continue;
         const dx = Math.abs(cx - p.x) / p.rx;
         if (dx >= 1) continue;
-        const depth = clamp(Math.round(p.ry * 0.8), 2, 8);
+        const depth = clamp(Math.round(p.ry * 0.8), 4, 16);
         edge = Math.min(edge, floor + depth * (1 - Math.sqrt(1 - dx * dx)));
       }
       if (cx <= right.x) edge = Math.min(edge, cap);
@@ -793,8 +875,9 @@ function cloudField(
   const hit = cloudFields.get(key);
   if (hit) return hit;
 
-  const maxW = layer.maxW + Math.round(clamp((w - 130) * layer.grow, 0, 24));
-  const margin = maxW + 6;
+  const maxW =
+    layer.maxW + 2 * Math.round(clamp((w / 2 - 130) * layer.grow, 0, 24));
+  const margin = maxW + 12;
   const period = w + margin;
   const count = Math.round((density * 1.3 * period) / layer.every);
   const r = rng(seed * 31 + layer.salt);
@@ -873,8 +956,8 @@ function drawClouds(
 
 const FLOCK: readonly (readonly [number, number])[] = [
   [0, 0],
-  [-6, 3],
-  [-9, -2],
+  [-12, 6],
+  [-18, -4],
 ];
 
 function drawBirds(
@@ -885,17 +968,38 @@ function drawBirds(
   horizonY: number,
 ): void {
   const r = rng(seed * 17 + 9);
-  const span = s.w + 90;
+  const span = s.w + 180;
   const y0 = Math.round(horizonY * r.range(0.3, 0.5));
   const start = r.range(0, span);
-  const x0 = (((Math.floor(start + t * 5) % span) + span) % span) - 40;
+  const x0 = (((Math.floor(start + t * 10) % span) + span) % span) - 80;
   const c = mix(bandAt(spec, y0, horizonY), P.slate, 0.7);
   for (let i = 0; i < FLOCK.length; i++) {
-    const x = x0 + FLOCK[i][0];
-    const y = y0 + FLOCK[i][1];
     const up = Math.floor(t * 3 + i * 0.37) % 2 === 0;
-    s.px(x, y, c);
-    s.px(x - 1, up ? y - 1 : y, c);
-    s.px(x + 1, up ? y - 1 : y, c);
+    drawGull(s, x0 + FLOCK[i][0], y0 + FLOCK[i][1], up, c);
   }
+}
+
+/**
+ * A bird: a body two pixels wide at (x, y) and (x + 1, y), the wings raised
+ * (`up`) or spread level with their tips down, seven pixels from tip to tip.
+ */
+export function drawGull(
+  s: Surface,
+  x: number,
+  y: number,
+  up: boolean,
+  c: Color,
+): void {
+  s.rect(x, y, 2, 1, c);
+  if (up) {
+    s.px(x - 1, y - 1, c);
+    s.px(x - 2, y - 2, c);
+    s.px(x + 2, y - 1, c);
+    s.px(x + 3, y - 2, c);
+    return;
+  }
+  s.rect(x - 2, y, 2, 1, c);
+  s.rect(x + 2, y, 2, 1, c);
+  s.px(x - 3, y + 1, c);
+  s.px(x + 4, y + 1, c);
 }

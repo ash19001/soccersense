@@ -154,8 +154,26 @@ class Recorder implements Scene {
   }
 }
 
-const PHONE = pixelScale(390, 844); // px 3, 130 x 282
-const DESKTOP = pixelScale(1440, 900); // px 3, 480 x 300
+/**
+ * The stage only reads the canvas's values from the scale, so its mechanics are checked on
+ * a scale whose canvas is the interface's own logical canvas (a canvas pixel of `dp` device
+ * pixels): these tests were written in its numbers. The real canvas (half the interface's
+ * pixel, about twice as many each way) has its own tests here and in
+ * `PixelStage-canvas.test.tsx`.
+ */
+function scaleOf(w: number, h: number, dpr = 1): PixelScale {
+  const s = pixelScale(w, h, dpr);
+  return {
+    ...s,
+    canvasW: s.logicalW,
+    canvasH: s.logicalH,
+    canvasDp: s.dp,
+    canvasPx: s.px,
+  };
+}
+
+const PHONE = scaleOf(390, 844); // px 3, 130 x 282
+const DESKTOP = scaleOf(1440, 900); // px 3, 480 x 300
 const DAY = lightingFor({ elevation: 40, morning: true });
 const NIGHT = lightingFor({ elevation: -30, morning: false });
 
@@ -178,7 +196,7 @@ function canvasOf(container: HTMLElement): HTMLCanvasElement {
 describe("PixelStage: the canvas", () => {
   test("takes its size from the scale context", () => {
     const { container } = render(
-      stage({ scene: null, light: null }, pixelScale(1000, 700)),
+      stage({ scene: null, light: null }, scaleOf(1000, 700)),
     );
     // px 2: ceil(1000 / 2) x ceil(700 / 2) logical, shown at exactly 2 CSS px each.
     const canvas = canvasOf(container);
@@ -191,7 +209,7 @@ describe("PixelStage: the canvas", () => {
 
   test("is rounded up to whole logical pixels, so it can be larger than the screen", () => {
     const { container } = render(
-      stage({ scene: null, light: null }, pixelScale(1366, 768)),
+      stage({ scene: null, light: null }, scaleOf(1366, 768)),
     );
     // px 3: 456 x 256 logical is 1368 x 768 CSS px, 2 px wider than the screen.
     const canvas = canvasOf(container);
@@ -203,7 +221,7 @@ describe("PixelStage: the canvas", () => {
 
   test("at a fractional device pixel ratio the canvas is still a whole number of device pixels per logical pixel", () => {
     // A 1920 x 1080 panel at 125%: 4 device pixels each, the same picture as at 100%.
-    const at125 = pixelScale(1536, 864, 1.25);
+    const at125 = scaleOf(1536, 864, 1.25);
     const { container, rerender } = render(
       stage({ scene: null, light: null }, at125),
     );
@@ -214,7 +232,7 @@ describe("PixelStage: the canvas", () => {
     expect(canvas.style.getPropertyValue("--ss-stage-w")).toBe("1536px");
 
     // Browser zoom at 110%: 3 device pixels each, so the CSS size is a fraction.
-    const at110 = pixelScale(1745, 982, 1.1);
+    const at110 = scaleOf(1745, 982, 1.1);
     rerender(stage({ scene: null, light: null }, at110));
     expect([canvas.width, canvas.height]).toEqual([640, 361]);
     // (Read from the variables: this test environment shortens `style.width` to six
@@ -235,7 +253,7 @@ describe("PixelStage: the canvas", () => {
         [1707, 960],
         [1920, 1080],
       ] as const) {
-        const scale = pixelScale(w, h, dpr);
+        const scale = scaleOf(w, h, dpr);
         rerender(stage({ scene: null, light: null }, scale));
         expect([canvas.width, canvas.height]).toEqual([
           scale.logicalW,
@@ -262,7 +280,8 @@ describe("PixelStage: the canvas", () => {
   });
 
   test("a device pixel ratio that changes without an event is caught on the next frame", () => {
-    // The real scale store this time: a PixelRoot around the stage, as on a page.
+    // The real scale store this time: a PixelRoot around the stage, as on a page, so the
+    // canvas is the real one (half the interface's pixel, rounded up).
     vi.stubGlobal("innerWidth", 1440);
     vi.stubGlobal("innerHeight", 900);
     vi.stubGlobal("devicePixelRatio", 1);
@@ -274,17 +293,17 @@ describe("PixelStage: the canvas", () => {
     );
     const canvas = canvasOf(container);
     frames.step(0);
-    expect([canvas.width, canvas.height]).toEqual([480, 300]);
-    expect(scene.take()).toContain("resize 480x300");
+    expect([canvas.width, canvas.height]).toEqual([720, 450]);
+    expect(scene.take()).toContain("resize 720x450");
 
     // The window is dragged to a monitor at 125%. No resize, no media query: only the
     // number changes. The next frame sees it, and the scene is given its new size.
     vi.stubGlobal("devicePixelRatio", 1.25);
     frames.step(16);
-    expect([canvas.width, canvas.height]).toEqual([450, 282]);
+    expect([canvas.width, canvas.height]).toEqual([900, 563]);
     expect(canvas.style.getPropertyValue("--ss-stage-w")).toBe("1440px");
-    expect(canvas.style.getPropertyValue("--ss-stage-h")).toBe("902.4px");
-    expect(scene.take()).toContain("resize 450x282");
+    expect(canvas.style.getPropertyValue("--ss-stage-h")).toBe("900.8px");
+    expect(scene.take()).toContain("resize 900x563");
     const root = container.firstElementChild as HTMLElement;
     expect(root.style.getPropertyValue("--px")).toBe("3.2px");
   });
@@ -302,6 +321,21 @@ describe("PixelStage: the canvas", () => {
       stage({ scene: null, light: null, className: "extra" }),
     );
     expect(container.firstElementChild).toHaveClass("ss-stage", "extra");
+  });
+
+  test("at the real scale it is the canvas's own size: 960 x 540 at 1920 x 1080", () => {
+    const scene = new Recorder();
+    const { container } = render(
+      stage({ scene, light: DAY }, pixelScale(1920, 1080)),
+    );
+    // A 1920 x 1080 monitor: 960 x 540 canvas pixels of 2 device pixels each.
+    const canvas = canvasOf(container);
+    expect(canvas.width).toBe(960);
+    expect(canvas.height).toBe(540);
+    expect(canvas.style.width).toBe("1920px");
+    expect(canvas.style.height).toBe("1080px");
+    frames.step(1000);
+    expect(scene.take()[0]).toBe("resize 960x540");
   });
 
   test("renders at build time without a browser", () => {
@@ -914,7 +948,7 @@ describe("PixelStage: the pointer", () => {
     // 125%: the canvas is 480 x 270 logical in 1536 x 864 CSS px, 3.2 CSS px each.
     const scene = new Recorder();
     const { container } = render(
-      stage({ scene, light: DAY }, pixelScale(1536, 864, 1.25)),
+      stage({ scene, light: DAY }, scaleOf(1536, 864, 1.25)),
     );
     const canvas = canvasOf(container);
     canvas.getBoundingClientRect = () =>

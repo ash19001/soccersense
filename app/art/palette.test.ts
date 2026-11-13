@@ -92,6 +92,13 @@ const ADDED = [
   "sun",
   "moon",
   "moonShade",
+  // the two era modes' ramps (2026-11-13)
+  "retroDark",
+  "retro",
+  "retroLight",
+  "nextgenDark",
+  "nextgen",
+  "nextgenLight",
 ];
 
 describe("palette", () => {
@@ -161,6 +168,38 @@ describe("MODE_COLORS", () => {
       base: P.away,
       light: P.awayLight,
     });
+  });
+
+  it("is old gold for RETRO and electric magenta for NEXT-GEN, each its own", () => {
+    expect(MODE_COLORS.retro).toEqual({
+      dark: P.retroDark,
+      base: P.retro,
+      light: P.retroLight,
+    });
+    expect(MODE_COLORS.nextgen).toEqual({
+      dark: P.nextgenDark,
+      base: P.nextgen,
+      light: P.nextgenLight,
+    });
+    // Ink letters on every badge: each base is light enough to read them on.
+    const luminance = (c: (typeof P)[keyof typeof P]) => {
+      const lin = (v: number) => {
+        const s = v / 255;
+        return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      };
+      const hexText = toHex(c).slice(1);
+      const [r, g, b] = [0, 2, 4].map((i) =>
+        lin(parseInt(hexText.slice(i, i + 2), 16)),
+      );
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ink = luminance(P.ink);
+    for (const ramp of Object.values(MODE_COLORS)) {
+      expect((luminance(ramp.base) + 0.05) / (ink + 0.05)).toBeGreaterThan(4.5);
+    }
+    // Four different colours.
+    const bases = Object.values(MODE_COLORS).map((ramp) => toHex(ramp.base));
+    expect(new Set(bases).size).toBe(4);
   });
 });
 

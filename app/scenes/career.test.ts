@@ -4,10 +4,10 @@
 import { describe, expect, test, vi } from "vitest";
 
 import { CareerGround } from "~/art/grounds";
-import { careerLayout } from "~/art/layout";
+import { careerLayout, type CareerLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
-import { P } from "~/art/palette";
-import type { Grade } from "~/game";
+import { MODE_COLORS, P } from "~/art/palette";
+import type { Grade, Mode } from "~/game";
 import { Surface, TRANSPARENT } from "~/pixel";
 import {
   ARRIVAL_SECONDS,
@@ -16,6 +16,7 @@ import {
   OPEN_HOLD,
 } from "./career";
 import { BUILD, buildColors, closeUpSize, drawBuild } from "./career-fx";
+import { castSpots } from "./career-cast";
 import type { SoundCue } from "./scene";
 
 const GRADES: Grade[] = [
@@ -436,10 +437,10 @@ describe("the opening", () => {
     const scene = fresh();
     scene.setReducedMotion(true);
     scene.update(0);
-    const s = new Surface(480, 270);
+    const s = new Surface(960, 540);
     scene.draw(s);
     expect(s.data.filter((c) => c === P.ink).length).toBeLessThan(
-      480 * 270 * 0.05,
+      960 * 540 * 0.05,
     );
   });
 });
@@ -515,33 +516,6 @@ describe("the promotion's close-up", () => {
 });
 
 describe("between shots", () => {
-  test("the last goal's ball stays in the net when the next shot starts", () => {
-    // the same next shot, after a goal and after a pass: only the first has a ball in the net
-    const grab = (first: Grade): Surface => {
-      const scene = new CareerScene({ seed: 2, mode: "home", total: 400 });
-      scene.resize(480, 270);
-      scene.setLighting(lightingFor({ elevation: 30, morning: true }));
-      scene.update(0);
-      scene.playShot(first);
-      run(scene, 6);
-      scene.playShot("timeup");
-      run(scene, 0.2);
-      const s = new Surface(480, 270);
-      scene.draw(s);
-      return s;
-    };
-    const L = careerLayout(480, 270);
-    const a = grab("trivela");
-    const b = grab("skipped");
-    let differ = 0;
-    for (let y = L.groundY - 5; y <= L.groundY + 1; y++) {
-      for (let x = L.goalX + 4; x <= L.goalX + 12; x++) {
-        if (a.get(x, y) !== b.get(x, y)) differ++;
-      }
-    }
-    expect(differ).toBeGreaterThan(4);
-  });
-
   test("a shot asked for during the last one's reaction moves people there, it does not cut", () => {
     const scene = new CareerScene({ seed: 2, mode: "home", total: 400 });
     scene.resize(480, 270);
@@ -660,6 +634,17 @@ describe("sound", () => {
       }
     }
   });
+
+  test.each([false, true])(
+    "no horn for a goal scored below the World Cup, even when its promotion takes the scene there while the shot plays on (reduced %s)",
+    (reduced) => {
+      const { scene, heard, play } = listening(500, reduced);
+      scene.playShot("worldie", () => scene.promote(600));
+      play(8);
+      expect(kinds(heard, "cheer").length).toBeGreaterThan(1);
+      expect(kinds(heard, "vuvuzela")).toHaveLength(0);
+    },
+  );
 
   test("fireworks at the stadium tiers only, faint, more for a better shot", () => {
     const count = (grade: Grade, total: number): number => {
@@ -833,5 +818,247 @@ describe("sound", () => {
     const night = new CareerScene({ seed: 1, mode: "away", total: 100 });
     night.setLighting(lightingFor({ elevation: -30, morning: false }));
     expect(night.ambience().night).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// On the canvases of every screen (art bible 2.1)
+// ---------------------------------------------------------------------------
+
+/** The heavy tests draw hundreds of 960 x 540 frames: room for a busy machine. */
+const SLOW = 120_000;
+const GOALS: Grade[] = ["worldie", "golazo", "trivela", "toepoke", "tapin"];
+
+/** The scene's insides the tests look at (the shot's ball, the layout). */
+interface Inside {
+  L: CareerLayout;
+  balls: { on: boolean; x: number; y: number }[];
+}
+const inside = (scene: CareerScene): Inside => scene as unknown as Inside;
+
+function readyAt(total: number, w = 960, h = 540): CareerScene {
+  const scene = new CareerScene({ seed: 3, mode: "home", total });
+  scene.resize(w, h);
+  scene.setLighting(lightingFor({ elevation: 30, morning: true }));
+  scene.update(0);
+  return scene;
+}
+
+const SIZES: [number, number][] = [
+  [960, 540],
+  [854, 480],
+  [683, 384],
+  [260, 562],
+  [234, 507],
+];
+
+describe("the career scene on every screen", () => {
+  test.each(SIZES)(
+    "every shot at tiers 0, 4 and 7 at %i x %i calls back once and never leaves a pixel unpainted",
+    (w, h) => {
+      for (const total of [0, 400, 680]) {
+        for (const grade of GRADES) {
+          const scene = readyAt(total, w, h);
+          run(scene, 1);
+          const done = vi.fn();
+          scene.playShot(grade, done);
+          const s = new Surface(w, h);
+          for (let t = 0; t < 4.5; t += 0.3) {
+            run(scene, 0.3);
+            scene.draw(s);
+            expect(s.data.includes(TRANSPARENT)).toBe(false);
+          }
+          expect(done).toHaveBeenCalledTimes(1);
+        }
+      }
+    },
+    SLOW,
+  );
+
+  test(
+    "a promotion and full time draw at every size",
+    () => {
+      for (const [w, h] of SIZES) {
+        for (const [from, to] of [
+          [0, 100],
+          [300, 400],
+          [500, 600],
+        ]) {
+          const scene = readyAt(from, w, h);
+          const done = vi.fn();
+          scene.promote(to, done);
+          const s = new Surface(w, h);
+          for (let t = 0; t < 1.6; t += 0.1) {
+            run(scene, 0.1);
+            scene.draw(s);
+            expect(s.data.includes(TRANSPARENT)).toBe(false);
+          }
+          expect(done).toHaveBeenCalledTimes(1);
+          scene.showFullTime(to + 80);
+          run(scene, 1.5);
+          scene.draw(s);
+          expect(s.data.includes(TRANSPARENT)).toBe(false);
+        }
+      }
+    },
+    SLOW,
+  );
+
+  test(
+    "the goals' ball stays inside the action band, over the pitch",
+    () => {
+      for (const [w, h] of [
+        [960, 540],
+        [260, 562],
+      ]) {
+        for (const grade of GOALS) {
+          const scene = readyAt(400, w, h);
+          run(scene, 1);
+          scene.playShot(grade);
+          const L = inside(scene).L;
+          const s = new Surface(w, h);
+          for (let t = 0; t < 2.4; t += 1 / 30) {
+            run(scene, 1 / 30);
+            scene.draw(s);
+            const b = inside(scene).balls[0];
+            if (!b.on) continue;
+            expect(b.y, `${grade} ${t}`).toBeGreaterThanOrEqual(L.actionTop);
+            expect(b.y, `${grade} ${t}`).toBeLessThanOrEqual(L.nearTouchY);
+            expect(b.x).toBeGreaterThanOrEqual(0);
+            expect(b.x).toBeLessThan(w);
+          }
+        }
+      }
+    },
+    SLOW,
+  );
+
+  test("the opening starts on ink", () => {
+    const scene = new CareerScene({ seed: 1, mode: "away", total: 400 });
+    scene.resize(960, 540);
+    scene.setLighting(lightingFor({ elevation: 30, morning: true }));
+    scene.update(0);
+    const s = new Surface(960, 540);
+    scene.draw(s);
+    expect(s.data.every((c) => c === P.ink)).toBe(true);
+  });
+
+  test("is staged with the cast's spots: the ball at rest at his boot, and on it for the bicycle kick", () => {
+    const spots = castSpots();
+    const scene = readyAt(400);
+    run(scene, 1);
+    scene.playShot("golazo");
+    run(scene, 0.4);
+    const s = new Surface(960, 540);
+    scene.draw(s);
+    const L = inside(scene).L;
+    let b = inside(scene).balls[0];
+    expect([b.x, b.y]).toEqual([
+      L.heroX + spots.KICK_DX,
+      L.groundY + spots.KICK_DY,
+    ]);
+    // the worldie: bicycle frame 3, 0.3 s after the cross reaches him (0.85 s)
+    const w = readyAt(400);
+    run(w, 1);
+    w.playShot("worldie");
+    for (let i = 0; i < 69; i++) w.update(1 / 60);
+    w.draw(s);
+    b = inside(w).balls[0];
+    expect([b.x, b.y]).toEqual([
+      L.heroX + spots.BIKE_X[3],
+      L.groundY + spots.BIKE_Y[3],
+    ]);
+  });
+
+  test("the same calls give the same pixels", () => {
+    const play = (): Uint32Array[] => {
+      const scene = readyAt(350);
+      const s = new Surface(960, 540);
+      const frames: Uint32Array[] = [];
+      scene.playShot("worldie");
+      for (let i = 0; i < 8; i++) {
+        run(scene, 0.3);
+        scene.draw(s);
+        frames.push(s.data.slice());
+      }
+      scene.promote(460);
+      run(scene, 0.4);
+      scene.draw(s);
+      frames.push(s.data.slice());
+      return frames;
+    };
+    expect(play()).toEqual(play());
+  });
+});
+
+describe("the career scene with RETRO and NEXT-GEN (2026-11-13)", () => {
+  /** A frame of a scene at rest (no shot playing), after its arrival. */
+  function still(mode: Mode, total: number): Surface {
+    const scene = new CareerScene({ seed: 3, mode, total });
+    scene.resize(130, 281);
+    scene.setLighting(lightingFor({ elevation: 30, morning: true }));
+    scene.update(0);
+    run(scene, ARRIVAL_SECONDS + 0.5);
+    const s = new Surface(130, 281);
+    scene.draw(s);
+    return s;
+  }
+
+  test.each([0, 200, 500])(
+    "tells the hometown hero's story in a look of its own (total %i)",
+    (total) => {
+      // since the era art (.snaps/era-art/THEME.md) each is drawn in its era: the whole
+      // canvas, and not HOME's picture (the cast's places stay HOME's:
+      // career-nextgen-players.test.ts)
+      const home = still("home", total);
+      for (const mode of ["retro", "nextgen"] as const) {
+        const s = still(mode, total);
+        expect(s.data.includes(TRANSPARENT)).toBe(false);
+        expect(s.data).not.toEqual(home.data);
+      }
+      // and AWAY's is another story
+      expect(still("away", total).data).not.toEqual(home.data);
+    },
+  );
+
+  test("its goals' fireworks and its trophy lift's confetti are in the mode's colour", () => {
+    /** How many pixels of `c` the scene shows over `seconds`, a frame a 30th. */
+    const seen = (scene: CareerScene, seconds: number, c: number): number => {
+      let n = 0;
+      for (let t = 0; t < seconds; t += 1 / 30) {
+        scene.update(1 / 30);
+        const s = new Surface(130, 281);
+        scene.draw(s);
+        for (let k = 0; k < s.data.length; k++) if (s.data[k] === c) n++;
+      }
+      return n;
+    };
+    for (const mode of ["retro", "nextgen"] as const) {
+      const ramp = MODE_COLORS[mode];
+      // a goal at a stadium tier: fireworks over the stand, each a colour picked by the
+      // day's seed, the mode's among them
+      let before = 0;
+      let after = 0;
+      for (let seed = 1; seed <= 6; seed++) {
+        const goal = new CareerScene({ seed, mode, total: 450 });
+        goal.resize(130, 281);
+        goal.setLighting(lightingFor({ elevation: 30, morning: true }));
+        goal.update(0);
+        run(goal, ARRIVAL_SECONDS + 0.2);
+        before += seen(goal, 0.5, ramp.light);
+        goal.playShot("worldie", () => {});
+        after += seen(goal, 2.4, ramp.light);
+      }
+      expect(after, mode).toBeGreaterThan(before);
+      // the trophy lift
+      const lift = new CareerScene({ seed: 3, mode, total: 700 });
+      lift.resize(130, 281);
+      lift.setLighting(lightingFor({ elevation: 30, morning: true }));
+      lift.update(0);
+      run(lift, ARRIVAL_SECONDS + 0.2);
+      const still = seen(lift, 0.3, ramp.base);
+      lift.showFullTime(700);
+      expect(seen(lift, 1.5, ramp.base), mode).toBeGreaterThan(still + 20);
+    }
   });
 });

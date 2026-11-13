@@ -4,14 +4,14 @@
  * the shot is about (the shot, the promotion, full time); the scene is advanced there in
  * sixtieths of a second, as a browser would.
  *
- *   ./node_modules/.bin/tsx tools/snap.ts career/idle --size 480x270 --scale 1
- *   ./node_modules/.bin/tsx tools/snap.ts career/idle-t4 --size 480x270 --time night --scale 2
- *   ./node_modules/.bin/tsx tools/snap.ts career/shot-worldie --size 480x270 --strip 9 --dt 0.2 --crop 150,70,200,90 --scale 2
- *   ./node_modules/.bin/tsx tools/snap.ts career/shot-tapin-t0 --size 480x270 --strip 8 --dt 0.25 --crop 150,90,200,70 --scale 2
- *   ./node_modules/.bin/tsx tools/snap.ts career/arrival --size 480x270 --strip 8 --dt 0.08 --scale 1
- *   ./node_modules/.bin/tsx tools/snap.ts career/promote --size 480x270 --strip 8 --dt 0.2 --scale 1
- *   ./node_modules/.bin/tsx tools/snap.ts career/fulltime --size 480x270 --t 1 --scale 2
- *   ./node_modules/.bin/tsx tools/snap.ts career/after-goal --size 480x270 --strip 8 --dt 0.25 --crop 150,70,200,110 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/idle --size 960x540 --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts career/idle-t4 --size 960x540 --time night --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/shot-worldie --size 960x540 --strip 9 --dt 0.2 --crop 300,140,400,180 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/shot-tapin-t0 --size 960x540 --strip 8 --dt 0.25 --crop 300,180,400,140 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/arrival --size 960x540 --strip 8 --dt 0.08 --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts career/promote --size 960x540 --strip 8 --dt 0.2 --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts career/fulltime --size 960x540 --t 1 --scale 2
+ *   ./node_modules/.bin/tsx tools/snap.ts career/after-goal --size 960x540 --strip 8 --dt 0.25 --crop 300,140,400,220 --scale 2
  *
  * Shots: `career/idle` (all eight tiers), `career/idle-t0` to `idle-t7`, `career/away`,
  * `career/shot-<grade>` (tier 4) and `career/shot-<grade>-t0` (the park) for all eight
@@ -210,5 +210,16 @@ for (const grade of GRADES) {
 }
 shots["career/shot-miss-wide"] = (ctx) => shot(ctx, "miss", 400, 0, ["miss"]);
 shots["career/shot-miss-wide-t0"] = (ctx) => shot(ctx, "miss", 0, 0, ["miss"]);
+// The fetch (`--w 960 --h 540`): from 1.4 s after the shot, the last
+// ball brought back to him, at every tier. `career/fetch-<grade>-t<tier>` for the goals
+// and the skied miss, `career/fetch-wide-t<tier>` for a miss dragged wide.
+for (let tier = 0; tier < 8; tier++) {
+  for (const grade of GRADES) {
+    shots[`career/fetch-${grade}-t${tier}`] = (ctx) =>
+      shot(ctx, grade, TOTALS[tier], 1.4);
+  }
+  shots[`career/fetch-wide-t${tier}`] = (ctx) =>
+    shot(ctx, "miss", TOTALS[tier], 1.4, ["miss"]);
+}
 
 export { shots };

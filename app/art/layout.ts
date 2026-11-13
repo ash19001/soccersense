@@ -2,7 +2,8 @@
  * Shared layout numbers (art bible section 5). If a number matters to more than one
  * painter, it lives here. Everything is in logical pixels and already rounded.
  *
- * Positions scale with the canvas. Sprites never do.
+ * Positions scale with the canvas. Sprites never do: they are drawn at the sizes below
+ * (art bible section 5).
  */
 
 /** A rectangle in logical pixels. */
@@ -17,18 +18,20 @@ export interface Zone {
 // Sprite sizes
 // ---------------------------------------------------------------------------
 
-/** Adult player: 12 x 18 drawn in a 16 x 20 cell, anchored bottom-centre. */
-export const PLAYER = { w: 12, h: 18, cellW: 16, cellH: 20 } as const;
-/** Youth player (career tiers 0 and 1): 10 x 14 in a 14 x 16 cell, anchored bottom-centre. */
-export const YOUTH = { w: 10, h: 14, cellW: 14, cellH: 16 } as const;
+// A cell's anchor is column floor(cellW / 2), its soles' outline row cellH - 1.
+
+/** Adult player: 24 x 36 drawn in a 32 x 40 cell (anchor column 16), anchored bottom-centre. */
+export const PLAYER = { w: 24, h: 36, cellW: 32, cellH: 40 } as const;
+/** Youth player (career tiers 0 and 1): 20 x 28 in a 28 x 32 cell (anchor column 14). */
+export const YOUTH = { w: 20, h: 28, cellW: 28, cellH: 32 } as const;
 /** The goalkeeper is adult size (gloves, and a kit colour nobody else in the scene wears). */
 export const KEEPER = PLAYER;
-/** The career match ball: 3 x 3 px plus a 1 px shadow, 2 or 3 spin frames. */
-export const MATCH_BALL = { size: 3, shadow: 1 } as const;
-/** A crowd fan: 3 x 4 px (head and body), repeated every 4 px across and down. */
-export const FAN = { w: 3, h: 4, pitch: 4 } as const;
-/** The trophy: a generic gold cup of about 9 x 12 px. */
-export const TROPHY = { w: 9, h: 12 } as const;
+/** The career match ball: 6 x 6 px plus a 2 px shadow, 3 spin frames. */
+export const MATCH_BALL = { size: 6, shadow: 2 } as const;
+/** A crowd fan: 6 x 8 px (head and body), repeated every 8 px across and down. */
+export const FAN = { w: 6, h: 8, pitch: 8 } as const;
+/** The trophy: a generic gold cup of about 18 x 24 px. */
+export const TROPHY = { w: 18, h: 24 } as const;
 
 // ---------------------------------------------------------------------------
 // What the DOM interface covers, as fractions of the canvas height
@@ -75,10 +78,11 @@ export interface MenuSky {
   sunX: number;
   /**
    * The moon, where all of it shows: nothing on the horizon and nothing that flies may
-   * stand in front of part of it. On a monitor it rides high on the right, level with the
-   * wordmark and above the city's towers; on a phone it is in the corner of sky left of the
-   * stacked wordmark; on a tablet beside the airship's tail. Where there is no such room it
-   * is behind the airship, all of it.
+   * stand in front of part of it. Where the airship hangs beside the wordmark (a monitor,
+   * 1366 x 768) it rides high on the right, level with the wordmark and above the city's
+   * towers; on a phone it is in the corner of sky left of the stacked wordmark; on a tablet
+   * right of the airship's tail. Where there is no such room it is behind the airship, all
+   * of it.
    */
   moon: { x: number; y: number };
 }
@@ -107,8 +111,11 @@ export interface MenuLayout {
   logo: Zone;
   /**
    * The matchday sign: the LED panel on the airship's flank, where it rests (the airship
-   * drifts 2 px either way). Beside the wordmark's left end on a monitor, under the
-   * wordmark on a phone. The field keeps the name of the scoreboard it used to be.
+   * drifts 2 px either way), at full size: the airship draws it at `AIRSHIP_SIZE` of this
+   * round the same centre (`signPlace`). High in the top left of the sky: beside the
+   * wordmark's left end where the airship has room there (a monitor, 1366 x 768), else
+   * just under the wordmark (a phone). The field keeps the name of the scoreboard it used
+   * to be.
    */
   scoreboard: Zone;
   /**
@@ -144,6 +151,21 @@ export const MENU_CAMERA = {
   bowlDown: 69,
 } as const;
 
+/**
+ * How big the airship is against its full-size drawing (the layout's sign zone and hull):
+ * `signPlace` (stadium-airship.ts) shrinks the panel and the envelope round the same
+ * centre, and the painter scales every length of its drawing by it, so it keeps its
+ * proportions. 7/8 until 2026-11-13; the product owner then asked for it "even smaller
+ * and top left".
+ */
+export const AIRSHIP_SIZE = 0.64;
+/** Past the envelope's ends: the nose lamp or the tail's stabiliser, and the drift. */
+const AIRSHIP_REACH = 8;
+/** The envelope's top at rest when it hangs beside the wordmark. */
+const AIRSHIP_TOP = 12;
+/** The gap it keeps from the wordmark's widest. */
+const AIRSHIP_CLEAR = 16;
+
 function unit(x: number): number {
   return x <= 0 ? 0 : x >= 1 ? 1 : x;
 }
@@ -168,15 +190,15 @@ export function menuLayout(w: number, h: number): MenuLayout {
   const byWidth = (W * (0.97 - 0.37 * wideness)) / 2 / MENU_CAMERA.stadiumHalf;
   // ...but the pitch must show above the ball with the horizon no more than a third of
   // the way down, which bounds it on a very wide, short screen.
-  const byHeight = (ballTop + 7 - 0.25 * H) / (23 + rise);
-  const scale = Math.max(0.06, Math.min(4, Math.min(byWidth, byHeight)));
+  const byHeight = (ballTop + 14 - 0.25 * H) / (23 + rise);
+  const scale = Math.max(0.12, Math.min(8, Math.min(byWidth, byHeight)));
   const horizon = H * (0.325 - 0.055 * wideness);
   const spotY = Math.round(
     Math.max(
       1,
       Math.min(
         Math.max(1, H),
-        ballTop + 7 - 23 * scale,
+        ballTop + 14 - 23 * scale,
         horizon + rise * scale,
       ),
     ),
@@ -195,42 +217,50 @@ export function menuLayout(w: number, h: number): MenuLayout {
     Math.min(H, spotY + Math.round(MENU_CAMERA.bowlDown * scale)),
   );
 
-  // The sign: "DID YOU KNOW?" in the small font over about 14 letters of the fact of the
-  // day in the big one, which scrolls (stadium-airship.ts); never wider than a phone. On a
-  // monitor it hangs at the left, clear of the wordmark and the skyline.
-  const roomy = W >= 400 && wide;
-  const signW = roomy ? 92 : Math.max(1, Math.min(92, Math.max(86, W - 40), W));
-  const signH = roomy ? 35 : 33;
-  const hull = roomy ? 64 : Math.max(52, Math.min(60, Math.floor(W / 2) - 5));
-  const signCx = roomy
-    ? Math.min(
-        Math.max(hull + 4, cx - 72 - hull),
-        Math.max(hull + 4, Math.round(W * 0.17)),
-      )
-    : cx;
-  const signCy = logoH + 1 + (roomy ? 24 : 23);
+  // The sign: a header in the small font over a line in the big one (stadium-airship.ts).
+  // These are the airship's full-size numbers; it is drawn at AIRSHIP_SIZE of them round
+  // the same centre (`signPlace`), and placed here by that size. It hangs high in the top
+  // left of the sky: beside the wordmark where there is room for it there (a monitor,
+  // 1366 x 768), else just under the wordmark (a phone), and always clear of the edge.
+  const roomy = W >= 800 && wide;
+  const signW = roomy
+    ? 184
+    : Math.max(1, Math.min(184, Math.max(172, W - 80), W));
+  const signH = roomy ? 70 : 66;
+  const hull = roomy
+    ? 128
+    : Math.max(104, Math.min(120, Math.floor(W / 2) - 10));
+  const rx = Math.round(hull * AIRSHIP_SIZE);
+  const ry = Math.round((roomy ? 48 : 46) * AIRSHIP_SIZE);
+  // from its nose lamp to its tail's stabiliser, and its drift (2 px) and lurches
+  const reach = rx + AIRSHIP_REACH;
+  const edge = Math.max(8, Math.min(24, Math.round(W * 0.04)));
+  const wordmarkLeft = cx - Math.ceil(Math.min(W - 52, 264) / 2);
+  const beside = edge + 2 * reach + AIRSHIP_CLEAR <= wordmarkLeft;
+  const signCx = Math.min(cx, edge + reach);
+  const signCy = beside ? AIRSHIP_TOP + ry : logoH + 4 + ry;
 
   // The moon, as the sky draws it: its radius, and the glow that reaches 6 px further.
-  const moonR = Math.max(6, Math.min(9, Math.round(3 + W / 45)));
-  const moonGlow = moonR + 6;
+  const moonR = Math.max(12, Math.min(18, Math.round(6 + W / 45)));
+  const moonGlow = moonR + 12;
   let moon: { x: number; y: number };
-  if (roomy) {
+  if (roomy || beside) {
     // High on the right, beside the wordmark. The city's roofs stop 3 px short of the logo
     // zone and its tallest aerial stands at most 6 px above them: the moon's disc ends
     // above that, so no tower ever stands in front of it.
     moon = {
       x: Math.round(W * 0.82),
       y: Math.max(
-        moonR + 1,
-        Math.min(Math.round(logoH * 0.7), logoH - moonR - 4),
+        moonR + 2,
+        Math.min(Math.round(logoH * 0.7), logoH - moonR - 8),
       ),
     };
-  } else if (W - 26 < 132) {
+  } else if (W - 52 < 264) {
     // the wordmark is stacked: the corner of sky left of its first line
-    moon = { x: moonR + 5, y: moonR + 6 };
-  } else if (W - (cx + hull + 6) >= 2 * moonGlow) {
+    moon = { x: moonR + 10, y: moonR + 12 };
+  } else if (W - (signCx + reach + 12) >= 2 * moonGlow) {
     // beside the airship's tail
-    moon = { x: W - moonGlow - 1, y: logoH + 12 };
+    moon = { x: W - moonGlow - 2, y: logoH + 24 };
   } else {
     // nowhere it would show whole: behind the airship
     moon = { x: cx, y: signCy };
@@ -251,7 +281,7 @@ export function menuLayout(w: number, h: number): MenuLayout {
     ballCy,
     logo: { x: 0, y: 0, w: W, h: logoH },
     scoreboard: {
-      x: signCx - Math.floor(signW / 2) - (roomy ? 2 : 0),
+      x: signCx - Math.floor(signW / 2) - (roomy ? 4 : 0),
       y: signCy - Math.floor(signH / 2),
       w: signW,
       h: signH,
@@ -270,13 +300,19 @@ export function menuLayout(w: number, h: number): MenuLayout {
 
 /**
  * The career stage is this wide on a phone, centred on the canvas. On a wider canvas it
- * grows with the width (`2 * round(W * 0.2)`: 192 at 480 x 270) up to `STAGE_W_MAX`, so on
+ * grows with the width (`2 * round(W * 0.2)`: 384 at 960 x 540) up to `STAGE_W_MAX`, so on
  * a monitor the hero and the goal stand further apart. Beyond the stage, wide canvases show
  * more of the same ground.
  */
-export const STAGE_W = 130;
-/** The widest the career stage gets (a canvas of 520 logical px or more). */
-export const STAGE_W_MAX = 208;
+export const STAGE_W = 260;
+/** The widest the career stage gets (a canvas of 1040 logical px or more). */
+export const STAGE_W_MAX = 416;
+/**
+ * Horizontal offsets on the stage are written in 130ths of a phone's stage (the cast's
+ * places in `docs/CAREER_SCENE.md`, the ground's dressing): `stageScale` is the stage's
+ * width over this.
+ */
+export const STAGE_UNITS = 130;
 
 export interface CareerLayout {
   /** The canvas size this layout was made for. */
@@ -287,15 +323,15 @@ export interface CareerLayout {
   /** The ground line: the row the players' feet stand on. round(H * 0.52). */
   groundY: number;
   /**
-   * Left edge of the stage: 130 px wide on a phone, wider on a monitor (192 at 480 x 270,
+   * Left edge of the stage: 260 px wide on a phone, wider on a monitor (384 at 960 x 540,
    * at most `STAGE_W_MAX`). May be off-canvas on a narrow screen.
    */
   stageLeft: number;
   /** Right edge of the stage (first column past it). */
   stageRight: number;
   /**
-   * The stage's width over 130: 1 on a phone, 192 / 130 (about 1.48) at 480 x 270.
-   * Horizontal offsets written for the 130 px stage (the cast's places in
+   * The stage's width over `STAGE_UNITS` (130): 2 on a phone, 384 / 130 (about 2.95) at
+   * 960 x 540. Horizontal offsets written in those units (the cast's places in
    * `docs/CAREER_SCENE.md`, the ground's dressing) are multiplied by it and rounded.
    * Sprites never are.
    */
@@ -304,11 +340,11 @@ export interface CareerLayout {
   heroX: number;
   /** The goal line, at the mouth of the goal: cx + round(44 * stageScale). */
   goalX: number;
-  /** Where the keeper stands, 6 px in front of the goal line: goalX - 6. */
+  /** Where the keeper stands, 12 px in front of the goal line: goalX - 12. */
   keeperX: number;
   /**
-   * The far touchline: the pitch starts here, 9 px behind the players' feet, so stands
-   * and backdrops get the rest of the action band.
+   * The far touchline: the pitch starts here, 18 px behind the players' feet,
+   * so stands and backdrops get the rest of the action band.
    */
   farTouchY: number;
   /**
@@ -330,7 +366,9 @@ export interface CareerLayout {
   sheetY: number;
 }
 
-/** Where things go in the career scene for a canvas of `w` x `h` logical pixels. */
+/**
+ * Where things go in the career scene for a canvas of `w` x `h` logical pixels.
+ */
 export function careerLayout(w: number, h: number): CareerLayout {
   const W = Math.max(1, Math.round(w));
   const H = Math.max(1, Math.round(h));
@@ -340,7 +378,7 @@ export function careerLayout(w: number, h: number): CareerLayout {
     STAGE_W,
     Math.min(STAGE_W_MAX, 2 * Math.round(W * 0.2)),
   );
-  const stageScale = stageW / STAGE_W;
+  const stageScale = stageW / STAGE_UNITS;
   const stageLeft = cx - stageW / 2;
   const goalX = cx + Math.round(44 * stageScale);
   return {
@@ -353,8 +391,8 @@ export function careerLayout(w: number, h: number): CareerLayout {
     stageScale,
     heroX: cx - Math.round(26 * stageScale),
     goalX,
-    keeperX: goalX - 6,
-    farTouchY: groundY - 9,
+    keeperX: goalX - 12,
+    farTouchY: groundY - 18,
     nearTouchY: groundY + Math.round(H * 0.12),
     actionTop: Math.round(H * 0.31),
     actionBottom: Math.round(H * 0.53),

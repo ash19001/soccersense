@@ -32,4 +32,4 @@ export {
   type PlayerAnim,
   type ShotAnim,
 } from "./people";
-export { drawMatchBall, drawPuff, drawTrophy } from "./props";
+export { drawBallRing, drawMatchBall, drawPuff, drawTrophy } from "./props";

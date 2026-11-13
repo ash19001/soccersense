@@ -13,6 +13,12 @@
  *   ./node_modules/.bin/tsx tools/snap.ts ball/spin --strip 8 --dt 0.1 --scale 2
  *   ./node_modules/.bin/tsx tools/snap.ts ball/modes --scale 3
  *   ./node_modules/.bin/tsx tools/snap.ts ball/modes-fit --scale 3
+ *
+ * The `-big` sheets draw the balls at the home screen's radii on a monitor (74 to 120):
+ *
+ *   ./node_modules/.bin/tsx tools/snap.ts ball/menu-big --scale 1 --time all
+ *   ./node_modules/.bin/tsx tools/snap.ts ball/modes-big --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts ball/fit-big --scale 1
  */
 
 import {
@@ -30,6 +36,7 @@ import {
   type BallPatches,
   type BallState,
 } from "./ball";
+import { paintedFont } from "./lettering";
 import { menuLayout } from "./layout";
 import { lightingFor, type Lighting } from "./lighting";
 import { MODE_COLORS, P } from "./palette";
@@ -44,6 +51,20 @@ const PATCHES: BallPatches = {
   backLeft: { label: "FURTHEST", icon: "globe", locked: true },
   rimLeft: { label: "GUESS WHO", icon: "shirt", locked: true },
   rimRight: { label: "SHOOTOUT", icon: "goal", locked: true },
+};
+
+/** RETRO and NEXT-GEN open (2026-11-13): four buttons, each framed in its mode's colour. */
+const ERA: BallPatches = {
+  ...PATCHES,
+  top: { label: "NEXT-GEN", icon: "forward", accent: MODE_COLORS.nextgen },
+  bottom: { label: "RETRO", icon: "rewind", accent: MODE_COLORS.retro },
+};
+
+const ERA_SCORED: BallPatches = {
+  ...ERA,
+  left: { ...ERA.left, badge: "512" } as BallPatches["left"],
+  bottom: { ...ERA.bottom, badge: "380" } as BallPatches["bottom"],
+  top: { ...ERA.top, badge: "70" } as BallPatches["top"],
 };
 
 const SCORED: BallPatches = {
@@ -131,6 +152,65 @@ function sheet(ctx: ShotContext, cells: readonly Cell[], perRow = 99): Surface {
       drawBall(s, state, c.patches ?? PATCHES, light);
       drawText(s, c.name, x + c.r, ground + 12, P.chalk, {
         font: FONT_3x5,
+        align: "center",
+      });
+      x += c.r * 2 + 1 + gap;
+    }
+  });
+  return s;
+}
+
+interface Cell extends Partial<BallState> {
+  r: number;
+  name: string;
+  patches?: BallPatches;
+}
+
+/** Big balls (radius 74 to 120, the home screen's) on grass with captions, `perRow` to a row. */
+function bigSheet(
+  ctx: ShotContext,
+  cells: readonly Cell[],
+  perRow = 99,
+): Surface {
+  const light = lightingFor(ctx.sun);
+  const gap = 16;
+  const rows: Cell[][] = [];
+  for (let i = 0; i < cells.length; i += perRow) {
+    rows.push(cells.slice(i, i + perRow));
+  }
+  let w = 0;
+  let h = 0;
+  const tops: number[] = [];
+  for (const row of rows) {
+    tops.push(h);
+    w = Math.max(
+      w,
+      row.reduce((sum, c) => sum + c.r * 2 + 1 + gap, gap),
+    );
+    h += Math.max(...row.map((c) => c.r)) * 2 + 1 + 52;
+  }
+  const s = new Surface(w, h);
+  s.clear(light.lit(P.grass));
+  const font = paintedFont(FONT_3x5);
+  rows.forEach((row, n) => {
+    const ground = tops[n] + 16 + Math.max(...row.map((c) => c.r)) * 2;
+    let x = gap;
+    for (const c of row) {
+      const state: BallState = {
+        cx: x + c.r,
+        cy: ground - c.r,
+        yaw: 0,
+        pitch: 0,
+        hovered: null,
+        pressed: null,
+        chosen: null,
+        t: ctx.t,
+        ...c,
+      };
+      drawBallShadow(s, state, ground - 2, light);
+      drawBall(s, state, c.patches ?? PATCHES, light);
+      drawText(s, c.name, x + c.r, ground + 20, P.chalk, {
+        font,
         align: "center",
       });
       x += c.r * 2 + 1 + gap;
@@ -290,5 +370,96 @@ export const shots: ShotMap = {
       { r: 44, name: "YAW", yaw: ctx.t * 2 },
       { r: 44, name: "PITCH", pitch: ctx.t * 2 },
       { r: 44, name: "ROLL", roll: ctx.t * 2 },
+    ]),
+
+  "ball/menu-big": (ctx) =>
+    bigSheet(ctx, [
+      { r: 118, name: "R 118" },
+      { r: 89, name: "R 89", hovered: "right" },
+      { r: 89, name: "SCORED", patches: SCORED },
+    ]),
+
+  "ball/states-big": (ctx) =>
+    bigSheet(
+      ctx,
+      [
+        { r: 90, name: "HOVER", hovered: "left" },
+        { r: 90, name: "PRESSED", pressed: "left" },
+        { r: 90, name: "CHOSEN", chosen: "right", t: 0.125 },
+      ],
+      3,
+    ),
+
+  "ball/modes-big": (ctx) =>
+    bigSheet(
+      ctx,
+      [
+        { r: 90, name: "HALF TURN", ...ballShowPose("backLeft") },
+        { r: 90, name: "NEXT-GEN", ...ballShowPose("top") },
+        { r: 90, name: "RETRO", ...ballShowPose("bottom"), hovered: "bottom" },
+        { r: 90, name: "GUESS WHO", ...ballShowPose("rimLeft") },
+        { r: 90, name: "SHOOTOUT", ...ballShowPose("rimRight") },
+        {
+          r: 90,
+          name: "CLOSEST",
+          ...ballShowPose("backRight"),
+          hovered: "backRight",
+        },
+      ],
+      3,
+    ),
+
+  "ball/fit-big": (ctx) =>
+    bigSheet(
+      ctx,
+      [-0.12, 0.12].flatMap((yaw) =>
+        [74, 82, 88, 94, 102, 118].map((r) => ({
+          r,
+          yaw,
+          name: `R ${r}`,
+          patches: yaw < 0 ? PATCHES : SCORED,
+        })),
+      ),
+      6,
+    ),
+
+  // The four open patches: the menu pose, NEXT-GEN and RETRO straight on, their states,
+  // and today's scores on them.
+  "ball/era": (ctx) =>
+    bigSheet(
+      ctx,
+      [
+        { r: 89, name: "MENU", patches: ERA },
+        { r: 89, name: "NEXT-GEN", ...ballShowPose("top"), patches: ERA },
+        { r: 89, name: "RETRO", ...ballShowPose("bottom"), patches: ERA },
+        { r: 84, name: "HOVER RETRO", hovered: "bottom", patches: ERA },
+        {
+          r: 84,
+          name: "CHOSEN NEXT-GEN",
+          chosen: "top",
+          t: 0.125,
+          patches: ERA,
+        },
+        { r: 84, name: "SCORED", patches: ERA_SCORED },
+        {
+          r: 88,
+          name: "RETRO SCORED",
+          ...ballShowPose("bottom"),
+          patches: ERA_SCORED,
+        },
+        { r: 88, name: "ROCKED", yaw: 0.12, pitch: 0.06, patches: ERA },
+        { r: 88, name: "PRESSED TOP", pressed: "top", patches: ERA },
+      ],
+      3,
+    ),
+
+  "ball/sizes-big": (ctx) =>
+    bigSheet(ctx, [
+      { r: 60, name: "60" },
+      { r: 50, name: "50" },
+      { r: 40, name: "40" },
+      { r: 30, name: "30" },
+      { r: 20, name: "20" },
+      { r: 12, name: "12" },
     ]),
 };

@@ -58,14 +58,44 @@ describe("the interface text", () => {
     expect(all.filter((w) => old.test(w.text))).toEqual([]);
   });
 
-  it("has a title for every rung of both ladders, all different", () => {
+  it("has a title for every rung of all four ladders, all different", () => {
     const home = TITLES.home.map((rung) => en.play.titles.home[rung.id]);
     const away = TITLES.away.map((rung) => en.play.titles.away[rung.id]);
-    for (const title of [...home, ...away]) {
+    const retro = TITLES.retro.map((rung) => en.play.titles.retro[rung.id]);
+    const nextgen = TITLES.nextgen.map(
+      (rung) => en.play.titles.nextgen[rung.id],
+    );
+    const all4 = [...home, ...away, ...retro, ...nextgen];
+    for (const title of all4) {
       expect(title).toMatch(/^[A-Z0-9 '!-]+$/);
       // One line on the full-time card in the big type, on a monitor.
       expect(title.length).toBeLessThanOrEqual(20);
     }
-    expect(new Set([...home, ...away]).size).toBe(20);
+    expect(new Set(all4).size).toBe(40);
+  });
+
+  it("words RETRO by the oldest answer and NEXT-GEN by the most recent", () => {
+    expect(en.home.modes.retro.label).toBe("RETRO");
+    expect(en.home.modes.nextgen.label).toBe("NEXT-GEN");
+    expect(en.play.board.instruction.retro).toMatch(/oldest/);
+    expect(en.play.board.instruction.nextgen).toMatch(/most recent/);
+    expect(en.play.title.retro).toMatch(/oldest/);
+    expect(en.play.title.nextgen).toMatch(/most recent/);
+    // The year where HOME and AWAY say a share.
+    expect(en.play.sentence.retro.worldie("Wanderers", "1872")).toMatch(
+      /^Wanderers: first did it in 1872\./,
+    );
+    expect(en.play.sentence.nextgen.miss("Ajax", "1995")).toMatch(
+      /^Ajax: last did it in 1995\./,
+    );
+    // The full-time card's other-mode button fits its row of three (10 letters at most).
+    for (const label of Object.values(en.play.fullTime.other)) {
+      expect(label.length).toBeLessThanOrEqual(10);
+    }
+    // ...and all four are worded alike: the mode's name, "Play <name>" read out.
+    for (const mode of ["home", "away", "retro", "nextgen"] as const) {
+      expect(en.play.fullTime.other[mode]).toBe(en.home.modes[mode].label);
+    }
+    expect(en.play.fullTime.otherSpoken("RETRO")).toBe("Play RETRO");
   });
 });

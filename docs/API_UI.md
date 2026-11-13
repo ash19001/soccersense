@@ -97,6 +97,41 @@ logical canvas is exact; from whole CSS pixels it is rounded up and can be one r
 Also from `~/ui`: `deviceToCss(devicePixels, dpr)`, `pixelVariables(scale)` (the six variables as
 strings), `isWide(scale)` with `WIDE_ROW_PX` and `WIDE_ROW_CP`, and `noticeDevicePixelRatio()`.
 
+### The canvas's own values
+
+`pixelScale(cssWidth, cssHeight, dpr = 1)` also returns the canvas's own size and pixel:
+`{ canvasW, canvasH, canvasDp, canvasPx }`. The interface never uses them; the canvas stage
+does.
+
+- `canvasDp = canvasDpFor(dp) = max(1, ceil(dp / 2))` device pixels per canvas pixel (half the
+  interface's, rounded up), `canvasPx = canvasDp / dpr`, and the canvas is the device size
+  divided by it, rounded up: about twice the interface's logical canvas each way.
+- Everything the interface uses (`px`, `fp`, `cp`, `tx`, `snap`, `dp`, `logicalW`,
+  `logicalH`, `portrait`, `isWide` and so every CSS variable) is worked out as above, the
+  canvas apart. (A test checks every field against the rule for 5,000 screens and ratios.)
+
+| viewport (CSS px) | ratio | logical (interface) | dp  | canvas     | canvasDp | times |
+| ----------------- | ----- | ------------------- | --- | ---------- | -------- | ----- |
+| 1920 x 1080       | 1     | 480 x 270           | 4   | 960 x 540  | 2        | 2     |
+| 1536 x 864        | 1.25  | 480 x 270           | 4   | 960 x 540  | 2        | 2     |
+| 1280 x 720        | 1.5   | 640 x 360           | 3   | 960 x 540  | 2        | 1.5   |
+| 1097 x 617        | 1.75  | 480 x 270           | 4   | 960 x 540  | 2        | 2     |
+| 1366 x 768        | 1     | 456 x 256           | 3   | 683 x 384  | 2        | 1.5   |
+| 1440 x 900        | 1     | 480 x 300           | 3   | 720 x 450  | 2        | 1.5   |
+| 2560 x 1440       | 1     | 512 x 288           | 5   | 854 x 480  | 3        | 1.67  |
+| 3840 x 2160       | 1     | 549 x 309           | 7   | 960 x 540  | 4        | 1.75  |
+| 2560 x 1440       | 1.5   | 480 x 270           | 8   | 960 x 540  | 4        | 2     |
+| 1280 x 720        | 1     | 640 x 360           | 2   | 1280 x 720 | 1        | 2     |
+| 390 x 844         | 3     | 130 x 282           | 9   | 234 x 507  | 5        | 1.8   |
+| 390 x 844         | 2     | 130 x 282           | 6   | 260 x 563  | 3        | 2     |
+| 412 x 915         | 2.625 | 136 x 301           | 8   | 271 x 601  | 4        | 2     |
+| 768 x 1024        | 2     | 192 x 256           | 8   | 384 x 512  | 4        | 2     |
+
+A canvas pixel is always a whole number of device pixels, and at least 2 except where the
+interface's is 2 (there 2 would leave a canvas half as wide as the painters are made for,
+everything twice as big). Rounding up rather than down keeps the pixels at least as chunky as
+asked and the canvas inside the painters' range (art bible section 2).
+
 Derived variables (declared on `:root` and `.ss-root`): `--u`, `--u2` ... `--u6`, `--u8` (that
 many `--px`), `--tap` (smallest touch target: 44 CSS px rounded up to an even number of snaps, or
 14 px if that is more), `--ring` (focus ring width: one logical pixel, never under 2 CSS px,
@@ -117,8 +152,8 @@ Palette: `--c-<kebab-name>` for every colour in art bible section 3.1 (`--c-ink`
 `--c-home-light`, `--c-grade-golazo` ...). No other colours. A test in
 `app/art/palette.test.ts` checks every one against the palette.
 
-Set by `GameLayout` for its children: `--ss-h` (the full height the sheet and the card measure
-their 46% against), `--ss-pad-t` and `--ss-pad-b` (column padding, safe areas included),
+Set by `GameLayout` for its children: `--ss-h` (the full height the full-time card measures its
+46% against), `--ss-pad-t` and `--ss-pad-b` (column padding, safe areas included),
 `--ss-col` (column width).
 
 ## Type classes
@@ -139,8 +174,10 @@ Also `ss-sr` (screen readers only), `ss-page` (a plain page outside the game: ru
 
 Colour is inherited from attributes, on any element:
 
-- `data-mode="home" | "away"` sets `--mode`, `--mode-dark`, `--mode-light` (warm or teal).
-  Components that take a `mode` prop set it themselves.
+- `data-mode="home" | "away" | "retro" | "nextgen"` sets `--mode`, `--mode-dark`,
+  `--mode-light` (warm red-orange, teal, old gold, electric magenta: the tokens `--c-home*`,
+  `--c-away*`, `--c-retro*`, `--c-nextgen*`, the last two new 2026-11-13). Components that take
+  a `mode` prop set it themselves.
 - `data-grade="worldie" | "golazo" | "trivela" | "toepoke" | "tapin" | "miss" | "timeup" | "skipped"`
   sets `--grade`: the six shots (gold, light green, green, blue, violet, red: a ramp round the
   colour wheel, best first), then the time-up grey and, for a pass, mist. (Changed on
@@ -148,7 +185,7 @@ Colour is inherited from attributes, on any element:
   finesse, power and chip, the colours unchanged.)
 
 `UiMode` and `UiGrade` are structurally the same as `Mode` and `Grade` in `~/game`, so game values
-pass straight in. `UI_GRADES` lists the grades in order, best shot first.
+pass straight in (`UiMode` has all four modes since 2026-11-13). `UI_GRADES` lists the grades in order, best shot first.
 
 ## Components
 
@@ -205,9 +242,10 @@ lie down in it (see "On a wide screen" below).
   do, on a landscape screen (`.ss-game:not([data-live]) .ss-menu`).
 
 What it covers on a 390 x 844 phone (measured, outlines included): board while asking 30% with a
-three-line question (27% with two lines), compact board 19%, answer bar 9%, reveal sheet 46%,
-full-time card 36% (46% at most), menu captions 9%. On shorter phones the board and the bar
-keep their size in CSS px, so they take a larger share: 38% and 12% at 375 x 667.
+three-line question (27% with two lines), compact board 19%, answer bar 9%, reveal sheet up to
+49% (as tall as what it holds: see `RevealSheet`), full-time card 36% (46% at most), menu
+captions 9%. On shorter phones the board and the bar keep their size in CSS px, so they take a
+larger share: 38% and 12% at 375 x 667 (and the reveal sheet up to 70%).
 
 #### On a wide screen
 
@@ -230,7 +268,7 @@ and 768 x 1024 @2).
   bottom edge of the screen like the sheet (its outline and shadow below the edge).
 - **Reveal sheet**: the grade band, the sentence (it scrolls past the height there is), the
   player's own answer under it when it did not score, and the button on the left; the league
-  table on the right, as tall as the sheet.
+  table on the right. The sheet is as tall as the taller of the two (see `RevealSheet`).
 - **Full-time card**: FULL TIME and the career title across the top, the score and the three
   buttons on the left (the buttons at the foot), the seven answers on the right.
 
@@ -240,12 +278,16 @@ of question at 1920 x 1080 and 125% for `ask-long`, two everywhere else):
 
 | screen             | column | board asking | board after | answer bar | with PASS or a rejection | reveal sheet | full-time card |
 | ------------------ | ------ | ------------ | ----------- | ---------- | ------------------------ | ------------ | -------------- |
-| 1920 x 1080        | 1312   | 26.3%        | 14.3%       | 7.8%       | 14.1%                    | 45.9%        | 32.4%          |
-| 1440 x 900         | 1311   | 24.3%        | 15.3%       | 8.3%       | 15.3%                    | 46.0%        | 36.7%          |
-| 1366 x 768         | 1311   | 28.5%        | 18.0%       | 9.8%       | 18.0%                    | 46.0%        | 43.0%          |
-| 2560 x 1440        | 1965   | 23.4%        | 14.9%       | 8.1%       | 14.9%                    | 46.0%        | 35.1%          |
-| 1536 x 864 at 125% | 1049.6 | 26.3%        | 14.3%       | 7.8%       | 14.1%                    | 45.9%        | 32.4%          |
-| limit (`COVER`)    |        | 30%          | 18%         | 10%        |                          | 46%          | 46%            |
+| 1920 x 1080        | 1312   | 26.3%        | 14.3%       | 7.8%       | 14.1%                    | 38.3%        | 32.4%          |
+| 1440 x 900         | 1311   | 24.3%        | 15.3%       | 8.3%       | 15.3%                    | 43.0%        | 36.7%          |
+| 1366 x 768         | 1311   | 28.5%        | 18.0%       | 9.8%       | 18.0%                    | 50.4%        | 43.0%          |
+| 2560 x 1440        | 1965   | 23.4%        | 14.9%       | 8.1%       | 14.9%                    | 41.7%        | 35.1%          |
+| 1536 x 864 at 125% | 1049.6 | 26.3%        | 14.3%       | 7.8%       | 14.1%                    | 38.3%        | 32.4%          |
+| limit (`COVER`)    |        | 30%          | 18%         | 10%        |                          | the board    | 46%            |
+
+The reveal sheet's column (2026-11-12) is the tallest over all 112 reveals of the game (14
+questions, eight kinds of result each), not the gallery: it is as tall as what it holds, and its
+only limit is the foot of the board.
 
 The board after an answer at 1366 x 768 (17.97%) has no room to spare, and neither has the
 board while asking where a question needs three lines on a screen that is three CSS px a
@@ -292,10 +334,37 @@ the field read-only and turns the buttons off.
 `grade`, `mode`, `gradeLabel`, `pointsLabel?`, `sentence`, `rows`, `tableLabels`, `yours?`,
 `nextLabel`, `onNext()`, `focusNext?` (default true)
 
-Slides up in steps; at most the lower 46% of the screen. Band in the grade colour (the shot's
-name and its points: `WORLDIE! +100`, `TAP IN +10`; leave `pointsLabel` out for a miss, a
-pass or a time-up), the sentence (three lines at most, then it scrolls), the `yours` line
-when given, a `LeagueTable` (with `inlinePlace`), the next button (focused on arrival).
+Slides up in steps. Band in the grade colour (the shot's name and its points: `WORLDIE! +100`,
+`TAP IN +10`; leave `pointsLabel` out for a miss, a pass or a time-up), the sentence (three
+lines at most, then it scrolls), the `yours` line when given, a `LeagueTable` (with
+`inlinePlace`), the next button (focused on arrival).
+
+**Its height (2026-11-12).** The five rows and the `yours` line are always all in view, whole,
+with no scrolling. The sheet is as tall as what it holds: it no longer stops at the lower 46%
+(the scene is composed around 46%, `COVER.revealSheet`, and the sheet may cover more of it during
+the reveal), and its ceiling is the foot of the board. While a sheet is in the bottom slot of
+`GameLayout`, the board keeps its size (`flex-shrink: 0`) and the bottom slot gets the rest of the
+column (ui.css section 13, a `:has()` rule on `.ss-game__col`). Where even that is too short, the
+sheet fits itself, `fitSheet(sheet)` (exported from `RevealSheet.tsx`), before the first paint
+and again when the column is resized or the fonts arrive: it undoes every step and then takes
+them in order, least visible first, until the table shows every row (`FIT_STEPS`, kept in
+`data-fit`, space-separated):
+
+| step    | what changes                                                                                                                    |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `place` | a row's place (the country) is left to screen readers where it would wrap onto a line of its own (`data-cut` on the place)      |
+| `tight` | the rows: one logical pixel less padding above, none below; the points box 6 font pixels lower (3 above and 3 below the figure) |
+| `band`  | the grade and the points on lines of the 20 face's height instead of the 25's (6 font pixels less, 3 above and 3 below)         |
+| `over`  | the board gives way: the sheet covers its foot, up to the whole column                                                          |
+
+Every step keeps each face on its own pixels and the screen-reader text the same (a place left
+out is still read with its name). Past all four the table scrolls, as it used to (with the best
+answer pinned and the player's row brought into view); no screen measured needs it. Measured in
+Chrome over all 14 questions and every kind of result (each scoring shot with the longest answer
+in it, a listed miss, a pass, a time-up): at 1920 x 1080, 1366 x 768, 1536 x 864 at 125%,
+1280 x 720, 390 x 844 @3, 360 x 640 @3 and 412 x 915 @2.625 every row fits with no step taken; the
+steps are only ever taken at 320 x 568 (`place`, in 12 of the 112 reveals) and on a phone on its
+side as short as 568 x 320 (all four). The script is `.snaps/r17-measure.mjs`.
 
 `yours` (`RevealYours`, new): `{ you, name, picked?, shot, points, spoken }`. The player's own
 answer when it is not one of `rows` (it did not score: a miss, a pass, a time-up): one line in
@@ -304,6 +373,15 @@ leave `picked` out with no answer). It sits above the table on a phone and in th
 under the sentence, on a wide screen. Screen readers hear `spoken` once ("Your answer: Blackburn
 Rovers, picked by 2%. MISS, 0 points."); the pieces are hidden from them. In the game it comes
 from `yoursLine(reveal)` in `app/routes/play/Game.tsx`, undefined when the answer is a row.
+
+**RETRO and NEXT-GEN (2026-11-13).** The sheet is the same; the game gives it a year where HOME
+and AWAY give a share. In `Game.tsx`: `rowFigure(row, mode)` is the third column (`"34%"`, or the
+year: `"1889"`, the first year in RETRO, the last in NEXT-GEN), `tableLabels(mode)` heads that
+column `FIRST` or `LATEST` (`strings.play.table.year`) instead of `PICKED`, `yoursLine(reveal,
+mode)` puts the year in `picked` (read out with `strings.play.yours.spokenYear`), and
+`revealSentence` uses `strings.play.sentence.retro` / `.nextgen`. The year is four figures,
+narrower than most shares, so the sheet fits as before (checked in Chrome at 1920 x 1080 and
+390 x 844 over every era question played: no fit step taken, nothing scrolls).
 
 ### `LeagueTable`
 
@@ -320,8 +398,9 @@ for the distance rules). Pass the rows best first.
   place colour, and wraps after it only when it must, so a row is one line tall (as tall as
   its points box) unless a name is long. The YOU tag stands beside the rank (`6 YOU`), not
   under it, so the player's row is as tall as the others. Without it every row is two lines,
-  name over place.
-  That is what lets the reveal's five rows and the headings fit at 1366 x 768 and 390 x 844.
+  name over place. Its body cells clip what reaches past them (`overflow: hidden`): an inline
+  span's box is the face's whole height, taller than the tight line, and on the last line of
+  the last row it made the table scroll by 2 px though every letter was inside.
 
 - With a `shot` heading in `labels` the table has a SHOT column, between the third column and
   the points: each row's `shot` (`"GOLAZO"`) as a tag in its `grade`'s colour, ink on colour,
@@ -337,9 +416,10 @@ unless `inlinePlace`. A distance such as `"540 miles"` is split at its last spac
 ### `FullTimeCard`
 
 `mode`, `heading`, `total`, `maxTotal`, `totalSpoken?`, `careerTitle`, `earnedTitle?`,
-`earnedTitleSpoken?`, `perfectLine?`, `results: { grade, points, answer, label? }[]`,
-`resultsLabel?`, `shareLabel`, `onShare()`, `otherLabel`, `otherMode`, `onPlayOther()`,
-`menuLabel`, `onMenu()`
+`earnedTitleSpoken?`, `perfectLine?`, `streak?` (new 2026-11-12: `StreakProps`, a flame and
+`STREAK 4` under the title; nothing at 0), `results: { grade, points, answer, label? }[]`,
+`resultsLabel?`, `shareLabel`, `shareBusy?`, `onShare()`, `otherLabel`, `otherMode`,
+`onPlayOther()`, `menuLabel`, `onMenu()`
 
 Heading and career tier (`careerTitle`), the score as a large LED (gold with `perfectLine`),
 under it the title the total earned (`earnedTitle`, new 2026-11-11: big type, the mode's light
@@ -348,12 +428,94 @@ before it), the seven answers (each with its lamp, and its shot's `label`, `"TRI
 shot's colour beside the points; a worldie's answer and points are gold), three buttons. At most the lower 46%; the answers scroll when they do not fit (phones
 shorter than about 670 CSS px).
 
+`shareBusy` (new 2026-11-12): the share picture is still being made. The SHARE button then
+has `aria-busy` and `aria-disabled` and ignores presses, but is not `disabled`, so it keeps
+the focus; its label says so (`shareLabel`, "MAKING"). Keep the button's words to 7 letters
+or so: a longer label (`"DOWNLOADED"`, and today's `"NOT COPIED"`) wraps the row of three
+buttons onto two lines at 1920 x 1080, 2560 x 1440 and on 390 x 844 and smaller phones.
+
+#### Sharing: the picture (2026-11-12)
+
+SHARE shares a picture of the game with the text summary (docs/GAME_DESIGN.md 6.4). The parts:
+
+- `shareCardFor(session)` in `~/game` (`app/game/share.ts`): the game's side, one row per
+  question (`{ prompt, answer: name | null, grade, points }`), the day, mode, stadium, total.
+- `paintShareCard(picture)` in `~/art/share-card`: the painter, pure, into a 360 x 450
+  `Surface` (`SHARE_CARD`, shared at `scale: 3`, 1080 x 1350); `scaleSurface(s, k)` blows it
+  up in whole blocks. It draws the wordmark and letters in the faces `font6x10` and
+  `font10x14`.
+  `fitText`, `answerFace`, `promptRoom`, `answerRoom` are how lines are fitted. Every word is
+  in `picture` (`ShareCardPicture`). In RETRO and NEXT-GEN each line has its `year`
+  (2026-11-13), painted in the mode's light colour before the tag, or at the end of the
+  question's line when the answer would not be whole beside it (`yearPlace`; two demo names). Look at it: `tsx tools/snap.ts share/home --scale 3`
+  (also `share/away`, `share/retro`, `share/nextgen`, `share/perfect`, `share/misses`,
+  `share/sheet`).
+- `app/routes/play/share-image.ts`: `shareCardPicture(card, title, tier)` words the card from
+  `strings` (`strings.play.fullTime.image`: the file name, the sheet's title, the cut-down
+  question, "no answer"); `browserShareKit()` is the browser's part, behind the `ShareKit`
+  interface (tests pass their own as `GameOptions.shareKit`).
+- The controller (`app/routes/play/controller.ts`) makes the picture 0.7 s after full time
+  (`SHARE_IMAGE_DELAY_MS`), off the main path: the paint and the enlargement each in an idle
+  callback (a frame where there is none), the PNG encoded by `canvas.toBlob`. No long task
+  in Chrome at 1920 x 1080 or on a phone. So it is ready when SHARE is pressed, and the share
+  sheet opens inside the press (Safari refuses a sheet opened long after the tap). Pressed
+  before then, the button is busy (`share: "making"`) until it is.
+- Then: a touch-first screen (`(pointer: coarse)`) whose `navigator.canShare({ files })` says
+  yes gets `navigator.share({ files, text, title })`: `SENT!`; closed by the player, SHARE is
+  simply ready again; refused by the browser, it falls back to the next way. Anywhere else the
+  PNG is downloaded (`soccersense-day-<n>-<mode>.png`) and the text copied: `SAVED!`, then
+  `COPIED!` (`saved`), or `SAVED!` alone when the clipboard says no (`downloaded`). Where no
+  canvas can make a PNG (`canMakeImage()` false), the text is copied as it always was
+  (`COPIED!` or `NOT COPIED`). Each ending is read out in the page's status line
+  (`strings.play.fullTime.*Spoken`).
+
 ### `MenuCaptions`
 
-`modes: { mode, label, line, score?, scoreSpoken? }[]` (HOME then AWAY), `onSelect?(mode)`,
+`modes: { mode, label, line, short?, tiny?, score?, scoreSpoken? }[]` (in pairs: HOME, AWAY, RETRO,
+NEXT-GEN), `onSelect?(mode)`,
 `onHover?(mode | null)`, `lit?`, `notice?`, `noticeKey?`, `stowed?`,
 `howToPlay: { label, to?, onClick?, open? }`, `howToPlayRef?`, `dayLabel`, `sound?` (the sound
-switch beside the "?": labels, default `strings.sound`, or `false`; see `SoundToggle`)
+switch beside the "?": labels, default `strings.sound`, or `false`; see `SoundToggle`),
+`stats?: { label, onClick, open? }` and `statsRef?` (new 2026-11-12: the stats button after
+the sound switch, `StatsButton`; see `Stats` below), `streak?` (new 2026-11-12: `StreakProps`,
+the daily streak in the day plate after the day; leave it out for none),
+`remind?: { label, onClick, open? }` and `remindRef?`, `support?: { label, onClick, open? }` and
+`supportRef?` (new 2026-11-13: the bell and the heart beside the day plate; see "`RemindMe`
+and `Support`" below; leave them out for none)
+
+**Four modes (2026-11-13).** The cards come in pairs, a pair to a row: HOME | AWAY, then
+RETRO | NEXT-GEN (the past on the left, the future on the right). `short` ("Most common wins",
+`strings.home.short`) is the line shown; the full `line` stays in the card, visually hidden, so
+it is what screen readers hear (the short one is `aria-hidden`). Leave `short` out to show
+`line`. Layout (ui.css section 26, which overrides 15, 21 and 24):
+
+- **A monitor** (`data-wide`): two rows across the foot of the picture, each a touch target
+  tall (four logical pixels round the badge, not eight), the gap of each pair on the centre
+  line; odd cards (HOME, RETRO) lie left of it like HOME did (line, badge, score), even ones
+  right of it like AWAY. The day plate hangs off the rows' left end, as tall as both; the "?"
+  and the speaker off the first row's right end (section 21's arithmetic still moves the
+  speaker onto the day plate where there is no room); the stats button under the "?".
+  Measured, both rows under the ball: 1920 x 1080 and 1366 x 768 clear of its bottom patch.
+- **A phone**: the four cards two by two across the column, each a touch target tall: the
+  badge beside `tiny` ("Most common", `strings.home.tiny`; two lines at most), or `short`
+  where there is no `tiny`. The score is not shown there (the ball's patch shows it, and
+  `scoreSpoken` is still read out). On a phone under 710 CSS px tall (375 x 667) the four
+  badges stand alone in one row, so that the cards stay clear of the ball's bottom patch; the day plate over the left end of the cards, and the "?", speaker and stats buttons
+  stacked up the right edge beside the ball, over the leaderboard's trophy (bottom to top:
+  trophy, stats, speaker, "?"), where the ball never reaches.
+
+### `Streak`
+
+`days`, `spoken` (read out: "Daily streak: 4 days in a row"), `title?` (the tooltip),
+`bump?`, `text?` (instead of the number: "STREAK 4"), `className?`
+
+A pixel flame (`FLAME`: 9 x 12 font pixels, two frames that flicker in `steps()`; an outline
+in `homeDark`, `home`, a `gold` heart, a `goldLight` core) and the days in the plate's type,
+in gold. `bump`: the streak has just gone up (the home page remembers the last one shown in
+`localStorage`, `soccersense:streak-seen`): the flame and the number hop and three frames of
+gold sparks fly out (`SPARKS`, 90 ms each), once. At 0 the flame is cold and grey
+(`data-cold`; the home page shows nothing then). With reduced motion it neither flickers nor
+hops. ui.css section 25.
 
 The "?" is a link with `to` and a button with `onClick`. With `open` (new 2026-11-12: the home
 page's rules pop-up is up, or not) the button carries `aria-haspopup="dialog"` and
@@ -426,8 +588,25 @@ card the badge, the score, the line. Screen readers get that order on both layou
 
 ### `Leaderboard`
 
-`boards: LeaderboardBoard[]` (HOME then AWAY), `labels: LeaderboardLabels`, `initialMode?`,
-`stowed?`
+`boards: LeaderboardBoard[]` (HOME, AWAY, RETRO, NEXT-GEN), `labels: LeaderboardLabels`,
+`initialMode?`, `stowed?`, `onStats?()` (new 2026-11-13: the link to the player's stats)
+
+**2026-11-13: four modes, and the player's own days.** The tabs are two by two. Under the
+table, for the selected mode: `board.mine` in place of `played` when given (the player's own
+line: "You're 37th of 1,284", or not played, the nudge "1,284 played. You?", in the
+mode's light colour), then `board.week` (`LeaderboardWeek`: `{ heading, days, spoken }`, `days`
+seven `LeaderboardDay` `{ label, total | null, today? }` oldest first): a strip of seven bars
+in the mode's colour on dim tracks, each bar's height its share of 700 in whole logical pixels
+(one at least), the day's name under it ("MO", today's in the mode's light colour), a day not
+played an empty, dimmer track. The bars are `aria-hidden`; `spoken` reads all seven out
+("Your last 7 days of RETRO: Wednesday not played, ..., Tuesday 380 points."). At the strip's
+top right `labels.more` ("ALL STATS") is a link-like button calling `onStats`; on a phone it
+closes the sheet first, so the stats come up in its place. The home page builds `week` from
+the device's history (`loadHistory`, the last seven game days up to today). On a monitor the
+rows are a little tighter, and on one under 820 px tall (1366 x 768) the column headings are
+only read out (their row is folded to nothing), so that the tallest panel (four tabs, the
+player under the gap, the strip: about 262 caption pixels and 50 logical pixels) still ends
+above the two rows of captions; its top rises for that (`--ss-lb-top`, section 26).
 
 - `LeaderboardBoard`: `{ mode, label, rows, you?, caption, played, youSpoken? }`. `rows` is the
   top of the table, best first (`LeaderboardEntry`: `{ rank, name, points, you?, id? }`; equal
@@ -546,7 +725,8 @@ ref: where the focus goes on closing)
   one line under the heading, "7 questions a day. 30 seconds each.", read out as the dialog's
   description), `shots` ("POINTS") and `career` ("YOUR CAREER"), the two section headings, and
   two functions read out by screen readers: `points(n)` ("100 points") and `step(tier, from)`
-  ("SUNDAY LEAGUE, from 90 points").
+  ("SUNDAY LEAGUE, from 90 points"); and `disclaimer?` (new 2026-11-12), the small print at
+  the foot of the card (`strings.legal.disclaimer`, see "The small print" under `Stats`).
 - `shots`: `HowToPlayShot[]`, `{ grade, label, points }`, the six shots best first.
 - `tiers`: `HowToPlayTier[]`, `{ name, from }`, the career from the park up.
 
@@ -633,6 +813,175 @@ const helpButton = useRef<HTMLButtonElement | null>(null);
   returnFocus={helpButton}
 />;
 ```
+
+### `Stats`, `StatsCard` and `StatsButton`
+
+(New 2026-11-12, at the product owner's request: "my stats option in home page where it shows
+your average result across the categories, today's result, etc.")
+
+`StatsCard`: `labels: StatsLabels`, `modes: StatsModeView[]`, `streak: { current, best }`,
+`empty`, `headingLevel?`, `action?`
+
+`Stats`: the card's `labels`, `modes`, `streak`, `empty`, and `open`, `onClose()`,
+`returnFocus?`: the same contract as `HowToPlay`.
+
+`StatsButton`: `label`, `onClick`, `open?`, `ref?` (`MenuCaptions` renders it from its `stats`
+prop). Also exported: `STATS_ICON` (the 9 x 9 bar chart) and `STATS_BAR_CELLS` (100).
+
+- `StatsModeView`: `{ mode, label, today, played, average, best, tally }`. `today` is
+  `{ total, title, shots }` or null (not played today); `shots` are `StatsShot`
+  `{ grade, label, points }`, one per question; `best` is `{ total, day }` or null; `tally` is
+  seven `StatsTally` `{ grade, label, count, cells }`, the six shots best first and then no
+  answer (a pass or a time-up, in the time-up grey), `cells` its length in the bar.
+- `StatsLabels`: `heading`, `close`, `intro` (also the dialog's description), `empty`,
+  `today`, `notPlayed`, `shots` and `tally` (two lists' names, read out), `played`, `average`,
+  `best`, `blank` (a number there is none of: "-"), `streak`, and the functions `shot(n, shot,
+points)`, `total(total)`, `bestDay(day)`, `bestSpoken(total, day)`, `days(n)`,
+  `streakBest(n)`, `streakSpoken(current, best)`; and `disclaimer?`, the small print.
+
+**The card** is the rules' card (the same classes, `ss-help` and its head and body: the frame,
+the heading, the close button), `ss-stats` on it (ui.css section 24):
+
+- the line on the day ("Your games on this device, over the last year.");
+- **STREAK**, days in a row with a finished game in any mode (`2 DAYS`, `BEST 5`);
+- per mode, under its badge (an `h3`, named HOME): **TODAY** with the total, the title it
+  earned in the mode's light colour and the seven shots as small tags, ink on the shot's
+  colour, showing their points (each read out "Question 3: WORLDIE, 100 points", its shot in
+  its tooltip), or "Not played yet"; then **PLAYED**, **AVERAGE** and **BEST** (with its day)
+  as labels over numbers; then a bar of `STATS_BAR_CELLS` whole logical pixels in the shots'
+  colours (`apportion` in `~/game`: every shot that happened has at least a cell; hidden
+  from screen readers) and, under it, each shot's tag and how many;
+- the small print.
+
+On a wide screen it is set in caption pixels and is wider than the rules' card (560 caption
+pixels and 10 logical pixels, a whole number of logical pixels, never wider than the screen
+less 8 a side), the modes side by side (a grid of as many columns of at least 240 caption
+pixels as fit: four modes go two by two); anywhere else one column, the modes one under the
+other. A first visit (`empty`) shows the line, "No games yet..." and the small print only.
+Measured from screenshots with HOME played on day 1 and AWAY on day 2, on day 2: 1920 x
+1080, the card about 1150 x 670 (top 205); 1366 x 768, about 1150 x 583 (top 92); 390 x 844
+at 3, a sheet about 624 CSS px tall on the bottom edge (74% of the screen: two modes and the
+small print; it scrolls on shorter phones, and then takes the focus by Tab). Four modes will
+make the phone's sheet scroll.
+
+**The dialog** is `HowToPlay`'s, line for line (a modal `dialog` with `ss-help-dialog`: the
+dither on a monitor, the sheet on a phone, the rise and the drop on whole device pixels and
+none under reduced motion, the close button, Escape, a press outside, the focus kept inside and
+given back). (It is a copy of `HowToPlay`'s `Dialog` with the stats' card in it: the two could
+share one dialog component, which is the next step if a third pop-up comes.)
+
+**The button.** A square steel icon button with a bar chart, named "Your stats" (and its
+tooltip), `aria-haspopup="dialog"` and `aria-expanded` while the dialog is up. In the captions
+it comes after the sound switch:
+
+- **On a phone** the day plate stands over the three buttons, "?", sound and stats side by
+  side at the right of the cards (`.ss-menu__side[data-stats]`). The cards are 25 CSS px
+  narrower for it: on a 390 px phone a played mode's score no longer fits beside its badge
+  and goes under it (`flex-wrap` on `.ss-menu__top`), which makes both cards a line taller.
+- **On a monitor** it is a square as tall as the row off its right end after the "?" and the
+  speaker, where the screen has room for all three (1920 x 1080, 2560 x 1440). Where it has
+  not (1366 x 768, 1440 x 900), it stands on the day plate at the row's other end, as the
+  speaker does where it has no room (and then beside the speaker). The same arithmetic as the
+  speaker's: section 24.
+
+**The data.** The kit only shows what it is given. The home page builds it with
+`statsContent(today)` (`app/routes/stats-content.ts`) on the press of the button (never while
+rendering): `loadHistory(today)` reads the finished games kept on the device (a year of
+them; `app/game/storage.ts`), `statsFor` works them out over `MODES` (`app/game/stats.ts`:
+`streakFor`, `apportion`), and the words come from
+`strings.stats`. So a mode added to `MODES` gets its column with no change here.
+
+**The small print.** `strings.legal.disclaimer` ("soccersense is an independent fan game. It
+is not affiliated with...") is the last thing in the stats' card and in the rules' card (the
+pop-up and `/how-to-play`): `p.ss-legal`, mist on night (7.3 to 1) under a slate rule, in
+Jersey 10 at the page's own font pixel (`--ss-small-fp`, set on `.ss-help-dialog` and
+`.ss-help-page` before the card swaps in caption pixels), so on a monitor it is half the size of
+the card's type: small print, but readable.
+
+### `RemindMe` and `Support`
+
+(New 2026-11-13, at the product owner's request: "remind me button where they enter their email
+and get daily reminders to play" and "a suggestions/donations tab (to submit idea or buy us a
+coffee)". Email needs a backend, which is out of scope until the product owner decides on one,
+so the reminder is a calendar event the player adds themselves; the pop-up says email reminders
+are coming and asks for no address.)
+
+`Popup`: `open`, `heading`, `intro`, `close` (the close button's name), `onClose()`,
+`returnFocus?`, `children?`, `className?` (on the card). The shared pop-up both are built on:
+the dialog of `HowToPlay` and `Stats`, line for line (a modal `dialog` with `ss-help-dialog`,
+the dither on a monitor, the sheet on a phone, the rise and drop on whole device pixels and
+none under reduced motion, the close button, Escape, a press outside, the focus kept inside
+and given back; see `HowToPlay`), holding a card (`ss-help ss-popup`): the heading (`h2`, the
+dialog's name) and the close button, then the line under it (the dialog's description) and
+`children`. On a monitor the card is 300 caption pixels and 10 logical pixels wide, one
+column. (`HowToPlay` and `Stats` still keep their own copies of the dialog; they could move
+onto `Popup`.)
+
+`PopupButton`: `icon` (a 9 x 9 `Bitmap`), `label`, `onClick`, `open?`, `ref?`, `className?`. A
+square steel icon button that opens a pop-up, named `label` (and its tooltip),
+`aria-haspopup="dialog"`, `aria-expanded` while it is up: the stats button's twin.
+
+`RemindMe`: `labels: RemindMeLabels` (`strings.remind`), `open`, `onClose()`, `returnFocus?`,
+`url?` (the site's address in the event; default the page's own origin and "/", read when it
+opens), `times?` (default `REMINDER_TIMES`, every half hour), `defaultTime?` ("09:00"). Also
+exported: `BELL`, its button's icon.
+
+- **The card**: "DAILY REMINDER"; the line; **TIME** and a select of times of day (09:00 first,
+  a pixel arrow, the focus ring of the buttons); a gold **DOWNLOAD CALENDAR FILE** button and a
+  quiet note (an .ics file for Apple Calendar and most others); **GOOGLE** and **OUTLOOK** side
+  by side, links dressed as buttons that open in a new tab (read out "(opens in a new tab)");
+  a note that Outlook's link cannot repeat the event by itself; a status line (`role="status"`,
+  nothing while there is nothing to say, then "Saved soccersense-reminder.ics. Open it to add
+  the reminder."); "Email reminders are coming." under a slate rule.
+- **The event** (`app/ui/reminder.ts`, pure): `strings.remind.event.title` ("Play soccersense")
+  and `details(url)` (what to play, and the address), 15 minutes, repeating every day
+  (`RRULE:FREQ=DAILY`), at a **floating** time: 09:00 wherever the player's calendar is, also
+  after the clocks change. It first goes off today if the time is still ahead, else tomorrow
+  (`firstReminder(now, time)`, the device's clock).
+  - `reminderIcs(event, now)`: the .ics text (CRLF lines folded at 75 bytes, text escaped, an
+    alert as it starts, `TRANSP:TRANSPARENT`; the UID is per time of day, so adding the same
+    time again updates the event in calendars that look). The button makes it on the device
+    (a `Blob` and an object URL, or a `data:` URL where there is none) and saves it as
+    `REMINDER_FILE`; nothing is sent anywhere.
+  - `googleCalendarUrl(event, now, timeZone?)`: Google Calendar's new-event page with the event,
+    `recur=RRULE:FREQ=DAILY`, and `ctz` (the device's IANA time zone) when given.
+  - `outlookCalendarUrl(event, now)`: Outlook on the web's (outlook.live.com) new-event page with
+    the event. Its link has no way to say "repeat", hence the note.
+
+`Support`: `labels: SupportLabels` (`strings.support`), `ideas` and `coffee` (each the address a
+button opens, or `null` while there is none), `open`, `onClose()`, `returnFocus?`. Also
+exported: `HEART` (its button's icon), `BULB` and `CUP` (beside the two buttons' words, in font
+pixels, two to a cell).
+
+- **The card**: "SUPPORT US"; a line of thanks (the dialog's description); two big buttons,
+  **SEND US AN IDEA** (steel) and **BUY US A COFFEE** (gold), each a link that opens in a new
+  tab (`target="_blank"`, `rel="noopener noreferrer"`, read out "(opens in a new tab)"). A
+  button whose address is `null` is a disabled button showing "COMING SOON" under its words
+  (read out "SEND US AN IDEA, COMING SOON").
+- **The addresses** are in `app/data/links.ts`: `IDEAS_URL` and `COFFEE_URL`, placeholders on
+  example.com until the product owner sets the real ones (a `mailto:` address works for ideas
+  too). The home page passes each through `usableLink(url)`, which gives `null` for a
+  placeholder (example.com, .org, .net, `.example`, `.invalid`, `.test`, `.localhost`), an
+  empty or broken address, or anything but `https:`, `http:` and `mailto:`.
+
+**The buttons.** `MenuCaptions` renders the bell (`remind`, named "Remind me") and the heart
+(`support`, "Support us") as `PopupButton`s inside the day plate, after the day and the streak
+(`.ss-menu__more`), so they follow the plate's edge whatever its width; the "?", sound and stats
+buttons are unchanged and the stats button is still the side's last child. They stand at the
+other end of the captions from the "?" (ui.css section 27):
+
+- **A monitor**: a column of two squares off the day plate's left end, each as tall as a row
+  (like the "?"), the bell level with the first row and the heart with the second. Checked at
+  1920 x 1080, 1536 x 864 at 125%, 1366 x 768, 1280 x 720, 2560 x 1440 and 844 x 390 at 3:
+  inside the screen, clear of the picture's ball.
+- **A phone**: stacked up the left edge above the day plate, the bell on top, flush with the
+  cards: the mirror of the "?", sound and stats buttons up the right edge, so the ball never
+  reaches them either. Checked at 390 x 844 at 3, 375 x 667 at 2, 360 x 740 at 3 and 1024 x 768.
+
+The home page keeps `remind` and `support` (open or not) and a ref for each button, and renders
+`<RemindMe labels={strings.remind} ... />` and `<Support labels={strings.support} ideas={IDEAS}
+coffee={COFFEE} ... />` beside the stats. The click sound is the usual one (the delegated
+listener in `~/audio`: the buttons, the links dressed as buttons; a disabled button is silent).
 
 ### `ClickBurst`
 
@@ -766,47 +1115,48 @@ first `update`, and that first `update` has `dt` 0.
   page up to the error page), the error is reported with `reportError` and the page stands.
 - With no 2D context (the test environment) nothing runs and nothing throws.
 
-**The canvas.** Its backing store is exactly `logicalW` x `logicalH` (from
-`usePixelRootScale()`), and it is shown at exactly `dp` device pixels per logical pixel, scaled
-with `image-rendering: pixelated`: its CSS size is `logicalW * dp / dpr` by `logicalH * dp / dpr`,
-which is a fraction of a CSS pixel at a fractional ratio (640 x 361 logical at 110% is
-`1745.45455px` by `984.54546px`, and exactly 1920 x 1083 device pixels). The surface is wrapped
-in one `ImageData` per size (the same memory, no copy) and sent with one `putImageData`. The
-canvas is `aria-hidden`, cannot take focus, and has `touch-action: manipulation`.
+**The canvas.** Its backing store is exactly `canvasW` x `canvasH` (from
+`usePixelRootScale()`: see "The canvas's own values" above), and it is shown at exactly
+`canvasDp` device pixels per canvas pixel, scaled with `image-rendering: pixelated`. Its CSS
+size is `canvasW * canvasDp / dpr` by `canvasH * canvasDp / dpr`, which is a fraction of a CSS
+pixel at a fractional ratio (960 x 541 at 110% is `1745.45455px` by `983.63637px`, exactly
+1920 x 1082 device pixels). The surface is wrapped in one `ImageData` per size (the same
+memory, no copy) and sent with one `putImageData`. The canvas is `aria-hidden`, cannot take
+focus, and has `touch-action: manipulation`. It carries `--ss-stage-px` (its own pixel in CSS
+px), which ui.css section 19 uses for the rounding slack where it places the canvas.
 
-The logical size is rounded up, so the canvas is less than one logical pixel larger than the
-screen each way. It is centred on the slot at a whole pixel (`--snap`: a CSS pixel, or whole
-device pixels where those differ) and the slot crops the extra. An odd pixel left over is
-cropped on the left and the top (ui.css section 19):
+The canvas's size is rounded up, so it is less than one canvas pixel larger than the screen
+each way. It is centred on the slot at a whole pixel (`--snap`: a CSS pixel, or whole device
+pixels where those differ) and the slot crops the extra. An odd pixel left over is cropped on
+the left and the top (ui.css section 19). Worked out from the rule:
 
-| viewport           | dp  | canvas (logical) | canvas (device px) | cropped, device px: left, right, top, bottom |
-| ------------------ | --- | ---------------- | ------------------ | -------------------------------------------- |
-| 390 x 844 at 2     | 6   | 130 x 282        | 780 x 1692         | 0, 0, 2, 2                                   |
-| 360 x 740 at 3     | 9   | 120 x 247        | 1080 x 2223        | 0, 0, 3, 0                                   |
-| 1366 x 768         | 3   | 456 x 256        | 1368 x 768         | 1, 1, 0, 0                                   |
-| 1440 x 900         | 3   | 480 x 300        | 1440 x 900         | none                                         |
-| 1536 x 864 at 125% | 4   | 480 x 270        | 1920 x 1080        | none                                         |
-| 1707 x 960 at 150% | 5   | 513 x 288        | 2565 x 1440        | 2, 2, 0, 0                                   |
-| 1745 x 982 at 110% | 3   | 640 x 361        | 1920 x 1083        | 0, 0, 1, 2                                   |
+| viewport                 | dp  | canvasDp | canvas    | canvas (device px) | cropped, device px: left, right, top, bottom |
+| ------------------------ | --- | -------- | --------- | ------------------ | -------------------------------------------- |
+| 390 x 844 at 2           | 6   | 3        | 260 x 563 | 780 x 1689         | 0, 0, 1, 0                                   |
+| 360 x 740 at 3           | 9   | 5        | 216 x 444 | 1080 x 2220        | none                                         |
+| 1920 x 1080              | 4   | 2        | 960 x 540 | 1920 x 1080        | none                                         |
+| 1366 x 768               | 3   | 2        | 683 x 384 | 1366 x 768         | none                                         |
+| 1440 x 900               | 3   | 2        | 720 x 450 | 1440 x 900         | none                                         |
+| 1536 x 864 at 125%       | 4   | 2        | 960 x 540 | 1920 x 1080        | none                                         |
+| 1745.45 x 981.82 at 110% | 3   | 2        | 960 x 541 | 1920 x 1082        | 0, 0, 1, 1                                   |
 
 So the line down the middle of the scene (`w / 2`) is the middle of the screen, or half a pixel
 left of it. The interface column and the wide menu row are centred with the same rounding, so
 the centre lines are never more than half a pixel apart. **Place things in a scene from its
-centre, not from a column edge worked out in logical pixels.** The column's edges only fall on
-the canvas's pixel grid when the column is a whole number of logical pixels wide and as odd or
-even as `logicalW`. They do at 390 x 844 and 820 x 1180. At 1440 x 900 the column starts at
-logical 172.33, at 1920 x 1080 and 768 x 1024 on a half pixel, and at `px` 2 the column is 202.5
-logical pixels wide. Browsers without CSS `round()` put the canvas at 0, 0 and crop it on the
-right and the bottom.
+centre, not from a column edge worked out in interface pixels**: the column's edges fall on the
+canvas's pixel grid only on some screens. Browsers without CSS `round()` put the canvas at
+0, 0 and crop it on the right and the bottom.
 
-**Every logical pixel is the same whole block of device pixels at any ratio.** Checked device
-pixel by device pixel in Chrome on the test card (the 1 px checkerboard: 576 identical squares of
-`dp` x `dp`, exactly two colours) at 1920 x 1080, 1440 x 900, 1366 x 768 and 2560 x 1440 at 1;
-1536 x 864 at 1.25; 1280 x 720 and 1707 x 960 at 1.5; 1097 x 617 at 1.75; 1745 x 982 at 1.1;
-2133 x 1200 at 0.9; and the phones 390 x 844 at 2 and 3, 360 x 740 at 3, 375 x 667, 320 x 568
-and 768 x 1024 at 2. The DOM was checked on the same card: its two checkerboards (a cell of
-`--px`, a cell of `--fp`) are exact, every box is on a whole device pixel, and each Jersey face,
-thresholded, is glyph for glyph the face at a whole ratio with the same device font pixel.
+**Every pixel is the same whole block of device pixels at any ratio.** Checked device pixel by
+device pixel in Chrome on the test card (the 1 px checkerboard: 576 identical squares of `dp` x
+`dp`, exactly two colours; 2026-11-10, when the canvas's pixel was the interface's, and the
+canvas's own pixel is made the same way: a whole number of device pixels) at 1920 x 1080,
+1440 x 900, 1366 x 768 and 2560 x 1440 at 1; 1536 x 864 at 1.25; 1280 x 720 and 1707 x 960 at
+1.5; 1097 x 617 at 1.75; 1745 x 982 at 1.1; 2133 x 1200 at 0.9; and the phones 390 x 844 at 2
+and 3, 360 x 740 at 3, 375 x 667, 320 x 568 and 768 x 1024 at 2. The DOM was checked on the
+same card: its two checkerboards (a cell of `--px`, a cell of `--fp`) are exact, every box is
+on a whole device pixel, and each Jersey face, thresholded, is glyph for glyph the face at a
+whole ratio with the same device font pixel.
 
 Two things to know when checking this yourself:
 
@@ -824,9 +1174,9 @@ Two things to know when checking this yourself:
   plate on a phone); the wide menu row avoids it.
 
 **The pointer.** `pointermove`, `pointerdown` and `pointerup` are forwarded to `scene.pointer`
-as `move`, `down` and `up`, and `pointerleave` and `pointercancel` both as `leave`, in logical
-pixels with fractions (`Math.floor` gives the pixel under the pointer). `touch` is true for
-anything that is not a mouse.
+as `move`, `down` and `up`, and `pointerleave` and `pointercancel` both as `leave`, in the
+canvas's pixels with fractions (`Math.floor` gives the pixel under the pointer). `touch` is
+true for anything that is not a mouse.
 
 - Only the primary pointer is forwarded (a second finger is ignored), and for a mouse only the
   main button presses.
@@ -854,6 +1204,14 @@ Chrome with `/dev/stage?bench=1` at 1920 x 1080). With the menu scene a whole fr
 page is 1.4 to 2.5 ms on average, at 60 frames a second with none dropped; the figures are in
 `docs/API_SCENES.md`. Nothing runs after the page is left: no frames, no timers, no listeners
 (counted across ten visits, strict mode on).
+
+### The old detail switch
+
+Until 2026-11-12 the art had two detail levels and `?detail=1` asked for the old one, kept for
+the tab in `sessionStorage` (`soccersense:detail`). There is one level now and `?detail` means
+nothing. `PixelRoot` calls `forgetDetailChoice()` (`app/ui/forget-detail.ts`, also
+`OLD_DETAIL_STORAGE_KEY`) after it mounts, so a tab that still remembers a choice loses it on
+its first visit; never during render, and blocked storage is left alone.
 
 ### `useDeviceSky`
 
@@ -896,6 +1254,44 @@ const heading = useArrivalFocus<HTMLHeadingElement>();
   `ss-page` has no outline: a heading is not a control).
 - One call per page, in the page's own component. The home page, the mode pages and the rules
   page use it.
+
+### The fade through black: `fadeThrough` and `useFadeArrival`
+
+(New 2026-11-12, at the product owner's request: "when clicking home after playing a match
+there should be a black fade out and fade in rather than teleport to home".) `app/ui/fade.ts`,
+ui.css section 23.
+
+```tsx
+// The way out: the full-time card's MENU (app/routes/play/Game.tsx).
+onMenu={() => fadeThrough(() => navigate({ pathname: "/", search }))}
+// The way in: the home page, once its picture can be drawn.
+useFadeArrival(scene !== null && sky !== null);
+```
+
+- `fadeThrough(go)`: the ink comes over the page (`FADE_MS`, 0.35 s), with the iris's closing
+  sound (`{ kind: "transition", opening: false }`); with the screen all ink, `go()` runs (a
+  navigation); the ink stays until the next page calls `fadeArrived()` (`useFadeArrival(true)`
+  does), then after two more frames (the first is the picture's first, often a long one) it
+  goes (`FADE_MS` again), with the iris opening. If the page never says so, the ink goes after
+  `ARRIVAL_PATIENCE_MS` (2.5 s); if `go()` throws or its promise rejects, at once. Returns
+  false and does nothing while a fade is on: no double fade.
+- **In pixels.** The ink is an ordered dither, a 4 x 4 Bayer pattern of the palette's ink in
+  sixteen steps (`BAYER`, `FADE_STEPS`, `fadeLevel`, `inked`): each step inks one more cell of
+  every 4 x 4 block, and a cell once inked stays inked, so the picture is eaten away in a
+  regular pattern, never faded. The overlay is a canvas of its own on `document.body`
+  (`.ss-fade`, outside React, so it lives through the change of page): one canvas pixel per
+  interface pixel (`dp` device pixels, about two of the picture's), from the top left corner, scaled with hard edges. Every frame shows the step
+  for its time; the clock moves at most `MAX_STEP_MS` a frame, so a long frame is a wait, not
+  a jump (measured: 21 frames out and 21 in at 60 Hz, every step from 1 to 16 shown).
+- It takes the presses while the ink comes (nothing is pressed twice) and lets them through
+  while it goes.
+- `arrivingThroughFade()` is true from the press until the ink starts to go: the home page asks
+  it when it makes its scene, so the ball's entrance (swelling out of its star) plays as the
+  page fades in. The back button, a link and a visit are untouched: no fade, and the
+  entrance as before (once a page load).
+- Under reduced motion (or with no 2D canvas) there is no fade and no sound: `go()` runs at
+  once.
+- Browser only: nothing runs at import or at build time.
 
 ### `fetchHeadingFaces`
 
@@ -1105,14 +1501,15 @@ and no `/` in it (on Windows a colon writes to a stream of another file).
 
 ## The pages
 
-| address                    | file                         | what it is                                                                          |
-| -------------------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
-| `/`                        | `app/routes/home.tsx`        | the home screen: `GameLayout` with `PixelStage` (the menu scene) and `MenuCaptions` |
-| `/play/home`, `/play/away` | `app/routes/play.tsx`        | the game, one page per mode (`app/routes/play/`)                                    |
-| `/how-to-play`             | `app/routes/how-to-play.tsx` | the rules for old links (the "?" button now opens them over the home screen)        |
-| any other                  | `app/root.tsx`               | the error page (`ErrorBoundary`), which is also the 404                             |
-| `/dev/ui`, `/dev/stage`    | `app/routes/dev-*.tsx`       | the gallery and the stage test card                                                 |
-| `/dev/sound`               | `app/routes/dev-sound.tsx`   | the sound board: every sound and its level from `app/audio/mix.ts` (docs/AUDIO.md)  |
+| address                         | file                         | what it is                                                                          |
+| ------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------- |
+| `/`                             | `app/routes/home.tsx`        | the home screen: `GameLayout` with `PixelStage` (the menu scene) and `MenuCaptions` |
+| `/play/home`, `/play/away`      | `app/routes/play.tsx`        | the game, one page per mode (`app/routes/play/`)                                    |
+| `/play/retro`, `/play/next-gen` | `app/routes/play.tsx`        | the same, for RETRO and NEXT-GEN (2026-11-13; `/play/nextgen` plays NEXT-GEN too)   |
+| `/how-to-play`                  | `app/routes/how-to-play.tsx` | the rules for old links (the "?" button now opens them over the home screen)        |
+| any other                       | `app/root.tsx`               | the error page (`ErrorBoundary`), which is also the 404                             |
+| `/dev/ui`, `/dev/stage`         | `app/routes/dev-*.tsx`       | the gallery and the stage test card                                                 |
+| `/dev/sound`                    | `app/routes/dev-sound.tsx`   | the sound board: every sound and its level from `app/audio/mix.ts` (docs/AUDIO.md)  |
 
 Every page is rendered to HTML at build time, so none of them reads the window, the address or
 the storage while rendering: what depends on the day arrives after mounting, through

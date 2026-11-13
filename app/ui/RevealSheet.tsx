@@ -56,12 +56,13 @@ export interface RevealSheetProps {
  * - `place`: the place after a name is kept for screen readers only in the rows where it
  *   does not fit on the name's line (and so would take a line of its own).
  * - `tight`: the rows are set tighter: less padding, the points on a lower box.
+ * - `band`: the band at the top (the grade and the points) is one size of line lower.
  * - `over`: the board gives way and the sheet covers the foot of it, up to the whole
  *   column.
  *
- * Past all three the table scrolls, as before; no screen measured needs that (docs/API_UI.md).
+ * Past all four the table scrolls, as before; no screen measured needs that (docs/API_UI.md).
  */
-export const FIT_STEPS = ["place", "tight", "over"] as const;
+export const FIT_STEPS = ["place", "tight", "band", "over"] as const;
 export type FitStep = (typeof FIT_STEPS)[number];
 
 /** Whether the sheet's table shows every row whole, with no scrolling. */
@@ -69,14 +70,16 @@ function tableFits(sheet: HTMLElement): boolean {
   const wrap = sheet.querySelector<HTMLElement>(".ss-table-wrap");
   const table = wrap?.querySelector("table");
   if (!wrap || !table) return true;
-  return table.offsetHeight <= wrap.clientHeight;
+  // The space LeagueTable may have put after the last row is not content.
+  const tail =
+    wrap.querySelector<HTMLElement>(".ss-table__tail")?.offsetHeight ?? 0;
+  const content = Math.max(table.offsetHeight, wrap.scrollHeight - tail);
+  return content <= wrap.clientHeight;
 }
 
 /** `place`: keep a place that would wrap onto a line of its own for screen readers only. */
 function cutWrappedPlaces(sheet: HTMLElement): void {
-  for (const place of sheet.querySelectorAll<HTMLElement>(
-    ".ss-table__place",
-  )) {
+  for (const place of sheet.querySelectorAll<HTMLElement>(".ss-table__place")) {
     const name = place.parentElement?.querySelector(".ss-table__name");
     if (!name || !place.textContent) continue;
     const lines = name.getClientRects();

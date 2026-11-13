@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   type KeyboardEvent,
   useEffect,
   useId,
@@ -43,6 +44,31 @@ export interface LeaderboardBoard {
   played: string;
   /** Read out for the player's row in place of YOU: "You: 37th of 1,284". */
   youSpoken?: string;
+  /**
+   * The player's own line under the table, in place of `played`: where they came today
+   * ("You're 37th of 1,284"), or a nudge to play when they have not.
+   */
+  mine?: string;
+  /** The player's last seven days in this mode, from this device: a strip of bars. */
+  week?: LeaderboardWeek;
+}
+
+/** One day of the strip: its name under the bar, and the total, or null if not played. */
+export interface LeaderboardDay {
+  /** Under the bar: "MON". */
+  label: string;
+  total: number | null;
+  /** Today's bar: its name is lit. */
+  today?: boolean;
+}
+
+/** The player's last seven days in a mode, oldest first, today last. */
+export interface LeaderboardWeek {
+  /** Over the strip: "YOUR LAST 7 DAYS". */
+  heading: string;
+  days: readonly LeaderboardDay[];
+  /** All seven read out in one go, in place of the bars. */
+  spoken: string;
 }
 
 export interface LeaderboardLabels {
@@ -68,6 +94,8 @@ export interface LeaderboardLabels {
   hide: string;
   /** The tab's tooltip while the panel is away: "Show the leaderboard". */
   show: string;
+  /** The link to the stats pop-up, at the strip's top right: "ALL STATS". */
+  more?: string;
 }
 
 export interface LeaderboardProps {
@@ -81,7 +109,68 @@ export interface LeaderboardProps {
    * drops away, and an open sheet closes), and nothing in it can be reached.
    */
   stowed?: boolean;
+  /** Open the player's stats (the link under the strip, `labels.more`). None: no link. */
+  onStats?: () => void;
   className?: string;
+}
+
+/** A total's share of a perfect game, for the height of its bar: 0 to 1. */
+function share(total: number): number {
+  return Number.isFinite(total) ? Math.min(1, Math.max(0, total / 700)) : 0;
+}
+
+/**
+ * The player's last seven days in the selected mode: seven bars in its colour, under a
+ * heading with the link to the stats at its right.
+ */
+function Week({
+  week,
+  more,
+}: {
+  week: LeaderboardWeek;
+  more?: { label: string; onClick(): void };
+}) {
+  return (
+    <div className="ss-lb__week">
+      <div className="ss-lb__week-head">
+        <span aria-hidden="true">{week.heading}</span>
+        {more && (
+          <button
+            type="button"
+            className="ss-lb__more"
+            aria-haspopup="dialog"
+            onClick={more.onClick}
+          >
+            {more.label}
+          </button>
+        )}
+      </div>
+      <p className="ss-sr">{week.spoken}</p>
+      <ol className="ss-lb__bars" aria-hidden="true">
+        {week.days.map((day, i) => (
+          <li
+            key={i}
+            className={cx(
+              "ss-lb__day",
+              day.total === null && "is-empty",
+              day.today && "is-today",
+            )}
+            title={day.total === null ? undefined : String(day.total)}
+          >
+            <span className="ss-lb__track">
+              {day.total !== null && (
+                <span
+                  className="ss-lb__bar"
+                  style={{ "--v": share(day.total) } as CSSProperties}
+                />
+              )}
+            </span>
+            <span className="ss-lb__dayname">{day.label}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
 }
 
 /** A cup with two handles on a foot, 9 x 9 like the kit's icons. Not any real trophy. */
@@ -258,6 +347,7 @@ function Body({
   onMode,
   headingId,
   close,
+  onStats,
 }: {
   boards: readonly LeaderboardBoard[];
   labels: LeaderboardLabels;
@@ -265,6 +355,7 @@ function Body({
   onMode(mode: UiMode): void;
   headingId: string;
   close?: { label: string; onClose(): void };
+  onStats?: () => void;
 }) {
   const base = useId();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -273,6 +364,10 @@ function Body({
     boards.findIndex((b) => b.mode === mode),
   );
   const board = boards[index];
+  const more =
+    onStats && labels.more
+      ? { label: labels.more, onClick: onStats }
+      : undefined;
 
   // Arrow keys move along the tabs and choose as they go (the panel is cheap to show).
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -388,7 +483,23 @@ function Body({
               )}
             </tbody>
           </table>
-          <p className="ss-lb__played">{board.played}</p>
+          <p className={cx("ss-lb__played", board.mine && "is-mine")}>
+            {board.mine ?? board.played}
+          </p>
+          {board.week ? (
+            <Week week={board.week} more={more} />
+          ) : (
+            more && (
+              <button
+                type="button"
+                className="ss-lb__more"
+                aria-haspopup="dialog"
+                onClick={more.onClick}
+              >
+                {more.label}
+              </button>
+            )
+          )}
         </div>
       )}
     </>
@@ -402,7 +513,9 @@ function settle(el: HTMLElement | null): void {
 }
 
 /**
- * Today's top ten, a tab per mode. On a wide screen (a monitor) it is a panel standing on
+ * Today's top ten, a tab per mode, and under it the player's own line for that mode (where
+ * they came, or a nudge), their last seven days in it as a strip of bars and a link to their
+ * stats. On a wide screen (a monitor) it is a panel standing on
  * the right of the picture. Anywhere else it is a trophy button that opens it as a sheet
  * over the lower part of the screen (a modal dialog: Escape or the close button shuts it,
  * and the focus goes back to the trophy). Use it inside a `GameLayout`.
@@ -420,6 +533,7 @@ export function Leaderboard({
   labels,
   initialMode,
   stowed = false,
+  onStats,
   className,
 }: LeaderboardProps) {
   const wide = isWide(usePixelRootScale());
@@ -622,6 +736,7 @@ export function Leaderboard({
             mode={mode}
             onMode={setMode}
             headingId={headingId}
+            onStats={onStats}
           />
         </div>
       </aside>
@@ -672,6 +787,18 @@ export function Leaderboard({
             onMode={setMode}
             headingId={headingId}
             close={{ label: labels.close, onClose: shut }}
+            onStats={
+              onStats &&
+              (() => {
+                // the sheet goes, and the stats come up in its place
+                const dialog = dialogRef.current;
+                if (dialog?.open && typeof dialog.close === "function") {
+                  dialog.close();
+                }
+                setOpen(false);
+                onStats();
+              })
+            }
           />
         </dialog>
       )}

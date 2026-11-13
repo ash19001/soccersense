@@ -91,7 +91,7 @@ function near(d: number, width: number, s: number): boolean {
 /** A road seen across (`a`, from its middle) and along (`l`). */
 function road(a: number, l: number, half: number, s: number): Color {
   if (Math.abs(a) > half - Math.max(1.3, 1 / s)) return P.concreteLight;
-  if (s > 0.62 && near(a, 0.5, s) && Math.floor(l / 5) % 2 === 0) return P.mist;
+  if (s > 1.24 && near(a, 0.5, s) && Math.floor(l / 5) % 2 === 0) return P.mist;
   return P.concreteDark;
 }
 
@@ -156,7 +156,7 @@ function pick(X: number, V: number, s: number, seed: number): Color | number {
       return P.concreteLight;
     }
     if (Math.abs(d) <= 2.6) {
-      return s > 0.5 && near(Math.abs(d) - 1.3, 0.4, s)
+      return s > 1 && near(Math.abs(d) - 1.3, 0.4, s)
         ? P.concreteDark
         : P.concrete;
     }
@@ -170,7 +170,7 @@ function pick(X: number, V: number, s: number, seed: number): Color | number {
     if (Math.abs(a) < 3) return P.grass;
     const lane = Math.abs(a) - 8.5;
     if (Math.abs(lane) > 4.4) return P.concreteLight;
-    if (s > 0.62 && near(lane, 0.5, s) && Math.floor(V / 5) % 2 === 0) {
+    if (s > 1.24 && near(lane, 0.5, s) && Math.floor(V / 5) % 2 === 0) {
       return P.mist;
     }
     return P.concreteDark;
@@ -250,7 +250,7 @@ function pick(X: number, V: number, s: number, seed: number): Color | number {
           : P.concreteDark;
       }
       if (gate && d < 10.2) {
-        return s > 0.9 &&
+        return s > 1.8 &&
           near(X - (LOT_GATE.x0 + LOT_GATE.x1) / 2, 0.5, s) &&
           Math.floor(d / 2) % 2 === 0
           ? P.mist
@@ -260,7 +260,7 @@ function pick(X: number, V: number, s: number, seed: number): Color | number {
       if (d < 4.5) return P.concreteLight;
       const row = (d - 3.2) % 22;
       const bays = row < 7 || (row >= 12 && row < 19);
-      if (bays && s > 0.55 && near((((X - 62) % 4) + 4) % 4, 0.4, s)) {
+      if (bays && s > 1.1 && near((((X - 62) % 4) + 4) % 4, 0.4, s)) {
         return P.concreteLight;
       }
       return bays ? P.concrete : P.concreteDark;
@@ -277,7 +277,7 @@ function pick(X: number, V: number, s: number, seed: number): Color | number {
     if (X >= COACHES.x0 && X <= COACHES.x1) {
       // the coach park: tarmac with long bays, a verge along the avenue
       if (X < COACHES.x0 + 3 || V > ROAD.northV0 - 4) return P.grass;
-      if (s > 0.55 && near(((V + 400) % 6.5) - 0.2, 0.4, s) && X < -183) {
+      if (s > 1.1 && near(((V + 400) % 6.5) - 0.2, 0.4, s) && X < -183) {
         return P.concreteLight;
       }
       return P.concrete;

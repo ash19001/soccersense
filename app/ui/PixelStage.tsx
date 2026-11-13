@@ -131,14 +131,14 @@ function stale(st: Stage): boolean {
 }
 
 /**
- * One frame, always in this order: `resize` (new scene or new size), `setLighting` (new
- * scene or new light), `setReducedMotion` (new scene or a change), `update(dt)`,
- * `draw(surface)`, then the surface goes to the canvas. A scene's first frame has `dt` 0.
+ * One frame, always in this order: `resize` (new scene or new size),
+ * `setLighting` (new scene or new light), `setReducedMotion` (new scene or a change),
+ * `update(dt)`, `draw(surface)`, then the surface goes to the canvas. A scene's first frame
+ * has `dt` 0.
  */
 function renderFrame(st: Stage, dt: number): void {
   const { ctx, scene, light, w, h } = st;
   if (!ctx || !scene || !light) return;
-
   if (st.told !== scene) {
     st.told = scene;
     st.toldW = 0;
@@ -228,11 +228,13 @@ function repaint(st: Stage): void {
  * The canvas host. It goes in `GameLayout`'s `canvas` slot, fills it, and drives one
  * `Scene`: it owns the frame loop, the framebuffer and the pointer mapping.
  *
- * The canvas's backing store is exactly `logicalW` x `logicalH` (from the nearest
- * `PixelRoot`), shown at exactly `dp` device pixels per logical pixel (`px` CSS pixels,
- * which is a fraction at a fractional device pixel ratio) with nearest-neighbour scaling:
- * every logical pixel is the same whole block of device pixels at any display scaling or
- * zoom. Placement is in ui.css (section 19): the less than one logical pixel by which the
+ * The canvas's backing store is exactly `canvasW` x `canvasH` (from the nearest
+ * `PixelRoot`), shown at exactly `canvasDp` device pixels per logical pixel (`canvasPx` CSS
+ * pixels, which is a fraction at a fractional device pixel ratio) with nearest-neighbour
+ * scaling: every logical pixel is the same whole block of device pixels at any display
+ * scaling or zoom. The canvas's pixels are half the interface's, rounded up to whole device
+ * pixels, and there are about twice as many each way (`canvasDpFor`: 960 x 540 at
+ * 1920 x 1080). Placement is in ui.css (section 19): the less than one logical pixel by which the
  * canvas is larger than the screen is split between the two sides in whole device pixels,
  * so the middle of the scene is the middle of the screen.
  *
@@ -250,7 +252,14 @@ export function PixelStage({
   timeScale = 1,
   className,
 }: PixelStageProps) {
-  const { px, dp, dpr, logicalW, logicalH } = usePixelRootScale();
+  // The canvas's own size and pixel (half the interface's: see scale.ts).
+  const {
+    canvasPx: px,
+    canvasDp: dp,
+    dpr,
+    canvasW: logicalW,
+    canvasH: logicalH,
+  } = usePixelRootScale();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stageRef = useRef<Stage | null>(null);
 
@@ -451,6 +460,7 @@ export function PixelStage({
     height: cssH,
     "--ss-stage-w": cssW,
     "--ss-stage-h": cssH,
+    "--ss-stage-px": `${px}px`,
   } as CSSProperties;
 
   return (

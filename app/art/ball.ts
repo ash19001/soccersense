@@ -51,11 +51,12 @@ import {
   clamp,
   drawText,
   measureText,
-  sprite,
   type Color,
   type Sprite,
   type TextOptions,
 } from "~/pixel";
+import { ballIcons } from "./ball-icons";
+import { paintedFont } from "./lettering";
 import type { Lighting } from "./lighting";
 import { P } from "./palette";
 
@@ -396,6 +397,38 @@ interface Disc {
 
 const disc: Disc = { x0: 0, y0: 0, d: 0, tx: 0, ty: 0, rad: 0 };
 
+// Many of the ball's choices are made in coarse units of two canvas pixels (a radius, a
+// distance in from a panel's edge, a block of text's half height), so that they fall on
+// even rows and columns: `rs`, `te`, `minE`, `halfRows`.
+
+/**
+ * Half of `rows` (a height) in whole coarse units: the coarse rows halved and rounded
+ * down, then doubled, so that a block of text sits on even rows.
+ */
+function halfRows(rows: number): number {
+  return ((rows / 2) >> 1) * 2;
+}
+
+/** The radius in coarse units (two pixels each): the sizes below are judged on it. */
+function rs(): number {
+  return disc.rad / 2;
+}
+
+/** The coarse edge distance (1 on the edge) that a distance in pixels lies in. */
+function te(edge: number): number {
+  return (edge + 1) >> 1;
+}
+
+/**
+ * The least distance in pixels from a panel's edge for what keeps `e` coarse units in: a
+ * clearance of e - 1 coarse units is 2e - 2 pixels, less the half pixel that the panel's
+ * own outline loses to rounding (so HOME on the smallest menu ball just fits), and never on
+ * the line, which lies at coarse distances 1 or 2 (`te`).
+ */
+function minE(e: number): number {
+  return Math.max(1, 2 * e - 2);
+}
+
 /** The engine's circle convention: a radius r is round(2r) + 1 pixels across. */
 function measure(state: BallState): boolean {
   const r = state.r;
@@ -474,8 +507,14 @@ function panelAt(x: number, y: number, z: number, guess: number): number {
   }
 }
 
-/** Fill `faceBuf`, `edgeBuf` and `seamBuf` for the current disc and orientation. */
-function rasterise(): void {
+/**
+ * Fill `faceBuf`, `edgeBuf` and `seamBuf` for the current disc and orientation: all of it,
+ * or only the disc's rows `from` to `to` (exclusive) for a measurement that reads a few
+ * rows (`roomFor`). A band's own first and last rows border on nothing, so only the rows at
+ * least `BAND_MARGIN` inside it are as a full rasterisation has them (as far as `freeRun`
+ * reads them: panel, outline and edge distances up to `BAND_MARGIN - 2`).
+ */
+function rasterise(from = 0, to = disc.d, c0 = 0, c1 = disc.d): void {
   const d = disc.d;
   const stride = d + 2;
   const size = stride * stride;
@@ -488,15 +527,27 @@ function rasterise(): void {
   const rad2 = rad * rad;
   const inv = 1 / rad;
   const half = (d - 1) / 2;
-  faceBuf.fill(OUTSIDE, 0, size);
+  const j0 = Math.max(0, from);
+  const j1 = Math.min(d, to);
+  // only the band's rows and the one either side are read (a band of rows is all that
+  // `freeRun` reads after a partial rasterisation)
+  if (j0 === 0 && j1 === d) faceBuf.fill(OUTSIDE, 0, size);
+  else
+    faceBuf.fill(
+      OUTSIDE,
+      Math.max(0, j0) * stride,
+      Math.min(size, (j1 + 2) * stride),
+    );
+  const i0 = Math.max(0, c0);
+  const i1 = Math.min(d, c1);
 
   let rowGuess = 0;
-  for (let j = 0; j < d; j++) {
+  for (let j = j0; j < j1; j++) {
     const dy = j - half;
     let guess = rowGuess;
     let first = true;
     const row = (j + 1) * stride + 1;
-    for (let i = 0; i < d; i++) {
+    for (let i = i0; i < i1; i++) {
       const dx = i - half;
       const q = dx * dx + dy * dy;
       if (q > rad2) continue;
@@ -514,9 +565,9 @@ function rasterise(): void {
 
   // The outline is the engine's circle: the disc's pixels that touch the outside.
   // Marked in a second sweep so the test reads the untouched panel ids.
-  for (let j = 0; j < d; j++) {
+  for (let j = j0; j < j1; j++) {
     const row = (j + 1) * stride + 1;
-    for (let i = 0; i < d; i++) {
+    for (let i = i0; i < i1; i++) {
       const k = row + i;
       edgeBuf[k] =
         faceBuf[k] !== OUTSIDE &&
@@ -528,9 +579,9 @@ function rasterise(): void {
           : 0;
     }
   }
-  for (let j = 0; j < d; j++) {
+  for (let j = j0; j < j1; j++) {
     const row = (j + 1) * stride + 1;
-    for (let i = 0; i < d; i++) {
+    for (let i = i0; i < i1; i++) {
       if (edgeBuf[row + i] === 1) faceBuf[row + i] = OUTLINE;
     }
   }
@@ -538,9 +589,9 @@ function rasterise(): void {
   // Distance to the nearest other panel, city-block, capped: two chamfer sweeps. The
   // first also marks the seams. A seam is drawn on one side only, in the panel with the
   // lower number, so it is a single pixel wide whichever way it runs.
-  for (let j = 0; j < d; j++) {
+  for (let j = j0; j < j1; j++) {
     const row = (j + 1) * stride + 1;
-    for (let i = 0; i < d; i++) {
+    for (let i = i0; i < i1; i++) {
       const k = row + i;
       const f = faceBuf[k];
       seamBuf[k] = 0;
@@ -566,9 +617,9 @@ function rasterise(): void {
       edgeBuf[k] = m >= 30 ? 31 : m + 1;
     }
   }
-  for (let j = d - 1; j >= 0; j--) {
+  for (let j = j1 - 1; j >= j0; j--) {
     const row = (j + 1) * stride + 1;
-    for (let i = d - 1; i >= 0; i--) {
+    for (let i = i1 - 1; i >= i0; i--) {
       const k = row + i;
       if (faceBuf[k] < 0) continue;
       const a = edgeBuf[k + 1];
@@ -583,282 +634,24 @@ function rasterise(): void {
 // Icons
 // ---------------------------------------------------------------------------
 
-const ICON_HOME = sprite(
-  `
-....w....
-...www.w.
-..wwwwww.
-.wwwwwww.
-wwwwwwwww
-.wwwwwww.
-.www.www.
-.www.www.
-.www.www.
-`,
-  "w",
-);
-
-const ICON_AWAY = sprite(
-  `
-.......ww
-......www
-.....www.
-.wwwwww..
-....www..
-...wwww..
-.wwww.w..
-..ww..w..
-..w......
-`,
-  "w",
-);
-
-const ICON_LOCK = sprite(
-  `
-..wwwww..
-.ww...ww.
-.w.....w.
-.w.....w.
-wwwwwwwww
-wwww.wwww
-wwww.wwww
-wwwwwwwww
-wwwwwwwww
-`,
-  "w",
-);
-
-const ICON_LOCK_SMALL = sprite(
-  `
-.www.
-.w.w.
-wwwww
-ww.ww
-wwwww
-`,
-  "w",
-);
-
-const ICON_LOCK_MID = sprite(
-  `
-..www..
-.w...w.
-.w...w.
-wwwwwww
-www.www
-www.www
-wwwwwww
-`,
-  "w",
-);
-
-const ICON_HOME_BIG = sprite(
-  `
-......w......
-.....www.ww..
-....wwwwwww..
-...wwwwwwww..
-..wwwwwwwww..
-.wwwwwwwwwww.
-wwwwwwwwwwwww
-.wwwwwwwwwww.
-.wwwwwwwwwww.
-.wwww...wwww.
-.wwww...wwww.
-.wwww...wwww.
-.wwww...wwww.
-`,
-  "w",
-);
-
-const ICON_AWAY_BIG = sprite(
-  `
-...........ww
-..........www
-.........www.
-........www..
-.wwwwwwwww...
-...wwwwww....
-.....wwww....
-....wwwww....
-...www.ww....
-wwwww..ww....
-..ww....w....
-...w....w....
-...w.........
-`,
-  "w",
-);
-
-// The pictures of the locked patches: one size only, as quiet as the patches they ride on.
-
-const ICON_FORWARD = sprite(
-  `
-w...w...
-ww..ww..
-www.www.
-wwwwwwww
-www.www.
-ww..ww..
-w...w...
-`,
-  "w",
-);
-
-const ICON_REWIND = sprite(
-  `
-...w...w
-..ww..ww
-.www.www
-wwwwwwww
-.www.www
-..ww..ww
-...w...w
-`,
-  "w",
-);
-
-const ICON_PIN = sprite(
-  `
-.wwwww.
-wwwwwww
-ww...ww
-ww...ww
-wwwwwww
-.wwwww.
-..www..
-...w...
-`,
-  "w",
-);
-
-const ICON_GLOBE = sprite(
-  `
-..wwwww..
-.w..w..w.
-w..w.w..w
-wwwwwwwww
-w..w.w..w
-.w..w..w.
-..wwwww..
-`,
-  "w",
-);
-
-/** GUESS WHO: the back of a shirt, its number cut out of it. */
-const ICON_SHIRT = sprite(
-  `
-.www.www.
-wwwwwwwww
-www...www
-.wwww.ww.
-.wwww.ww.
-.www.www.
-.www.www.
-.wwwwwww.
-`,
-  "w",
-);
-
-/** SHOOTOUT: a goal with its net, and the ball on the spot in front of it. */
-const ICON_GOAL = sprite(
-  `
-wwwwwwwww
-w.w.w.w.w
-ww.w.w.ww
-w.w.w.w.w
-w.......w
-....w....
-...www...
-....w....
-`,
-  "w",
-);
-
-// The same, small, for a locked patch squashed far round the ball (the top and bottom
-// patches of the menu pose): five rows, beside the small padlock.
-
-const ICON_FORWARD_SMALL = sprite(
-  `
-w..w..
-ww.ww.
-wwwwww
-ww.ww.
-w..w..
-`,
-  "w",
-);
-
-const ICON_REWIND_SMALL = sprite(
-  `
-..w..w
-.ww.ww
-wwwwww
-.ww.ww
-..w..w
-`,
-  "w",
-);
-
-const ICON_PIN_SMALL = sprite(
-  `
-.www.
-ww.ww
-wwwww
-.www.
-..w..
-`,
-  "w",
-);
-
-const ICON_GLOBE_SMALL = sprite(
-  `
-.www.
-w.w.w
-wwwww
-w.w.w
-.www.
-`,
-  "w",
-);
-
-const ICON_SHIRT_SMALL = sprite(
-  `
-ww.ww
-wwwww
-.w.w.
-.www.
-.www.
-`,
-  "w",
-);
-
-const ICON_GOAL_SMALL = sprite(
-  `
-wwwww
-ww.ww
-w.w.w
-w...w
-..w..
-`,
-  "w",
-);
+// The pictures are drawn in ball-icons.ts.
 
 /** A locked patch's picture, full size or squashed, or null for "lock" and "none". */
 function pictureFor(patch: BallPatch, small: boolean): Sprite | null {
+  const I = ballIcons();
   switch (patch.icon) {
     case "forward":
-      return small ? ICON_FORWARD_SMALL : ICON_FORWARD;
+      return small ? I.forwardSmall : I.forward;
     case "rewind":
-      return small ? ICON_REWIND_SMALL : ICON_REWIND;
+      return small ? I.rewindSmall : I.rewind;
     case "pin":
-      return small ? ICON_PIN_SMALL : ICON_PIN;
+      return small ? I.pinSmall : I.pin;
     case "globe":
-      return small ? ICON_GLOBE_SMALL : ICON_GLOBE;
+      return small ? I.globeSmall : I.globe;
     case "shirt":
-      return small ? ICON_SHIRT_SMALL : ICON_SHIRT;
+      return small ? I.shirtSmall : I.shirt;
     case "goal":
-      return small ? ICON_GOAL_SMALL : ICON_GOAL;
+      return small ? I.goalSmall : I.goal;
     case "home":
     case "away":
       return small ? null : iconFor(patch, false);
@@ -868,25 +661,26 @@ function pictureFor(patch: BallPatch, small: boolean): Sprite | null {
 }
 
 function iconFor(patch: BallPatch, big: boolean): Sprite | null {
+  const I = ballIcons();
   switch (patch.icon) {
     case "home":
-      return big ? ICON_HOME_BIG : ICON_HOME;
+      return big ? I.homeBig : I.home;
     case "away":
-      return big ? ICON_AWAY_BIG : ICON_AWAY;
+      return big ? I.awayBig : I.away;
     case "forward":
-      return ICON_FORWARD;
+      return I.forward;
     case "rewind":
-      return ICON_REWIND;
+      return I.rewind;
     case "pin":
-      return ICON_PIN;
+      return I.pin;
     case "globe":
-      return ICON_GLOBE;
+      return I.globe;
     case "shirt":
-      return ICON_SHIRT;
+      return I.shirt;
     case "goal":
-      return ICON_GOAL;
+      return I.goal;
     case "lock":
-      return ICON_LOCK;
+      return I.lock;
     default:
       return null;
   }
@@ -938,8 +732,19 @@ const BIG_ICON_R = 56;
  * This frame's layout, the same for both buttons (or one would say HOME beside a bare
  * aeroplane). Set by `chooseLayout`.
  */
-/** Where the coloured line runs: 2 px in from the pentagon's edge, on it (1), or nowhere. */
+/**
+ * How much room the border leaves the words, in coarse units: 2 (a border three pixels
+ * deep, the words at least six in), 1 (two deep, the words four in) or 0 (one deep, the
+ * words two in). Text and plates are kept `minE(ringAt + 2)` from the pentagon's edge.
+ */
 let ringAt = 2;
+/**
+ * The border of an open patch (a button with an accent): a frame in its mode's colour
+ * round the very edge of its pentagon, this many pixels deep (3, 2 or 1, by `ringAt`).
+ * Three deep, its outer pixel is the mode's dark tone, so the frame reads against the
+ * white leather outside it as well as against the black patch inside it.
+ */
+let borderW = 3;
 /** How the labels are written, or null when there is no room for words. */
 let labelOpts: TextOptions | null = null;
 let bigIcons = false;
@@ -1023,7 +828,7 @@ function prepareSlots(
       slotColor[o + 4] = base;
       // "Press me": every few seconds a bar of light crosses the patch, HOME and then
       // AWAY. Stepped, and nothing at t = 0.
-      if (Number.isFinite(state.t) && disc.rad >= 20) {
+      if (Number.isFinite(state.t) && rs() >= 20) {
         const phase =
           (((state.t % SHINE_PERIOD) + SHINE_PERIOD) % SHINE_PERIOD) -
           SHINE_START -
@@ -1085,7 +890,7 @@ function freeRun(
 
 /** Top row of a block of text `h` rows tall on a side patch centred on row `cy`. */
 function textTop(cy: number, h: number): number {
-  return cy + 2 - (h >> 1);
+  return cy + 4 - halfRows(h);
 }
 
 /**
@@ -1107,25 +912,106 @@ const ROOM_SIZE = 11;
 /** The menu's deepest nod, give or take: the squashed room is measured that far each way. */
 const SQUASH_NOD = 0.065;
 
-/** Index into a room table: the line's place (0 none, 1 edge, 2 inset), rows of text. */
+/** Index into a room table: the line's place (0 none, 1 edge, 2 inset), rows of text
+ * (10 or 14). */
 function roomAt(ring: number, rows: number): number {
-  return ring * 2 + (rows > 5 ? 1 : 0);
+  return ring * 2 + (rows > 10 ? 1 : 0);
 }
+
+/**
+ * Rasterise only the band of rows that a measurement of screen rows `top` to `top + rows`
+ * reads, with `BAND_MARGIN` rows to spare each side: the same pixels there as a whole
+ * rasterisation, for a fraction of the work (the room is measured on about 25 poses for
+ * every new size, and in the entrance the ball has a new size every frame).
+ */
+function rasteriseRows(
+  top: number,
+  rows: number,
+  f = -1,
+  x = 0,
+  edge = BAND_MARGIN,
+): void {
+  // A measurement of panel `f` reads edge distances only up to `edge` (its least distance
+  // in from the panel's edge): the band needs no more than that to spare (a
+  // band's own edge can make a distance no smaller than its distance from it), which is
+  // most of the entrance's work saved.
+  const margin = f < 0 ? BAND_MARGIN * 2 : Math.max(1, edge + 1);
+  const from = top - disc.y0 - margin;
+  const to = top - disc.y0 + rows + margin;
+  if (f < 0) {
+    rasterise(from, to);
+    return;
+  }
+  // Only panel `f`'s columns round `x` are read (`freeRun` keeps to the panel): find how far
+  // the panel reaches on these rows and rasterise that much, `margin` columns to spare each
+  // side, the same pixels there as a whole rasterisation (a quarter to half of the work:
+  // the entrance asks for a new room table every frame).
+  const d = disc.d;
+  const half = (d - 1) / 2;
+  const rad = disc.rad;
+  const inv = 1 / rad;
+  const ix = x - disc.x0;
+  let lo = d;
+  let hi = -1;
+  const inside = (i: number, dy: number): boolean => {
+    const dx = i - half;
+    return i >= 0 && i < d && dx * dx + dy * dy <= rad * rad;
+  };
+  const faceOf = (i: number, dy: number): number => {
+    const nx = (i - half) * inv;
+    const ny = dy * inv;
+    return panelAt(nx, ny, Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny)), f);
+  };
+  for (
+    let j = Math.max(0, top - disc.y0);
+    j < Math.min(d, top - disc.y0 + rows);
+    j++
+  ) {
+    const dy = j - half;
+    if (!inside(ix, dy) || faceOf(ix, dy) !== f) continue;
+    // in steps of four: the run of the panel through x ends within three pixels of the
+    // last step that found it, so the window is never short of it (at most 3 px long)
+    let a = ix;
+    while (inside(a - 4, dy) && faceOf(a - 4, dy) === f) a -= 4;
+    let b = ix;
+    while (inside(b + 4, dy) && faceOf(b + 4, dy) === f) b += 4;
+    if (a - 3 < lo) lo = a - 3;
+    if (b + 3 > hi) hi = b + 3;
+  }
+  if (hi < lo) {
+    // the panel is not under x on any of these rows: nothing is free there
+    rasterise(from, from);
+    return;
+  }
+  rasterise(from, to, lo - margin, hi + margin + 1);
+}
+
+/** See `rasterise`: two more than the deepest edge distance `freeRun` asks for (4). */
+const BAND_MARGIN = 6;
 
 function roomFor(): Int16Array {
   const d = disc.d;
-  let room = roomCache.get(d);
+  // one table per size and level
+  const key = d * 2 + 1;
+  let room = roomCache.get(key);
   if (room) return room;
   room = new Int16Array(ROOM_SIZE);
-  if (disc.rad >= ICON_MIN_R) {
+  const rowsS = 10;
+  const rowsB = 14;
+  const lockedRow = LOCKED_ROW * 2;
+  const lockedGap = LOCKED_GAP * 2;
+  const squashedRow = SQUASHED_ROW * 2;
+  const lockedEdge = minE(LOCKED_EDGE);
+  if (rs() >= ICON_MIN_R) {
     orient(ROCK, 0, 0);
-    rasterise();
     // The far patch is the tight one; the ball is symmetrical, so one end is enough.
     const x = Math.round(disc.tx + VIEW[3] * disc.rad);
     const y = Math.round(disc.ty + VIEW[4] * disc.rad);
+    rasteriseRows(textTop(y, rowsB), rowsB, 1, x, minE(4));
     for (let ring = 0; ring <= 2; ring++) {
-      room[roomAt(ring, 5)] = freeRun(1, x, textTop(y, 5), 5, ring + 2);
-      room[roomAt(ring, 7)] = freeRun(1, x, textTop(y, 7), 7, ring + 2);
+      const edge = minE(ring + 2);
+      room[roomAt(ring, rowsS)] = freeRun(1, x, textTop(y, rowsS), rowsS, edge);
+      room[roomAt(ring, rowsB)] = freeRun(1, x, textTop(y, rowsB), rowsB, edge);
     }
     // A locked patch in a side place (where CLOSEST and FURTHEST rest after half a turn):
     // its picture row, and its word under it. And the top and bottom patches of the menu
@@ -1137,23 +1023,30 @@ function roomFor(): Int16Array {
     for (const yaw of [-ROCK, ROCK]) {
       for (const pitch of [-SQUASH_NOD, SQUASH_NOD]) {
         orient(yaw, pitch, 0);
-        rasterise();
         const top = lockedTop(Math.round(disc.ty + VIEW[4] * disc.rad));
         const sx = Math.round(disc.tx + VIEW[3] * disc.rad);
-        mark = Math.min(mark, freeRun(1, sx, top, LOCKED_ROW, LOCKED_EDGE));
+        rasteriseRows(top, lockedRow + lockedGap + rowsS, 1, sx, lockedEdge);
+        mark = Math.min(mark, freeRun(1, sx, top, lockedRow, lockedEdge));
         word = Math.min(
           word,
-          freeRun(1, sx, top + LOCKED_ROW + LOCKED_GAP, 5, LOCKED_EDGE),
+          freeRun(1, sx, top + lockedRow + lockedGap, rowsS, lockedEdge),
         );
         for (const f of [2, 3]) {
           const px = Math.round(disc.tx + VIEW[f * 3] * disc.rad);
           const py = Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad);
+          rasteriseRows(
+            py - halfRows(squashedRow),
+            squashedRow,
+            f,
+            px,
+            lockedEdge,
+          );
           const run = freeRun(
             f,
             px,
-            py - (SQUASHED_ROW >> 1),
-            SQUASHED_ROW,
-            LOCKED_EDGE,
+            py - halfRows(squashedRow),
+            squashedRow,
+            lockedEdge,
           );
           const half =
             run > 0 ? Math.min(px - runLo, runLo + run - 1 - px) : -1;
@@ -1177,18 +1070,24 @@ function roomFor(): Int16Array {
         for (const nod of [-SQUASH_NOD, SQUASH_NOD]) {
           for (const roll of rolls) {
             orient(pose.yaw + yaw, pose.pitch + nod, roll);
-            rasterise();
             const px = Math.round(disc.tx + VIEW[f * 3] * disc.rad);
             const top = lockedTop(
               Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad),
             );
+            rasteriseRows(
+              top,
+              lockedRow + lockedGap + rowsS,
+              f,
+              px,
+              lockedEdge,
+            );
             frontMark = Math.min(
               frontMark,
-              freeRun(f, px, top, LOCKED_ROW, LOCKED_EDGE),
+              freeRun(f, px, top, lockedRow, lockedEdge),
             );
             frontWord = Math.min(
               frontWord,
-              freeRun(f, px, top + LOCKED_ROW + LOCKED_GAP, 5, LOCKED_EDGE),
+              freeRun(f, px, top + lockedRow + lockedGap, rowsS, lockedEdge),
             );
           }
         }
@@ -1198,14 +1097,33 @@ function roomFor(): Int16Array {
     room[ROOM_WORD_FRONT] = frontWord;
   }
   if (roomCache.size > 400) roomCache.clear();
-  roomCache.set(d, room);
+  roomCache.set(key, room);
   return room;
 }
 
-const SMALL = { font: FONT_3x5 } as const;
-const SMALL_DIGITS = { font: FONT_3x5, tabular: true } as const;
-const BIG_DIGITS = { font: FONT_5x7, tabular: true } as const;
-const BIG = { font: FONT_5x7 } as const;
+interface LabelFonts {
+  SMALL: TextOptions;
+  SMALL_DIGITS: TextOptions;
+  BIG: TextOptions;
+  BIG_DIGITS: TextOptions;
+}
+
+let fonts: LabelFonts | undefined;
+
+/** The labels' faces: the painted ones (~/art/lettering), made on first use. */
+function labelFonts(): LabelFonts {
+  if (fonts === undefined) {
+    const small = paintedFont(FONT_3x5);
+    const big = paintedFont(FONT_5x7);
+    fonts = {
+      SMALL: { font: small },
+      SMALL_DIGITS: { font: small, tabular: true },
+      BIG: { font: big },
+      BIG_DIGITS: { font: big, tabular: true },
+    };
+  }
+  return fonts;
+}
 
 /**
  * Pick the line's place and the label font for this frame (see `ringAt`). Words matter
@@ -1213,49 +1131,54 @@ const BIG = { font: FONT_5x7 } as const;
  * a smaller one still it goes, to leave the label room.
  */
 function chooseLayout(patches: BallPatches, room: Int16Array): void {
+  const F = labelFonts();
+  const rowsS = 10;
+  const rowsB = 14;
   // The widest label in each font, and the widest plate a score would need.
   let small = 0;
   let big = 0;
   let plate = 0;
   for (let i = 0; i < SLOT_COUNT; i++) {
     const patch = patches[SLOTS[i]];
-    // the buttons (a locked patch has its own layout: see `drawLocked`)
-    if (!patch || !accentOf(patch)) continue;
+    // the side buttons (a locked patch has its own layout: see `drawLocked`; so do the
+    // buttons on the top and the bottom: see `drawFront`)
+    if (!patch || !accentOf(patch) || FRONT_FACE[SLOT_FACE[i]] === 1) continue;
     if (hasBadge(patch)) {
-      const w = measureText(patch.badge as string, SMALL_DIGITS) + 4;
+      const w = measureText(patch.badge as string, F.SMALL_DIGITS) + 8;
       plate = Math.max(plate, w);
     } else if (patch.label !== "") {
-      small = Math.max(small, measureText(patch.label, SMALL));
-      big = Math.max(big, measureText(patch.label, BIG));
+      small = Math.max(small, measureText(patch.label, F.SMALL));
+      big = Math.max(big, measureText(patch.label, F.BIG));
     }
   }
-  bigIcons = disc.rad >= BIG_ICON_R;
-  labelOpts = SMALL;
+  bigIcons = rs() >= BIG_ICON_R;
+  labelOpts = F.SMALL;
   ringAt = 2;
-  if (disc.rad < ICON_MIN_R) {
+  if (rs() < ICON_MIN_R) {
     // Too small for anything but the line, which then sits on the edge.
     labelOpts = null;
     ringAt = 1;
-  } else if (bigIcons && big <= room[roomAt(2, 7)]) {
-    labelOpts = BIG;
+  } else if (bigIcons && big <= room[roomAt(2, rowsB)]) {
+    labelOpts = F.BIG;
   } else {
     // Step the line out, and then off, until the words and the plate fit. If the plate
     // never does, the words alone decide (the score is then written without one).
     let ring = 2;
     while (
       ring >= 0 &&
-      (small > room[roomAt(ring, 5)] || plate > room[roomAt(ring, 7)])
+      (small > room[roomAt(ring, rowsS)] || plate > room[roomAt(ring, rowsB)])
     ) {
       ring--;
     }
     if (ring < 0) {
       ring = 2;
-      while (ring >= 0 && small > room[roomAt(ring, 5)]) ring--;
+      while (ring >= 0 && small > room[roomAt(ring, rowsS)]) ring--;
     }
     if (ring < 0) labelOpts = null;
     else ringAt = ring;
   }
   inkEdge = Math.max(2, ringAt + 1);
+  borderW = ringAt + 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -1307,21 +1230,30 @@ export function drawBall(
   const black = tones.black;
   const shineTones = tones.shine;
   const blackGlint = tones.blackGlint;
-  // Detail comes in with size (art bible: no dither or fuss on anything small).
-  const dome = rad >= 20 ? DOME : 0.25;
-  const stitched = rad >= 30;
-  const bevel = rad >= 30;
-  const glintDot = rad >= 30 ? GLINT_DOT : 2;
-  const glintFlood = tones.flood > 0.6 && rad >= 20 ? GLINT_FLOOD : 2;
+  // Detail comes in with size (art bible: no dither or fuss on anything small). Sizes are
+  // judged in coarse units (`r1`).
+  const r1 = rs();
+  const dome = r1 >= 20 ? DOME : 0.25;
+  const stitched = r1 >= 30;
+  const bevel = r1 >= 30;
+  const glintDot = r1 >= 30 ? GLINT_DOT : 2;
+  const glintFlood = tones.flood > 0.6 && r1 >= 20 ? GLINT_FLOOD : 2;
   // The grass's bounce light: the outer 2 px of the darkest band.
-  const bounce = rad >= 20 ? Math.sqrt(1 - (1 - 2.2 / rad) ** 2) : 0;
+  const bounce = r1 >= 20 ? Math.sqrt(1 - (1 - 4.4 / rad) ** 2) : 0;
   // Floodlights behind the ball catch its far edge: a crisp rim just inside the outline,
   // one to three pixels wide as the lights come up and the ball gets bigger.
   const flood = tones.flood;
   const rimW =
     flood <= 0.25
       ? 0
-      : (flood < 0.6 ? 1 : 2) + (rad >= 40 ? 1 : 0) - (rad < 20 ? 1 : 0);
+      : ((flood < 0.6 ? 1 : 2) + (r1 >= 40 ? 1 : 0) - (r1 < 20 ? 1 : 0)) * 2;
+  // The seams are grooves one pixel fine, and the stitches on them are dashes two pixels
+  // long.
+  const stitchEvery = STITCH_EVERY * 2;
+  const stitchLong = 2;
+  // The bar of light that crosses an idle button: its half-width and its core's.
+  const shineHalf = 4;
+  const shineCore = 2;
   const rimIn = rimW > 0 ? (rad - 1 - rimW) * inv : 2;
   const rimIn2 = rimIn * rimIn;
   // A patch is banded on the diagonal through its centre: clean 45 degree steps.
@@ -1329,6 +1261,7 @@ export function drawBall(
   const fillLight = Math.round(rad * 0.29);
   const fillDark = Math.round(rad * 0.3);
   const ring = ringAt;
+  const border = borderW;
 
   for (let j = jMin; j < jMax; j++) {
     const dy = j - half;
@@ -1411,7 +1344,9 @@ export function drawBall(
               Math.abs(tx) >= Math.abs(ty)
                 ? px - Math.round(disc.tx + mx * mid)
                 : py - Math.round(disc.ty + my * mid);
-            if (n % STITCH_EVERY === 0) c = stitch[band];
+            if (((n % stitchEvery) + stitchEvery) % stitchEvery < stitchLong) {
+              c = stitch[band];
+            }
           }
         } else {
           // The lip of a padded panel, just past a seam, catches the light where it
@@ -1435,7 +1370,8 @@ export function drawBall(
         }
         const si = FACE_SLOT[f];
         const mode = si >= 0 ? slotMode[si] : PLAIN;
-        const edge = edgeBuf[k];
+        // in coarse units: the line and the lips are two pixels wide
+        const edge = te(edgeBuf[k]);
         const lb = BLACK_FACE * FACE_LIGHT[f] + (1 - BLACK_FACE) * flat;
         let tone = lb >= BLACK_STEPS[0] ? 0 : lb >= BLACK_STEPS[1] ? 1 : 2;
         if (mode === PLAIN || mode === NORMAL) {
@@ -1451,20 +1387,25 @@ export function drawBall(
             const o = si * 5;
             const diag = px - panelX[f] + (py - panelY[f]);
             const shine = diag - slotShine[si];
-            const lit = shine >= -2 && shine <= 2;
-            if (edge === ring) {
+            const lit = shine >= -shineHalf && shine <= shineHalf;
+            const px1 = edgeBuf[k];
+            if (px1 <= border) {
+              // the frame: lit on the side that faces the light, its outer pixel dark when
+              // it is three deep
               c = (
                 lit
                   ? slotColor[o + 3]
-                  : diag < -bandHalf
-                    ? slotColor[o]
-                    : diag > bandHalf * 2
-                      ? slotColor[o + 2]
-                      : slotColor[o + 1]
+                  : border >= 3 && px1 === 1
+                    ? slotColor[o + 2]
+                    : diag < -bandHalf
+                      ? slotColor[o]
+                      : diag > bandHalf * 2
+                        ? slotColor[o + 2]
+                        : slotColor[o + 1]
               ) as Color;
             } else if (lit && edge > ring) {
               // The bar: a bright core with a softer pixel either side.
-              c = shineTones[shine >= -1 && shine <= 1 ? 0 : 1];
+              c = shineTones[shine >= -shineCore && shine <= shineCore ? 0 : 1];
             }
           }
         } else {
@@ -1500,8 +1441,8 @@ export function drawBall(
 // ---------------------------------------------------------------------------
 
 /** A small surface that text is stamped into before it is masked onto a patch. */
-const STAMP_W = 64;
-const STAMP_H = 9;
+const STAMP_W = 128;
+const STAMP_H = 18;
 const stamp = new Surface(STAMP_W, STAMP_H);
 
 /** The index into the buffers of screen pixel (x, y) if it may be drawn on, else -1. */
@@ -1529,7 +1470,7 @@ function plotSprite(
   y0: number,
   f: number,
   c: Color,
-  minEdge = inkEdge,
+  minEdge = minE(inkEdge),
 ): void {
   const cells = sp.frames[0];
   for (let j = 0; j < sp.h; j++) {
@@ -1553,12 +1494,12 @@ function plotStamp(
   x0: number,
   y0: number,
   f: number,
-  minEdge = inkEdge,
+  minEdge = minE(inkEdge),
 ): void {
   const d = disc.d;
   for (let j = 0; j < h; j++) {
     for (let i = 0; i < w; i++) {
-      const v = stamp.data[j * STAMP_W + i];
+      const v = stamp.data[j * stamp.w + i];
       if (v === TRANSPARENT) continue;
       const x = x0 + i;
       const y = y0 + j;
@@ -1582,7 +1523,9 @@ function plotStamp(
 function badgeFit(text: string, opts: TextOptions, rows: number): number {
   const room = roomFor();
   const w = measureText(text, opts);
-  if (w + 4 <= room[roomAt(ringAt, 7)] - (rows > 5 ? 2 : 0)) return 2;
+  if (w + 8 <= room[roomAt(ringAt, 14)] - (rows > 10 ? 4 : 0)) {
+    return 2;
+  }
   return w <= room[roomAt(ringAt, rows)] ? 1 : 0;
 }
 
@@ -1594,21 +1537,25 @@ function drawContent(
 ): void {
   const f = SLOT_FACE[i];
   const facing = VIEW[f * 3 + 2];
-  const rad = disc.rad;
-  if (facing < FACING_MIN || rad < 20) return;
+  if (facing < FACING_MIN || rs() < 20) return;
   const accent = accentOf(patch);
   if (!accent) {
     drawLocked(s, i, f, patch, tones, facing);
     return;
   }
+  if (FRONT_FACE[f] === 1) {
+    // a button on the top or the bottom (NEXT-GEN, RETRO): laid out like a locked patch
+    drawFront(s, i, f, patch, tones, facing, accent);
+    return;
+  }
   const mode = slotMode[i];
   const o = i * 5;
   const cx = panelX[f];
-  const cy = panelY[f] + (mode === PRESSED ? 1 : 0);
+  const cy = panelY[f] + (mode === PRESSED ? 2 : 0);
   const ink: Color = mode === CHOSEN ? accent.dark : tones.chalk;
 
   const icon =
-    rad >= ICON_MIN_R && facing >= FACING_ICON
+    rs() >= ICON_MIN_R && facing >= FACING_ICON
       ? iconFor(patch, bigIcons)
       : null;
   // The icon of an idle button wears its colour.
@@ -1617,14 +1564,15 @@ function drawContent(
   const text = badge ? (patch.badge as string) : patch.label;
   // A badge is news (today's score), so it shows whenever it fits by itself: on a plate
   // when there is room for one, as bare figures when there is not.
+  const F = labelFonts();
   let opts = labelOpts;
   let plate = false;
   if (badge) {
-    opts = BIG_DIGITS;
-    let fit = bigIcons ? badgeFit(text, opts, 7) : 0;
+    opts = F.BIG_DIGITS;
+    let fit = bigIcons ? badgeFit(text, opts, 14) : 0;
     if (fit === 0) {
-      opts = SMALL_DIGITS;
-      fit = badgeFit(text, opts, 5);
+      opts = F.SMALL_DIGITS;
+      fit = badgeFit(text, opts, 10);
     }
     if (fit === 0) opts = null;
     plate = fit === 2;
@@ -1638,27 +1586,27 @@ function drawContent(
 
   // The label sits on the pentagon's widest rows (it only just fits), centred in what
   // the panel has free there this frame, with the icon above and the tab below.
-  const tw = Math.min(STAMP_W - 4, measureText(text, opts));
-  const w = plate ? tw + 4 : tw;
-  const h = (opts === BIG || opts === BIG_DIGITS ? 7 : 5) + (plate ? 2 : 0);
-  const top = icon ? textTop(cy, h) : cy - (h >> 1);
-  const free = freeRun(f, cx, top, h, ringAt + 2);
+  const tw = Math.min(stamp.w - 8, measureText(text, opts));
+  const w = plate ? tw + 8 : tw;
+  const h =
+    (opts === F.BIG || opts === F.BIG_DIGITS ? 7 : 5) * 2 + (plate ? 4 : 0);
+  const top = icon ? textTop(cy, h) : cy - halfRows(h);
+  const free = freeRun(f, cx, top, h, minE(ringAt + 2));
   const left = free > 0 ? runLo + ((free - w) >> 1) : cx - (w >> 1);
   const mid = left + (w >> 1);
 
-  stamp.erase(0, 0, STAMP_W, STAMP_H);
+  stamp.erase(0, 0, stamp.w, stamp.h);
   if (plate) {
     // A score: a chalk plate with dark digits, so it reads as a result, not a name.
     const paper = mode === CHOSEN ? P.white : tones.chalk;
-    stamp.rect(1, 0, w - 2, h, paper);
-    stamp.rect(0, 1, w, h - 2, paper);
-    drawText(stamp, text, 2, 1, slotDeep[i] as Color, opts);
+    plateShape(w, h, paper);
+    drawText(stamp, text, 4, 2, slotDeep[i] as Color, opts);
   } else {
     drawText(stamp, text, 0, 0, badge && mode === NORMAL ? iconInk : ink, opts);
   }
   plotStamp(s, w, h, left, top, f);
   if (!icon) return;
-  plotSprite(s, icon, mid - (icon.w >> 1), top - 1 - icon.h, f, iconInk);
+  plotSprite(s, icon, mid - (icon.w >> 1), top - 2 - icon.h, f, iconInk);
   if (!plate) {
     // The tab: a little bar in the button's colour.
     const tab =
@@ -1667,13 +1615,24 @@ function drawContent(
         : mode === CHOSEN
           ? accent.base
           : ink;
-    const half = bigIcons ? 5 : 3;
-    for (let y = top + h + 2; y < top + h + 4; y++) {
+    const half = (bigIcons ? 5 : 3) * 2;
+    const edge = minE(inkEdge);
+    for (let y = top + h + 4; y < top + h + 8; y++) {
       for (let x = mid - half; x <= mid + half; x++) {
-        if (spot(s, x, y, f, inkEdge) >= 0) s.data[y * s.w + x] = tab;
+        if (spot(s, x, y, f, edge) >= 0) s.data[y * s.w + x] = tab;
       }
     }
   }
+}
+
+/**
+ * A plate (a score's, a word's tag) on the stamp, `w` by `h`, with clipped corners: a 45
+ * degree chamfer of two pixels.
+ */
+function plateShape(w: number, h: number, c: Color): void {
+  stamp.rect(2, 0, w - 4, h, c);
+  stamp.rect(1, 1, w - 2, h - 2, c);
+  stamp.rect(0, 2, w, h - 4, c);
 }
 
 /** The row a locked patch's picture and padlock stand in: as tall as the tallest picture. */
@@ -1687,7 +1646,7 @@ const LOCKED_GAP = 2;
 
 /** The top of a locked patch's picture row, with its word under it, on a patch centred on cy. */
 function lockedTop(cy: number): number {
-  return cy + 1 - ((LOCKED_ROW + LOCKED_GAP + 5) >> 1);
+  return cy + 2 - halfRows((LOCKED_ROW + LOCKED_GAP + 5) * 2);
 }
 
 /**
@@ -1709,9 +1668,13 @@ function drawLocked(
   tones: Tones,
   facing: number,
 ): void {
-  const rad = disc.rad;
+  const rad = rs();
   if (rad < 26) return;
   const room = roomFor();
+  const I = ballIcons();
+  const F = labelFonts();
+  const edge = minE(LOCKED_EDGE);
+  const rowsS = 10;
   const ink = slotMode[i] === LIFTED ? tones.chalk : tones.mist;
   const cx = panelX[f];
   const cy = panelY[f];
@@ -1720,11 +1683,11 @@ function drawLocked(
   // one, whatever the facing, so that it never comes and goes as the ball breathes
   const facingUs = facing >= FACING_LABEL;
   // (a squashed patch has five rows to spare at the deepest nod: the small padlock)
-  const lock = rad >= 40 && facingUs ? ICON_LOCK_MID : ICON_LOCK_SMALL;
+  const lock = rad >= 40 && facingUs ? I.lockMid : I.lockSmall;
   let pic = rad >= 30 ? pictureFor(patch, !facingUs) : null;
   // The picture and its padlock side by side, or the padlock alone.
   const markW = (sp: Sprite | null): number =>
-    sp ? sp.w + 1 + ICON_LOCK_SMALL.w : lock.w;
+    sp ? sp.w + 2 + I.lockSmall.w : lock.w;
   // (the top, bottom and rim patches are measured where they rest, straight on; the back
   // ones in a side place, where CLOSEST and FURTHEST rest)
   const front = FRONT_FACE[f] === 1;
@@ -1733,44 +1696,139 @@ function drawLocked(
     pic = null;
   }
   const aw = markW(pic);
-  const ah = !pic ? lock.h : facingUs ? LOCKED_ROW : SQUASHED_ROW;
+  const ah = !pic ? lock.h : (facingUs ? LOCKED_ROW : SQUASHED_ROW) * 2;
 
   const word = patch.label !== "" && facingUs ? patch.label : "";
   if (word !== "" && pic) {
-    const tw = Math.min(STAMP_W - 4, measureText(word, SMALL));
+    const tw = Math.min(stamp.w - 8, measureText(word, F.SMALL));
     const top = lockedTop(cy);
-    const run = freeRun(f, cx, top, ah, LOCKED_EDGE);
+    const run = freeRun(f, cx, top, ah, edge);
     const left = run >= aw ? runLo + ((run - aw) >> 1) : cx - (aw >> 1);
     plotLockedMark(s, pic, lock, left, top, ah, f, ink);
-    const ty = top + ah + LOCKED_GAP;
-    stamp.erase(0, 0, STAMP_W, STAMP_H);
+    const ty = top + ah + LOCKED_GAP * 2;
+    stamp.erase(0, 0, stamp.w, stamp.h);
     if (tw <= room[front ? ROOM_WORD_FRONT : ROOM_WORD]) {
-      const free = freeRun(f, cx, ty, 5, LOCKED_EDGE);
+      const free = freeRun(f, cx, ty, rowsS, edge);
       const x = free >= tw ? runLo + ((free - tw) >> 1) : cx - (tw >> 1);
-      drawText(stamp, word, 0, 0, ink, SMALL);
-      plotStamp(s, tw, 5, x, ty, f, LOCKED_EDGE);
+      drawText(stamp, word, 0, 0, ink, F.SMALL);
+      plotStamp(s, tw, rowsS, x, ty, f, edge);
       return;
     }
     // the tag: centred under the picture, and moved in as far as it must be to lie whole
     // inside the ball's outline; with no room for it, there is no word
-    const w = tw + 4;
+    const w = tw + 8;
     const far = Math.max(
-      Math.abs(ty - 1 - disc.ty),
-      Math.abs(ty + 5 - disc.ty),
+      Math.abs(ty - 2 - disc.ty),
+      Math.abs(ty + rowsS - disc.ty),
     );
-    const half = Math.sqrt(Math.max(0, disc.rad * disc.rad - far * far)) - 2;
+    const half = Math.sqrt(Math.max(0, disc.rad * disc.rad - far * far)) - 4;
     const lo = Math.ceil(disc.tx - half);
     const hi = Math.floor(disc.tx + half) - w + 1;
     if (lo <= hi) {
       const x = clamp(left + (aw >> 1) - (w >> 1), lo, hi);
-      stamp.rect(1, 0, w - 2, 7, tones.ink);
-      stamp.rect(0, 1, w, 5, tones.ink);
-      drawText(stamp, word, 2, 1, ink, SMALL);
-      plotStamp(s, w, 7, x, ty - 1, -1, 1);
+      plateShape(w, 14, tones.ink);
+      drawText(stamp, word, 4, 2, ink, F.SMALL);
+      plotStamp(s, w, 14, x, ty - 2, -1, 1);
     }
     return;
   }
   plotLockedMark(s, pic, lock, cx - (aw >> 1), cy - (ah >> 1), ah, f, ink);
+}
+
+/**
+ * A button on the top or the bottom of the ball (NEXT-GEN, RETRO): framed like HOME and
+ * AWAY, but laid out like a locked patch, with no padlock and in its mode's colour. In the
+ * menu pose it is squashed far round the ball and carries its small picture (or today's
+ * score, when that fits); shown straight on, its full picture with its word (or the score)
+ * under it. As for a locked patch, what it carries is decided by the radius alone, never by
+ * this frame's pixels.
+ */
+function drawFront(
+  s: Surface,
+  i: number,
+  f: number,
+  patch: BallPatch,
+  tones: Tones,
+  facing: number,
+  accent: NonNullable<BallPatch["accent"]>,
+): void {
+  const rad = rs();
+  if (rad < 26) return;
+  const room = roomFor();
+  const F = labelFonts();
+  const mode = slotMode[i];
+  const o = i * 5;
+  // clear of the frame
+  const edge = Math.max(minE(LOCKED_EDGE), borderW + 1);
+  const rowsS = 10;
+  const ink: Color =
+    mode === NORMAL
+      ? (slotColor[o] as Color)
+      : mode === CHOSEN
+        ? accent.dark
+        : tones.chalk;
+  const cx = panelX[f];
+  const cy = panelY[f] + (mode === PRESSED ? 2 : 0);
+  const facingUs = facing >= FACING_LABEL;
+  const badge = hasBadge(patch) ? (patch.badge as string) : "";
+  let pic = rad >= 30 ? pictureFor(patch, !facingUs) : null;
+  if (pic && pic.w > room[facingUs ? ROOM_MARK_FRONT : ROOM_SQUASHED]) {
+    pic = null;
+  }
+
+  if (!facingUs) {
+    // squashed: today's score if it fits the picture's row, else the small picture
+    if (badge !== "") {
+      const tw = measureText(badge, F.SMALL_DIGITS);
+      if (tw <= room[ROOM_SQUASHED]) {
+        stamp.erase(0, 0, stamp.w, stamp.h);
+        drawText(stamp, badge, 0, 0, ink, F.SMALL_DIGITS);
+        plotStamp(s, tw, rowsS, cx - (tw >> 1), cy - (rowsS >> 1), f, edge);
+        return;
+      }
+    }
+    if (pic) {
+      plotSprite(s, pic, cx - (pic.w >> 1), cy - (pic.h >> 1), f, ink, edge);
+    }
+    return;
+  }
+
+  // straight on: the picture, and under it the word or the score
+  const ah = LOCKED_ROW * 2;
+  const top = lockedTop(cy);
+  if (pic) {
+    const run = freeRun(f, cx, top, ah, edge);
+    const left =
+      run >= pic.w ? runLo + ((run - pic.w) >> 1) : cx - (pic.w >> 1);
+    plotSprite(s, pic, left, top + ah - pic.h, f, ink, edge);
+  }
+  const word = badge !== "" ? badge : patch.label;
+  if (word === "") return;
+  const opts = badge !== "" ? F.SMALL_DIGITS : F.SMALL;
+  const ty = top + ah + LOCKED_GAP * 2;
+  const tw = Math.min(stamp.w - 8, measureText(word, opts));
+  stamp.erase(0, 0, stamp.w, stamp.h);
+  if (tw <= room[ROOM_WORD_FRONT]) {
+    const free = freeRun(f, cx, ty, rowsS, edge);
+    const x = free >= tw ? runLo + ((free - tw) >> 1) : cx - (tw >> 1);
+    drawText(stamp, word, 0, 0, ink, opts);
+    plotStamp(s, tw, rowsS, x, ty, f, edge);
+    return;
+  }
+  // wider than the patch: on a dark tag across the seams, whole inside the ball
+  const w = tw + 8;
+  const far = Math.max(
+    Math.abs(ty - 2 - disc.ty),
+    Math.abs(ty + rowsS - disc.ty),
+  );
+  const half = Math.sqrt(Math.max(0, disc.rad * disc.rad - far * far)) - 4;
+  const lo = Math.ceil(disc.tx - half);
+  const hi = Math.floor(disc.tx + half) - w + 1;
+  if (lo > hi) return;
+  const x = clamp(cx - (w >> 1), lo, hi);
+  plateShape(w, 14, tones.ink);
+  drawText(stamp, word, 4, 2, ink, opts);
+  plotStamp(s, w, 14, x, ty - 2, -1, 1);
 }
 
 /** A locked patch's picture with the small padlock at its foot, or the padlock alone. */
@@ -1784,13 +1842,14 @@ function plotLockedMark(
   f: number,
   ink: Color,
 ): void {
+  const edge = minE(LOCKED_EDGE);
   if (!pic) {
-    plotSprite(s, lock, x, y, f, ink, LOCKED_EDGE);
+    plotSprite(s, lock, x, y, f, ink, edge);
     return;
   }
-  const small = ICON_LOCK_SMALL;
-  plotSprite(s, pic, x, y + h - pic.h, f, ink, LOCKED_EDGE);
-  plotSprite(s, small, x + pic.w + 1, y + h - small.h, f, ink, LOCKED_EDGE);
+  const small = ballIcons().lockSmall;
+  plotSprite(s, pic, x, y + h - pic.h, f, ink, edge);
+  plotSprite(s, small, x + pic.w + 2, y + h - small.h, f, ink, edge);
 }
 
 // ---------------------------------------------------------------------------
@@ -1811,9 +1870,9 @@ export function drawBallShadow(
   const r = state.r;
   if (!(r >= 1) || !Number.isFinite(state.cx + state.cy + r + groundY)) return;
   const height = Math.max(0, groundY - (state.cy + r));
-  const k = clamp(1 - height / (r * 4 + 24), 0.3, 1);
+  const k = clamp(1 - height / (r * 4 + 48), 0.3, 1);
   const rx = r * 0.9 * k;
-  const ry = Math.max(1, r * 0.2 * k);
+  const ry = Math.max(2, r * 0.2 * k);
   const y = Math.round(groundY);
   const soft = light.lit(P.grassDark);
   const deep = light.lit(P.grassDeep);
@@ -1821,7 +1880,7 @@ export function drawBallShadow(
   // at night it sits under the ball, with a fainter one thrown out to each side.
   const flood = tonesFor(light).flood;
   const x = Math.round(state.cx + (r * 0.16 + height * 0.3) * (1 - flood));
-  if (r < 10) {
+  if (r < 20) {
     s.ellipse(x, y, rx, ry, deep, true, k > 0.6 ? 1 : 0.5);
     return;
   }
@@ -1830,13 +1889,13 @@ export function drawBallShadow(
     s.ellipse(x - off, y, rx * 0.9, ry * 0.8, soft, true, 0.5);
     s.ellipse(x + off, y, rx * 0.9, ry * 0.8, soft, true, 0.5);
   } else {
-    s.ellipse(x, y, rx + 4, ry + 2, soft, true, 0.25);
-    s.ellipse(x, y, rx + 2, ry + 1, soft, true, 0.5);
+    s.ellipse(x, y, rx + 8, ry + 4, soft, true, 0.25);
+    s.ellipse(x, y, rx + 4, ry + 2, soft, true, 0.5);
   }
   s.ellipse(x, y, rx, ry, soft, true, k > 0.6 ? 1 : 0.5);
   if (k > 0.6) {
-    s.ellipse(x - 1, y, rx * 0.8, ry * 0.72, deep, true, 0.5);
-    s.ellipse(x - 2, y, rx * 0.6, ry * 0.5, deep, true);
+    s.ellipse(x - 2, y, rx * 0.8, ry * 0.72, deep, true, 0.5);
+    s.ellipse(x - 4, y, rx * 0.6, ry * 0.5, deep, true);
   }
 }
 

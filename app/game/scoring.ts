@@ -2,6 +2,7 @@ import { distanceKm } from "./geo";
 import { normalise } from "./judge";
 import { SHOT_ORDER, SHOT_POINTS, shotsFor } from "./shots";
 import type {
+  Answer,
   Grade,
   LatLng,
   Mode,
@@ -11,27 +12,57 @@ import type {
   Shot,
 } from "./types";
 
-/** Every rule, the two played today first. */
+/** Every rule, the four played today first. */
 export const RULES: readonly Rule[] = [
   "common",
   "niche",
+  "oldest",
+  "newest",
   "closest",
   "furthest",
 ];
 
 /**
- * The rule a mode is scored by: HOME is `common` (the most popular answer wins), AWAY is
- * `niche` (the least popular wins). The distance rules, `closest` and `furthest`, belong to
- * the locked modes CLOSEST and FURTHEST: they are switched on by mapping a mode to them here.
+ * The rule each mode is scored by: HOME is `common` (the most popular answer wins), AWAY
+ * `niche` (the least popular), RETRO `oldest` (the earliest year), NEXT-GEN `newest` (the
+ * latest). The distance rules, `closest` and `furthest`, belong to the locked modes CLOSEST
+ * and FURTHEST: they are switched on by adding the mode and mapping it to them here.
  */
+export const MODE_RULES: Readonly<Record<Mode, Rule>> = Object.freeze({
+  home: "common",
+  away: "niche",
+  retro: "oldest",
+  nextgen: "newest",
+});
+
+/** The rule a mode is scored by (`MODE_RULES`); HOME's for anything unknown. */
 export function ruleFor(mode: Mode): Rule {
-  return mode === "away" ? "niche" : "common";
+  return Object.hasOwn(MODE_RULES, mode) ? MODE_RULES[mode] : "common";
 }
 
-/** Whether a rule ranks by distance from today's stadium (else by popularity). */
+/** Whether a rule ranks by distance from today's stadium. */
 export function isDistanceRule(rule: Rule): boolean {
   return rule === "closest" || rule === "furthest";
 }
+
+/** Whether a rule ranks by an answer's year (RETRO and NEXT-GEN). */
+export function isYearRule(rule: Rule): boolean {
+  return rule === "oldest" || rule === "newest";
+}
+
+/**
+ * The year an answer is ranked by under a rule: its first (`oldest`) or its last
+ * (`newest`) of `Answer.years`. Null under any other rule, and for an answer with no years.
+ */
+export function rankingYear(answer: Answer, rule: Rule): number | null {
+  const years = answer.years;
+  if (!isYearRule(rule) || !years || years.length === 0) return null;
+  const year = rule === "oldest" ? years[0] : years[years.length - 1];
+  return Number.isFinite(year) ? year : null;
+}
+
+/** Where an answer with no year sorts under a year rule: after every real year. */
+const NO_YEAR = 1e6;
 
 /** A share in tenths of a percent: shares that round to the same tenth are tied. */
 function tenths(share: number): number {
@@ -45,6 +76,10 @@ function keyFor(rule: Rule, row: RankedAnswer): number {
       return -tenths(row.share);
     case "niche":
       return tenths(row.share);
+    case "oldest":
+      return row.year ?? NO_YEAR;
+    case "newest":
+      return row.year === null ? NO_YEAR : -row.year;
     case "closest":
       return row.km;
     case "furthest":
@@ -64,7 +99,8 @@ function byName(a: RankedAnswer, b: RankedAnswer): number {
  * The shot of every answer of a question under a rule, in the question's answer order. Under
  * the question's own rule (`ruleFor(question.mode)`) these are the shots filed in the data
  * (`Answer.shot`). Under any other rule they are worked out by `shotsFor`: from the shares
- * for `common` and `niche`, from the whole kilometres to the stadium for `closest` and
+ * for `common` and `niche`, from the years for `oldest` and `newest` (an answer with no
+ * year counts as the worst), from the whole kilometres to the stadium for `closest` and
  * `furthest`.
  */
 export function shotsOf(
@@ -75,6 +111,21 @@ export function shotsOf(
   if (rule === ruleFor(question.mode)) {
     return question.answers.map((answer) => answer.shot);
   }
+  if (isYearRule(rule)) {
+    const years = question.answers.map((answer) => rankingYear(answer, rule));
+    const known = years.filter((year): year is number => year !== null);
+    // No year at all ranks last: after the latest in RETRO, before the earliest in NEXT-GEN.
+    const worst =
+      known.length === 0
+        ? 0
+        : rule === "oldest"
+          ? Math.max(...known) + 1
+          : Math.min(...known) - 1;
+    return shotsFor(
+      years.map((year) => year ?? worst),
+      rule,
+    );
+  }
   const values = isDistanceRule(rule)
     ? question.answers.map((answer) => Math.round(distanceKm(stadium, answer)))
     : question.answers.map((answer) => answer.popularity);
@@ -83,17 +134,21 @@ export function shotsOf(
 
 /**
  * The table for one question under one rule: every answer with its share, its distance from
- * the stadium in whole kilometres, its shot, its points and its rank, best first.
+ * the stadium in whole kilometres, its year (under `oldest` and `newest`), its shot, its
+ * points and its rank, best first.
  *
  * Answers are ranked by their shot, worldies first (`SHOT_ORDER`), and within a shot by
  * the rule:
  * - `common` (HOME): the higher the share, the better.
  * - `niche` (AWAY): the lower the share, the better.
+ * - `oldest` (RETRO): the earlier the answer's first year, the better.
+ * - `newest` (NEXT-GEN): the later the answer's last year, the better.
  * - `closest`: nearer the stadium is better. `furthest`: further is better.
  *
  * Then by name. The shots are `shotsOf`, and an answer's points are its shot's
  * (`SHOT_POINTS`). Answers with the same shot and the same key (the same share to a tenth of
- * a percent, or the same whole kilometres) are tied: they share a rank (1, 2, 2, 4).
+ * a percent, the same year, or the same whole kilometres) are tied: they share a rank
+ * (1, 2, 2, 4).
  * The stadium is only used by the distance rules, but every row carries its distance.
  */
 export function rankAnswers(
@@ -109,6 +164,7 @@ export function rankAnswers(
     shot: shots[i],
     points: SHOT_POINTS[shots[i]],
     rank: 0,
+    year: rankingYear(answer, rule),
   }));
   const keys = new Map(rows.map((row) => [row, keyFor(rule, row)]));
   const key = (row: RankedAnswer) => keys.get(row) ?? 0;

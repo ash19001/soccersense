@@ -4,7 +4,15 @@
 //
 // The voice is a cheerful matchday programme, in British English. Lines that carry a value
 // are functions.
-import type { AwayTitleId, Grade, HomeTitleId, Shot, TierId } from "~/game";
+import type {
+  AwayTitleId,
+  Grade,
+  HomeTitleId,
+  NextgenTitleId,
+  RetroTitleId,
+  Shot,
+  TierId,
+} from "~/game";
 
 export const en = {
   siteName: "soccersense",
@@ -36,13 +44,54 @@ export const en = {
       /** Two more on the rim, a quarter turn round: past HOME and past AWAY. */
       guesswho: "GUESS WHO",
       shootout: "SHOOTOUT",
-      /** The airship's sign, over the fact of the day. */
+      /** On the plane's banner, before the fact of the day. */
       header: "DID YOU KNOW?",
       tagline: "DAILY FOOTBALL TRIVIA",
+    },
+    /**
+     * The airship's sign: short messages about the player's day, one after another
+     * (app/routes/home-sign.ts). A green header over an amber line, in lamps: capitals, and
+     * short, so nothing scrolls on the smallest sign (a 100 px window, every size): a header
+     * of 12 small letters at most, a line of 8 big or 12 small ones. A title, longer, is
+     * shown alone, on two small lines with no header.
+     */
+    sign: {
+      /**
+       * A mode played today: its label over its total ("NEXT-GEN" over "360 PTS"), then
+       * over its place out of everyone on the board ("37 OF 1,284"), then the title it
+       * earned, alone. The place is a bare number: the longest the board can give,
+       * "1891 OF 1,891", just fits the smallest sign in small letters; with "#" or "TH"
+       * it would not.
+       */
+      points: (points: number) => `${points} PTS`,
+      rank: (rank: number, count: number) =>
+        `${rank} OF ${count.toLocaleString("en-GB")}`,
+      /** "DAILY STREAK" over "4 DAYS". */
+      streak: "DAILY STREAK",
+      days: (days: number) => (days === 1 ? "1 DAY" : `${days} DAYS`),
+      /** A mode not played yet: its label over "IS WAITING". */
+      isWaiting: "IS WAITING",
+      /** "PLAYED TODAY" over "1,136". */
+      crowd: "PLAYED TODAY",
+      count: (count: number) => count.toLocaleString("en-GB"),
+    },
+    /**
+     * The daily streak by the day plate: a flame and the days in a row with a finished game.
+     * Read out: "Daily streak: 4 days in a row".
+     */
+    streak: {
+      spoken: (days: number) =>
+        days === 0
+          ? "No daily streak yet. Finish today's game to start one."
+          : `Daily streak: ${days} ${days === 1 ? "day" : "days"} in a row`,
+      /** Its tooltip. */
+      title: "Daily streak",
     },
     modes: {
       home: { label: "HOME", line: "The most common answer wins" },
       away: { label: "AWAY", line: "The most uncommon answer wins" },
+      retro: { label: "RETRO", line: "The oldest answer wins" },
+      nextgen: { label: "NEXT-GEN", line: "The most recent answer wins" },
     },
     /** Read out for the score on a mode that has been played today. */
     played: (points: number) => `Played today: ${points} points`,
@@ -87,6 +136,58 @@ export const en = {
       toggle: "Leaderboard",
       hide: "Hide the leaderboard",
       show: "Show the leaderboard",
+      /**
+       * Under the table, in place of "1,284 played today": the player's own line, where
+       * they came today in this mode ("You're 37th of 1,284")...
+       */
+      mine: (rank: number, count: number) => {
+        const tens = rank % 100;
+        const suffix =
+          tens >= 11 && tens <= 13
+            ? "th"
+            : (["th", "st", "nd", "rd"][rank % 10] ?? "th");
+        return `You're ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
+      },
+      /** ...or, not played yet, a nudge (short: the monitor's panel shows one line). */
+      nudge: (count: number) => `${count.toLocaleString("en-GB")} played. You?`,
+      /** Over the strip of the player's last seven days in the mode. */
+      week: "LAST 7 DAYS",
+      /** The days under the bars, Sunday first (`Date.getUTCDay`). */
+      weekdays: ["SU", "MO", "TU", "WE", "TH", "FR", "SA"],
+      /** The same, read out. */
+      weekdaysSpoken: [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+      ],
+      /** The seven read out in one go: "Your last 7 days of RETRO: Monday 340, ...". */
+      weekSpoken: (mode: string, days: string) =>
+        `Your last 7 days of ${mode}: ${days}.`,
+      daySpoken: (day: string, points: number | null) =>
+        points === null ? `${day} not played` : `${day} ${points} points`,
+      /** The link to the stats pop-up, at the strip's top right. */
+      more: "ALL STATS",
+    },
+    /**
+     * The modes' lines, shorter, as the captions show them (the full line, `modes`, is what
+     * screen readers hear).
+     */
+    short: {
+      home: "Most common wins",
+      away: "Most uncommon wins",
+      retro: "Oldest wins",
+      nextgen: "Newest wins",
+    },
+    /** Shorter still, for a phone's cards: two lines at most beside the badge. */
+    tiny: {
+      home: "Most common",
+      away: "Most uncommon",
+      retro: "Oldest",
+      nextgen: "Newest",
     },
   },
 
@@ -94,13 +195,24 @@ export const en = {
     title: {
       home: "HOME: the most common answer wins · soccersense",
       away: "AWAY: the most uncommon answer wins · soccersense",
+      retro: "RETRO: the oldest answer wins · soccersense",
+      nextgen: "NEXT-GEN: the most recent answer wins · soccersense",
     },
     description: {
       home: "Seven questions, and the answer most players give scores 100. Go with the crowd.",
       away: "Seven questions, and the most uncommon answer, the one fewest players give, scores 100. Find the deep cut.",
+      retro:
+        "Seven questions, and the oldest answer, the one furthest back in football's history, scores 100. Dust off the record books.",
+      nextgen:
+        "Seven questions, and the most recent answer, the one that happened last, scores 100. Keep up with the latest.",
     },
     /** The page's heading: only read out (the scoreboard says the rest). */
-    heading: { home: "The HOME match", away: "The AWAY match" },
+    heading: {
+      home: "The HOME match",
+      away: "The AWAY match",
+      retro: "The RETRO match",
+      nextgen: "The NEXT-GEN match",
+    },
     /** Read out under the heading once the day is known. */
     stadium: (name: string, city: string, country: string) =>
       `Today's stadium: ${name}, ${city}, ${country}.`,
@@ -117,11 +229,15 @@ export const en = {
       instruction: {
         home: "The most common answer wins.",
         away: "The most uncommon answer wins.",
+        retro: "The oldest answer wins.",
+        nextgen: "The most recent answer wins.",
       },
       /** How it is scored, in a few words, under the instruction. */
       measure: {
         home: "Scored by how many players give the same answer.",
         away: "Scored by how few players give the same answer.",
+        retro: "Scored by how far back it first happened.",
+        nextgen: "Scored by how recently it last happened.",
       },
     },
 
@@ -206,18 +322,65 @@ export const en = {
         miss: (name: string, picked: string) =>
           `${name}: ${picked} of players said the same. Right answer, but busy round here!`,
       } satisfies Record<Shot, (name: string, picked: string) => string>,
-      /** No answer was given: the sentence names the top of the table instead. */
+      /**
+       * RETRO: the oldest answers are the worldies. `year` is the first year the answer
+       * counted (a club's first title, a country's first final): "1889".
+       */
+      retro: {
+        worldie: (name: string, year: string) =>
+          `${name}: first did it in ${year}. Straight out of the history books. Worldie!`,
+        golazo: (name: string, year: string) =>
+          `${name}: first did it in ${year}. Proper old school.`,
+        trivela: (name: string, year: string) =>
+          `${name}: first did it in ${year}. A good dig through the archives.`,
+        toepoke: (name: string, year: string) =>
+          `${name}: first did it in ${year}. A fair way back, but not the start.`,
+        tapin: (name: string, year: string) =>
+          `${name}: first did it in ${year}. Not all that long ago, really.`,
+        miss: (name: string, year: string) =>
+          `${name}: first did it in ${year}. Right answer, but that's practically yesterday!`,
+      } satisfies Record<Shot, (name: string, year: string) => string>,
+      /**
+       * NEXT-GEN: the most recent answers are the worldies. `year` is the last year the
+       * answer counted (a club's latest title): "2026".
+       */
+      nextgen: {
+        worldie: (name: string, year: string) =>
+          `${name}: last did it in ${year}. Hot off the press. Worldie!`,
+        golazo: (name: string, year: string) =>
+          `${name}: last did it in ${year}. The ink's still wet.`,
+        trivela: (name: string, year: string) =>
+          `${name}: last did it in ${year}. Fresh enough to remember the kits.`,
+        toepoke: (name: string, year: string) =>
+          `${name}: last did it in ${year}. A few seasons back now.`,
+        tapin: (name: string, year: string) =>
+          `${name}: last did it in ${year}. That's going back a bit.`,
+        miss: (name: string, year: string) =>
+          `${name}: last did it in ${year}. Right answer, but that's ancient history!`,
+      } satisfies Record<Shot, (name: string, year: string) => string>,
+      /**
+       * No answer was given: the sentence names the top of the table instead. The second
+       * value is a share ("34%") in HOME and AWAY, a year ("1889") in RETRO and NEXT-GEN.
+       */
       skipped: {
         home: (best: string, share: string) =>
           `Passed. The crowd's favourite was ${best}: about ${share} of players said it.`,
         away: (best: string, share: string) =>
           `Passed. The deepest cut was ${best}: only ${share} of players said it.`,
+        retro: (best: string, year: string) =>
+          `Passed. The oldest answer was ${best}, all the way back in ${year}.`,
+        nextgen: (best: string, year: string) =>
+          `Passed. The most recent answer was ${best}, as recently as ${year}.`,
       },
       timeup: {
         home: (best: string, share: string) =>
           `The whistle went. The crowd's favourite was ${best}: about ${share} of players said it.`,
         away: (best: string, share: string) =>
           `The whistle went. The deepest cut was ${best}: only ${share} of players said it.`,
+        retro: (best: string, year: string) =>
+          `The whistle went. The oldest answer was ${best}, all the way back in ${year}.`,
+        nextgen: (best: string, year: string) =>
+          `The whistle went. The most recent answer was ${best}, as recently as ${year}.`,
       },
     },
 
@@ -268,6 +431,11 @@ export const en = {
       points: "PTS",
       you: "YOU",
       gap: "Rows left out",
+      /**
+       * The third column's heading in RETRO and NEXT-GEN, where it holds a year in place of
+       * the share: the first year each answer counted, or the last.
+       */
+      year: { retro: "FIRST", nextgen: "LATEST" },
     },
     /**
      * The player's answer above the reveal's table when it did not score (it is not a row):
@@ -282,6 +450,16 @@ export const en = {
       /** Read out: "Your answer: Blackburn Rovers, picked by 2%. MISS, 0 points." */
       spoken: (answer: string, picked: string, shot: string, points: number) =>
         `Your answer: ${answer}, picked by ${picked}. ${shot}, ${points} points.`,
+      /**
+       * The same in RETRO and NEXT-GEN, with the year in place of the share: "Your answer:
+       * Liverpool, first did it in 1901. MISS, 0 points."
+       */
+      spokenYear: {
+        retro: (answer: string, year: string, shot: string, points: number) =>
+          `Your answer: ${answer}, first did it in ${year}. ${shot}, ${points} points.`,
+        nextgen: (answer: string, year: string, shot: string, points: number) =>
+          `Your answer: ${answer}, last did it in ${year}. ${shot}, ${points} points.`,
+      },
       /** Read out after a pass or a time-up: "No answer: TIME'S UP, 0 points." */
       spokenNone: (shot: string, points: number) =>
         `No answer: ${shot}, ${points} points.`,
@@ -333,12 +511,43 @@ export const en = {
         deepcuts: "DEEP CUT SPECIALIST",
         hipster: "HIPSTER'S HIPSTER",
       } satisfies Record<AwayTitleId, string>,
+      /** RETRO: the keeper of football's past, from born yesterday to there at the start. */
+      retro: {
+        yesterday: "BORN YESTERDAY",
+        almanac: "FLICKS THE ALMANAC",
+        blackwhite: "BLACK AND WHITE TV",
+        leather: "HEAVY LEATHER BALL",
+        programmes: "PROGRAMME COLLECTOR",
+        longshorts: "SHORTS PAST THE KNEE",
+        historian: "TERRACE HISTORIAN",
+        ledger: "KEEPER OF THE LEDGER",
+        archive: "LIVING ARCHIVE",
+        kickoff: "THERE AT KICK-OFF",
+      } satisfies Record<RetroTitleId, string>,
+      /** NEXT-GEN: first with the news, from still on dial-up to here from the future. */
+      nextgen: {
+        dialup: "STILL ON DIAL-UP",
+        teletext: "SCORES ON TELETEXT",
+        replays: "WAITING FOR REPLAYS",
+        groupchat: "ON THE GROUP CHAT",
+        alerts: "NOTIFICATIONS ON",
+        liveblog: "LIVE BLOG REGULAR",
+        rumours: "TRANSFER RUMOUR MILL",
+        firstnews: "FIRST WITH THE NEWS",
+        ahead: "AHEAD OF THE WHISTLE",
+        future: "FROM THE FUTURE",
+      } satisfies Record<NextgenTitleId, string>,
     },
 
     fullTime: {
       heading: "FULL TIME",
       totalSpoken: (total: number, max: number) => `${total} out of ${max}`,
       perfect: "PERFECT GAME",
+      /** The daily streak this game kept going, beside the title: "STREAK 4". */
+      streak: (days: number) => `STREAK ${days}`,
+      /** Read out for it. */
+      streakSpoken: (days: number) =>
+        `Daily streak: ${days} ${days === 1 ? "day" : "days"} in a row`,
       results: "Your answers",
       /** The full-time list, for a question with no answer. */
       skipped: "Passed",
@@ -350,7 +559,64 @@ export const en = {
       copiedSpoken: "Your result is copied. Paste it wherever your mates are.",
       notCopiedSpoken:
         "The browser would not let us copy your result. Try SHARE again.",
-      other: { home: "PLAY HOME", away: "PLAY AWAY" },
+      /**
+       * SHARE with a picture (docs/GAME_DESIGN.md 6.4): the share sheet where the browser
+       * can share files (mostly phones), else the picture downloaded and the text copied.
+       * The button's words are kept short (7 letters at most): a longer one wraps the
+       * full-time card's row of buttons on a monitor and on small phones.
+       */
+      making: "MAKING",
+      /** The share sheet took it. */
+      shared: "SENT!",
+      /**
+       * The picture downloaded. When the text is copied too, the button says this and
+       * then `copied`; when the clipboard said no, only this.
+       */
+      downloaded: "SAVED!",
+      /** Read out while the picture is made, and after each way SHARE can end. */
+      makingSpoken: "Making your picture.",
+      sharedSpoken: "Shared. Nice one.",
+      savedSpoken:
+        "Your picture is downloaded and your result is copied. Paste it wherever your mates are.",
+      downloadedSpoken:
+        "Your picture is downloaded. The browser would not let us copy the text.",
+      /** The share image's own words (`paintShareCard` in ~/art/share-card). */
+      image: {
+        /** The file: "soccersense-day-12-home.png". */
+        fileName: (day: number, mode: string) =>
+          `soccersense-day-${day}-${mode}.png`,
+        /** The share sheet's title. */
+        title: (day: number, mode: string) => `soccersense #${day} ${mode}`,
+        /**
+         * A question cut down for its row: no "Name a", nothing in brackets, "has won"
+         * as "won" (and "has hosted", "has played in"). The card shortens what is left to
+         * fit, at a word.
+         */
+        prompt: (prompt: string) => {
+          const short = prompt
+            .replace(/\s*\([^)]*\)/g, "")
+            .replace(/^Name (a|an) /i, "")
+            .replace(/\bhas (won|hosted|played)\b/g, "$1")
+            .trim();
+          return short.charAt(0).toUpperCase() + short.slice(1);
+        },
+        /** In an answer's place after a pass or a time-up. */
+        noAnswer: "no answer",
+      },
+      /**
+       * The button that plays the other mode of the pair: HOME and AWAY, RETRO and
+       * NEXT-GEN. Keyed by the mode it starts. Ten letters at most: "PLAY NEXT-GEN" wraps
+       * the card's row of three buttons at 1920 x 1080 and on a 390 x 844 phone, so every
+       * mode's button is its name alone, the same for all four (in the mode's colour, it
+       * reads as the way there); `otherSpoken` is its name for screen readers.
+       */
+      other: {
+        home: "HOME",
+        away: "AWAY",
+        retro: "RETRO",
+        nextgen: "NEXT-GEN",
+      },
+      otherSpoken: (mode: string) => `Play ${mode}`,
       menu: "MENU",
       /** Read out when the final whistle goes. */
       spoken: (total: number, max: number, title: string, tier: string) =>
@@ -363,6 +629,10 @@ export const en = {
     canvas: {
       boards: ["SOCCERSENSE", "HOT PIES", "TEA BAR", "COME ON THEN"],
       banners: ["HOMETOWN HERO", "ONE OF OUR OWN", "BRING IT HOME"],
+      /** NEXT-GEN's holographic boards, in place of the boards above. */
+      nextgen: {
+        boards: ["SOCCERSENSE", "DRONE PIES", "HOLO SEATS", "SCAN TO CHEER"],
+      },
     },
 
     /** The way back to the menu from the plain pages (the rules, the error page). */
@@ -395,6 +665,110 @@ export const en = {
       /** Read out for each step of the ladder. */
       step: (tier: string, from: number) => `${tier}, from ${from} points`,
     },
+  },
+
+  /**
+   * The player's stats: a pop-up over the home screen, behind the chart button beside the
+   * "?" (Stats in ~/ui). Today's result per mode, then each mode over the year this device
+   * keeps, and the daily streak.
+   */
+  stats: {
+    /** The button's name and tooltip. */
+    open: "Your stats",
+    heading: "YOUR STATS",
+    close: "Close",
+    /** The one line under the heading, and the dialog's description. */
+    intro: "Your games on this device, over the last year.",
+    /** A first visit: nothing finished yet. */
+    empty:
+      "No games yet. Finish a match and your results start piling up here.",
+    today: "TODAY",
+    notPlayed: "Not played yet",
+    /** Read out for today's seven shots: "Question 3: TRIVELA, 60 points". */
+    shot: (n: number, shot: string, points: number) =>
+      `Question ${n}: ${shot}, ${points} points`,
+    /** Read out before them. */
+    shots: "Today's answers",
+    /** Read out for today's total: "420 points". */
+    total: (total: number) => `${total} points`,
+    played: "PLAYED",
+    average: "AVERAGE",
+    best: "BEST",
+    /** Under the best total: the day it was made. */
+    bestDay: (day: number) => `DAY ${day}`,
+    /** Read out for the best total: "520 points, on day 3". */
+    bestSpoken: (total: number, day: number) =>
+      `${total} points, on day ${day}`,
+    /** A number there is none of yet: the average of a mode never played. */
+    blank: "-",
+    /** The tally of how the answers went, read out. */
+    tally: "Your answers so far",
+    /** In the tally, for a pass or a time-up. */
+    none: "NO ANSWER",
+    streak: "STREAK",
+    /** The streak: days in a row with a finished game. */
+    days: (days: number) => (days === 1 ? "1 DAY" : `${days} DAYS`),
+    streakBest: (days: number) => `BEST ${days}`,
+    /** Read out for the streak: "Streak: 3 days in a row. Best: 5." */
+    streakSpoken: (current: number, best: number) =>
+      `Streak: ${current} ${current === 1 ? "day" : "days"} in a row. Best: ${best}.`,
+  },
+
+  /**
+   * The daily reminder: a pop-up over the home screen, behind the bell beside the day
+   * (RemindMe in ~/ui). The player picks a time and adds an event that repeats every day to
+   * their calendar: a file made on the device, or Google Calendar or Outlook on the web.
+   */
+  remind: {
+    /** The button's name and tooltip. */
+    open: "Remind me",
+    heading: "DAILY REMINDER",
+    close: "Close",
+    /** The one line under the heading, and the dialog's description. */
+    intro: "Pick a time and we'll pop a daily kick-off into your calendar.",
+    time: "TIME",
+    file: "DOWNLOAD CALENDAR FILE",
+    fileNote:
+      "An .ics file for Apple Calendar and most others: open it to add it.",
+    google: "GOOGLE",
+    outlook: "OUTLOOK",
+    outlookNote: "In Outlook, set the event to repeat every day.",
+    newTab: "(opens in a new tab)",
+    /** Announced once the file is saved. */
+    saved: (file: string) => `Saved ${file}. Open it to add the reminder.`,
+    /** The quiet line at the foot. */
+    email: "Email reminders are coming.",
+    /** The event in the calendar. */
+    event: {
+      title: "Play soccersense",
+      details: (url: string) =>
+        `Today's seven football questions are out. Play HOME, AWAY, RETRO or NEXT-GEN: ${url}`,
+    },
+  },
+
+  /**
+   * Support: a pop-up over the home screen, behind the heart beside the bell (Support in
+   * ~/ui). Its two links are set in app/data/links.ts.
+   */
+  support: {
+    /** The button's name and tooltip. */
+    open: "Support us",
+    heading: "SUPPORT US",
+    close: "Close",
+    /** The line of thanks under the heading, and the dialog's description. */
+    intro:
+      "Thanks for playing! Tell us how to make soccersense better, or buy us a coffee to keep the questions coming.",
+    idea: "SEND US AN IDEA",
+    coffee: "BUY US A COFFEE",
+    /** On a button whose link is not set yet. */
+    soon: "COMING SOON",
+    newTab: "(opens in a new tab)",
+  },
+
+  /** Small print at the foot of the rules and the stats. */
+  legal: {
+    disclaimer:
+      "soccersense is an independent fan game. It is not affiliated with, endorsed or sponsored by FIFA, UEFA or any league, club or player. All names and brands belong to their owners and are used for identification only.",
   },
 
   errors: {

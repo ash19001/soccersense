@@ -66,7 +66,7 @@ export function shotForStanding(standing: number): Shot {
 
 /** Whether a higher value is better under the rule. */
 function higherIsBetter(rule: Rule): boolean {
-  return rule === "common" || rule === "furthest";
+  return rule === "common" || rule === "furthest" || rule === "newest";
 }
 
 /**
@@ -77,14 +77,15 @@ function higherIsBetter(rule: Rule): boolean {
  *   the best, 1 for the worst (`better / (better + worse)`, as a league table counts).
  * - **Gap**: how far the answer is from the best, as a fraction of the way to the worst. For
  *   `common` and `niche` the gap is measured in ratios of shares, on a log scale, so that 30%
- *   against 15% is as far apart as 2% against 1%. For `closest` and `furthest` it is
- *   measured in kilometres.
+ *   against 15% is as far apart as 2% against 1%. For `oldest` and `newest` it is measured
+ *   in years, for `closest` and `furthest` in kilometres.
  *
  * `values` are, per answer: its share of players in percent for `common` and `niche` (shares
  * tie to a tenth of a percent, as in the table; a backend turns its counts into shares
- * first), its distance in whole kilometres for `closest` and `furthest` (equal distances
- * tie). A share under 0.05% counts as the smallest share in the list, or 0.1%. One answer, or
- * all tied, all stand at 0.
+ * first), its year for `oldest` (its first) and `newest` (its last), its distance in whole
+ * kilometres for `closest` and `furthest`. Equal years and equal distances tie: the same
+ * standing, so the same shot. A share under 0.05% counts as the smallest share in the list,
+ * or 0.1%. One answer, or all tied, all stand at 0.
  */
 export function standings(values: readonly number[], rule: Rule): number[] {
   const n = values.length;
@@ -118,7 +119,8 @@ export function standings(values: readonly number[], rule: Rule): number[] {
 
 /**
  * The shot of each answer under a rule, from its share or count of players (`common`,
- * `niche`) or its distance (`closest`, `furthest`): `shotForStanding` of its standing. The
+ * `niche`), its year (`oldest`, `newest`) or its distance (`closest`, `furthest`):
+ * `shotForStanding` of its standing. The
  * best answer is always a worldie and, when anything is worse, the worst is a miss. A
  * better value never gets a worse shot. This is the rule that filed the sample answers
  * (before a look by eye; docs/data-notes/shots.md) and the one a backend runs on real counts.

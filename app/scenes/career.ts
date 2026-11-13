@@ -18,7 +18,8 @@
  * Timings the page relies on (held by `career.test.ts`):
  * - `playShot(grade, onDone)`: `SHOT_SECONDS` (2.4 s; 0.4 s with reduced motion), then
  *   `onDone` exactly once, called after `busy` has gone back to false. The picture plays
- *   on after it (the reaction ends, he gets a new ball and juggles again), but is free.
+ *   on after it (the reaction ends, the ball is brought back to him, "The fetch", and he
+ *   juggles again), but is free.
  * - `promote(total, onDone)`: `PROMOTION_SECONDS` (1.5 s; 0.25 s with reduced motion) if the
  *   tier changes, and `onDone` at once, synchronously, if it does not.
  * - A shot or promotion asked for while another plays finishes that one first (its
@@ -37,6 +38,7 @@ import {
   PLAYER_ANIMS,
   SHOT_ANIMS,
   STRIKE_FRAME,
+  drawBallRing,
   drawKeeper,
   drawMatchBall,
   drawPlayer,
@@ -48,11 +50,20 @@ import {
   type ShotAnim,
 } from "~/art/characters";
 import {
+  FETCH_ANIM_NAMES,
+  drawFetch,
+  fetchBall as fetchSpot,
+  type FetchAnim,
+} from "~/art/characters/fetch";
+import { NEXTGEN_TRAIL } from "~/art/characters/nextgen";
+import {
   CareerGround,
   type CrowdMood,
   type NetBulge,
   type Tier,
 } from "~/art/grounds";
+import { STAND } from "~/art/grounds/stand";
+import { eraOf, type Era } from "~/art/era";
 import { careerLayout, type CareerLayout } from "~/art/layout";
 import { type Lighting, lightingFor } from "~/art/lighting";
 import { MODE_COLORS, P } from "~/art/palette";
@@ -67,25 +78,19 @@ import {
   lerp,
 } from "~/pixel";
 import {
-  BIKE_X,
-  BIKE_Y,
+  BALLKID,
   CAST,
   EXTRA_A,
   EXTRA_B,
   HERO,
-  JUGGLE_X,
-  JUGGLE_Y,
   KEEPER,
-  KICK_DX,
-  KICK_DY,
-  KICK_LEFT_DX,
-  LEAP_TOP,
-  LIFT,
   MATE_A,
   MATE_B,
   OPP_A,
   OPP_B,
   REF,
+  castSpots,
+  endFrontX,
   ensureKits,
   fillHomes,
   newHomes,
@@ -114,15 +119,29 @@ import type { Ambience, Scene, ScoreShot, SoundCue } from "./scene";
 export interface CareerLabels {
   boards?: readonly string[];
   banners?: readonly string[];
+  /** NEXT-GEN's own words, over the ones above in that era. */
+  nextgen?: { boards?: readonly string[]; banners?: readonly string[] };
 }
 
 export interface CareerSceneOptions {
   /** The day number: it seeds the picture. */
   seed: number;
+  /**
+   * The mode played. HOME tells the hometown hero's story and AWAY the journeyman's; RETRO
+   * and NEXT-GEN tell the hometown hero's for now (their own look comes later), with their
+   * own colour in the fireworks and the confetti.
+   */
   mode: Mode;
   /** The running total to start at (a resumed game). Default 0. */
   total?: number;
   labels?: CareerLabels;
+}
+
+/** The modes the scene knows; anything else plays as HOME. */
+const SCENE_MODES: readonly Mode[] = ["home", "away", "retro", "nextgen"];
+
+function isMode(v: unknown): v is Mode {
+  return (SCENE_MODES as readonly unknown[]).includes(v);
 }
 
 /** How long a shot takes, from the answer to the moment the reveal may come up. */
@@ -157,7 +176,7 @@ const KICK_AT = 0.3;
 /** The tap in: he dribbles in from the set, round the keeper; then the tap in itself. */
 const TAP_AT = 0.95;
 /** He goes round the keeper on the near side: this many rows nearer the camera. */
-const TAP_DY = 6;
+const TAP_DY = 12;
 /** The toe poke: a heavy touch at the set, he chases it, and lunges from here. */
 const POKE_AT = 0.75;
 /** The worldie: he hooks the ball out to team-mate A, who lofts it straight back. */
@@ -189,15 +208,34 @@ const WORLD_CUP = 6;
 /** Full time: the long whistle at once, the crowd this long after. */
 const FULL_CHEER = 0.8;
 
+// The fetch: the last shot's ball brought back to him between questions.
+/** How the fetcher goes: the keeper (to it, picks it up, carries it to his place, rolls
+ * it out), a youth (runs to it, dribbles it back, passes it), the ball kid (runs to it,
+ * picks it up, throws it from there). */
+const BY_KEEPER = 0;
+const BY_FOOT = 1;
+const BY_HAND = 2;
+/** Their speeds, as parts of `RUN_BACK`: the keeper's jog into his net, his walk with the
+ * ball, a youth's dribble. */
+const JOG = 0.65;
+const WALK = 0.5;
+const DRIBBLE = 0.8;
+/** The stoop and the rise with it (two frames at 6 a second). */
+const PICK = 2 / 6;
+/** A youth stepping round the ball to dribble it back the way he came. */
+const TRAP = 0.18;
+/** The ball at his feet a moment before the flick. */
+const SETTLE = 0.1;
+/** A skied miss comes down behind the goal: from landing to lying still. */
+const SKY_SETTLE = 0.6;
+
 /** Tiers 6 and 7 are always played at night, whatever the player's sky (the ground's). */
 const DAY = lightingFor({ elevation: 40, morning: false });
 
 /** The team-mates who jump round him at full time. */
 const FULL_MATES = [MATE_A, MATE_B, EXTRA_A, EXTRA_B] as const;
-/** The worldie's 2 px shake as it hits the net, a step every 0.04 s. */
-const BIG_SHAKE = [2, -2, 1, -1, 0] as const;
-
-const GOLD = { gold: true } as const;
+/** The worldie's 4 px shake as it hits the net, a step every 0.04 s. */
+const BIG_SHAKE = [4, -4, 2, -2, 0] as const;
 
 /** How many people make the bed of sound at each tier (`ambience`), 0 to 1 (mix.ts, BEDS). */
 const CROWD: readonly number[] = [
@@ -377,6 +415,8 @@ const S_RESULT = 8;
 const S_HORN = 16;
 const S_BACK = 32;
 const S_FLICK = 64;
+const S_FETCH = 128;
+const S_BOUNCE = 256;
 
 interface Story {
   grade: Grade;
@@ -415,6 +455,10 @@ interface Story {
   end: number;
   /** With reduced motion: the settled moment shown. */
   still: number;
+  /** Who brings the ball back to him, and when (a goal or a miss), or null. */
+  fetch: Fetch | null;
+  /** The set's hop when the ball comes from far off (a shot cut in on a fetch), in px. */
+  hop: number;
   /** Sound: the one-off cues sent (`S_*`), the touches and fireworks heard so far. */
   sent: number;
   touched: number;
@@ -433,6 +477,47 @@ interface Promotion {
   cheered: boolean;
   area: BuildArea;
   colors: BuildColors | null;
+}
+
+/** The fetch's beats, in seconds from `playShot` (see "The fetch" below). */
+interface Fetch {
+  /** The fetcher (a cast index) and how he goes (`BY_*`). */
+  who: number;
+  how: number;
+  /** How far out of his goal the keeper is as he sets off (the toe poke, the tap in). */
+  out: number;
+  /** The ball kid catches a skied miss over his head, where he stands, and throws it. */
+  catch: boolean;
+  /** Sets off; at the ball; has it; at the spot he lets it go from; lets it go. */
+  go: number;
+  reach: number;
+  lift: number;
+  ready: number;
+  release: number;
+  /** The ball's way to the hero's feet, and its arrival there. */
+  flight: number;
+  arrive: number;
+  /** Back at his own place. */
+  home: number;
+}
+
+/** Where a fetcher is and what he does this frame (`fetcher`), reused. */
+interface FetchPose {
+  on: boolean;
+  x: number;
+  y: number;
+  flip: boolean;
+  anim: PlayerAnim;
+  /** A fetch frame, drawn instead of `anim`; or a keeper animation; or neither. */
+  fetch: FetchAnim | null;
+  kanim: KeeperAnim | null;
+  frame: number;
+}
+
+/** A point, reused. */
+interface Pt {
+  x: number;
+  y: number;
 }
 
 /** A ball this frame. */
@@ -455,13 +540,22 @@ const newBall = (): Ball => ({
   spin: 0,
 });
 
+const newFetchPose = (): FetchPose => ({
+  on: false,
+  x: 0,
+  y: 0,
+  flip: false,
+  anim: "idle",
+  fetch: null,
+  kanim: null,
+  frame: 0,
+});
+
 /** The balls, after the cast in the draw order. */
 const SHOT = CAST;
 const GIVEN = CAST + 1;
 const HELD = CAST + 2;
-const REST_NET = CAST + 3;
-const REST_WIDE = CAST + 4;
-const BALLS = 5;
+const BALLS = 3;
 
 /** Keep a tier in range. */
 function tierOf(total: number): Tier {
@@ -502,7 +596,22 @@ export class CareerScene implements Scene {
   onSound: ((cue: SoundCue) => void) | null = null;
 
   private readonly seed: number;
+  /** The mode played: its colour is the fireworks' and the confetti's. */
   private readonly mode: Mode;
+  /**
+   * The journey the scene tells: AWAY's (the journeyman's grounds and kit) or HOME's (the
+   * hometown hero's), which RETRO and NEXT-GEN share: their story and places are HOME's,
+   * only their look (`era`) is their own.
+   */
+  private readonly journey: "home" | "away";
+  /**
+   * The era it is drawn in (`~/art/era`, .snaps/era-art/THEME.md): today's for HOME and AWAY,
+   * RETRO's and NEXT-GEN's own. Handed to the ground, the kits and the props.
+   */
+  private readonly era: Era;
+  /** The ball's options for `drawMatchBall`, plain and gold, in this era. */
+  private readonly ballPlain: { gold: boolean; era: Era };
+  private readonly ballGold: { gold: boolean; era: Era };
   private readonly ground: CareerGround;
   private w = 0;
   private h = 0;
@@ -537,14 +646,18 @@ export class CareerScene implements Scene {
   private juggling = false;
   /** Misses so far: they are skied and dragged wide by turns. */
   private misses = 0;
-  /** The last goal's ball, left lying: 0 none, 1 in the net, 2 out past the jumpers. */
-  private restNet = 0;
-  /** The last miss dragged wide, left lying by the near touchline. */
-  private restWide = false;
   /** Where everyone stood when a shot or full time cut in, and how long ago (or -1). */
   private readonly fromX = new Int32Array(CAST);
   private readonly fromY = new Int32Array(CAST);
   private carry = -1;
+  /** How long this carry takes (`CARRY`, or the fetcher's walk home after a fetch). */
+  private carryFor = CARRY;
+  /**
+   * A shot cut in while a fetcher had the ball: he lets it go to the hero at once (this
+   * pose, where he stood) for the first half of the carry, then goes back to his place.
+   */
+  private cutWho = -1;
+  private readonly cutPose: FetchPose = newFetchPose();
 
   private readonly kits = newKits();
   private readonly poses: Pose[] = [];
@@ -552,6 +665,13 @@ export class CareerScene implements Scene {
   private readonly depths = new Float32Array(CAST + BALLS);
   private readonly balls: Ball[] = [];
   private readonly probe: Ball = newBall();
+  /** The fetch's points (`fetchPoints`) and the fetcher's pose (`fetcher`), reused. */
+  private readonly rest: Ball = newBall();
+  private readonly fS: Pt = { x: 0, y: 0 };
+  private readonly fP: Pt = { x: 0, y: 0 };
+  private readonly fR: Pt = { x: 0, y: 0 };
+  private readonly fB: Pt = { x: 0, y: 0 };
+  private readonly fpose: FetchPose = newFetchPose();
   private readonly bulge: NetBulge = { y: 0, amount: 0 };
   private buffer: Surface | null = null;
   /** The flight's point (`fly`) and the runs' (`dribble`), reused. */
@@ -564,13 +684,22 @@ export class CareerScene implements Scene {
 
   constructor(opts: CareerSceneOptions) {
     this.seed = Math.round(Number.isFinite(opts.seed) ? opts.seed : 0) | 0;
-    this.mode = opts.mode === "away" ? "away" : "home";
+    this.mode = isMode(opts.mode) ? opts.mode : "home";
+    this.journey = this.mode === "away" ? "away" : "home";
+    this.era = eraOf(this.mode);
+    this.ballPlain = { gold: false, era: this.era };
+    this.ballGold = { gold: true, era: this.era };
     this.tier = tierOf(opts.total ?? 0);
     this.ground = new CareerGround({
       seed: this.seed,
-      mode: this.mode,
+      mode: this.journey,
       tier: this.tier,
-      labels: opts.labels,
+      // NEXT-GEN's holographic boards have their own words
+      labels:
+        this.era === "nextgen" && opts.labels?.nextgen
+          ? { ...opts.labels, ...opts.labels.nextgen }
+          : opts.labels,
+      era: this.era,
     });
     this.ground.setLighting(DAY);
     for (let i = 0; i < CAST; i++) this.poses.push(newPose());
@@ -593,8 +722,6 @@ export class CareerScene implements Scene {
   setTotal(total: number): void {
     this.setTier(tierOf(total));
     this.fullT = -1;
-    this.restNet = 0;
-    this.restWide = false;
   }
 
   playShot(shot: Grade, onDone?: () => void): void {
@@ -607,20 +734,27 @@ export class CareerScene implements Scene {
     // the ball he has now, relative to his feet: the set brings it from there
     const b = this.probe;
     this.heroBall(b);
-    let fromDX = b.on ? b.x - this.L.heroX : KICK_DX;
-    let fromDY = b.on ? b.y - this.heroY() : KICK_DY;
+    const { KICK_DX, KICK_DY } = castSpots();
+    const fromDX = b.on ? b.x - this.L.heroX : KICK_DX;
+    const fromDY = b.on ? b.y - this.heroY() : KICK_DY;
     const prev = this.story;
-    if (prev && !prev.reduced && this.view(prev) < prev.deliverAt) {
-      // cut in before his new ball came: the last one stays where it went, and a new
-      // one is thrown on from the near side for this shot
-      if (prev.goal) this.restNet = this.ground.goal.kind === "jumpers" ? 2 : 1;
-      if (prev.low) this.restWide = true;
-      if (prev.goal || prev.grade === "miss") {
-        fromDX = -Math.round(16 * this.L.stageScale);
-        fromDY = this.L.h + 4 - this.heroY();
+    let cut = -1;
+    let hop = 0;
+    if (prev && prev.fetch && this.view(prev) < prev.flickAt) {
+      // cut in on a fetch: the same ball comes to him from where it is now (above); if
+      // the fetcher has it, he lets it go at once, and it hops if it has far to come
+      const v = this.view(prev);
+      const f = prev.fetch;
+      if (v >= this.hasAt(f) && v < f.release) {
+        cut = f.who;
+        this.fetcher(prev, v, this.cutPose);
+        this.letGo(prev, this.cutPose);
       }
+      const far = Math.hypot(fromDX - KICK_DX, fromDY - KICK_DY);
+      if (far > 24) hop = Math.min(28, Math.round(far * 0.08));
     }
     this.capture();
+    this.cutWho = cut;
     this.story = null;
     this.fullT = -1;
     const reduced = this.reduced;
@@ -675,10 +809,13 @@ export class CareerScene implements Scene {
       flickAt,
       end: reduced ? SHOT_REDUCED_SECONDS + REDUCED_HOLD : flickAt + FLICK,
       still: Math.min(RETURN - 0.05, Math.max(REDUCED_VIEW, settle)),
+      fetch: null,
+      hop,
       sent: 0,
       touched: 0,
       fired: 0,
     };
+    this.planFetch(this.story);
     this.applyMood(this.story);
   }
 
@@ -691,9 +828,9 @@ export class CareerScene implements Scene {
       return;
     }
     const L = this.L;
-    const tall = [16, 18, 30, 48, 82, 82, 82, 82][to];
-    const top = Math.max(2, L.farTouchY - tall);
-    const bottom = L.groundY + 9;
+    const tall = 2 * [16, 18, 30, 48, 82, 82, 82, 82][to];
+    const top = Math.max(4, L.farTouchY - tall);
+    const bottom = L.groundY + 18;
     const p: Promotion = {
       to,
       t: 0,
@@ -714,6 +851,8 @@ export class CareerScene implements Scene {
     };
     this.promotion = p;
     if (this.reduced) this.swapTier(p);
+    // the next ground is built a slice a frame under the smoke, not in the swap
+    else this.ground.prepare(to);
   }
 
   showFullTime(total: number): void {
@@ -721,8 +860,6 @@ export class CareerScene implements Scene {
     this.finishPromotion();
     this.capture();
     this.story = null;
-    this.restNet = 0;
-    this.restWide = false;
     this.setTier(tierOf(total));
     this.fullT = 0;
     this.fullWhistle = false;
@@ -748,6 +885,13 @@ export class CareerScene implements Scene {
   }
 
   setLighting(light: Lighting): void {
+    if (light !== this.light && !this.stale && this.light) {
+      // the picture built: the sky moving on is no long frame. The next frame
+      // regrades the kits; the ground relights a slice a frame after it (ground.ts).
+      this.light = light;
+      this.ground.setLighting(light);
+      return;
+    }
     if (light !== this.light) this.stale = true;
     this.light = light;
     this.ground.setLighting(light);
@@ -796,7 +940,10 @@ export class CareerScene implements Scene {
     }
     if (this.carry >= 0) {
       this.carry += step;
-      if (this.carry >= CARRY || this.reduced) this.carry = -1;
+      if (this.carry >= this.carryFor || this.reduced) {
+        this.carry = -1;
+        this.cutWho = -1;
+      }
     }
     if (!this.story) this.jug += step * (this.reduced ? 0.5 : 1);
 
@@ -807,11 +954,10 @@ export class CareerScene implements Scene {
       this.shotSounds(story);
       if (!story.called && story.st >= story.cbAt) this.callBack(story);
       if (this.story === story && story.st >= story.end) {
+        // a fetcher not yet back at his place walks there from where he is
+        if (story.fetch) this.trail();
         this.story = null;
         this.jug = story.reduced ? 0 : 1;
-        if (story.goal)
-          this.restNet = this.ground.goal.kind === "jumpers" ? 2 : 1;
-        if (story.low) this.restWide = true;
       }
     }
 
@@ -870,7 +1016,7 @@ export class CareerScene implements Scene {
     }
     if (opening) {
       const L = this.L;
-      drawIris(s, this.irisX(), L.groundY - 10, r, P.ink);
+      drawIris(s, this.irisX(), L.groundY - 20, r, P.ink);
     }
   }
 
@@ -922,8 +1068,13 @@ export class CareerScene implements Scene {
     if (p.swapped) return;
     p.swapped = true;
     this.setTier(p.to);
-    this.restNet = 0;
-    this.restWide = false;
+    // a fetch under the smoke: nothing to fetch on the new ground, his ball is at his feet
+    if (this.story?.fetch) {
+      this.story = null;
+      this.jug = 1;
+      this.carry = -1;
+      this.cutWho = -1;
+    }
   }
 
   private finishPromotion(): void {
@@ -974,14 +1125,18 @@ export class CareerScene implements Scene {
       drawPlayer(b, SHOT_ANIMS[i >> 1], 0, 20, 30, kits[HERO], opts);
     } else if (i < S + WARM_PLAYER.length) {
       drawPlayer(b, WARM_PLAYER[i - S], 0, 20, 30, kits[HERO], WARM_ADULT);
-    } else {
+    } else if (i < S + WARM_PLAYER.length + KEEPER_WARM.length) {
       const k = KEEPER_WARM[i - S - WARM_PLAYER.length];
       drawKeeper(b, k, 0, 20, 30, kits[KEEPER], WARM_ADULT);
+    } else {
+      // the fetch's frames
+      const j = i - S - WARM_PLAYER.length - KEEPER_WARM.length;
+      drawFetch(b, FETCH_ANIM_NAMES[j], 0, 20, 30, kits[KEEPER]);
     }
   }
 
   private kitsNow(): readonly Kit[] {
-    ensureKits(this.kits, this.tier, this.mode, this.ground.light);
+    ensureKits(this.kits, this.tier, this.journey, this.ground.light, this.era);
     return this.kits.list;
   }
 
@@ -994,6 +1149,25 @@ export class CareerScene implements Scene {
       this.fromY[i] = this.poses[i].y;
     }
     this.carry = 0;
+    this.carryFor = CARRY;
+    this.cutWho = -1;
+  }
+
+  /**
+   * The end of a fetch: everyone where they are now, carried to their places, at a walk
+   * for whoever has furthest to go (the fetcher, as a rule).
+   */
+  private trail(): void {
+    if (this.reduced) return;
+    this.capture();
+    const H = this.homes;
+    const v = RUN_BACK * this.L.stageScale * WALK;
+    let far = 0;
+    for (let i = 0; i < CAST; i++) {
+      const d = Math.hypot(this.fromX[i] - H.x[i], this.fromY[i] - H.y[i]);
+      if (d > far) far = d;
+    }
+    this.carryFor = Math.max(CARRY, far / v);
   }
 
   // -------------------------------------------------------------------------
@@ -1064,10 +1238,16 @@ export class CareerScene implements Scene {
       else if (g === "timeup") this.sound(WHISTLE);
     }
     const stadium = this.tier >= 4;
+    // Decided at its moment, by the tier the goal was scored at: a promotion that takes the
+    // scene to the World Cup while this shot plays on brings no late horn for it.
     if (
       story.goal &&
-      this.tier >= WORLD_CUP &&
-      this.due(story, S_HORN, st >= story.moodAt + (reduced ? 0 : HORN_AFTER))
+      this.due(
+        story,
+        S_HORN,
+        st >= story.moodAt + (reduced ? 0 : HORN_AFTER),
+      ) &&
+      this.tier >= WORLD_CUP
     )
       this.sound({ kind: "vuvuzela", size: p.cheer });
     if (reduced) return;
@@ -1084,6 +1264,20 @@ export class CareerScene implements Scene {
     }
     if (g === "skipped" && this.due(story, S_BACK, st >= story.deliverAt + 0.2))
       this.kick(GAME.knockBack);
+    const f = story.fetch;
+    if (f) {
+      // the fetch: the pass back (a kick), the roll out (a touch on the grass), the
+      // throw's first bounce
+      if (this.due(story, S_FETCH, st >= f.release)) {
+        if (f.how === BY_FOOT) this.kick(GAME.knockBack);
+        else if (f.how === BY_KEEPER) this.sound(TOUCH);
+      }
+      if (
+        f.how === BY_HAND &&
+        this.due(story, S_BOUNCE, st >= f.release + f.flight * 0.55)
+      )
+        this.sound(JUGGLE_TOUCH);
+    }
     if (this.due(story, S_FLICK, st >= story.flickAt)) this.sound(JUGGLE_TOUCH);
   }
 
@@ -1117,11 +1311,11 @@ export class CareerScene implements Scene {
   private irisRadius(): number {
     const L = this.L;
     const cx = this.irisX();
-    const cy = L.groundY - 10;
-    const ring = Math.round((L.goalX - L.heroX) / 2) + 18;
+    const cy = L.groundY - 20;
+    const ring = Math.round((L.goalX - L.heroX) / 2) + 36;
     const far = Math.max(
       ring,
-      Math.ceil(Math.hypot(Math.max(cx, L.w - cx), Math.max(cy, L.h - cy))) + 1,
+      Math.ceil(Math.hypot(Math.max(cx, L.w - cx), Math.max(cy, L.h - cy))) + 2,
     );
     const a = this.arrival;
     if (a <= 0) return 0;
@@ -1160,12 +1354,12 @@ export class CareerScene implements Scene {
   private outDX(g: Grade): number {
     if (g === "golazo") return this.slideDX();
     if (g === "tapin") return this.tapX() - this.L.heroX;
-    if (g === "toepoke") return this.pokeX() + 2 - this.L.heroX;
+    if (g === "toepoke") return this.pokeX() + 4 - this.L.heroX;
     return 0;
   }
 
   private outDY(g: Grade): number {
-    return g === "golazo" ? 5 : g === "tapin" ? TAP_DY : 0;
+    return g === "golazo" ? 10 : g === "tapin" ? TAP_DY : 0;
   }
 
   /** How far off his line the keeper comes (negative: towards the shooter). */
@@ -1181,20 +1375,51 @@ export class CareerScene implements Scene {
     const L = this.L;
     return Math.min(
       this.ground.goal.lineX + Math.round(18 * L.stageScale),
-      L.w - 3,
+      L.w - 6,
     );
   }
 
   private wideEndRow(): number {
     const L = this.L;
-    return Math.min(L.nearTouchY - 3, L.groundY + 12);
+    return Math.min(L.nearTouchY - 6, L.groundY + 24);
+  }
+
+  /** Where a goal past the jumpers runs to, towards the hedge (on screen). */
+  private hedgeX(story: Story): number {
+    const L = this.L;
+    const x = this.ground.goal.lineX + Math.round(26 * L.stageScale);
+    return story.fetch ? Math.min(x, L.w - 10) : x;
+  }
+
+  /**
+   * A skied miss comes down here, behind the goal: on the grass in front of the
+   * far side, or (tiers 3 to 7) off the boards of the end behind the goal, at their foot.
+   */
+  private landX(): number {
+    const L = this.L;
+    const x =
+      this.tier >= 3
+        ? Math.round(endFrontX(L, this.landRow())) - 10
+        : this.ground.goal.lineX + Math.round(22 * L.stageScale);
+    return Math.min(x, L.w - 18);
+  }
+
+  private landRow(): number {
+    const L = this.L;
+    return this.tier >= 3 ? L.groundY - 6 : L.farTouchY + 6;
+  }
+
+  /** After it lands it rolls on this far (back off the end's boards, tiers 3 to 7). */
+  private landRoll(): number {
+    return this.tier >= 3 ? -6 : 8;
   }
 
   /** How long after the strike a miss dragged wide passes the goal line. */
   private wideTime(): number {
-    const sx = this.L.heroX + KICK_DX;
+    const sx = this.L.heroX + castSpots().KICK_DX;
     const span = this.wideEndX() - sx;
-    const f = span > 0 ? clamp((this.ground.goal.lineX + 1 - sx) / span) : 1;
+    const line = this.ground.goal.lineX + 2;
+    const f = span > 0 ? clamp((line - sx) / span) : 1;
     return WIDE_ROLL * (1 - Math.sqrt(1 - f));
   }
 
@@ -1209,7 +1434,9 @@ export class CareerScene implements Scene {
     const story = this.story;
     if (story) {
       const v = this.view(story);
-      if (v >= story.deliverAt && !story.reduced) this.givenBall(story, v, b);
+      if (story.fetch && !story.reduced) this.fetchBall(story, v, b);
+      else if (v >= story.deliverAt && !story.reduced)
+        this.givenBall(story, v, b);
       else this.shotBall(story, v, b);
       return;
     }
@@ -1229,6 +1456,7 @@ export class CareerScene implements Scene {
     const even = i & 6;
     const s = (i - even + (f - fi)) / 2;
     const o = youth ? 8 : 0;
+    const { JUGGLE_X, JUGGLE_Y } = castSpots();
     const ax = JUGGLE_X[o + even];
     const ay = JUGGLE_Y[o + even];
     const mx = JUGGLE_X[o + even + 1];
@@ -1257,31 +1485,32 @@ export class CareerScene implements Scene {
     const L = this.L;
     const gy = L.groundY;
     const goal = this.ground.goal;
-    const lx = goal.lineX + 1;
-    const top = Math.max(4, gy - goal.barY - 5);
+    const lx = goal.lineX + 2;
+    const top = Math.max(8, gy - goal.barY - 10);
     const hy = this.heroY();
+    const { KICK_DX, BIKE_X, BIKE_Y } = castSpots();
     const x0 = L.heroX + KICK_DX;
     switch (story.grade) {
       case "worldie": {
         // flat and a little downhill from over his head into the top corner
         const o = this.youth() ? 9 : 4;
         this.fx = lerp(L.heroX + BIKE_X[o], lx, v);
-        this.frow = lerp(hy, gy - 2, v);
-        this.fh = lerp(-BIKE_Y[o] - 2, top, v);
+        this.frow = lerp(hy, gy - 4, v);
+        this.fh = lerp(-BIKE_Y[o] - 4, top, v);
         return;
       }
       case "golazo":
         // bent out towards the camera and back in, rising under the bar at the far post
         this.fx = lerp(x0, lx, v * (1.15 - 0.15 * v));
-        this.frow = lerp(hy, gy - 2, v) + 4 * arc(v);
+        this.frow = lerp(hy, gy - 4, v) + 8 * arc(v);
         this.fh = top * (1.9 * v - 0.9 * v * v);
         return;
       case "toepoke": {
         // scuffed along the grass past the keeper's gloves, a pixel's bobble now and then
         const tx = this.pokeX() + KICK_DX;
         this.fx = lerp(tx, lx, v);
-        this.frow = lerp(hy, gy + 1, v);
-        this.fh = v > 0.15 && (Math.floor(v * 7) & 1) === 1 ? 1 : 0;
+        this.frow = lerp(hy, gy + 2, v);
+        this.fh = v > 0.15 && (Math.floor(v * 7) & 1) === 1 ? 2 : 0;
         return;
       }
       case "tapin": {
@@ -1296,7 +1525,7 @@ export class CareerScene implements Scene {
         // the trivela, off the outside of the boot: up quickly, flattening and dipping
         // late into the near corner, its shadow swinging away from the camera and back
         this.fx = lerp(x0, lx, v * (0.9 + 0.1 * v));
-        this.frow = lerp(hy, gy + 1, v) - 4 * arc(v);
+        this.frow = lerp(hy, gy + 2, v) - 8 * arc(v);
         this.fh = top * v * (1.25 - 0.45 * v - 0.55 * v * v);
         return;
     }
@@ -1316,6 +1545,8 @@ export class CareerScene implements Scene {
     const hx = L.heroX;
     const hy = this.heroY();
     const g = story.grade;
+    // the ball's centre over its shadow's row: its radius
+    const R = 4;
     b.on = true;
     b.sy = hy;
     b.depth = hy + 0.5;
@@ -1325,13 +1556,14 @@ export class CareerScene implements Scene {
       return;
     }
     const left = g === "skipped";
+    const { KICK_DX, KICK_DY, KICK_LEFT_DX } = castSpots();
     const sx = hx + (left ? KICK_LEFT_DX : KICK_DX);
     const sy = hy + KICK_DY;
     if (st < SET_END) {
       // the set: it drops to his feet
       const u = st / SET_END;
       b.x = Math.round(lerp(hx + story.fromDX, sx, u));
-      b.y = Math.round(lerp(hy + story.fromDY, sy, u * u));
+      b.y = Math.round(lerp(hy + story.fromDY, sy, u * u) - story.hop * arc(u));
       return;
     }
     b.x = sx;
@@ -1341,9 +1573,9 @@ export class CareerScene implements Scene {
       const u = clamp((st - SET_END) / (TAP_AT - SET_END));
       this.dribble(u);
       const row = Math.round(this.frow);
-      const push = Math.round(3 * Math.sin(Math.PI * frac(u * 3)));
+      const push = Math.round(6 * Math.sin(Math.PI * frac(u * 3)));
       b.x = Math.round(this.fx) + KICK_DX + push;
-      b.y = row - 2;
+      b.y = row - R;
       b.sy = row;
       b.depth = row + 0.5;
       b.spin = Math.floor(st * 12);
@@ -1367,7 +1599,7 @@ export class CareerScene implements Scene {
     switch (g) {
       case "timeup": {
         const u = clamp((st - story.strike) / 0.45);
-        b.x = sx + Math.round(4 * easeOutCubic(u));
+        b.x = sx + Math.round(8 * easeOutCubic(u));
         if (u >= 1) b.spin = 0;
         return;
       }
@@ -1391,16 +1623,20 @@ export class CareerScene implements Scene {
           const e = 1 - (1 - u) * (1 - u);
           const row = Math.round(lerp(hy, this.wideEndRow(), e));
           b.x = Math.round(lerp(sx, this.wideEndX(), e));
-          b.y = row - 2;
+          b.y = row - R;
           b.sy = row;
           b.depth = row + 0.5;
           b.spin = u >= 1 ? 0 : Math.floor(st * 18 * (1 - u));
           return;
         }
+        if (story.fetch) {
+          this.skiedDown(story, st, b, sx, sy);
+          return;
+        }
         // skied: over the bar and away, gone behind the far side as it comes down
-        const ex = Math.min(lx + Math.round(24 * L.stageScale), L.w - 4);
-        const ey = L.farTouchY - 6;
-        const peak = Math.max(L.actionTop - 2, L.boardShrunkY + 8);
+        const ex = Math.min(lx + Math.round(24 * L.stageScale), L.w - 8);
+        const ey = L.farTouchY - 12;
+        const peak = Math.max(L.actionTop - 4, L.boardShrunkY + 16);
         const lift = Math.max(0, (sy + ey) / 2 - peak);
         const u = clamp(v);
         b.x = Math.round(lerp(sx, ex, u));
@@ -1408,7 +1644,7 @@ export class CareerScene implements Scene {
         const row = Math.round(lerp(hy, L.farTouchY, u));
         b.sy = row >= L.farTouchY && u < 1 ? row : -1;
         b.depth = row + 0.5;
-        if (u >= 1 || (u > 0.5 && b.y >= L.farTouchY - 10)) b.on = false;
+        if (u >= 1 || (u > 0.5 && b.y >= L.farTouchY - 20)) b.on = false;
         return;
       }
       default:
@@ -1419,7 +1655,7 @@ export class CareerScene implements Scene {
       this.fly(story, v);
       const row = Math.round(this.frow);
       b.x = Math.round(this.fx);
-      b.y = Math.round(this.frow - 2 - this.fh);
+      b.y = Math.round(this.frow - R - this.fh);
       b.sy = row;
       b.depth = row + 0.5;
       return;
@@ -1427,43 +1663,45 @@ export class CareerScene implements Scene {
     this.fly(story, 1);
     const lineRow = this.frow;
     const lineH = this.fh;
-    const lineY = Math.round(lineRow - 2 - lineH);
+    const lineY = Math.round(lineRow - R - lineH);
+    const one = 2;
     if (goal.kind === "jumpers") {
       // no net: it runs on towards the hedge
       const u = clamp((st - story.ta) / 0.9);
       const e = easeOutCubic(u);
-      const row = Math.round(lerp(lineRow, L.farTouchY + 4, e));
+      const row = Math.round(lerp(lineRow, L.farTouchY + 8, e));
       const h =
         lineH * (1 - u) * (1 - u) * (1 - u) +
-        (lineH > 2 ? 3 : 1) * arc(clamp((u - 0.3) / 0.3)) +
-        arc(clamp((u - 0.6) / 0.15));
-      b.x = Math.round(lerp(lx + 1, lx + Math.round(26 * L.stageScale), e));
-      b.y = Math.round(row - 2 - h);
+        (lineH > R ? 6 : one) * arc(clamp((u - 0.3) / 0.3)) +
+        one * arc(clamp((u - 0.6) / 0.15));
+      b.x = Math.round(lerp(lx + one, this.hedgeX(story), e));
+      b.y = Math.round(row - R - h);
       b.sy = row;
       b.depth = row + 0.5;
       if (u >= 1) b.spin = 0;
       return;
     }
     // into the net: to the back of it, held there by the bulge, then down to the floor
-    const backX = lx + Math.max(3, goal.depth - 3);
+    const backX = this.backX();
     const th = story.th;
     b.depth = gy - 0.5;
     b.sy = gy;
     if (st < th) {
-      b.x = Math.round(lerp(lx + 1, backX, (st - story.ta) / (th - story.ta)));
+      const u = (st - story.ta) / (th - story.ta);
+      b.x = Math.round(lerp(lx + one, backX, u));
       b.y = lineY;
       return;
     }
     const since = st - th;
-    b.x = backX + Math.round(3 * this.bulgeAmount(story, st));
+    b.x = backX + Math.round(6 * this.bulgeAmount(story, st));
     if (since < 0.12) {
       b.y = lineY;
     } else if (since < 0.45) {
       const q = (since - 0.12) / 0.33;
-      b.y = Math.round(lerp(lineY, gy - 2, q * q));
+      b.y = Math.round(lerp(lineY, gy - R, q * q));
     } else {
-      const bounce = lineY < gy - 4 ? 2 : 0;
-      b.y = gy - 2 - Math.round(arc(clamp((since - 0.45) / 0.16)) * bounce);
+      const bounce = lineY < gy - 8 ? R : 0;
+      b.y = gy - R - Math.round(arc(clamp((since - 0.45) / 0.16)) * bounce);
       if (since > 0.61) b.spin = 0;
     }
   }
@@ -1478,8 +1716,10 @@ export class CareerScene implements Scene {
     const hx = L.heroX;
     const hy = this.heroY();
     const o = this.youth() ? 5 : 0;
+    const { KICK_DX, BIKE_X, BIKE_Y } = castSpots();
     const ax = this.homes.x[MATE_A] + KICK_DX;
     const arow = this.homes.y[MATE_A];
+    const R = 4;
     if (st < BIKE_CROSS) {
       let x0: number;
       let x1: number;
@@ -1496,9 +1736,9 @@ export class CareerScene implements Scene {
         x1 = ax;
         r0 = hy;
         r1 = arow;
-        h0 = -story.fromDY - 2;
+        h0 = -story.fromDY - R;
         h1 = 0;
-        loft = 8;
+        loft = 16;
       } else {
         // A's first-time cross, lofted back to his chest
         u = (st - BIKE_PASS) / (BIKE_CROSS - BIKE_PASS);
@@ -1507,12 +1747,12 @@ export class CareerScene implements Scene {
         r0 = arow;
         r1 = hy;
         h0 = 0;
-        h1 = -BIKE_Y[o] - 2;
-        loft = 22;
+        h1 = -BIKE_Y[o] - R;
+        loft = 44;
       }
       const row = lerp(r0, r1, u);
       b.x = Math.round(lerp(x0, x1, u));
-      b.y = Math.round(row - 2 - lerp(h0, h1, u) - loft * arc(u));
+      b.y = Math.round(row - R - lerp(h0, h1, u) - loft * arc(u));
       b.sy = Math.round(row);
       b.depth = row + 0.5;
       return;
@@ -1531,6 +1771,7 @@ export class CareerScene implements Scene {
     const L = this.L;
     const hx = L.heroX;
     const hy = this.heroY();
+    const { KICK_DX, KICK_DY, JUGGLE_X, JUGGLE_Y } = castSpots();
     const fx = hx + KICK_DX;
     const fy = hy + KICK_DY;
     b.on = true;
@@ -1553,7 +1794,7 @@ export class CareerScene implements Scene {
     let h = 0;
     let e = easeOutCubic(u);
     if (g === "timeup") {
-      x0 = fx + 4;
+      x0 = fx + 8;
       row0 = hy;
     } else if (g === "skipped") {
       // team-mate A knocks it back: his kick, then it rolls
@@ -1567,15 +1808,555 @@ export class CareerScene implements Scene {
     } else {
       // thrown on from the near side, a bounce, then rolling to his feet
       x0 = hx - Math.round(16 * L.stageScale);
-      row0 = L.h + 6;
-      h = 12 * arc(clamp(u / 0.45)) + 3 * arc(clamp((u - 0.45) / 0.2));
+      row0 = L.h + 12;
+      h = 24 * arc(clamp(u / 0.45)) + 6 * arc(clamp((u - 0.45) / 0.2));
     }
     const row = Math.round(lerp(row0, hy, e));
     b.x = Math.round(lerp(x0, fx, e));
-    b.y = Math.round(row - 2 - h);
+    b.y = Math.round(row - 4 - h);
     b.sy = row;
     b.depth = row + 0.5;
     if (u >= 1) b.spin = 0;
+  }
+
+  // -------------------------------------------------------------------------
+  // The fetch
+  //
+  // A goal or a miss that brings no promotion leaves the ball somewhere: in the net,
+  // past the jumpers, behind the goal, out wide. Rather than a new ball, that one is
+  // brought back to his feet before he juggles again: at tiers 0 and 1 a youth runs after
+  // it and passes it back (the child keeper for a goal, team-mate B for a miss); at tiers
+  // 2 to 7 the keeper picks a goal out of his net, carries it to his place and rolls it
+  // out to him, and a ball kid behind the goal catches a miss skied over the bar, or picks
+  // up one dragged wide, and throws it back. It is all in
+  // `Story.fetch`, planned as the shot starts; a promotion ends it (the smoke covers the
+  // change of ground), and a shot cut in on it takes the ball from where it is.
+  // -------------------------------------------------------------------------
+
+  /** Who fetches a shot's ball, and the beats of it (none for a pass or time up). */
+  private planFetch(s: Story): void {
+    if (s.reduced || (!s.goal && s.grade !== "miss")) return;
+    const tier = this.tier;
+    const youth = tier <= 1;
+    let who = KEEPER;
+    let how = BY_KEEPER;
+    if (s.goal) {
+      if (youth) how = BY_FOOT;
+    } else if (youth) {
+      who = MATE_B;
+      how = BY_FOOT;
+    } else {
+      who = BALLKID;
+      how = BY_HAND;
+    }
+    const f: Fetch = {
+      who,
+      how,
+      out: who === KEEPER ? this.keeperOut(s.grade) : 0,
+      catch: how === BY_HAND && !s.low,
+      go: 0,
+      reach: 0,
+      lift: 0,
+      ready: 0,
+      release: 0,
+      flight: 0,
+      arrive: 0,
+      home: 0,
+    };
+    s.fetch = f;
+    this.fetchPoints(s, f);
+    const S = this.fS;
+    const P = this.fP;
+    const R = this.fR;
+    const B = this.fB;
+    const L = this.L;
+    const v = RUN_BACK * L.stageScale;
+    // when the ball lies still
+    const still = s.goal
+      ? s.th >= 0
+        ? s.th + 0.62
+        : s.ta + 0.9
+      : s.low
+        ? s.strike + WIDE_ROLL
+        : s.strike + s.flight + SKY_SETTLE;
+    // after his reaction (a keeper beaten, a team-mate's head in his hands), timed to
+    // reach the ball as it stops if it is still on its way
+    const react = s.ta + (s.goal ? (how === BY_KEEPER ? 0.7 : 0.5) : 0.3);
+    const run =
+      Math.hypot(P.x - S.x, P.y - S.y) /
+      (v * (s.goal && how === BY_KEEPER ? JOG : 1));
+    f.go = Math.max(react, still - run);
+    f.reach = f.go + run;
+    f.lift = f.reach + (how === BY_FOOT ? TRAP : PICK);
+    if (f.catch) {
+      // hands up as it drops to him, and it is his; a breath before the throw
+      f.lift = s.strike + s.flight;
+      f.go = f.reach = f.lift - 0.3;
+    }
+    const carry =
+      Math.hypot(R.x - P.x, R.y - P.y) /
+      (v * (how === BY_KEEPER ? WALK : DRIBBLE));
+    f.ready = f.lift + carry;
+    const windup =
+      how === BY_KEEPER
+        ? 1 / 8
+        : how === BY_HAND
+          ? f.catch
+            ? 0.4
+            : 2 / 8
+          : 0.2;
+    const { KICK_DX, KICK_DY } = castSpots();
+    const far = Math.hypot(
+      L.heroX + KICK_DX - B.x,
+      this.heroY() + KICK_DY - B.y,
+    );
+    f.flight =
+      how === BY_HAND
+        ? 0.45 + far / (4 * v)
+        : how === BY_KEEPER
+          ? 0.3 + far / (2.2 * v)
+          : 0.25 + far / (2.6 * v);
+    // never there before he is back in his place
+    f.release = Math.max(f.ready + windup, s.deliverAt + 0.25 - f.flight);
+    f.arrive = f.release + f.flight;
+    const H = this.homes;
+    const back =
+      how === BY_FOOT
+        ? Math.hypot(H.x[who] - R.x, H.y[who] - R.y) / v
+        : how === BY_HAND
+          ? Math.hypot(H.x[who] - P.x, H.y[who] - P.y) / (v * WALK)
+          : 0;
+    f.home = f.release + 0.3 + back;
+    s.flickAt = f.arrive + SETTLE;
+    s.end = s.flickAt + FLICK;
+  }
+
+  /** From when the fetcher has the ball (it moves with him). */
+  private hasAt(f: Fetch): number {
+    return f.how === BY_FOOT || f.catch ? f.lift : f.reach + PICK / 2;
+  }
+
+  /** Where the shot's ball comes to rest, to be fetched, into `b`. */
+  private restSpot(story: Story, b: Ball): void {
+    const L = this.L;
+    const R = 4;
+    let row: number;
+    if (story.goal && this.ground.goal.kind !== "jumpers") {
+      row = L.groundY;
+      b.x = this.backX();
+      b.y = row - R;
+      b.sy = row;
+      b.depth = row - 0.5;
+      return;
+    }
+    if (story.goal) {
+      b.x = this.hedgeX(story);
+      row = L.farTouchY + 8;
+    } else if (story.low) {
+      b.x = this.wideEndX();
+      row = this.wideEndRow();
+    } else {
+      b.x = this.landX() + this.landRoll();
+      row = this.landRow();
+    }
+    b.y = row - R;
+    b.sy = row;
+    b.depth = row + 0.5;
+  }
+
+  /**
+   * The fetch's points for the layout of the moment: the ball at rest (`rest`), where the
+   * fetcher sets off from (`fS`), where he stands to pick it up or take it (`fP`), where he
+   * lets it go from (`fR`) and the ball's centre as it leaves him (`fB`).
+   */
+  private fetchPoints(s: Story, f: Fetch): void {
+    const H = this.homes;
+    const B = this.rest;
+    const S = this.fS;
+    S.x = H.x[f.who] + f.out;
+    S.y = H.y[f.who];
+    if (f.catch) {
+      // the ball kid's catch: in his hands over his head, facing the pitch, where he stands
+      const c = fetchSpot("kidThrow", 1);
+      const left = this.L.heroX < S.x;
+      B.x = S.x + (c ? (left ? -c.x : c.x) : 0);
+      B.y = S.y + (c ? c.y : 0);
+      B.sy = S.y;
+      B.depth = S.y + 0.05;
+    } else {
+      this.restSpot(s, B);
+    }
+    const dir = B.x >= S.x ? 1 : -1;
+    const { KICK_DX, KICK_DY, KICK_LEFT_DX } = castSpots();
+    const pick =
+      f.how === BY_KEEPER
+        ? fetchSpot("keeperPick", 0)
+        : f.how === BY_HAND
+          ? fetchSpot("kidPick", 0)
+          : null;
+    const P = this.fP;
+    P.x = f.catch ? S.x : B.x - dir * (pick ? pick.x : KICK_DX);
+    P.y = f.catch ? S.y : B.sy;
+    const R = this.fR;
+    if (f.how === BY_HAND) {
+      R.x = P.x;
+      R.y = P.y;
+    } else if (f.who === KEEPER) {
+      R.x = H.x[KEEPER];
+      R.y = H.y[KEEPER];
+    } else {
+      // team-mate B brings it half way back, then passes
+      R.x = Math.round(lerp(P.x, H.x[f.who], 0.55));
+      R.y = Math.round(lerp(P.y, H.y[f.who], 0.55));
+    }
+    const left = this.L.heroX < R.x;
+    const Q = this.fB;
+    if (f.how === BY_FOOT) {
+      Q.x = R.x + (left ? KICK_LEFT_DX : KICK_DX);
+      Q.y = R.y + KICK_DY;
+    } else {
+      const sp = fetchSpot(f.how === BY_KEEPER ? "keeperRoll" : "kidThrow", 1);
+      Q.x = R.x + (sp ? (left ? -sp.x : sp.x) : 0);
+      Q.y = R.y + (sp ? sp.y : 0);
+    }
+  }
+
+  /** The fetcher at `st`: where he is and what he does (`o.on` false before he sets off). */
+  private fetcher(s: Story, st: number, o: FetchPose): void {
+    const f = s.fetch;
+    o.on = false;
+    if (!f || st < f.go) return;
+    this.fetchPoints(s, f);
+    const S = this.fS;
+    const P = this.fP;
+    const R = this.fR;
+    const B = this.rest;
+    o.on = true;
+    o.fetch = null;
+    o.kanim = null;
+    o.anim = "idle";
+    o.frame = 0;
+    const toward = (
+      ax: number,
+      ay: number,
+      bx: number,
+      by: number,
+      u: number,
+    ): void => {
+      o.x = Math.round(lerp(ax, bx, u));
+      o.y = Math.round(lerp(ay, by, u));
+    };
+    if (st < f.reach) {
+      // on his way to it
+      toward(S.x, S.y, P.x, P.y, clamp((st - f.go) / (f.reach - f.go)));
+      o.anim = "run";
+      o.frame = Math.floor(st * (f.how === BY_KEEPER && s.goal ? 8 : 10));
+      o.flip = P.x < S.x;
+      return;
+    }
+    const facing = B.x < P.x;
+    const toHero = this.L.heroX < R.x;
+    const after = st - f.release;
+    if (f.how === BY_FOOT) {
+      // round the ball, to dribble it back with it at his other foot
+      const { KICK_DX, KICK_LEFT_DX } = castSpots();
+      const back = R.x < B.x;
+      const dx = B.x - (back ? KICK_LEFT_DX : KICK_DX);
+      if (st < f.lift) {
+        toward(P.x, P.y, dx, P.y, clamp((st - f.reach) / (f.lift - f.reach)));
+        o.anim = dx === P.x ? "idle" : "run";
+        o.frame = Math.floor(st * 10);
+        o.flip = dx === P.x ? facing : dx < P.x;
+        return;
+      }
+      if (st < f.ready) {
+        toward(dx, P.y, R.x, R.y, clamp((st - f.lift) / (f.ready - f.lift)));
+        o.anim = "run";
+        o.frame = Math.floor(st * 10);
+        o.flip = R.x < P.x;
+        return;
+      }
+      if (after < 0.3) {
+        // the pass: kick frames 0 and 1 before it, the strike on 2
+        toward(R.x, R.y, R.x, R.y, 0);
+        o.flip = toHero;
+        const k = st - (f.release - 0.2);
+        if (k >= 0) {
+          o.anim = "kick";
+          o.frame = Math.min(4, Math.floor(k * 10));
+        }
+        return;
+      }
+      this.fetcherHome(f, st, R, o);
+      return;
+    }
+    if (f.catch && after < -2 / 8) {
+      // hands up for it as it drops, then it is in them
+      toward(P.x, P.y, P.x, P.y, 0);
+      o.fetch = "kidThrow";
+      o.frame = 1;
+      o.flip = toHero;
+      return;
+    }
+    if (st < f.lift) {
+      // stooped over it, then up with it
+      toward(P.x, P.y, P.x, P.y, 0);
+      o.fetch = f.how === BY_KEEPER ? "keeperPick" : "kidPick";
+      o.frame = st < f.reach + PICK / 2 ? 0 : 1;
+      o.flip = facing;
+      return;
+    }
+    if (f.how === BY_KEEPER) {
+      if (st < f.ready) {
+        // carried back to his place
+        toward(P.x, P.y, R.x, R.y, clamp((st - f.lift) / (f.ready - f.lift)));
+        o.fetch = "keeperCarry";
+        o.frame = Math.floor((st - f.lift) * 8);
+        o.flip = R.x < P.x;
+        return;
+      }
+      toward(R.x, R.y, R.x, R.y, 0);
+      o.flip = toHero;
+      if (after < -1 / 8) {
+        // waiting for him to be back in his place, the ball held
+        o.fetch = "keeperCarry";
+        o.frame = 1;
+      } else if (after < 0.45) {
+        o.fetch = "keeperRoll";
+        o.frame = after < 0 ? 0 : after < 1 / 8 ? 1 : 2;
+      } else {
+        o.kanim = "ready";
+        o.frame = Math.floor(this.t * 1.2);
+      }
+      return;
+    }
+    // the ball kid: throws it from where he picked it up, then walks back
+    toward(P.x, P.y, P.x, P.y, 0);
+    o.flip = this.L.heroX < P.x;
+    if (after < -2 / 8) {
+      o.fetch = "kidPick";
+      o.frame = 1;
+    } else if (after < 0.3) {
+      o.fetch = "kidThrow";
+      o.frame = after < -1 / 8 ? 0 : after < 0 ? 1 : 2;
+    } else {
+      this.fetcherHome(f, st, P, o);
+    }
+  }
+
+  /** After he has let it go: back from `from` to his place (at a walk), then at ease. */
+  private fetcherHome(f: Fetch, st: number, from: Pt, o: FetchPose): void {
+    const H = this.homes;
+    const hx = H.x[f.who];
+    const hy = H.y[f.who];
+    const t0 = f.release + 0.3;
+    if (st < f.home && f.home > t0) {
+      const u = clamp((st - t0) / (f.home - t0));
+      o.x = Math.round(lerp(from.x, hx, u));
+      o.y = Math.round(lerp(from.y, hy, u));
+      o.anim = "run";
+      o.frame = Math.floor(st * (f.how === BY_HAND ? 8 : 10));
+      o.flip = hx < from.x;
+      return;
+    }
+    o.x = hx;
+    o.y = hy;
+    o.anim = "idle";
+    o.frame = Math.floor((this.t + f.who * 0.37) * 2);
+    // at his place he faces as he always does: the ball kid and the keeper the pitch
+    o.flip = f.who === BALLKID || f.who === KEEPER;
+  }
+
+  /** A fetcher cut off by the next shot lets the ball go at once: his release frame. */
+  private letGo(s: Story, o: FetchPose): void {
+    const f = s.fetch;
+    if (!f) return;
+    o.flip = this.L.heroX < o.x;
+    o.kanim = null;
+    if (f.how === BY_KEEPER) {
+      o.fetch = "keeperRoll";
+      o.frame = 2;
+    } else if (f.how === BY_HAND) {
+      o.fetch = "kidThrow";
+      o.frame = 2;
+    } else {
+      o.fetch = null;
+      o.anim = "kick";
+      o.frame = 3;
+    }
+  }
+
+  /** The fetcher's pose over whatever his part in the shot had him do. */
+  private poseFetch(story: Story, st: number): void {
+    const f = story.fetch;
+    const o = this.fpose;
+    this.fetcher(story, st, o);
+    if (!f || !o.on) return;
+    const p = this.poses[f.who];
+    p.x = o.x;
+    p.y = o.y;
+    p.depth = o.y;
+    p.flip = o.flip;
+    p.anim = o.anim;
+    p.fetch = o.fetch;
+    p.frame = o.frame;
+    p.keeper = o.kanim !== null;
+    if (o.kanim !== null) p.kanim = o.kanim;
+  }
+
+  /**
+   * The one ball of a fetched shot: the shot until the fetcher has it, then with him (in
+   * his hands, or dribbled at his feet), then on its way to the hero's feet (rolled or
+   * passed along the grass, or thrown, bouncing), then the flick up into the juggle.
+   */
+  private fetchBall(story: Story, st: number, b: Ball): void {
+    const f = story.fetch;
+    if (!f || st < this.hasAt(f)) {
+      this.shotBall(story, st, b);
+      return;
+    }
+    const L = this.L;
+    const R = 4;
+    const hx = L.heroX;
+    const hy = this.heroY();
+    const { KICK_DX, KICK_DY, KICK_LEFT_DX, JUGGLE_X, JUGGLE_Y } = castSpots();
+    const fx = hx + KICK_DX;
+    const fy = hy + KICK_DY;
+    b.on = true;
+    if (st < f.release) {
+      const o = this.fpose;
+      this.fetcher(story, st, o);
+      if (o.fetch !== null) {
+        const sp = fetchSpot(o.fetch, o.frame);
+        b.x = o.x + (sp ? (o.flip ? -sp.x : sp.x) : 0);
+        b.y = o.y + (sp ? sp.y : -R);
+        b.sy = -1;
+        b.depth = o.y + 0.05;
+        b.spin = 0;
+        return;
+      }
+      // at a youth's feet: pushed on ahead of him as he dribbles, then still for the pass
+      let push = 0;
+      b.spin = 0;
+      if (st < f.ready) {
+        const u = clamp((st - f.lift) / (f.ready - f.lift));
+        push = Math.round(6 * Math.sin(Math.PI * frac(u * 3)));
+        b.spin = Math.floor(st * 12);
+      }
+      b.x = o.x + (o.flip ? KICK_LEFT_DX - push : KICK_DX + push);
+      b.y = o.y + KICK_DY;
+      b.sy = o.y;
+      b.depth = o.y + 0.5;
+      return;
+    }
+    b.sy = hy;
+    b.depth = hy + 0.5;
+    if (st >= story.flickAt) {
+      // the flick: from his foot up to the top of the juggle's last hop
+      const u = clamp((st - story.flickAt) / FLICK);
+      const o = this.youth() ? 15 : 7;
+      b.x = Math.round(lerp(fx, hx + JUGGLE_X[o], u));
+      b.y = Math.round(lerp(fy, hy + JUGGLE_Y[o], easeOutCubic(u)));
+      b.spin = Math.floor(st * 16);
+      return;
+    }
+    if (st >= f.arrive) {
+      b.x = fx;
+      b.y = fy;
+      b.spin = 0;
+      return;
+    }
+    this.fetchPoints(story, f);
+    const Q = this.fB;
+    const u = clamp((st - f.release) / f.flight);
+    b.spin = Math.floor(st * 16 * (1 - 0.6 * u));
+    if (f.how === BY_HAND) {
+      // thrown: up from his hands, down two thirds of the way there, a hop, a roll
+      const from = this.fP.y;
+      const e = u * (1.35 - 0.35 * u);
+      const row = lerp(from, hy, e);
+      const h0 = from - R - Q.y;
+      let h = 0;
+      if (u < 0.55) {
+        const a = u / 0.55;
+        h = h0 * (1 - a) + 24 * arc(a);
+      } else if (u < 0.8) {
+        h = 8 * arc((u - 0.55) / 0.25);
+      }
+      b.x = Math.round(lerp(Q.x, fx, e));
+      b.y = Math.round(row - R - h);
+      b.sy = Math.round(row);
+      b.depth = row + 0.5;
+      return;
+    }
+    // rolled or passed along the grass, slowing as it comes
+    const e = 1 - (1 - u) * (1 - u);
+    const row = lerp(Q.y + R, hy, e);
+    b.x = Math.round(lerp(Q.x, fx, e));
+    b.y = Math.round(row - R);
+    b.sy = Math.round(row);
+    b.depth = row + 0.5;
+  }
+
+  /**
+   * A skied miss to be fetched: over the bar, down behind the goal in front of
+   * the far side (in sight), a bounce and a hop, rolling on a little to lie still.
+   */
+  private skiedDown(
+    story: Story,
+    st: number,
+    b: Ball,
+    sx: number,
+    sy: number,
+  ): void {
+    const L = this.L;
+    const R = 4;
+    const hy = this.heroY();
+    const f = story.fetch;
+    let ex = this.landX();
+    let erow = this.landRow();
+    let ey = erow - R;
+    if (f?.catch) {
+      // into the ball kid's hands
+      this.fetchPoints(story, f);
+      ex = this.rest.x;
+      ey = this.rest.y;
+      erow = this.rest.sy;
+    }
+    const peak = Math.max(L.actionTop - 4, L.boardShrunkY + 16);
+    const lift = Math.max(0, (sy + ey) / 2 - peak);
+    const v = story.flight > 0 ? (st - story.strike) / story.flight : 1;
+    if (v < 1) {
+      const u = clamp(v);
+      const row = Math.round(lerp(hy, erow, u));
+      b.x = Math.round(lerp(sx, ex, u));
+      b.y = Math.round(lerp(sy, ey, u) - arc(u) * lift);
+      b.sy = row;
+      b.depth = row + 0.5;
+      return;
+    }
+    if (f?.catch) {
+      b.x = ex;
+      b.y = ey;
+      b.sy = -1;
+      b.depth = erow + 0.05;
+      return;
+    }
+    const a = st - story.strike - story.flight;
+    const roll = easeOutCubic(clamp(a / SKY_SETTLE));
+    b.x = ex + Math.round(this.landRoll() * roll);
+    b.y =
+      ey -
+      Math.round(12 * arc(clamp(a / 0.3)) + 4 * arc(clamp((a - 0.3) / 0.16)));
+    b.sy = erow;
+    b.depth = erow + 0.5;
+    b.spin = a >= SKY_SETTLE ? 0 : Math.floor(st * 12);
+  }
+
+  /** Where a ball in the net comes to rest: at the back of it, inside the back post. */
+  private backX(): number {
+    const goal = this.ground.goal;
+    return goal.lineX + Math.max(6, goal.depth - 6);
   }
 
   /** The net's bulge after a goal, 0 to 1. */
@@ -1595,23 +2376,34 @@ export class CareerScene implements Scene {
     const tier = this.tier;
     const youth = tier <= 1;
     const H = this.homes;
+    // how far past someone the ball must be before he turns to watch it
+    const look = 6;
+    const kid = tier >= 2;
     for (let i = 0; i < CAST; i++) {
       const p = this.poses[i];
       p.on = i !== REF || tier >= 2;
       if (i === EXTRA_A || i === EXTRA_B) p.on = false;
+      if (i === BALLKID) p.on = kid;
       p.keeper = i === KEEPER && !youth;
       p.anim = "idle";
       p.kanim = "ready";
+      p.fetch = null;
       // breathing, each to his own beat
       p.frame = Math.floor((t + i * 0.37) * 2);
       p.x = H.x[i];
       p.y = H.y[i];
-      // facing: team-mates and the referee face the goal, opponents him; all watch the ball
-      const right = i === OPP_A || i === OPP_B || i === KEEPER ? false : true;
+      // facing: team-mates and the referee face the goal, opponents him (and the ball kid
+      // the pitch); all watch the ball
+      const right = !(
+        i === OPP_A ||
+        i === OPP_B ||
+        i === KEEPER ||
+        i === BALLKID
+      );
       p.flip = !right;
       if (i !== KEEPER && i !== HERO) {
-        if (right && ballX < p.x - 3) p.flip = true;
-        if (!right && ballX > p.x + 3) p.flip = false;
+        if (right && ballX < p.x - look) p.flip = true;
+        if (!right && ballX > p.x + look) p.flip = false;
       }
       p.depth = p.y;
     }
@@ -1630,14 +2422,34 @@ export class CareerScene implements Scene {
     if (this.carry >= 0) this.carryOn();
   }
 
-  /** Those caught away from where they now belong run there (`CARRY` seconds). */
+  /**
+   * Those caught away from where they now belong run there (`CARRY` seconds, or the walk
+   * home after a fetch). A fetcher cut off with the ball lets it go first (`cutWho`).
+   */
   private carryOn(): void {
-    const u = clamp(this.carry / CARRY);
-    const e = u * u * (3 - 2 * u);
+    const all = clamp(this.carry / this.carryFor);
     const k = this.L.stageScale;
     for (let i = 0; i < CAST; i++) {
       const p = this.poses[i];
       if (!p.on) continue;
+      let u = all;
+      if (i === this.cutWho) {
+        if (all < 0.5) {
+          const c = this.cutPose;
+          p.x = this.fromX[i];
+          p.y = this.fromY[i];
+          p.depth = p.y;
+          p.flip = c.flip;
+          p.anim = c.anim;
+          p.fetch = c.fetch;
+          p.keeper = c.kanim !== null;
+          if (c.kanim !== null) p.kanim = c.kanim;
+          p.frame = c.frame;
+          continue;
+        }
+        u = (all - 0.5) * 2;
+      }
+      const e = u * u * (3 - 2 * u);
       const dx = p.x - this.fromX[i];
       const dy = p.y - this.fromY[i];
       if (dx === 0 && dy === 0) continue;
@@ -1645,6 +2457,7 @@ export class CareerScene implements Scene {
       p.y = Math.round(this.fromY[i] + dy * e);
       p.depth = p.y + (i === HERO ? 0.4 : 0);
       if (Math.abs(dx) + Math.abs(dy) > 3 * k && u < 1) {
+        p.fetch = null;
         if (p.keeper) {
           p.kanim = "ready";
           p.frame = Math.floor(this.t * 8);
@@ -1674,6 +2487,7 @@ export class CareerScene implements Scene {
     if (this.youth()) this.poseChildKeeper(story, st, P0[KEEPER]);
     else this.poseKeeper(story, st, P0[KEEPER]);
     this.poseOthers(story, st);
+    if (story.fetch && !story.reduced) this.poseFetch(story, st);
   }
 
   /** Him: the set, his shot, the reaction, back to his place. */
@@ -1742,7 +2556,7 @@ export class CareerScene implements Scene {
     // the set: he stops and steps back
     if (st < KICK_AT) {
       hero.frame = 0;
-      if (st > 0.12) hero.x = hx - 2;
+      if (st > 0.12) hero.x = hx - 4;
       return;
     }
     if (g === "timeup") {
@@ -1756,25 +2570,26 @@ export class CareerScene implements Scene {
     const f = Math.floor((st - story.plan.at) * info.fps);
     hero.anim = anim;
     hero.frame = Math.min(f, info.frames - 1);
-    hero.x = hx - (f === 0 ? 2 : f === 1 ? 1 : 0);
+    hero.x = hx - (f === 0 ? 4 : f === 1 ? 2 : 0);
     switch (g) {
       case "golazo": {
         // off to the near corner and a knee slide
         const run0 = ta + 0.1;
         const slide0 = ta + 0.35;
         const D = this.slideDX();
+        const down = 10;
         if (st >= run0 && st < slide0) {
           const u = (st - run0) / (slide0 - run0);
           hero.anim = "run";
           hero.frame = Math.floor(st * 10);
           hero.x = hx + Math.round(u * 0.45 * D);
-          hero.y = hy + Math.round(u * 0.4 * 5);
+          hero.y = hy + Math.round(u * 0.4 * down);
         } else if (st >= slide0) {
           const u = easeOutCubic(clamp((st - slide0) / 0.55));
           hero.anim = "slide";
           hero.frame = Math.floor((st - slide0) * 4);
           hero.x = hx + Math.round((0.45 + 0.55 * u) * D);
-          hero.y = hy + Math.round((0.4 + 0.6 * u) * 5);
+          hero.y = hy + Math.round((0.4 + 0.6 * u) * down);
         }
         return;
       }
@@ -1822,7 +2637,7 @@ export class CareerScene implements Scene {
     hero.anim = "toepoke";
     hero.frame = Math.min(4, f);
     // the stumble carries him on a pixel or two
-    hero.x = px + (f >= 3 ? 2 : f >= 2 ? 1 : 0);
+    hero.x = px + (f >= 3 ? 4 : f >= 2 ? 2 : 0);
     const ta = story.ta;
     if (st >= ta + 0.15) {
       hero.anim = "celebrate";
@@ -1838,12 +2653,12 @@ export class CareerScene implements Scene {
     const dir = left ? -1 : 1;
     if (st < KICK_AT) {
       hero.frame = 0;
-      if (st > 0.12) hero.x = hx - 2 * dir;
+      if (st > 0.12) hero.x = hx - 4 * dir;
     } else if (st < KICK_AT + 0.45) {
       const f = Math.floor((st - KICK_AT) * 10);
       hero.anim = "kick";
       hero.frame = f;
-      hero.x = hx - dir * (f === 0 ? 2 : f === 1 ? 1 : 0);
+      hero.x = hx - dir * (f === 0 ? 4 : f === 1 ? 2 : 0);
     } else if (st < KICK_AT + 0.5) {
       hero.anim = "kick";
       hero.frame = 4;
@@ -2018,7 +2833,7 @@ export class CareerScene implements Scene {
             this.homes.x[HERO] +
             (slide ? this.slideDX() : 0) +
             (j === 0 ? -1 : 1) * Math.round(9 * k);
-          const ey = this.homes.y[HERO] + (slide ? 2 : j === 0 ? 3 : -2);
+          const ey = this.homes.y[HERO] + (slide ? 4 : j === 0 ? 6 : -4);
           const go = clamp((st - at) / 0.45);
           const home = clamp((st - RETURN) / 0.45);
           const p = easeInOutCubic(go * (1 - home));
@@ -2075,7 +2890,9 @@ export class CareerScene implements Scene {
   private keeperLift(story: Story): number {
     const L = this.L;
     // worked out once per shot and size
-    if (story.liftFor === L.w * 10000 + L.h) return story.lift;
+    const key = L.w * 10000 + L.h;
+    if (story.liftFor === key) return story.lift;
+    const { LEAP_TOP } = castSpots();
     const gx = L.keeperX + LEAP_TOP.x;
     const gloves = L.groundY + LEAP_TOP.y;
     // where the ball is as it passes his gloves
@@ -2086,8 +2903,8 @@ export class CareerScene implements Scene {
       by = b.y;
       if (b.x >= gx) break;
     }
-    story.lift = clamp(gloves - (by + 3), 0, 8);
-    story.liftFor = L.w * 10000 + L.h;
+    story.lift = clamp(gloves - (by + 6), 0, 16);
+    story.liftFor = key;
     return story.lift;
   }
 
@@ -2113,15 +2930,15 @@ export class CareerScene implements Scene {
       // the trophy lift on the podium, everyone round him
       hero.x = pd.x;
       hero.y = pd.top;
-      hero.depth = L.groundY + 2;
+      hero.depth = L.groundY + 4;
       const x0 = pd.x - (pd.w >> 1);
       const a = P0[MATE_A];
       const b = P0[MATE_B];
-      a.x = x0 + 5;
-      a.y = L.groundY - 2;
+      a.x = x0 + 10;
+      a.y = L.groundY - 4;
       a.flip = false;
-      b.x = x0 + pd.w - 5;
-      b.y = L.groundY - 1;
+      b.x = x0 + pd.w - 10;
+      b.y = L.groundY - 2;
       b.flip = true;
       a.depth = a.y;
       b.depth = b.y;
@@ -2135,10 +2952,10 @@ export class CareerScene implements Scene {
       const a = P0[MATE_A];
       const b = P0[MATE_B];
       a.x = L.heroX - Math.round(13 * k);
-      a.y = L.groundY + 3;
+      a.y = L.groundY + 6;
       a.flip = false;
       b.x = L.heroX + Math.round(13 * k);
-      b.y = L.groundY - 3;
+      b.y = L.groundY - 6;
       b.flip = true;
       a.depth = a.y;
       b.depth = b.y;
@@ -2160,18 +2977,20 @@ export class CareerScene implements Scene {
     return 0;
   }
 
+  /** The thump of a strike and the promotion's jolt: 2 px. */
   private shakeY(): number {
     if (this.reduced) return 0;
+    const one = 2;
     const story = this.story;
     if (story && story.plan.thump) {
       const a = story.st - story.strike;
-      if (a >= 0 && a < 0.06) return 1;
+      if (a >= 0 && a < 0.06) return one;
     }
     const p = this.promotion;
     if (p) {
       // the jolt as the ball in the close-up hits the net
       const a = p.t - BUILD.hit;
-      if (a >= 0 && a < 0.12) return Math.floor(a / 0.04) % 2 === 0 ? 1 : 0;
+      if (a >= 0 && a < 0.12) return Math.floor(a / 0.04) % 2 === 0 ? one : 0;
     }
     return 0;
   }
@@ -2182,6 +3001,7 @@ export class CareerScene implements Scene {
     const t = this.t;
     const light = ground.light;
     const kits = this.kitsNow();
+    const { LIFT } = castSpots();
     ground.drawBack(s, t);
 
     const story = this.story;
@@ -2197,9 +3017,10 @@ export class CareerScene implements Scene {
         story.plan.size,
         L.stageLeft - Math.round(30 * L.stageScale),
         L.stageRight + Math.round(30 * L.stageScale),
-        L.farTouchY - 71,
+        L.farTouchY - STAND.roofTop,
         this.seed,
         MODE_COLORS[this.mode].light,
+        this.era,
       );
     }
 
@@ -2210,7 +3031,10 @@ export class CareerScene implements Scene {
     const held = B[HELD - CAST];
     for (let i = 0; i < BALLS; i++) B[i].on = false;
     if (story) {
-      if (motion && st >= story.deliverAt) {
+      if (motion && story.fetch) {
+        // one ball, the shot's, fetched back to him
+        this.fetchBall(story, st, shot);
+      } else if (motion && st >= story.deliverAt) {
         this.givenBall(story, st, given);
         if (story.goal || story.low) this.shotBall(story, st, shot);
       } else {
@@ -2219,8 +3043,6 @@ export class CareerScene implements Scene {
     } else if (this.fullT < 0) {
       this.juggleBall(given);
     }
-    if (this.restNet > 0) this.restBall(B[REST_NET - CAST], false);
-    if (this.restWide) this.restBall(B[REST_WIDE - CAST], true);
     const look = given.on ? given.x : shot.on ? shot.x : L.heroX;
     this.poseCast(look);
 
@@ -2231,7 +3053,7 @@ export class CareerScene implements Scene {
       const o = this.youth() ? 4 : 0;
       held.on = true;
       held.x = hero.x + LIFT[o + f * 2];
-      held.y = hero.y + LIFT[o + f * 2 + 1] - 2;
+      held.y = hero.y + LIFT[o + f * 2 + 1] - 4;
       held.sy = -1;
       held.depth = hero.depth + 0.05;
       held.spin = 0;
@@ -2241,21 +3063,22 @@ export class CareerScene implements Scene {
     for (let i = 0; i < CAST; i++) {
       const p = this.poses[i];
       if (!p.on) continue;
-      const small = this.youth() && !p.keeper;
-      const half = small ? 3 : 4;
+      const small = (this.youth() && !p.keeper) || i === BALLKID;
+      const half = small ? 6 : 8;
       const lifted = p.keeper && p.kanim === "leap";
       if (!lifted || p.y === this.homes.y[i])
-        shadowRow(s, p.x - half, p.x + half - 1, p.y);
-      else shadowRow(s, p.x - half + 1, p.x + half - 2, this.homes.y[i]);
+        shadowRow(s, p.x - half, p.x + half - 1, p.y, 2);
+      else shadowRow(s, p.x - half + 2, p.x + half - 3, this.homes.y[i], 2);
     }
+    // under a ball (6 wide), on the rows of its ring's foot
     for (let i = 0; i < BALLS; i++) {
       const b = B[i];
-      if (b.on && b.sy >= 0) shadowRow(s, b.x - 1, b.x + 1, b.sy);
+      if (b.on && b.sy >= 0) shadowRow(s, b.x - 3, b.x + 2, b.sy - 1, 2);
     }
 
     // a miss dragged wide passes outside the near post: drawn over the goal, not in it
     const late =
-      story !== null && story.low && shot.on && shot.sy > L.groundY + 2;
+      story !== null && story.low && shot.on && shot.sy > L.groundY + 4;
 
     // the people and the balls, far to near
     const n = this.sortCast(late);
@@ -2266,18 +3089,28 @@ export class CareerScene implements Scene {
         continue;
       }
       const p = this.poses[i];
-      if (p.keeper) {
+      if (p.fetch !== null) {
+        this.keeperOpts.flipX = p.flip;
+        drawFetch(s, p.fetch, p.frame, p.x, p.y, kits[i], this.keeperOpts);
+      } else if (p.keeper) {
         this.keeperOpts.flipX = p.flip;
         drawKeeper(s, p.kanim, p.frame, p.x, p.y, kits[i], this.keeperOpts);
       } else {
         this.playerOpts.flipX = p.flip;
-        this.playerOpts.youth = this.youth() && i !== REF;
+        this.playerOpts.youth = i === BALLKID || (this.youth() && i !== REF);
         drawPlayer(s, p.anim, p.frame, p.x, p.y, kits[i], this.playerOpts);
       }
       if (i === HERO && this.fullT >= 0 && ground.podium) {
         const f = p.frame & 1;
         const glint = this.fullT % 1.4 < 0.12;
-        drawTrophy(s, p.x + LIFT[f * 2], p.y + LIFT[f * 2 + 1], light, glint);
+        drawTrophy(
+          s,
+          p.x + LIFT[f * 2],
+          p.y + LIFT[f * 2 + 1],
+          light,
+          glint,
+          this.era,
+        );
       }
     }
 
@@ -2290,20 +3123,21 @@ export class CareerScene implements Scene {
       const g = story.grade;
       if (story.plan.thump && g !== "worldie" && a >= 0 && a < 0.3) {
         const left = g === "skipped";
-        drawPuff(s, L.heroX + (left ? 2 : -2), hy, Math.floor(a * 10), grass);
+        const x = L.heroX + (left ? 4 : -4);
+        drawPuff(s, x, hy, Math.floor(a * 10), grass);
       }
       if (g === "toepoke" && a >= 0 && a < 0.3)
-        drawPuff(s, this.pokeX() + 6, hy, Math.floor(a * 10), grass);
+        drawPuff(s, this.pokeX() + 12, hy, Math.floor(a * 10), grass);
       if (g === "worldie") {
         const land = st - (BIKE_CROSS + 0.55);
         if (land >= 0 && land < 0.3)
-          drawPuff(s, L.heroX - 4, hy, Math.floor(land * 10), grass);
+          drawPuff(s, L.heroX - 8, hy, Math.floor(land * 10), grass);
       }
       if (g === "trivela" && !this.youth()) {
         const k = this.poses[KEEPER];
         const down = st - (story.ta + 0.06);
         if (down >= 0 && down < 0.3)
-          drawPuff(s, k.x + 4, k.y, Math.floor(down * 10), grass);
+          drawPuff(s, k.x + 8, k.y, Math.floor(down * 10), grass);
       }
     }
 
@@ -2331,11 +3165,12 @@ export class CareerScene implements Scene {
         st < story.strike + 1.4
       ) {
         const ref = this.tier >= 2 ? this.poses[REF] : this.poses[HERO];
-        const tall = this.youth() ? 16 : 20;
+        // the top of his cell (the youth's or the adult's), less a pixel
+        const tall = this.youth() ? 32 : 40;
         drawWhistle(
           s,
           ref.x,
-          ref.y - tall + 1,
+          ref.y - tall + 2,
           st - story.strike + 0.05,
           light.lit(P.ink),
           light.lit(P.chalk),
@@ -2354,44 +3189,20 @@ export class CareerScene implements Scene {
         0,
         L.w,
         0,
-        L.groundY + 12,
+        L.groundY + 24,
         this.seed,
         ramp.base,
         ramp.light,
+        this.era,
       );
     }
 
     // a promotion: the smoke, and in it the close-up of the ball at the back of the net
     const p = this.promotion;
     if (p && !this.reduced) {
-      if (!p.colors) p.colors = buildColors(p.to <= 1 ? light.env : light.lit);
+      if (!p.colors)
+        p.colors = buildColors(p.to <= 1 ? light.env : light.lit, this.era);
       drawBuild(s, p.t, p.area, p.colors, this.seed);
-    }
-  }
-
-  /** A ball left lying: the last goal's (in the net, or by the hedge) or the last miss's. */
-  private restBall(b: Ball, wide: boolean): void {
-    const L = this.L;
-    const goal = this.ground.goal;
-    b.on = true;
-    b.spin = 0;
-    if (wide) {
-      const row = this.wideEndRow();
-      b.x = this.wideEndX();
-      b.y = row - 2;
-      b.sy = row;
-      b.depth = row + 0.5;
-    } else if (this.restNet === 2 || goal.kind === "jumpers") {
-      const row = L.farTouchY + 4;
-      b.x = goal.lineX + Math.round(26 * L.stageScale);
-      b.y = row - 2;
-      b.sy = row;
-      b.depth = row + 0.5;
-    } else {
-      b.x = goal.lineX + Math.max(3, goal.depth - 3);
-      b.y = L.groundY - 2;
-      b.sy = L.groundY;
-      b.depth = L.groundY - 0.5;
     }
   }
 
@@ -2420,21 +3231,53 @@ export class CareerScene implements Scene {
         for (let j = 1; j <= 7; j++) {
           this.shotBall(story, Math.max(story.strike, st - j * 0.02), q);
           const c = j <= 2 ? P.goldLight : j <= 5 ? P.gold : P.goldDark;
+          // a line 2 px thick, and a second under it near the ball, centred on the
+          // ball's middle rows
+          s.line(px, py - 1, q.x, q.y - 1, c);
           s.line(px, py, q.x, q.y, c);
-          if (j <= 4)
-            s.line(px, py + 1, q.x, q.y + 1, j <= 2 ? P.gold : P.goldDark);
+          if (j <= 4) {
+            const c2 = j <= 2 ? P.gold : P.goldDark;
+            s.line(px, py + 1, q.x, q.y + 1, c2);
+            s.line(px, py + 2, q.x, q.y + 2, c2);
+          }
+          px = q.x;
+          py = q.y;
+        }
+      }
+    } else if (
+      // NEXT-GEN: every struck ball leaves a trail of light behind it in flight
+      this.era === "nextgen" &&
+      b === this.balls[SHOT - CAST] &&
+      story &&
+      !story.reduced &&
+      story.grade !== "timeup" &&
+      story.grade !== "skipped"
+    ) {
+      const v = (st - story.strike) / story.flight;
+      if (v > 0 && v < 1) {
+        const q = this.probe;
+        let px = b.x;
+        let py = b.y;
+        for (let j = 1; j <= NEXTGEN_TRAIL.length; j++) {
+          this.shotBall(story, Math.max(story.strike, st - j * 0.02), q);
+          const c = NEXTGEN_TRAIL[j - 1];
+          s.line(px, py, q.x, q.y, c);
+          if (j <= 3) s.line(px, py - 1, q.x, q.y - 1, c);
           px = q.x;
           py = q.y;
         }
       }
     }
-    // the 1 px ink outline every ball and character has (art bible section 4)
-    const ink = light.lit(P.ink);
-    s.hline(b.x - 1, b.y - 2, 3, ink);
-    s.hline(b.x - 1, b.y + 2, 3, ink);
-    s.vline(b.x - 2, b.y - 1, 3, ink);
-    s.vline(b.x + 2, b.y - 1, 3, ink);
-    drawMatchBall(s, b.x, b.y, b.spin, light, gold ? GOLD : undefined);
+    // the ink outline every ball and character has (art bible section 4)
+    drawBallRing(s, b.x, b.y, light.lit(P.ink));
+    drawMatchBall(
+      s,
+      b.x,
+      b.y,
+      b.spin,
+      light,
+      gold ? this.ballGold : this.ballPlain,
+    );
   }
 
   /** Far to near: people and balls by their depth (`order` gets the indices). */
@@ -2494,6 +3337,9 @@ const WARM_PLAYER: readonly PlayerAnim[] = [
   "slide",
 ];
 const WARM_COUNT =
-  SHOT_ANIMS.length * 2 + WARM_PLAYER.length + KEEPER_WARM.length;
+  SHOT_ANIMS.length * 2 +
+  WARM_PLAYER.length +
+  KEEPER_WARM.length +
+  FETCH_ANIM_NAMES.length;
 const WARM_ADULT = { flipX: false, youth: false } as const;
 const WARM_YOUTH = { flipX: false, youth: true } as const;

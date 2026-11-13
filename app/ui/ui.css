@@ -152,7 +152,10 @@
   }
 }
 
-/* HOME is always warm, AWAY always teal. Set data-mode on any element. */
+/*
+ * HOME is always warm, AWAY always teal, RETRO old gold, NEXT-GEN electric magenta. Set
+ * data-mode on any element.
+ */
 [data-mode="home"] {
   --mode: var(--c-home);
   --mode-dark: var(--c-home-dark);
@@ -163,6 +166,18 @@
   --mode: var(--c-away);
   --mode-dark: var(--c-away-dark);
   --mode-light: var(--c-away-light);
+}
+
+[data-mode="retro"] {
+  --mode: var(--c-retro);
+  --mode-dark: var(--c-retro-dark);
+  --mode-light: var(--c-retro-light);
+}
+
+[data-mode="nextgen"] {
+  --mode: var(--c-nextgen);
+  --mode-dark: var(--c-nextgen-dark);
+  --mode-light: var(--c-nextgen-light);
 }
 
 /* Grade colours, one per shot. Set data-grade on any element. */
@@ -1215,11 +1230,11 @@
 
 /*
  * An inline span's box is the face's whole height, taller than the tight line it sits on,
- * so on the last line of the last row it reached 2 px past the table and the table could
- * scroll by that much. The cell keeps it in: its own padding is round the text, and the
- * letters themselves are inside the line.
+ * so on the last line of the last row it reached past the table (2 px, more with the rows
+ * set tight) and the table could scroll by that much. The cells keep it in: the letters
+ * themselves are inside the line.
  */
-.ss-table--inline tbody .ss-table__who {
+.ss-table--inline tbody :is(td, th) {
   overflow: hidden;
 }
 
@@ -1464,6 +1479,14 @@
 
 .ss-sheet[data-fit~="tight"] .ss-table__ptsbox {
   line-height: calc(var(--lh-15) - var(--fp) * 6);
+}
+
+/*
+ * `band`: the grade and the points on lines of the 20 face's height instead of the 25's: 6
+ * font pixels less, 3 above and 3 below each, so both stay on their own pixels.
+ */
+.ss-sheet[data-fit~="band"] :is(.ss-sheet__grade, .ss-sheet__points) {
+  line-height: var(--lh-20);
 }
 
 /*
@@ -2556,12 +2579,6 @@ button.ss-menu__card:active {
  * The body's parts are laid out by the sheet itself.
  */
 .ss-game[data-wide] .ss-sheet {
-  /* A wide screen is never as short as a phone on its side: less is enough here. */
-  --cover-least: min(
-    calc(var(--ss-h, 100dvh) - var(--px) * 4),
-    calc(var(--fp) * 160)
-  );
-
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
   grid-template-rows: auto minmax(0, auto) auto minmax(0, 1fr) auto;
@@ -2670,9 +2687,9 @@ button.ss-menu__card:active {
 
 /*
  * The stage fills the canvas slot. The canvas inside it is exactly --ss-stage-w by
- * --ss-stage-h (the logical size times --px, set by PixelStage: a whole number of device
- * pixels per logical pixel), which is up to one logical pixel larger than the slot each
- * way because the logical size is rounded up.
+ * --ss-stage-h (the canvas's size times its own pixel, --ss-stage-px, set by PixelStage: a
+ * whole number of device pixels per canvas pixel, about half of --px), which is up to one
+ * canvas pixel larger than the slot each way because the canvas's size is rounded up.
  */
 .ss-stage {
   position: relative;
@@ -2719,7 +2736,7 @@ button.ss-menu__card:active {
       var(--snap)
     );
     top: max(
-      calc(var(--snap) - var(--px)),
+      calc(var(--snap) - var(--ss-stage-px, var(--px))),
       round(
         down,
         calc((100% - var(--ss-stage-h)) / 2 + var(--nudge)),
@@ -3983,4 +4000,1116 @@ html:has(.ss-help-dialog[open]) {
       var(--snap)
     );
   }
+}
+
+/* ---------- 23. Fade through black between pages (fade.ts) -------------------------------------- */
+
+/*
+ * The fade's overlay: a canvas of its own on the body, one canvas pixel per interface pixel
+ * from the top left corner, drawn with hard edges over everything (an ordered dither of
+ * ink, sixteen steps; fade.ts). It takes the presses while the ink comes, so nothing is
+ * pressed twice on the way out, and lets them through while the ink goes.
+ */
+.ss-fade {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 2147483647;
+  display: block;
+  image-rendering: pixelated;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.ss-fade[data-leaving] {
+  pointer-events: none;
+}
+
+/* ---------- 24. Stats (Stats, StatsCard, StatsButton) and the small print ------------------------ */
+
+/*
+ * The small print at the foot of the rules and the stats: quiet (mist, under a rule) but
+ * readable. On a monitor the cards are set in caption pixels; the small print stays in the
+ * page's own font pixel (`--ss-small-fp`, taken where --fp is still the page's), so it is
+ * small print there too.
+ */
+.ss-help-dialog,
+.ss-help-page {
+  --ss-small-fp: var(--fp);
+}
+
+.ss-legal {
+  margin: 0;
+  padding-top: var(--u3);
+  color: var(--c-mist);
+  font-family: var(--font-10);
+  font-size: calc(var(--ss-small-fp, var(--fp)) * 56 / 3);
+  line-height: calc(var(--ss-small-fp, var(--fp)) * 18);
+  box-shadow: inset 0 var(--u) 0 0 var(--c-slate);
+}
+
+.ss-help__body .ss-legal {
+  margin: 0;
+}
+
+/* The rules on a monitor: under both columns. */
+.ss-help[data-wide] .ss-legal {
+  grid-column: 1 / -1;
+}
+
+/*
+ * The stats' card is the rules' (section 22: frame, heading, close button, body, the dialog
+ * and its motion). On a monitor it is wider, for the modes side by side, and its body is
+ * one column, not the rules' grid.
+ */
+.ss-help[data-wide].ss-stats {
+  --ss-help-w: round(
+    down,
+    min(calc(var(--cp) * 560 + var(--px) * 10), calc(100% - var(--px) * 16)),
+    var(--px)
+  );
+}
+
+.ss-stats .ss-stats__body,
+.ss-help[data-wide] .ss-stats__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--u4);
+}
+
+.ss-stats p {
+  margin: 0;
+}
+
+/* The badge works its type out from the card's own font pixel (caption pixels on a monitor). */
+.ss-stats .ss-badge {
+  font-size: calc(var(--fp) * 56 / 3);
+  line-height: calc(var(--fp) * 15);
+}
+
+/* A label: amber, like the rules' section headings. */
+.ss-stats__k {
+  color: var(--c-amber);
+  font-family: var(--font-15);
+  font-size: calc(var(--fp) * 27);
+  line-height: calc(var(--fp) * 24);
+}
+
+/* A number or a value: chalk, in the same face. */
+.ss-stats__v,
+.ss-stats__total,
+.ss-stats__nums dd {
+  color: var(--c-chalk);
+  font-family: var(--font-15);
+  font-size: calc(var(--fp) * 27);
+  line-height: calc(var(--fp) * 24);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Beside a value: the day of a best, the best streak. */
+.ss-stats__sub,
+.ss-stats__none {
+  color: var(--c-mist);
+  font-family: var(--font-10);
+  font-size: calc(var(--fp) * 56 / 3);
+  line-height: calc(var(--fp) * 18);
+}
+
+.ss-stats__streak {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--u3);
+}
+
+/* The modes: one under the other; on a monitor side by side, as many as fit. */
+.ss-stats__modes {
+  display: grid;
+  gap: var(--u5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ss-stats[data-wide] .ss-stats__modes {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, calc(var(--fp) * 240)), 1fr)
+  );
+  gap: var(--u5) var(--u8);
+}
+
+.ss-stats__mode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--u2);
+  min-width: 0;
+  padding-top: var(--u3);
+  box-shadow: inset 0 var(--u) 0 0 var(--c-slate);
+}
+
+.ss-stats__mode-h {
+  display: flex;
+  margin: 0;
+  font: inherit;
+}
+
+/* Today: the label, the total and the title, and under them the seven shots. */
+.ss-stats__today {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--u) var(--u3);
+}
+
+.ss-stats__title {
+  color: var(--mode-light, var(--c-chalk));
+}
+
+.ss-stats__shots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--u);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A shot: its points, ink on the shot's colour, every tag the same width (three figures). */
+.ss-stats__shot {
+  box-sizing: border-box;
+  min-width: calc(var(--fp) * 18 + var(--u2) * 2);
+  overflow: clip;
+  padding: 0 var(--u2);
+  background: var(--grade, var(--c-mist));
+  color: var(--c-ink);
+  line-height: calc(var(--fp) * 15);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Played, average, best: a label over each number. */
+.ss-stats__nums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--u2) var(--u6);
+  margin: 0;
+}
+
+.ss-stats__nums dt {
+  color: var(--c-mist);
+}
+
+.ss-stats__nums dd {
+  margin: 0;
+}
+
+/* How the answers went: a bar of whole cells in the shots' colours, outlined in ink. */
+.ss-stats__bar {
+  display: flex;
+  align-self: flex-start;
+  width: calc(var(--px) * 100);
+  max-width: 100%;
+  height: var(--u2);
+  margin: var(--u) 0;
+  overflow: hidden;
+  background: var(--c-ink);
+  box-shadow: 0 0 0 var(--u) var(--c-ink);
+}
+
+.ss-stats__cell {
+  flex: none;
+  width: calc(var(--px) * var(--cells, 0));
+  background: var(--grade, var(--c-mist));
+}
+
+/* Under it, each shot's tag and how many: the rules' tags (section 22). */
+.ss-stats__tally {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--u) var(--u3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ss-stats__tally > li {
+  display: flex;
+  gap: var(--u);
+  white-space: nowrap;
+}
+
+.ss-stats__tag {
+  overflow: clip;
+  padding: 0 var(--u2);
+  background: var(--grade, var(--c-mist));
+  color: var(--c-ink);
+  line-height: calc(var(--fp) * 15);
+}
+
+.ss-stats__count {
+  overflow: clip;
+  line-height: calc(var(--fp) * 15);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The stats button on the home screen, beside the "?" and the sound switch (MenuCaptions).
+ * On a phone the day plate stands over the three, side by side at the right of the cards.
+ */
+.ss-menu__side[data-sound][data-stats] {
+  grid-template-columns: auto auto auto;
+}
+
+/*
+ * The three buttons leave the cards less room: where a played mode's score no longer fits
+ * beside its badge (a 390 px phone), it goes under it rather than out of the card.
+ */
+.ss-menu:has(> .ss-menu__side[data-stats]) .ss-menu__top {
+  flex-wrap: wrap;
+  row-gap: var(--u);
+}
+
+.ss-menu__side[data-stats]:not([data-sound]) {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  align-content: space-between;
+  justify-content: end;
+}
+
+.ss-menu__side[data-stats]:not([data-sound]) > .ss-menu__day {
+  grid-column: 1 / -1;
+}
+
+/*
+ * A monitor: a square as tall as the row, off its right end after the "?" and the speaker
+ * (section 21), where the screen has room for all three. Where it has not (1366 x 768), it
+ * stands on the day plate at the row's other end, as the speaker does where it has no room
+ * either (and then beside it). The same arithmetic as the speaker's: --ss-stats-room3 and
+ * --ss-stats-room2 are positive when three squares, or two, fit after the row, and the
+ * clamps turn each into all of a step or none of it.
+ */
+.ss-game[data-wide] .ss-menu__side > .ss-stats-btn {
+  --ss-stats-room3: calc(
+    (50vw - 50% - var(--u2) * 4 - var(--ss-row) * 3) * 100000
+  );
+  --ss-stats-room2: calc(
+    (50vw - 50% - var(--u2) * 3 - var(--ss-row) * 2) * 100000
+  );
+
+  left: calc(
+    clamp(
+        0px,
+        var(--ss-stats-room3),
+        calc(100% + var(--u2) * 4 + var(--ss-row) * 3)
+      ) +
+      clamp(0px, var(--ss-stats-room2), calc(var(--ss-row) + var(--u2))) -
+      var(--u2) * 2 - var(--ss-row) * 2
+  );
+  margin-top: calc(
+    clamp(0px, var(--ss-stats-room3), calc(var(--ss-row) + var(--u2))) -
+      var(--ss-row) - var(--u2)
+  );
+}
+
+/* ---------- 25. The daily streak (Streak): by the day plate, and on the full-time card --------- */
+
+/*
+ * A pixel flame (9 x 12 font pixels, two frames that flicker) and the days in a row. It sits
+ * in the day plate after "DAY 12", in the plate's own type. At 0 the flame is cold and grey.
+ * When the streak has just gone up it hops and throws a ring of gold sparks, once.
+ */
+.ss-streak {
+  position: relative;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: calc(var(--fp) * 3);
+  vertical-align: baseline;
+  color: var(--c-gold);
+}
+
+.ss-menu__day .ss-streak {
+  margin-left: calc(var(--fp) * 5);
+}
+
+.ss-streak__flame {
+  position: relative;
+  display: block;
+  flex: none;
+  width: calc(var(--fp) * 9);
+  height: calc(var(--fp) * 12);
+  /* the flame's foot on the letters' baseline */
+  margin-bottom: calc(var(--fp) * 2);
+}
+
+.ss-streak__frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.ss-streak__o {
+  fill: var(--c-home-dark);
+}
+
+.ss-streak__r {
+  fill: var(--c-home);
+}
+
+.ss-streak__g {
+  fill: var(--c-gold);
+}
+
+.ss-streak__y {
+  fill: var(--c-gold-light);
+}
+
+/* Cold: no streak yet. */
+.ss-streak[data-cold] {
+  color: var(--c-steel);
+}
+
+.ss-streak[data-cold] .ss-streak__o {
+  fill: var(--c-slate);
+}
+
+.ss-streak[data-cold] .ss-streak__r,
+.ss-streak[data-cold] .ss-streak__g {
+  fill: var(--c-steel);
+}
+
+.ss-streak[data-cold] .ss-streak__y {
+  fill: var(--c-mist);
+}
+
+/* The flicker: the second frame shows for a beat now and then, in whole steps. */
+.ss-streak__frame:nth-child(2) {
+  visibility: hidden;
+}
+
+.ss-streak:not([data-cold]) .ss-streak__frame:nth-child(1) {
+  animation: ss-streak-a 1.2s steps(1, end) infinite;
+}
+
+.ss-streak:not([data-cold]) .ss-streak__frame:nth-child(2) {
+  animation: ss-streak-b 1.2s steps(1, end) infinite;
+}
+
+@keyframes ss-streak-a {
+  0%,
+  100% {
+    visibility: visible;
+  }
+  33%,
+  50% {
+    visibility: hidden;
+  }
+  50.01% {
+    visibility: visible;
+  }
+}
+
+@keyframes ss-streak-b {
+  0%,
+  100% {
+    visibility: hidden;
+  }
+  33%,
+  50% {
+    visibility: visible;
+  }
+  50.01% {
+    visibility: hidden;
+  }
+}
+
+.ss-streak__days {
+  display: block;
+}
+
+/* The bump: three frames of sparks round the flame, and a hop of the flame and the number. */
+.ss-streak__spark {
+  position: absolute;
+  top: calc(var(--fp) * -3);
+  left: calc(var(--fp) * -4);
+  visibility: hidden;
+  fill: var(--c-gold-light);
+  animation: ss-streak-spark 90ms steps(1, end) 1;
+}
+
+.ss-streak__spark:nth-of-type(4) {
+  fill: var(--c-gold);
+  animation-delay: 90ms;
+}
+
+.ss-streak__spark:nth-of-type(5) {
+  fill: var(--c-gold-dark);
+  animation-delay: 180ms;
+}
+
+@keyframes ss-streak-spark {
+  0%,
+  100% {
+    visibility: visible;
+  }
+}
+
+.ss-streak[data-bump] .ss-streak__flame,
+.ss-streak[data-bump] .ss-streak__days {
+  animation: ss-streak-hop 360ms steps(1, end) 1;
+}
+
+@keyframes ss-streak-hop {
+  0% {
+    transform: translateY(calc(var(--fp) * -2));
+  }
+  34% {
+    transform: translateY(calc(var(--fp) * -1));
+  }
+  67%,
+  100% {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-streak__frame:nth-child(1),
+  .ss-streak__frame:nth-child(2),
+  .ss-streak[data-bump] .ss-streak__flame,
+  .ss-streak[data-bump] .ss-streak__days {
+    animation: none;
+  }
+
+  .ss-streak__spark {
+    display: none;
+  }
+}
+
+/* On the full-time card: under the title, in the plate's type. */
+.ss-full__streak {
+  display: flex;
+  justify-content: center;
+  margin: var(--u) 0 0;
+  line-height: var(--plate);
+}
+
+/* ---------- 26. Four modes on the home screen (MenuCaptions, 2026-11-13) ------------------------- */
+
+/*
+ * HOME and AWAY, then RETRO and NEXT-GEN, a pair to a row (MenuCaptions keeps them in that
+ * order). This section comes last so that it overrides what sections 15, 21 and 24 say for
+ * two modes.
+ *
+ * A phone: the four cards two by two across the column, each its badge beside a short line
+ * (the full line is still read out); the day plate stands over the left end of the cards
+ * and the "?", sound and stats buttons are stacked up the right edge beside the ball, over
+ * the leaderboard's trophy (section 20), where the ball never reaches. The cards are kept
+ * low so the ball's bottom patch (RETRO) stays clear of them.
+ */
+.ss-menu__short {
+  display: none;
+}
+
+/* A card with a short line shows it, and the full line is only read out. */
+.ss-menu__card.has-short .ss-menu__short {
+  display: block;
+  white-space: nowrap;
+}
+
+.ss-menu__card.has-short .ss-menu__line {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.ss-game[data-wide] .ss-menu__card:nth-child(odd) .ss-menu__short {
+  order: -1;
+}
+
+.ss-game[data-wide] .ss-menu__short {
+  margin-top: calc(var(--px) * 2 - var(--fp));
+}
+
+.ss-game:not([data-wide]) .ss-menu__modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--u2);
+}
+
+/*
+ * Each card one touch target tall: its badge, and beside it the short line (two lines of it
+ * at most). Today's score is not shown here: the ball's patch shows it, and screen readers
+ * still hear it. So the two rows of cards stay under the ball on a short phone (375 x 667).
+ */
+.ss-game:not([data-wide]) .ss-menu__card {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--u2);
+  width: auto;
+  padding: var(--u) var(--u2) var(--u) var(--u3);
+}
+
+.ss-game:not([data-wide]) .ss-menu__top {
+  flex: none;
+  align-self: center;
+}
+
+.ss-game:not([data-wide]) .ss-menu__score {
+  display: none;
+}
+
+.ss-menu__tiny {
+  display: none;
+}
+
+.ss-game:not([data-wide])
+  .ss-menu__card.has-short
+  .ss-menu__short:has(+ .ss-menu__tiny) {
+  display: none;
+}
+
+.ss-game:not([data-wide]) .ss-menu__card.has-short .ss-menu__short,
+.ss-game:not([data-wide]) .ss-menu__card.has-short .ss-menu__tiny {
+  display: block;
+  min-width: 0;
+  white-space: normal;
+}
+
+/*
+ * A phone too short for two rows under the ball (375 x 667): the four badges alone, in one
+ * row, a touch target tall. The lines are still read out, and the rules are a "?" away.
+ */
+@media (max-height: 44.375rem) {
+  .ss-game:not([data-wide]) .ss-menu__modes {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .ss-game:not([data-wide]) .ss-menu__card {
+    justify-content: center;
+    padding-inline: var(--u);
+  }
+
+  .ss-game:not([data-wide]) .ss-menu__card.has-short .ss-menu__short,
+  .ss-game:not([data-wide]) .ss-menu__card.has-short .ss-menu__tiny {
+    display: none;
+  }
+}
+
+.ss-game:not([data-wide]) .ss-menu__side {
+  display: contents;
+}
+
+.ss-game:not([data-wide]) .ss-menu__day {
+  position: absolute;
+  bottom: calc(100% + var(--u3));
+  left: 0;
+}
+
+.ss-game:not([data-wide]) .ss-menu__side > .ss-btn {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--u3) * 2 + var(--tap) * 3 + var(--u2) * 2);
+}
+
+.ss-game:not([data-wide]) .ss-menu__side > .ss-sound {
+  bottom: calc(100% + var(--u3) * 2 + var(--tap) * 2 + var(--u2));
+}
+
+.ss-game:not([data-wide]) .ss-menu__side > .ss-stats-btn {
+  bottom: calc(100% + var(--u3) * 2 + var(--tap));
+}
+
+/*
+ * A monitor: two rows, each as low as a touch target allows (four logical pixels round the
+ * badge instead of eight), so that the two together stay under the ball. Cards 1 and 3
+ * (HOME, RETRO) lie left of the centre line like HOME did, cards 2 and 4 (AWAY, NEXT-GEN)
+ * right of it like AWAY. The day plate hangs off the rows' left end, as tall as both; the
+ * "?" and the speaker off the first row's right end (section 21), and the stats button
+ * under the "?", off the second row's.
+ */
+.ss-game[data-wide] .ss-menu {
+  --ss-row: max(var(--tap), calc(var(--fp) * 13 + var(--px) * 4));
+
+  row-gap: var(--u);
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-game[data-wide] .ss-menu {
+    --ss-row: round(
+      up,
+      calc(
+        max(var(--tap), calc(var(--fp) * 13 + var(--px) * 4)) - var(--nudge)
+      ),
+      var(--px)
+    );
+  }
+}
+
+.ss-game[data-wide] .ss-menu__card:nth-child(odd) {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.ss-game[data-wide] .ss-menu__card:nth-child(odd) .ss-menu__line {
+  order: -1;
+}
+
+.ss-game[data-wide] .ss-menu__card:nth-child(even) {
+  --stripe: calc(var(--u) * -1);
+  --stripe-lit: calc(var(--u2) * -1);
+
+  justify-content: flex-start;
+  padding-inline: var(--u2) var(--u3);
+  text-align: left;
+}
+
+.ss-game[data-wide] .ss-menu__card:nth-child(even) .ss-menu__line {
+  order: 0;
+}
+
+.ss-game[data-wide] .ss-menu__card:nth-child(even) .ss-menu__score {
+  order: -1;
+}
+
+.ss-game[data-wide] .ss-menu__side > .ss-stats-btn {
+  top: calc(var(--ss-row) + var(--u));
+  left: calc(100% + var(--u2));
+  margin-top: 0;
+}
+
+/*
+ * The leaderboard with four modes (section 20): the tabs two by two, the table's rows a
+ * little tighter, and under the table the player's own line, their last seven days in the
+ * selected mode (seven bars in its colour, a day's name under each, the days not played an
+ * empty dim track) and the link to their stats.
+ */
+.ss-lb__tabs {
+  flex-wrap: wrap;
+  row-gap: var(--u2);
+}
+
+/*
+ * The panel's top, again (section 20 has it for two modes): level with the airship's sign,
+ * or higher where that would bring it down onto the two rows of captions (section 26). At
+ * its tallest (four tabs, the player's row under the gap, the strip) it is about 262 font
+ * pixels and 50 logical pixels tall.
+ */
+.ss-game[data-wide] .ss-lb--docked {
+  --ss-lb-top: max(
+    var(--u4),
+    min(
+      calc(var(--ss-h, 100dvh) * 0.18),
+      calc(
+        var(--ss-h, 100dvh) - var(--fp) * 262 - var(--px) * 58 -
+          max(var(--tap), calc(var(--fp) * 13 + var(--px) * 4)) * 2
+      )
+    )
+  );
+}
+
+/*
+ * A short monitor (1366 x 768): the column headings are only read out, so that the panel
+ * still ends above the captions.
+ */
+@media (max-height: 51.25rem) {
+  .ss-game[data-wide] .ss-lb--docked .ss-lb__table thead th {
+    height: 0;
+    padding: 0;
+    font-size: 0;
+    line-height: 0;
+    box-shadow: none;
+  }
+
+  .ss-game[data-wide] .ss-lb--docked .ss-lb__table tbody tr:first-child td,
+  .ss-game[data-wide] .ss-lb--docked .ss-lb__table tbody tr:first-child th {
+    padding-top: var(--u);
+  }
+}
+
+.ss-lb--docked .ss-lb__table tbody th,
+.ss-lb--docked .ss-lb__table tbody td {
+  padding-top: 0;
+}
+
+.ss-lb__played {
+  margin-top: var(--u2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The player's own line, in the mode's light colour. */
+.ss-lb__played.is-mine {
+  color: var(--mode-light, var(--c-chalk));
+}
+
+.ss-lb__week {
+  margin-top: var(--u2);
+  padding: var(--u2) var(--u2) var(--u);
+  background: var(--c-ink);
+}
+
+.ss-lb__week-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--u2);
+  margin: 0 0 var(--u);
+  color: var(--c-mist);
+  white-space: nowrap;
+}
+
+.ss-lb__bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--u);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ss-lb__day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+}
+
+/* The bar's room: 12 logical pixels of dim track, the bar standing on its foot. */
+.ss-lb__track {
+  position: relative;
+  display: block;
+  height: calc(var(--px) * 12);
+  background: var(--c-night);
+  box-shadow: inset 0 calc(var(--u) * -1) 0 0 var(--c-slate);
+}
+
+/* Its height is its share of 700 in whole logical pixels, and never less than one. */
+.ss-lb__bar {
+  position: absolute;
+  right: var(--u);
+  bottom: 0;
+  left: var(--u);
+  height: max(var(--px), calc(var(--px) * 12 * var(--v, 0)));
+  background: var(--mode, var(--c-steel));
+  box-shadow:
+    inset var(--u) var(--u) 0 0 var(--mode-light, var(--c-mist)),
+    inset 0 calc(var(--u) * -1) 0 0 var(--mode-dark, var(--c-slate));
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-lb__bar {
+    height: max(
+      var(--px),
+      round(nearest, calc(var(--px) * 12 * var(--v, 0)), var(--px))
+    );
+  }
+}
+
+.ss-lb__day.is-empty .ss-lb__track {
+  background: var(--c-led-off);
+}
+
+.ss-lb__dayname {
+  color: var(--c-slate);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ss-lb__day:not(.is-empty) .ss-lb__dayname {
+  color: var(--c-mist);
+}
+
+.ss-lb__day.is-today .ss-lb__dayname {
+  color: var(--mode-light, var(--c-chalk));
+}
+
+/* The link to the stats: amber words, underlined in whole pixels. */
+.ss-lb__more {
+  display: block;
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-amber);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: var(--u);
+  text-underline-offset: var(--u);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .ss-lb__more:hover {
+    color: var(--c-gold-light);
+  }
+}
+
+.ss-lb__more:focus {
+  outline: none;
+}
+
+.ss-lb__more:focus-visible {
+  outline: var(--ring) solid var(--c-amber);
+  outline-offset: var(--u);
+}
+
+/* On a phone the link is a touch target. */
+.ss-lb--sheet .ss-lb__more {
+  min-height: var(--tap);
+}
+
+/* ---------- 27. Remind me and Support (RemindMe, Support, Popup; 2026-11-13) --------------------- */
+
+/*
+ * The bell (Remind me) and the heart (Support) beside the day plate, at the other end of the
+ * captions from the "?". They are inside the plate in the markup (MenuCaptions), so they
+ * follow its edge whatever its width.
+ *
+ * A phone: stacked up the left edge of the column above the day plate, the bell on top, the
+ * mirror of the "?", sound and stats buttons up the right edge (section 26), so the ball
+ * never reaches them either.
+ */
+.ss-menu__more {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: var(--u2);
+  line-height: 0;
+  text-align: left;
+}
+
+.ss-menu__more > .ss-btn {
+  flex: none;
+}
+
+.ss-game:not([data-wide]) .ss-menu__more {
+  bottom: calc(100% + var(--u3));
+  /* The plate's ink frame reaches a logical pixel past its box: flush with the cards. */
+  left: calc(var(--u) * -1);
+}
+
+/*
+ * A monitor: a column of two squares off the day plate's left end, one to a row (each as
+ * tall as a row, like the "?" off the other end), the bell level with the first row.
+ */
+.ss-game[data-wide] .ss-menu__more {
+  top: 0;
+  right: calc(100% + var(--u2));
+  gap: var(--u);
+}
+
+.ss-game[data-wide] .ss-menu__more > .ss-btn {
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: var(--ss-row);
+  min-width: 0;
+  height: var(--ss-row);
+  min-height: 0;
+  padding: var(--ss-row-glyph) 0 0 var(--ss-row-glyph);
+}
+
+/*
+ * The pop-ups (Popup): the rules' card and dialog (section 22), narrower on a monitor (300
+ * caption pixels and 10 logical pixels, a whole number of logical pixels), one column.
+ */
+.ss-help[data-wide].ss-popup {
+  --ss-help-w: round(
+    down,
+    min(calc(var(--cp) * 300 + var(--px) * 10), calc(100% - var(--px) * 16)),
+    var(--px)
+  );
+}
+
+.ss-popup .ss-popup__body,
+.ss-help[data-wide] .ss-popup__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--u4);
+}
+
+.ss-popup p {
+  margin: 0;
+}
+
+/* Buttons in the card take their type from its own font pixel (caption pixels on a monitor). */
+.ss-popup .ss-btn:not(.ss-btn--icon) {
+  min-height: max(var(--tap), calc(var(--fp) * 24 + var(--px) * 6));
+  /* Room over the words, and under them for the lip, should they wrap. */
+  padding: var(--u) var(--u3) var(--u2);
+  font-size: calc(var(--fp) * 27);
+  line-height: calc(var(--fp) * 24);
+  white-space: normal;
+}
+
+/* A label: amber, like the stats' labels. */
+.ss-popup__k {
+  color: var(--c-amber);
+  font-family: var(--font-15);
+  font-size: calc(var(--fp) * 27);
+  line-height: calc(var(--fp) * 24);
+}
+
+.ss-popup__ways {
+  display: flex;
+  flex-direction: column;
+  gap: var(--u2);
+}
+
+/* Under a button: what it is for, quietly. */
+.ss-popup__note {
+  color: var(--c-mist);
+}
+
+/* Announced once something is done; nothing while there is nothing to say. */
+.ss-popup__status {
+  color: var(--c-grass-hi);
+}
+
+.ss-popup__status:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+/* The quiet line at the foot, under a slate rule like the small print. */
+.ss-popup__quiet {
+  padding-top: var(--u3);
+  color: var(--c-mist);
+  box-shadow: inset 0 var(--u) 0 0 var(--c-slate);
+}
+
+/* Remind me: the time, then the calendar file and the two calendars on the web. */
+.ss-remind__time {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--u2) var(--u4);
+}
+
+.ss-remind__pick {
+  position: relative;
+  display: inline-block;
+}
+
+.ss-remind__select {
+  box-sizing: border-box;
+  min-width: calc(var(--fp) * 27 * 3);
+  min-height: var(--tap);
+  margin: 0;
+  padding: 0 calc(var(--px) * 15) 0 var(--u3);
+  border: var(--u) solid var(--c-ink);
+  border-radius: 0;
+  background: var(--c-ink);
+  color: var(--c-chalk);
+  font-family: var(--font-15);
+  font-size: calc(var(--fp) * 27);
+  line-height: calc(var(--fp) * 24);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  appearance: none;
+  box-shadow:
+    inset 0 0 0 var(--u) var(--c-steel),
+    var(--u) var(--u) 0 0 var(--c-ink);
+}
+
+.ss-remind__select option {
+  background: var(--c-night);
+  color: var(--c-chalk);
+}
+
+@media (hover: hover) {
+  .ss-remind__select:hover {
+    box-shadow:
+      inset 0 0 0 var(--u) var(--c-steel-hi),
+      var(--u) var(--u) 0 0 var(--c-ink);
+  }
+}
+
+.ss-remind__select:focus {
+  outline: none;
+}
+
+.ss-remind__select:focus-visible {
+  outline: var(--ring) solid var(--c-amber);
+  outline-offset: var(--u);
+}
+
+/* The select's arrow: a stepped triangle, 7 logical pixels across and 4 down. */
+.ss-remind__pick::after {
+  content: "";
+  position: absolute;
+  top: calc(50% - var(--u2));
+  right: var(--u4);
+  width: calc(var(--px) * 7);
+  height: var(--u4);
+  background: var(--c-chalk);
+  pointer-events: none;
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% 25%,
+    calc(100% * 6 / 7) 25%,
+    calc(100% * 6 / 7) 50%,
+    calc(100% * 5 / 7) 50%,
+    calc(100% * 5 / 7) 75%,
+    calc(100% * 4 / 7) 75%,
+    calc(100% * 4 / 7) 100%,
+    calc(100% * 3 / 7) 100%,
+    calc(100% * 3 / 7) 75%,
+    calc(100% * 2 / 7) 75%,
+    calc(100% * 2 / 7) 50%,
+    calc(100% / 7) 50%,
+    calc(100% / 7) 25%,
+    0 25%
+  );
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-remind__pick::after {
+    top: round(down, calc(50% - var(--u2) + var(--nudge)), var(--snap));
+  }
+}
+
+/* Google and Outlook side by side. */
+.ss-remind__links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--u3);
+}
+
+/* Support: two big buttons, an icon in font pixels beside the words. */
+.ss-popup .ss-support__way {
+  min-height: max(var(--tap), calc(var(--fp) * 24 + var(--px) * 10));
+  padding-block: var(--u2) var(--u3);
+}
+
+.ss-support__way .ss-btn__label {
+  gap: var(--u3);
+}
+
+.ss-support__icon {
+  flex: none;
+}
+
+.ss-support__words {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* A link not set yet: the words, and "COMING SOON" under them in amber. */
+.ss-support__soon {
+  color: var(--c-amber);
+  font-family: var(--font-10);
+  font-size: calc(var(--fp) * 56 / 3);
+  line-height: calc(var(--fp) * 18);
 }

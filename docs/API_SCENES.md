@@ -14,7 +14,7 @@ Look at any of it without a browser:
 ```
 
 Shots: `menu/home`, `float`, `hover`, `pressed`, `locked`, `scores`, `intro`, `reduced`,
-`kickoff-home`, `kickoff-away`, `drag`, `spin`, `rest` (each locked patch shown, close up),
+`kickoff-home`, `kickoff-away`, `kickoff-nextgen`, `kickoff-retro`, `drag`, `spin`, `rest` (each locked patch shown, close up),
 `half-turn` (in `menu.shots.ts`).
 
 ## The scene contract (`~/scenes/scene`)
@@ -155,34 +155,36 @@ interface Ambience {
 
 The home screen's picture: the aerial stadium (`MenuBackdrop`), the wordmark, and the football
 that floats in front of them and is the menu. HOME (the most common answer wins) is its left
-patch, AWAY (the most uncommon answer wins) its right. Six more patches are locked modes:
-NEXT-GEN on the top patch, RETRO on the bottom one, CLOSEST and FURTHEST on the back, directly
-behind AWAY and HOME, so that half a turn brings CLOSEST round to where HOME was and FURTHEST
+patch, AWAY (the most uncommon answer wins) its right, NEXT-GEN (the most recent answer wins)
+its top patch and RETRO (the oldest answer wins) its bottom one: the four open modes (RETRO
+and NEXT-GEN since 2026-11-13), each framed in its mode's colour. Four more patches are
+locked modes: CLOSEST and FURTHEST on the back, directly behind AWAY and HOME, so that half a turn brings CLOSEST round to where HOME was and FURTHEST
 to where AWAY was, and GUESS WHO and SHOOTOUT on the rim out past HOME and AWAY, a quarter turn
 round (a drag to the right brings GUESS WHO to the front, a drag to the left SHOOTOUT). Which
 pentagon each one is: `docs/API_ART.md`, the menu ball.
 
 ```ts
-type LockedMode =
-  "nextgen" | "retro" | "closest" | "furthest" | "guesswho" | "shootout";
+const OPEN_MODES: readonly Mode[]; // ["home", "away", "nextgen", "retro"]: Mode is all four
+type LockedMode = "closest" | "furthest" | "guesswho" | "shootout"; // (was six: 2026-11-13)
 const LOCKED_MODES: readonly LockedMode[];
 const MODE_SLOTS: Record<Mode | LockedMode, BallSlot>; // home left, away right, nextgen top,
 // retro bottom, closest backRight, furthest backLeft, guesswho rimLeft, shootout rimRight
 interface MenuLabels {
   home: string;
   away: string;
-  nextgen: string; // the locked patches' words: "NEXT-GEN", "RETRO", "CLOSEST", "FURTHEST"
+  nextgen: string; // the patches' words: "NEXT-GEN", "RETRO", "CLOSEST", "FURTHEST"
   retro: string;
   closest: string;
   furthest: string;
   guesswho: string; // "GUESS WHO"
   shootout: string; // "SHOOTOUT"
-  header: string; // the airship's sign, over the fact: "DID YOU KNOW?"
+  header: string; // "DID YOU KNOW?": the plane's banner, before the fact (and the sign's, with no messages)
   tagline?: string;
 }
 interface MenuSceneOptions {
   seed: number; // the day number: it seeds the town and its life, and picks the club colours (schemeForDay)
-  fact: string; // the fact of the day on the airship's sign (factForDay(day).text), any case
+  fact: string; // the fact of the day (factForDay(day).text), any case: the plane's banner (and the sign, with no messages)
+  messages?: readonly MenuSign[]; // the airship's sign's messages (setSignMessages)
   labels: MenuLabels; // the words painted on the canvas (strings.home.canvas)
   intro?: boolean; // play the entrance; default true
 }
@@ -201,7 +203,8 @@ class MenuScene implements Scene {
   ambience(): Ambience; // { venue: "town", crowd: 0.3, night: the light's phase is "night" }
 
   // what the page tells it
-  setFact(text: string): void; // a new fact on the sign (the same again does nothing)
+  setFact(text: string): void; // a new fact on the banner (and the sign, with no messages); the same again does nothing
+  setSignMessages(messages: readonly MenuSign[]): void; // the sign's messages, one after another (none: the fact)
   setLabels(labels: MenuLabels): void; // a new header goes to the sign too
   setScores(scores: Partial<Record<Mode, number | null>>): void; // a badge on the patch; null takes it off
   setMoonPhase(phase: number): void; // 0 new, 0.5 full
@@ -212,7 +215,7 @@ class MenuScene implements Scene {
 ```
 
 It takes nothing from `~/art` but the backdrop contract (`MenuBackdrop`: `resize`, `setLighting`,
-`setSign`, `setMoonPhase`, `target`, `setRoar`, `draw`, `airshipAt`, `pokeAirship`, `mascotAt`,
+`setSign`, `setMessages`, `setBanner`, `setMoonPhase`, `target`, `setRoar`, `draw`, `airshipAt`, `pokeAirship`, `mascotAt`,
 `pokeMascot`, `cuesBetween`), `menuLayout`'s `cx`,
 `ballR`, `ballCy` and `logo`, the ball, the logo and the palette. A test holds it to that.
 
@@ -251,6 +254,26 @@ On a canvas under 200 logical pixels wide (a phone) the flights are the phone pi
 apex is lower, under the sign, and AWAY flies out over the right edge and comes back in small
 beside the wordmark. The times are the same.
 
+**NEXT-GEN and RETRO** (2026-11-13) keep the same clock (flash at 0, strike at 0.22, iris from
+1.13, ink at 1.76, `onChoose` at 1.81) with flights of their own (constants `NEXT_*` and
+`RETRO_*` in `menu.ts`; shots `menu/kickoff-nextgen`, `menu/kickoff-retro`):
+
+| at   | NEXT-GEN: into the future                                                                                                                   | RETRO: back in time                                                                        |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 0.22 | struck from below on AWAY's side (sparks thrown down-right), the picture shakes up and down                                                 | chopped from above (sparks thrown up); the picture shakes; the tape starts to tear (below) |
+| 0.29 | it lights up and climbs, faster and faster (the others slow), almost straight up then over                                                  | it drops away from us onto Stadium Road, left of the middle, shrinking, spinning backwards |
+| 0.49 | a comet: a trail 0.16 s of its way long, as wide as the ball, white hot, then its colours                                                   | it bounces once on the road (a puff of light), and rolls back left, slowing                |
+| 0.75 | out in a flare high beside the wordmark's right end (the airship is at its left): a ring and a cross of light, then a twinkle that winks on |                                                                                            |
+| 0.97 |                                                                                                                                             | it stops in the old town at the left of the picture, small, and lies still                 |
+| 1.13 | the iris closes on the flare, onto a ring of 0.22 of the ball's radius (a little sky)                                                       | the iris closes on the ball, onto a ring of 0.45 of its radius (the corner of the town)    |
+
+RETRO's picture is a tape being rewound from the strike to the ink: three ghosts of the ball
+(0.05, 0.1 and 0.15 s behind it, see-through balls of its colour, only their outline while big),
+three bands of the screen torn sideways with a line of snow along their tops rolling up it, and
+an old recorder's rewind sign (two arrows, white on an ink shadow, blinking) in the top right
+corner. On a phone NEXT-GEN flies out of the left edge and back in small beside the wordmark
+(AWAY's mirror image), and RETRO bounces further left and stops on the plaza at the left edge.
+
 With reduced motion: no entrance (an `intro` ends at once), no bob, no nod, no shine on the
 patches or the wordmark, no "no" shake, the rock and the town at a quarter of their speed, and
 the kick-off is a cut: the patch lights for 0.15 s, then ink and `onChoose`.
@@ -260,11 +283,12 @@ the kick-off is a cut: the patch lights for 0.15 s, then ink and `onChoose`.
 - A patch is chosen by pressing and releasing on the same patch without moving more than 3 logical
   pixels (12 CSS px on the reference monitor). Further than that the press is a drag (below) and
   never chooses, wherever it is let go. A locked patch answers with a shake of the ball (0.35 s)
-  and `onLocked(mode)`, and never chooses. HOME and AWAY choose from any pose in which they are
-  in view (their pentagon is under the pointer); from a pose other than the menu pose the ball
-  is first brought round, as for `choose` mid-spin (below).
+  and `onLocked(mode)`, and never chooses. The four open modes choose from any pose in which
+  they are in view (their pentagon is under the pointer); from a pose other than the menu pose
+  the ball is first brought round, as for `choose` mid-spin (below). (A spun ball that comes
+  to rest with NEXT-GEN or RETRO facing the viewer goes home, as for HOME and AWAY.)
 - A locked patch under the mouse lifts a step (it never takes a colour); `onHover` is only
-  about HOME and AWAY, so it stays `null` there.
+  about the open modes, so it stays `null` there.
 - Hover is the mouse's only: a finger lights nothing, and its `up` ends any hover. `onHover` fires
   only on a change, and with `null` when a kick-off starts.
 - A pointer that keeps still keeps its patch while the ball bobs and rocks under it.
@@ -341,17 +365,19 @@ fact's marquee runs on the ambient clock, so under reduced motion it scrolls slo
 
 Through the Scene contract's `onSound` (above); nothing is sent while it is null.
 
-| when                                                                   | cue                                                    |
-| ---------------------------------------------------------------------- | ------------------------------------------------------ |
-| a press on the ball (a click, or the start of a drag); hover is silent | `kick`, power 0.3 (`HOME_PAGE.press`), one per 0.1 s   |
-| every frame the hand's turn is moving (drag, coast, spring, snap)      | `wind`, speed = angular speed / 14 rad/s, 0 to 1       |
-| the strike (0.22 s into the kick-off; at once with reduced motion)     | `kick`, power 1                                        |
-| every frame of the flight                                              | `wind`, 0.9 falling to 0.36 (HOME) or 0.23 (AWAY)      |
-| HOME lands (0.89 s), and its bounce comes down (0.2 s later)           | `land`, power 1, then power 0.35; no cheer, no horns   |
-| AWAY's twinkle (0.95 s: its brightest at the flare, 1.07 s)            | `sparkle`; its `wind` dies away over 0.35 s            |
-| the iris starts to close (1.13 s; at once with reduced motion)         | `transition`, opening false, once a kick-off           |
-| a poke on the airship / the poke that bursts it                        | `squeak` / `pop` (nothing for `"none"`)                |
-| every frame but in `done`                                              | `backdrop.cuesBetween(last clock, clock)`, as they are |
+| when                                                                   | cue                                                                                                                                                     |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a press on the ball (a click, or the start of a drag); hover is silent | `kick`, power 0.3 (`HOME_PAGE.press`), one per 0.1 s                                                                                                    |
+| every frame the hand's turn is moving (drag, coast, spring, snap)      | `wind`, speed = angular speed / 14 rad/s, 0 to 1                                                                                                        |
+| the strike (0.22 s into the kick-off; at once with reduced motion)     | `kick`, power 1                                                                                                                                         |
+| every frame of the flight                                              | `wind`, 0.9 falling to 0.36 (HOME) or 0.23 (AWAY); NEXT-GEN's rising from 0.36 to 0.9; RETRO's falling to 0.36 as it drops, then to nothing as it rolls |
+| HOME lands (0.89 s), and its bounce comes down (0.2 s later)           | `land`, power 1, then power 0.35; no cheer, no horns                                                                                                    |
+| AWAY's twinkle (0.95 s: its brightest at the flare, 1.07 s)            | `sparkle`; its `wind` dies away over 0.35 s                                                                                                             |
+| NEXT-GEN's flare (0.63 s, its brightest at 0.75 s)                     | `sparkle`; its `wind` dies away over 0.35 s                                                                                                             |
+| RETRO bounces on the road (0.49 s), and comes to a stop (0.97 s)       | `land`, power 0.35; then `touch`, level 0.3                                                                                                             |
+| the iris starts to close (1.13 s; at once with reduced motion)         | `transition`, opening false, once a kick-off                                                                                                            |
+| a poke on the airship / the poke that bursts it                        | `squeak` / `pop` (nothing for `"none"`)                                                                                                                 |
+| every frame but in `done`                                              | `backdrop.cuesBetween(last clock, clock)`, as they are                                                                                                  |
 
 Neither `land` nor `sparkle` is sent with reduced motion (there is no flight). The numbers
 (the powers and the wind's speeds) are `HOME_PAGE` in `app/audio/mix.ts`.
@@ -392,7 +418,7 @@ The page owns the scene, the host runs it, and the DOM captions are its second s
 const scene = new MenuScene({ seed: today.dayNumber, fact: factForDay(today.dayNumber).text, labels: strings.home.canvas, intro });
 scene.onHover = (mode) => setLit(mode); // lights the DOM caption
 scene.onKickoff = (mode) => setStowed(true); // the captions drop out of the way
-scene.onChoose = (mode) => navigate(`/play/${mode}`);
+scene.onChoose = (mode) => navigate(playPath(mode)); // /play/next-gen for NEXT-GEN
 scene.onLocked = (mode) => showTheNotice(strings.home.soon[mode]); // 2.5 s, in the captions' live region
 scene.setScores({ home: 478, away: null });
 
@@ -411,6 +437,8 @@ The page must:
 - Give it the day's fact (`factForDay` from `app/data/facts.ts`, for the day `resolveToday`
   gives, so `?day=` chooses it) and put the same fact in the visually hidden line for screen
   readers (`strings.home.fact`: "Fact of the day: ...").
+- Give it the sign's messages (`setSignMessages(signMessages(day, scores, streak))`, from
+  `app/routes/home-sign.ts`), again whenever the scores or the streak change.
 - Hand it the sky's `light` through `PixelStage`, and the moon's phase with `setMoonPhase`.
 - Stow the captions on `onKickoff` (they are `inert` then) and leave the page on `onChoose`,
   exactly once however many times it is told.
@@ -436,7 +464,30 @@ The page must not:
 ## The career scene (`~/scenes/career`)
 
 The picture behind the questions (`docs/CAREER_SCENE.md`): the ground of his tier
-(`CareerGround`, `~/art/grounds`) with the cast on it (`~/art/characters`). The API:
+(`CareerGround`, `~/art/grounds`) with the cast on it (`~/art/characters`).
+
+`mode` is any of the four open modes (2026-11-13). HOME tells the hometown hero's story and
+AWAY the journeyman's. The scene works out two things from its mode, once, in the
+constructor:
+
+- **`journey`**: whose story it tells, and so where everyone stands, the kits' roles, the
+  crowd's mood and the play. RETRO and NEXT-GEN tell the hometown hero's, as HOME does.
+- **`era`** (`eraOf(mode)`, `~/art/era`; `docs/API_ART.md` "Eras"): how it looks. HOME and
+  AWAY are `"today"`; RETRO is the early days of the game and NEXT-GEN the future
+  (`docs/ART_BIBLE.md` section 10). The scene hands it to the ground
+  (`new CareerGround({ ..., era })`), to the kits (`ensureKits(..., era)`, so every
+  `drawPlayer`, `drawKeeper` and `drawFetch` picks the era's sprites), to the ball
+  (`drawMatchBall(..., { gold, era })`, two option objects made once) and the trophy, and to
+  the effects (`buildColors`, `drawGoalFireworks`, `drawConfetti`). In NEXT-GEN it also
+  gives a struck shot a light trail and lays `labels.nextgen` over the board words. Both
+  eras' referees are people drawn by `drawPlayer` in today's place (NEXT-GEN's was a drone
+  until the polish).
+
+So RETRO and NEXT-GEN play exactly as HOME, beat for beat and in the same places (the stage,
+the goal, the cast's places, the shots, the fetch, the promotion and its close-up, full time
+and the trophy lift); only the look changes. Their own colour is the hero's (`P.retro`,
+`P.nextgen`). Anything else plays as HOME. The era's tests (`career-retro-*.test.ts`,
+`career-nextgen-*.test.ts`) hold the cast to HOME's places. The API:
 
 ```ts
 new CareerScene({ seed, mode, total?, labels?: CareerLabels });
@@ -451,8 +502,8 @@ SHOT_SECONDS, PROMOTION_SECONDS, ARRIVAL_SECONDS (0.63), ARRIVAL_STEP (1/30), OP
 ```
 
 It keeps every promise in "The career scene and the game page" below (held by
-`career.test.ts`). The picture plays on after a shot's `onDone`: the reaction ends, he gets a
-new ball and juggles again, without being `busy`. A shot or promotion asked for while one
+`career.test.ts`). The picture plays on after a shot's `onDone`: the reaction ends, the ball is
+fetched back to him (the fetch) and he juggles again, without being `busy`. A shot or promotion asked for while one
 plays finishes it first (the outcome stands, its `onDone` is called), then starts.
 
 **Idle.** He does keepie-uppies at `heroX` (juggle, 7 fps); the ball goes through every
@@ -492,13 +543,13 @@ pixels only when drawn, in the same clean pixel circle as the closing iris (`dra
 
 **A shot**, in seconds from `playShot` (each shot's own beats are in the table below):
 
-| beat    | when     | what                                                                                                                                  |
-| ------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| set     | 0 to 0.3 | he stops, steps back 2 px, the ball drops to his feet (from wherever it was); a soft touch                                            |
-| strike  | by shot  | his move from its start; the boot meets it at `STRIKE_FRAME`: golazo, trivela and miss 0.5, toe poke 0.85, tap in 1.075, worldie 1.25 |
-| flight  | by shot  | trivela 0.44, golazo 0.62, toe poke 0.27, tap in 0.55, worldie 0.3; a miss 1.1 skied or a 1.2 s roll wide                             |
-| outcome | to 2.4   | the reaction, the crowd's `setMood` as the ball gets there (into a net: 0.05 s later); `onDone` at 2.4                                |
-| after   | 3.0 on   | everyone back (he runs back from his celebration), a new ball, the flick up (0.22 s), juggling                                        |
+| beat    | when     | what                                                                                                                                                |
+| ------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| set     | 0 to 0.3 | he stops, steps back 2 px, the ball drops to his feet (from wherever it was); a soft touch                                                          |
+| strike  | by shot  | his move from its start; the boot meets it at `STRIKE_FRAME`: golazo, trivela and miss 0.5, toe poke 0.85, tap in 1.075, worldie 1.25               |
+| flight  | by shot  | trivela 0.44, golazo 0.62, toe poke 0.27, tap in 0.55, worldie 0.3; a miss 1.1 skied or a 1.2 s roll wide                                           |
+| outcome | to 2.4   | the reaction, the crowd's `setMood` as the ball gets there (into a net: 0.05 s later); `onDone` at 2.4                                              |
+| after   | 3.0 on   | everyone back (he runs back from his celebration); the ball comes back to him (a goal or a miss: the fetch, below), the flick up (0.22 s), juggling |
 
 | grade     | build-up and the ball                                                                                                                                                                                                                                                                                                                                                 | the keeper (adult)                                                                                                                                        | him; the others                                                                                                              | mood    |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------- |
@@ -511,21 +562,39 @@ pixels only when drawn, in the same clean pixel circle as the closing iris (`dra
 | `timeup`  | never struck: rolls 4 px off his foot; a whistle sign over the referee (him at 0/1)                                                                                                                                                                                                                                                                                   | `ready`, slower                                                                                                                                           | `dejected` (hands on hips)                                                                                                   | `hush`  |
 | `skipped` | he turns and side-foots it to team-mate A, who knocks it back after                                                                                                                                                                                                                                                                                                   | `ready`, slower                                                                                                                                           | `shrug`, then faces the goal again                                                                                           | `idle`  |
 
-- In the net the ball reaches the back, is held by the bulge, drops to the floor and stays
-  there until the ground changes (a promotion, `setTotal`, full time), through the next shots;
-  at tier 0 there is no net: it runs on towards the hedge and stays there. A miss dragged wide
-  stays where it stopped, the same way.
+- In the net the ball reaches the back, is held by the bulge and drops to the floor; at tier 0
+  there is no net: it runs on towards the hedge. A skied miss comes down behind the goal, a
+  miss dragged wide rolls to a stop by the near touchline. That same ball is then fetched
+  back to him (the fetch, below): there is only ever one ball.
 - The child keeper (tiers 0, 1, the youth frames) has no dives: for the toe poke and the tap in
   he runs out and holds his arms out (`shrug`), and he is `dejected` after every goal.
 - Opponents slump after every goal. At tiers 4 to 7 every goal sets off small fireworks over
   the stand roof, more and bigger for the better shots (tap in 2, toe poke 3, trivela 4,
   golazo 5, worldie 7; `drawGoalFireworks` takes a size from 0 to 1).
-- The new ball after a goal or a miss is thrown on from the near side (it enters from the
-  bottom edge, bounces, rolls to his feet); after a pass A knocks it back; after time up it is
-  the same ball, drawn back to his foot.
+- **The fetch** (`Story.fetch`, planned in `planFetch` as the shot starts; frames in
+  `~/art/characters/fetch`): after a goal or a miss that brings no promotion, the shot's ball
+  is brought back to his feet before he juggles again.
+  - Tiers 0 and 1: a youth runs to it, steps round it, dribbles it back and passes it to him:
+    the child keeper after a goal, team-mate B after a miss.
+  - Tiers 2 to 7, a goal: the keeper jogs into his net after his reaction (0.7 s), picks the
+    ball up (`keeperPick`), walks it back to his place (`keeperCarry`) and rolls it out to
+    him underarm (`keeperRoll`).
+  - Tiers 2 to 7, a miss: the ball kid behind the goal (a youth in a sky-blue bib) catches
+    one skied over the bar as it drops, or runs to one dragged wide and picks it up
+    (`kidPick`), and throws it back with both hands over his head (`kidThrow`), then walks
+    back to his place.
+  - The fetcher sets off after his reaction, timed to reach the ball as it stops if it is
+    still moving, and never lets it go before he is in his place or so early that it reaches
+    the hero before he is back from his own reaction. The ball settles at his feet for 0.1 s,
+    then the flick up.
+  - A promotion ends it: the smoke covers the change of ground and the ball is at his feet
+    on the new one. Reduced motion has no fetch (the cut back to juggling).
+- After a pass A knocks the ball back; after time up it is the same ball, drawn back to his
+  foot.
 - A shot (or full time) asked for during the last shot's reaction does not cut: everyone runs
-  from where he is to where the new moment needs him over 0.3 s, the last ball stays where it
-  went, and he gets a new ball thrown on for the set.
+  from where he is to where the new moment needs him over 0.3 s. If it comes during a fetch,
+  the same ball comes to him for the set from where it is (a fetcher holding it lets it go
+  at once, and it hops if it has far to come).
 - Reduced motion: the shot is drawn still at its settled moment (the ball's final place, the
   reaction) from the call, the crowd reacts at once, `onDone` at 0.4 s, and 1.8 s later he is
   juggling again (a cut). No shake, puff, gold burst, fireworks, confetti or opening iris; the
@@ -609,16 +678,23 @@ over `ctx.t` from the call (use `--strip`), `career/after-<grade>` (from the cal
 `career/arrival` (the opening, `ctx.t` from the first frame), `career/interrupt` (a toe poke
 asked for during a golazo's knee slide), `career/promote` (2 to 3), `promote-t0`, `promote-t1`,
 `promote-t3`, `career/fulltime` (tier 7), `fulltime-t3`, `fulltime-t0`, `career/reduced`.
+RETRO and NEXT-GEN have their own (`career/retro-*`, `career/nextgen-*`, in
+`career-retro-players.shots.ts`, `career-retro-low.shots.ts`, `career-retro-high.shots.ts`,
+`career-nextgen-players.shots.ts`, `career-nextgen-high.shots.ts`; the list is in
+`docs/API_ART.md`, "Eras").
 
 **Files**: `career.ts` (the class, the plans and beats, the ball's paths, the poses, the
 opening, the sound), `career-cast.ts` (who stands where, kits, the sprite spots read once: the
 juggle, the kick, the bicycle kick, the keeper's gloves), `career-fx.ts` (the promotion's
-smoke and close-up, fireworks, confetti, the whistle sign, the gold burst, the iris, shadows).
+smoke and close-up, fireworks, confetti, the whistle sign, the gold burst, the iris, shadows),
+`career-fx-retro.ts` and `career-fx-nextgen.ts` (each era's close-up colours and ball, goal
+fireworks and confetti, called from `career-fx.ts` when the era asks).
 
 ## The career scene and the game page (`~/scenes/career`, `app/routes/play/`)
 
-The API is `docs/CAREER_SCENE.md` section 7, with `CareerLabels { boards?, banners? }` for
-`labels`. Import it from `~/scenes/career` (not from the index). `app/scenes/career.ts` is the
+The API is `docs/CAREER_SCENE.md` section 7, with `CareerLabels { boards?, banners?, nextgen? }`
+for `labels` (`nextgen`, `en.play.canvas.nextgen`: NEXT-GEN's own board words, laid over the
+others in that era only). Import it from `~/scenes/career` (not from the index). `app/scenes/career.ts` is the
 real scene (the section above); the stand-in it replaced kept the same API. `career.test.ts`
 holds any scene behind that file to what the page relies on:
 

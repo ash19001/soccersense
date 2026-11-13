@@ -1,6 +1,12 @@
-import type { CSSProperties, HTMLAttributes, Ref } from "react";
+import {
+  type CSSProperties,
+  type HTMLAttributes,
+  type Ref,
+  useEffect,
+} from "react";
 
 import { cx } from "./cx";
+import { forgetDetailChoice } from "./forget-detail";
 import { PixelScaleContext, pixelVariables, usePixelScale } from "./scale";
 
 export interface PixelRootProps extends HTMLAttributes<HTMLDivElement> {
@@ -14,6 +20,9 @@ export interface PixelRootProps extends HTMLAttributes<HTMLDivElement> {
  * pixel. On the server it renders the defaults (px 3, fp 1, cp 2, tx 2, at ratio 1).
  * Everything in app/ui is sized from these variables, so the interface must live inside a
  * PixelRoot.
+ *
+ * After mounting it forgets the choice of detail a tab may remember from when the art had
+ * two levels (`./forget-detail`).
  */
 export function PixelRoot({
   ref,
@@ -23,6 +32,8 @@ export function PixelRoot({
   ...rest
 }: PixelRootProps) {
   const scale = usePixelScale();
+  // Storage is touched after mounting, never during render.
+  useEffect(() => forgetDetailChoice(), []);
   const vars = { ...style, ...pixelVariables(scale) } as CSSProperties;
   return (
     <PixelScaleContext value={scale}>

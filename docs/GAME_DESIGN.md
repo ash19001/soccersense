@@ -17,7 +17,24 @@ lifting the World Cup. At full time the total also earns the player a title (sec
 
 (Changed on 2026-11-11. HOME and AWAY used to be "closest to today's stadium" and "furthest from
 it". Those two rules are kept, as the locked modes **CLOSEST** and **FURTHEST** on the back of
-the ball; **NEXT-GEN** and **RETRO** are locked too, on its top and bottom patches.)
+the ball; **NEXT-GEN** and **RETRO** were locked too, on its top and bottom patches.)
+
+**RETRO and NEXT-GEN** (2026-11-13; the product owner: "It's the same as home and away in the
+sense that it's general questions and you slowly progress from park to World Cup. However,
+retro rewards based off the oldest answer and next gen is rewarded based off most recent
+answer. E.g. name a team who won champions league: retro best answer would be first ever team
+to win it and next gen best answer would be the team that won it most recently."). Every valid
+answer to their questions has its **years**: each year that makes it valid (a title, a final, a
+tournament hosted). In **RETRO** the answer whose _first_ year is the earliest wins (a club
+with several titles counts its first); in **NEXT-GEN** the one whose _last_ year is the latest
+(a club counts its most recent). Answers from the same year tie. Everything else plays exactly
+as HOME and AWAY: seven questions, the clock, the six shots, the career, the titles. Their own
+look (old kits and grounds for RETRO, everything futuristic for NEXT-GEN) comes later; for now
+they use HOME's scenery. Their questions and years: `app/data/questions/retro.ts`,
+`next-gen.ts`, sources in `docs/data-notes/retro-next-gen.md`. Their pages are `/play/retro`
+and `/play/next-gen`. Each mode has its colour, on its badge, the board, the reveal, the
+full-time card, the share picture and the stats: HOME warm red-orange, AWAY teal, RETRO old
+gold (a sepia-warmed brass), NEXT-GEN electric magenta.
 
 ## 2. Daily structure
 
@@ -43,6 +60,8 @@ the ball; **NEXT-GEN** and **RETRO** are locked too, on its top and bottom patch
    the day's stadium: the question has the room; changed 2026-11-11):
    - HOME: `The most common answer wins.` plus `Scored by how many players give the same answer.`
    - AWAY: `The most uncommon answer wins.` plus `Scored by how few players give the same answer.`
+   - RETRO: `The oldest answer wins.` plus `Scored by how far back it first happened.`
+   - NEXT-GEN: `The most recent answer wins.` plus `Scored by how recently it last happened.`
 2. A 30 second timer runs. The player types an answer and presses **SHOOT** (Enter also works).
 3. The judge checks the answer against the question's answer list (names plus aliases, accents
    and case ignored, small typos forgiven).
@@ -89,6 +108,17 @@ the ball; **NEXT-GEN** and **RETRO** are locked too, on its top and bottom patch
      (every line: `strings.play.sentence` in `app/i18n/en.ts`).
    - A pass or a time-up names the top of the table instead: the crowd's favourite in HOME, the
      deepest cut in AWAY.
+   - **RETRO and NEXT-GEN** (2026-11-13) show a **year** wherever HOME and AWAY show a share: the
+     table's third column is the year each answer first counted in RETRO (headed `FIRST`) and
+     last counted in NEXT-GEN (`LATEST`), the player's own line under the sentence carries it
+     too (`YOU Brazil 2016 MISS 0`), and the sentence says it in the mode's voice:
+     `Preston North End: first did it in 1889. Straight out of the history books. Worldie!` down
+     to `Brazil: first did it in 2016. Right answer, but that's practically yesterday!`;
+     `Bayern Munich: last did it in 2026. Hot off the press. Worldie!` down to
+     `AC Milan: last did it in 2007. Right answer, but that's ancient history!`. A pass or a
+     time-up names the oldest answer (`Passed. The oldest answer was Genoa, all the way back`
+     `in 1898.`) or the most recent (`... as recently as 2026.`). Each row is the shot's best
+     year.
    - After each name the table shows the answer's country, unless every answer shares one (the
      Premier League's clubs) or the answers are countries themselves.
 
@@ -140,8 +170,15 @@ Each mode is scored by a **rule** that ranks the question's answers, best first:
 | ---------- | ----------------- | --------------------------------- |
 | `common`   | HOME              | the highest share of players      |
 | `niche`    | AWAY              | the lowest share of players       |
+| `oldest`   | RETRO             | the earliest first year           |
+| `newest`   | NEXT-GEN          | the latest last year              |
 | `closest`  | CLOSEST (locked)  | the place nearest today's stadium |
 | `furthest` | FURTHEST (locked) | the place furthest from it        |
+
+RETRO and NEXT-GEN file their shots by the same standing and bands, with the gap measured in
+years from the best year (`shotsFor` on each answer's first or last year); answers from the
+same year have the same standing, so the same shot, and share a rank in the table. Their
+stored shots are the rule's (a test keeps them so).
 
 (The rule `niche` keeps its id in code; every word a player sees says **uncommon**.)
 
@@ -272,20 +309,48 @@ crowd colours and kit differ.
 - The ball is heard: a light touch when the pointer comes onto it or presses it, wind while it
   spins (louder the faster), and the strike when a mode is chosen, then wind as it flies; HOME's
   ball lands to a roar and a blast of horns, AWAY's whistles away into the distance.
-- An airship drifts over the town with a dot-matrix sign on its flank: `DID YOU KNOW?` in
-  green and under it **a fun football fact of the day** in amber, scrolling (the product owner,
-  2026-11-11: "The blimp should now say just a fun football daily fact instead"). It used to
-  show today's stadium; the stadium now belongs to the game screens. Sixty fact-checked facts
+- An airship drifts over the town with a dot-matrix sign on its flank. Since 2026-11-12 (the
+  product owner: "make blimp slightly smaller and contain key info like your total points, or
+  your position on leaderboard, etc. and it switches between this stuff") it is 7/8 of its old
+  size and its sign shows **short messages about the player's day**, one after another, each
+  for about 4 seconds, changing as an LED sign does (the lamps roll the old message up and the
+  next one up into its place): for each mode played today its total (`NEXT-GEN / 360 PTS`),
+  the player's place on today's leaderboard (`NEXT-GEN / 37 OF 1,284`, as the leaderboard
+  panel places it) and the title it earned, alone on two lines (`FROM THE / FUTURE`); the
+  daily streak (`DAILY STREAK / 4 DAYS`); a nudge for each mode not played yet (`AWAY / IS
+WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the era-art
+  review (2026-11-13) every message fits the smallest sign whole, nothing scrolling: a header
+  of 12 small letters at most, a line of 8 big or 12 small ones. The words are in `strings.home.sign`, the list
+  in `app/routes/home-sign.ts`.
+- **The fact of the day** is towed across the sky on a banner (the product owner, 2026-11-12:
+  "the daily fun fact is instead shown by a plane that flies by occasionally with a banner
+  behind it saying the fun fact"): a little plane flies over from right to left about once a
+  minute (the first pass 6 seconds after the page opens), towing `DID YOU KNOW? ...` and the
+  fact in painted letters on a rippling banner, at a reading pace (a letter a seventh of a
+  second); at night its cabin and navigation lamps are lit and lamps along the banner light
+  it. On a monitor it flies in the sky beside the wordmark, behind the airship; on a phone just
+  under the airship. Before 2026-11-12 the fact scrolled on the airship's sign (the product
+  owner, 2026-11-11: "The blimp should now say just a fun football daily fact instead"); it
+  showed today's stadium before that; the stadium now belongs to the game screens. Sixty fact-checked facts
   in a fixed cycle, the first on day 1 (2026-11-10): `app/data/facts.ts`, notes in
   `docs/data-notes/facts.md`. The fact starts at its beginning and rests a moment, then
   scrolls at a steady reading pace (a whole fact passes in 17 to 28 seconds) and comes round
   again. Screen readers hear "Fact of the day: ...". The airship can be clicked: it wobbles,
-  five or six quick clicks pop it, it crashes into the town, and a new one drifts in with the
-  same fact, from its start.
+  five or six quick clicks pop it, it crashes into the town (its pilot parachutes down beside
+  the wreck, never over the mascot), and a new one drifts in with the same messages, from the
+  first.
+- **The daily streak** (the product owner, 2026-11-12: "there should be a daily streak showing
+  if the user comes on everyday to play then it should keep going up"): a small pixel flame and
+  the days in a row with a finished game (`streakFor`, section 6.6) in the day plate under the
+  ball (`DAY 12` then the flame and `4`). The first time it is seen after it went up it hops
+  and throws a ring of gold sparks. With no streak nothing shows. It is also on the full-time
+  card (`STREAK 4` under the title) and one of the airship's messages. Screen readers hear
+  "Daily streak: 4 days in a row".
 - The sky is the player's own sky: day, dusk, night or dawn, worked out from their device clock
   and time zone (no location permission prompt). At night the floodlights are on.
 - Under the ball: one line per mode (`HOME: the most common answer wins`,
-  `AWAY: the most uncommon answer wins`), a `?` how-to-play button, and the day number.
+  `AWAY: the most uncommon answer wins`), a `?` how-to-play button, the sound switch, a
+  stats button (section 6.6) and the day number.
 - Choosing a patch: it lights up in the mode's colour and the ball is struck. HOME: it drops
   into the stadium, onto the pitch, and the ground erupts. AWAY: it sails away over the town
   and out of sight. Then the screen wipes into the career scene.
@@ -317,30 +382,77 @@ crowd colours and kit differ.
   heading.
 - Bottom: the answer bar. Text input and the SHOOT button. PASS appears after 8 seconds.
 - While he waits the footballer does keepie-uppies. Team-mates and a keeper idle around him.
+- After a goal or a miss that earns no promotion, the same ball is fetched back to him before
+  he juggles again: at tiers 0 and 1 (still youths) a youth runs after it and passes it back
+  (the child keeper after a goal, a team-mate after a miss); from tier 2 the keeper picks a
+  goal out of his net, carries it to his place and rolls it out, and a ball kid behind the
+  goal catches or picks up a miss and throws it back. A promotion skips it (the new ground
+  starts with the ball at his feet). Details: docs/API_SCENES.md, "The fetch".
 
 ### 6.3 Reveal sheet
 
-Slides up from the bottom and covers at most the lower 46% of the screen so the scene stays
-visible. A header band in the shot's colour (`GOLAZO!` and `+80`), the sentence, the player's
-own answer on a line in the miss colour when it did not score, the table (five rows, one per
-shot that scores; see section 3, step 6), the next button. The five rows and the headings fit
-without scrolling at 1920 x 1080, 1366 x 768 and 390 x 844 for the sample questions; a long
-name that takes two lines can make the table scroll by a few pixels on a phone, with the
-worldie row pinned under the headings.
+Slides up from the bottom. A header band in the shot's colour (`GOLAZO!` and `+80`), the
+sentence, the player's own answer on a line in the miss colour when it did not score, the table
+(five rows, one per shot that scores; see section 3, step 6), the next button. The five rows,
+the headings and the player's line are always all in view, whole, with no scrolling: the sheet
+is as tall as what it holds, up to the foot of the board. The scene is composed around a sheet
+covering the lower 46%, and it usually covers 26 to 46%; with long names it can reach about 50%
+on a 1366 x 768 monitor and 57 to 59% on a small phone (360 x 640, 412 x 915), where it then
+hides the players for the length of the reveal. On a screen too short even for that the sheet
+sets itself tighter rather than cut a row (docs/API_UI.md, `RevealSheet`, "Its height").
 
 ### 6.4 Full time
 
 The final tableau for the tier reached, `FULL TIME`, the career tier reached, the total out of
 700 and, big under it in the mode's colour, the **title** the total earned; the seven pips with
-each answer and its shot, and three buttons: SHARE (copies a text summary, title included),
-play the other mode, back to the menu.
+each answer and its shot, and three buttons: SHARE, play the other mode of the pair (HOME and
+AWAY, RETRO and NEXT-GEN: the other mode's name alone, in its colour, `HOME`, `AWAY`, `RETRO`
+or `NEXT-GEN`, read out "Play AWAY" and so on, since "PLAY NEXT-GEN" wraps the row of
+buttons), back to the menu.
+
+**SHARE** (the product owner, 2026-11-12: "pressing share should produce an image you can
+share which shows what you answered for each question and your points and final result")
+makes a picture of the game as well as the text summary:
+
+- **The picture**: a pixel-art card, 1080 x 1350 PNG (portrait 4:5, 360 x 450 card pixels at
+  3 x 3 each), drawn by the game's own engine. From the top: the wordmark on a night sky; the
+  mode's badge in its colour, `DAY 12` and the day's stadium; the seven questions, one row
+  each (its number, the question cut down to one line: no "Name a", nothing in brackets,
+  "has won" as "won", then shortened at a word with "..."; the answer, or `no answer` after
+  a pass or a time-up, in the big face, the small one if it is too wide, cut short only if
+  even that is: one name in the demo, "International Stadium Yokohama"; the shot as its
+  grade-coloured tag, `PASSED` or `TIME'S UP` for no answer; the points; in RETRO and
+  NEXT-GEN the answer's year, in the mode's light colour, before the tag, or at the end of the
+  question's line for the two names too long for both: Wolverhampton Wanderers, Inverness
+  Caledonian Thistle); the total on the
+  full-time card's dot-matrix display (gold on a 700), the title in the mode's light colour,
+  the career tier (or a gold `PERFECT GAME` plate); the site's name on a strip of pitch.
+- **Sharing it**: on a phone or tablet whose browser can share files (`navigator.canShare`
+  with the PNG), the system share sheet opens with the picture and the text together. On a
+  PC (a mouse-first screen, even where the browser could share) the picture is downloaded,
+  named `soccersense-day-12-home.png`, and the text copied, and the button says `SAVED!`
+  then `COPIED!`. Where no picture can be made, the text is copied as before.
+- The text summary is unchanged (four lines, no spoilers: `buildShareText`). The picture
+  names the answers: it is shared after full time, by choice.
+
+**The way home** (the product owner, 2026-11-12: "when clicking home after playing a match
+there should be a black fade out and fade in rather than teleport to home"). MENU fades the
+screen to black and the home screen in from black, in the game's pixels: an ordered dither of
+ink eats the picture in whole pixels in sixteen steps (0.35 s), the home screen is put up
+behind the ink, and the dither shrinks away off it (0.35 s), the ball swelling out of its
+star as it does. It is heard as the iris between the home screen and the game is: the whoosh
+closing as the ink comes, opening as it goes. Instant under reduced motion. The game screen
+has no other way home (the board has no home link); the browser's back button and a visit to
+the home page are as they were, with no fade.
 
 The titles (the product owner, 2026-11-11: "based on total points ... it should also give you
 an appropriate title"): a ladder of ten a mode, in the matchday voice, funny and never mean,
 nothing named after a real award, trophy, club or person. HOME's are the crowd's favourite
-(going with the room), AWAY's the scout of the obscure (deep cuts, hipster picks). The rungs
-are the same for both modes (`titleFor` in `~/game`; the words in `strings.play.titles`), at
-most 20 characters so a title is one line on a monitor:
+(going with the room), AWAY's the scout of the obscure (deep cuts, hipster picks), RETRO's the
+keeper of football's past (2026-11-13: from born yesterday to there at the very start),
+NEXT-GEN's the one first with the news (from still on dial-up to here from the future). The
+rungs are the same for every mode (`titleFor` in `~/game`; the words in
+`strings.play.titles`), at most 20 characters so a title is one line on a monitor:
 
 | total      | HOME                 | AWAY                 |
 | ---------- | -------------------- | -------------------- |
@@ -355,6 +467,19 @@ most 20 characters so a title is one line on a monitor:
 | 620 to 690 | CROWD WHISPERER      | DEEP CUT SPECIALIST  |
 | 700        | THE HIVE MIND        | HIPSTER'S HIPSTER    |
 
+| total      | RETRO                | NEXT-GEN             |
+| ---------- | -------------------- | -------------------- |
+| 0          | BORN YESTERDAY       | STILL ON DIAL-UP     |
+| 10 to 110  | FLICKS THE ALMANAC   | SCORES ON TELETEXT   |
+| 120 to 210 | BLACK AND WHITE TV   | WAITING FOR REPLAYS  |
+| 220 to 290 | HEAVY LEATHER BALL   | ON THE GROUP CHAT    |
+| 300 to 370 | PROGRAMME COLLECTOR  | NOTIFICATIONS ON     |
+| 380 to 450 | SHORTS PAST THE KNEE | LIVE BLOG REGULAR    |
+| 460 to 530 | TERRACE HISTORIAN    | TRANSFER RUMOUR MILL |
+| 540 to 610 | KEEPER OF THE LEDGER | FIRST WITH THE NEWS  |
+| 620 to 690 | LIVING ARCHIVE       | AHEAD OF THE WHISTLE |
+| 700        | THERE AT KICK-OFF    | FROM THE FUTURE      |
+
 ### 6.5 How to play
 
 The `?` button on the home screen opens the rules as a pop-up over the menu (the page is not
@@ -366,12 +491,45 @@ to its content. `/how-to-play` stays as a page with the same card, for old links
 without script. (Changed on 2026-11-12: it used to be only that page; the HOME and AWAY rules
 were dropped from it at the product owner's request.)
 
+At the foot of the card, in small print, the disclaimer (the product owner, 2026-11-12:
+"some sort of disclaimer somewhere saying we aren't associated with fifa"): `soccersense is
+an independent fan game. It is not affiliated with, endorsed or sponsored by FIFA, UEFA or
+any league, club or player. All names and brands belong to their owners and are used for
+identification only.` It is on the pop-up, on `/how-to-play` and at the foot of the stats
+(6.6): quiet (a small grey line under a rule) but readable.
+
+### 6.6 Your stats
+
+(The product owner, 2026-11-12: "my stats option in home page where it shows your average
+result across the categories, today's result, etc.")
+
+A stats button (a bar chart) beside the `?` and the sound switch opens the player's stats as
+a pop-up built like the rules' (the same card, the same ways in and out; a sheet on a phone):
+
+- **STREAK**: how many days in a row the player has finished at least one game, in any mode,
+  and their best run. Today counts once a game is finished; until then the run up to
+  yesterday is still alive.
+- Per mode (every mode the game has, in the menu's order: HOME, AWAY, RETRO, NEXT-GEN; two by
+  two on a monitor): **TODAY**, the total, the title it earned and the seven shots as small tags in
+  their colours, or `Not played yet`; then over every day played on this device, **PLAYED**
+  (games finished), **AVERAGE** (the mean total, to the whole point), **BEST** (the highest
+  total and the day it was first made), and how the answers went: a bar of the shots' colours
+  and, under it, how many worldies, golazos, trivelas, toe pokes, tap-ins, misses and no
+  answers (a pass or a time-up).
+- A first visit says there are no games yet. The small print is at the foot.
+
+The history is the finished games the device already keeps, one per day and mode
+(`soccersense:v1:<day>:<mode>` in local storage): a year of them, today included. A game more
+than a year older than the one being saved is forgotten as it is saved, and a game played
+with a `?day=` override ahead of the day shown is left out. Nothing leaves the device.
+
 ## 7. What is deliberately not in this iteration
 
 Backend, accounts, real daily content, real leaderboards (the home screen's is mock data),
-streaks, payments, analytics, other languages, more categories. (Drag-to-spin on the ball
-and sound were on this list; the product owner asked for both on 2026-11-11 and they are
-built.) The code should leave room for them but must not build them.
+payments, analytics, other languages, more categories. (Drag-to-spin on the ball and sound
+were on this list; the product owner asked for both on 2026-11-11 and they are built. So are
+streaks and stats, on 2026-11-12, kept on the device only: section 6.6.) The code should
+leave room for them but must not build them.
 
 ## 8. Originality
 

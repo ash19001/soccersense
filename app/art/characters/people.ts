@@ -3,19 +3,26 @@
  *
  * Everyone faces right; `flipX` mirrors them inside their cell. `(x, y)` is the ground
  * point under the standing feet: the soles' outline is row y - 1 and the cell's left edge
- * is x - floor(cellW / 2). Spots (`ballSpot`, `handsSpot`, `keeperHands`) are offsets
- * from (x, y), and a flipped spot is `-dx - 1`, the exact mirror of the pixels.
+ * is x - cellW / 2 (the adult's cell is 32 x 40, the bicycle's 48 x 56). Spots
+ * (`ballSpot`, `handsSpot`, `keeperHands`) are offsets from (x, y); what a spot marks is
+ * even-sized (the 6 x 6 ball, the 18-wide trophy, centred on it as `drawSprite` centres
+ * them), so a flipped spot is `-dx`, the exact mirror of the pixels around it.
+ *
+ * The art is in `adult.ts` (the moves), `adult-shots.ts` (the shots), `youth.ts`,
+ * `youth-shots.ts` and `keeper.ts`, drawn with `LEGEND` and coloured by `kitColors`.
  */
 
 import { drawSprite, type Sprite, type Surface } from "~/pixel";
-import { KEEPER, PLAYER, YOUTH } from "../layout";
-import * as ADULT from "./adult";
-import * as ADULT_SHOTS from "./adult-shots";
-import { figure } from "./figure";
-import * as KEEP from "./keeper";
+import type { Era } from "../era";
+import * as LAYOUT from "../layout";
+import { eraFrames } from "./era-frames";
+import { ADULT } from "./adult";
+import { ADULT_SHOTS, ADULT_SHOT_BALL } from "./adult-shots";
+import { type ArtRecord, artText, figure } from "./figure";
+import { KEEPER, KEEPER_GLOVES } from "./keeper";
 import { kitColors, type Kit } from "./kit";
-import * as KID from "./youth";
-import * as KID_SHOTS from "./youth-shots";
+import { YOUTH } from "./youth";
+import { YOUTH_SHOTS, YOUTH_SHOT_BALL } from "./youth-shots";
 
 export type PlayerAnim =
   | "idle"
@@ -103,11 +110,14 @@ export interface Cell {
   readonly cellH: number;
 }
 
-/** The bicycle kick needs room over his head: anchor column 12 (youth 10). */
-export const BICYCLE_CELL: Cell = { cellW: 24, cellH: 28 };
-export const BICYCLE_YOUTH_CELL: Cell = { cellW: 20, cellH: 22 };
-/** The keeper's sprawl is a full-length dive: anchor column 12. */
-export const SPRAWL_CELL: Cell = { cellW: 24, cellH: 20 };
+/**
+ * The bicycle kick needs room over his head: anchor column 24 (youth 20), soles' outline
+ * row 55 (youth 43).
+ */
+export const BICYCLE_CELL: Cell = { cellW: 48, cellH: 56 };
+export const BICYCLE_YOUTH_CELL: Cell = { cellW: 40, cellH: 44 };
+/** The keeper's sprawl is a full-length dive: anchor column 24, soles' outline row 39. */
+export const SPRAWL_CELL: Cell = { cellW: 48, cellH: 40 };
 
 export type KeeperAnim =
   "ready" | "leap" | "smother" | "hold" | "beaten" | "stranded" | "sprawl";
@@ -124,82 +134,71 @@ export const KEEPER_ANIMS: Readonly<Record<KeeperAnim, AnimInfo>> = {
 
 export const KEEPER_ANIM_NAMES = Object.keys(KEEPER_ANIMS) as KeeperAnim[];
 
-type Spot = { x: number; y: number } | null;
-type SpotTable<A extends string> = Partial<Record<A, readonly Spot[]>>;
-
-const ART_KEY: Record<PlayerAnim, string> = {
-  idle: "IDLE",
-  run: "RUN",
-  kick: "KICK",
-  juggle: "JUGGLE",
-  celebrate: "CELEBRATE",
-  dejected: "DEJECTED",
-  lift: "LIFT",
-  shrug: "SHRUG",
-  slide: "SLIDE",
-  tapin: "TAPIN",
-  toepoke: "TOEPOKE",
-  trivela: "TRIVELA",
-  chip: "CHIP",
-  power: "POWER",
-  finesse: "FINESSE",
-  bicycle: "BICYCLE",
-};
+/** An offset from (x, y), facing right; null where there is nothing to point at. */
+export type Spot = { x: number; y: number } | null;
+/** Spots by animation, one per frame. */
+export type SpotTable<A extends string> = Partial<Record<A, readonly Spot[]>>;
 
 /** The cell an animation is drawn in (most share the layout's `PLAYER` / `YOUTH` cell). */
 export function playerCell(anim: PlayerAnim, youth = false): Cell {
   if (anim === "bicycle") return youth ? BICYCLE_YOUTH_CELL : BICYCLE_CELL;
-  return youth ? YOUTH : PLAYER;
+  return youth ? LAYOUT.YOUTH : LAYOUT.PLAYER;
 }
 
 export function keeperCell(anim: KeeperAnim): Cell {
-  return anim === "sprawl" ? SPRAWL_CELL : KEEPER;
+  return anim === "sprawl" ? SPRAWL_CELL : LAYOUT.KEEPER;
 }
 
-const ADULT_ART: Record<string, unknown> = { ...ADULT, ...ADULT_SHOTS };
-const KID_ART: Record<string, unknown> = { ...KID, ...KID_SHOTS };
+// The art: the moves and the shots, adult and youth.
+const ADULT_ART: ArtRecord<PlayerAnim> = { ...ADULT, ...ADULT_SHOTS };
+const YOUTH_ART: ArtRecord<PlayerAnim> = { ...YOUTH, ...YOUTH_SHOTS };
 
-const artOf = (set: Record<string, unknown>, prefix: string, key: string) => {
-  const v = set[`${prefix}_${key}`];
-  if (typeof v !== "string") throw new Error(`people: no art ${prefix}_${key}`);
-  return v;
+// The sprites, each built on first use, one set per era (the era's layer over the same art:
+// era-frames.ts).
+interface SpriteSet {
+  adult: Partial<Record<PlayerAnim, Sprite>>;
+  youth: Partial<Record<PlayerAnim, Sprite>>;
+  keeper: Partial<Record<KeeperAnim, Sprite>>;
+}
+const sprites: Record<Era, SpriteSet> = {
+  today: { adult: {}, youth: {}, keeper: {} },
+  retro: { adult: {}, youth: {}, keeper: {} },
+  nextgen: { adult: {}, youth: {}, keeper: {} },
 };
 
-// Built once per animation, on first use.
-const adultSprites: Partial<Record<PlayerAnim, Sprite>> = {};
-const youthSprites: Partial<Record<PlayerAnim, Sprite>> = {};
-const keeperSprites: Partial<Record<KeeperAnim, Sprite>> = {};
-
-function playerSpriteOf(anim: PlayerAnim, youth: boolean): Sprite {
-  const cache = youth ? youthSprites : adultSprites;
-  const cell = playerCell(anim, youth);
-  return (cache[anim] ??= figure(
-    youth
-      ? artOf(KID_ART, "YOUTH", ART_KEY[anim])
-      : artOf(ADULT_ART, "ADULT", ART_KEY[anim]),
-    cell.cellW,
-    cell.cellH,
-    `${youth ? "youth" : "adult"} ${anim}`,
-  ));
+/** The sprite behind an animation (for tests and sheets), in an era (today by default). */
+export function playerSprite(
+  anim: PlayerAnim,
+  youth = false,
+  era: Era = "today",
+): Sprite {
+  const set = sprites[era];
+  const cache = youth ? set.youth : set.adult;
+  let sp = cache[anim];
+  if (sp === undefined) {
+    const who = youth ? "youth" : "adult";
+    const art = (youth ? YOUTH_ART : ADULT_ART)[anim];
+    if (art === undefined) throw new Error(`people: no art for ${who} ${anim}`);
+    const cell = playerCell(anim, youth);
+    const text = eraFrames(era, who, anim, artText(art));
+    sp = figure(text, cell.cellW, cell.cellH, `${who} ${anim}`);
+    cache[anim] = sp;
+  }
+  return sp;
 }
 
-function keeperSpriteOf(anim: KeeperAnim): Sprite {
-  const cell = keeperCell(anim);
-  return (keeperSprites[anim] ??= figure(
-    artOf(KEEP, "KEEPER", anim.toUpperCase()),
-    cell.cellW,
-    cell.cellH,
-    `keeper ${anim}`,
-  ));
-}
-
-/** The sprite behind an animation (for tests and sheets). */
-export function playerSprite(anim: PlayerAnim, youth = false): Sprite {
-  return playerSpriteOf(anim, youth);
-}
-
-export function keeperSprite(anim: KeeperAnim): Sprite {
-  return keeperSpriteOf(anim);
+export function keeperSprite(anim: KeeperAnim, era: Era = "today"): Sprite {
+  const set = sprites[era];
+  let sp = set.keeper[anim];
+  if (sp === undefined) {
+    const art = KEEPER[anim];
+    if (art === undefined) throw new Error(`people: no art for keeper ${anim}`);
+    const cell = keeperCell(anim);
+    const text = eraFrames(era, "keeper", anim, artText(art));
+    sp = figure(text, cell.cellW, cell.cellH, `keeper ${anim}`);
+    set.keeper[anim] = sp;
+  }
+  return sp;
 }
 
 function frameIndex(frame: number, count: number, loop: boolean): number {
@@ -226,17 +225,10 @@ export function drawPlayer(
   opts?: { flipX?: boolean; youth?: boolean },
 ): void {
   const info = PLAYER_ANIMS[anim];
-  const sp = playerSpriteOf(anim, opts?.youth === true);
+  const sp = playerSprite(anim, opts?.youth === true, kit.era ?? "today");
   DRAW.flipX = opts?.flipX === true;
-  drawSprite(
-    s,
-    sp,
-    frameIndex(frame, info.frames, info.loop),
-    x,
-    y,
-    kitColors(kit),
-    DRAW,
-  );
+  const f = frameIndex(frame, info.frames, info.loop);
+  drawSprite(s, sp, f, x, y, kitColors(kit), DRAW);
 }
 
 /** Draw the goalkeeper. Same rules as `drawPlayer`; adult build, gloves on. */
@@ -250,16 +242,10 @@ export function drawKeeper(
   opts?: { flipX?: boolean },
 ): void {
   const info = KEEPER_ANIMS[anim];
+  const sp = keeperSprite(anim, kit.era ?? "today");
   DRAW.flipX = opts?.flipX === true;
-  drawSprite(
-    s,
-    keeperSpriteOf(anim),
-    frameIndex(frame, info.frames, info.loop),
-    x,
-    y,
-    kitColors(kit),
-    DRAW,
-  );
+  const f = frameIndex(frame, info.frames, info.loop);
+  drawSprite(s, sp, f, x, y, kitColors(kit), DRAW);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,72 +254,67 @@ export function drawKeeper(
 
 const p = (x: number, y: number): Spot => ({ x, y });
 
-/** Where the ball's centre is, frame by frame, as an offset from (x, y). */
+// The spots, measured on the art (the adult's 32 x 40 cell has its anchor at column 16: a
+// spot's x is its column - 16, its y its row - 40; the youth's 28 x 32, column 14). The
+// ball's spot is the centre of the 6 x 6 ball drawn with anchor "center": it covers
+// columns dx - 3 to dx + 2 and rows dy - 3 to dy + 2, so (14, -4) is a ball resting on the
+// grass (its bottom row on the soles' row, y - 2). On a touch the ring's bottom row lies on
+// the top row of what he touches it with. The shots' spots are drawn with the shots
+// (adult-shots.ts, youth-shots.ts; .snaps/detail2/A2-spots.md and B2-spots.md).
+
+/** At rest on the grass in front of him, beside the planted far foot (the scene's `KICK_DX`). */
+const REST = p(14, -4);
+
+/** Where the adult's ball's centre is, frame by frame, as an offset from (x, y). */
 const ADULT_BALL: SpotTable<PlayerAnim> = {
-  kick: [p(7, -2), p(7, -2), p(7, -2), null, null],
+  ...ADULT_SHOT_BALL,
+  // at rest in front of him, beside the planted far foot; the near toe meets it on 2
+  kick: [REST, REST, REST, null, null],
+  // on the near boot (0, 4), the knee (2), the forehead (6), and the top of each hop
   juggle: [
-    p(4, -7),
-    p(6, -12),
-    p(4, -11),
-    p(6, -16),
-    p(4, -7),
-    p(3, -22),
-    p(1, -20),
-    p(6, -12),
-  ],
-  tapin: [p(7, -2), p(7, -2), null, null],
-  toepoke: [p(7, -2), p(7, -2), null, null, null],
-  trivela: [p(7, -2), p(7, -2), p(7, -2), null, null, null],
-  chip: [p(7, -2), p(7, -2), p(7, -2), null, null],
-  power: [p(7, -2), p(7, -2), p(7, -2), null, null, null],
-  finesse: [p(7, -2), p(7, -2), p(7, -2), null, null],
-  bicycle: [
-    p(-5, -10),
-    p(-3, -22),
-    p(1, -26),
-    p(4, -25),
-    p(7, -23),
-    null,
-    null,
-    null,
+    p(8, -13),
+    p(12, -24),
+    p(8, -18),
+    p(12, -32),
+    p(8, -13),
+    p(6, -44),
+    p(2, -39),
+    p(12, -24),
   ],
 };
 
-const YOUTH_BALL: SpotTable<PlayerAnim> = {
-  kick: [p(7, -2), p(7, -2), p(7, -2), null, null],
+/** In the lift the trophy's foot sits on his hands' top row (drawTrophy is bottom-centre). */
+const ADULT_HANDS: SpotTable<PlayerAnim> = {
+  lift: [p(0, -34), p(0, -36)],
+};
+
+/** The youth's ball's centre, frame by frame. */
+export const YOUTH_BALL: SpotTable<PlayerAnim> = {
+  ...YOUTH_SHOT_BALL,
+  // at rest beside the planted far foot; the near boot meets it on the strike (2)
+  kick: [REST, REST, REST, null, null],
+  // on the near boot (0, 4), the knee (2), the crown (6), and the top of each hop between
   juggle: [
-    p(4, -6),
-    p(5, -10),
-    p(3, -9),
-    p(5, -13),
-    p(4, -6),
-    p(3, -18),
-    p(1, -17),
-    p(5, -9),
-  ],
-  tapin: [p(7, -2), p(7, -2), null, null],
-  toepoke: [p(7, -2), p(7, -2), null, null, null],
-  trivela: [p(7, -2), p(7, -2), p(7, -2), null, null, null],
-  chip: [p(7, -2), p(7, -2), p(7, -2), null, null],
-  power: [p(7, -2), p(7, -2), p(7, -2), null, null, null],
-  finesse: [p(7, -2), p(7, -2), p(7, -2), null, null],
-  bicycle: [
-    p(-5, -7),
-    p(-3, -17),
-    p(0, -20),
-    p(3, -19),
-    p(4, -18),
-    null,
-    null,
-    null,
+    p(9, -9),
+    p(11, -19),
+    p(8, -13),
+    p(11, -23),
+    p(9, -9),
+    p(5, -35),
+    p(2, -31),
+    p(11, -19),
   ],
 };
 
-const ADULT_HANDS: SpotTable<PlayerAnim> = { lift: [p(0, -17), p(0, -18)] };
-const YOUTH_HANDS: SpotTable<PlayerAnim> = { lift: [p(0, -13), p(0, -14)] };
+/**
+ * Between the youth's hands in the lift: the foot of what he holds (drawTrophy is
+ * bottom-centre) on his fists' top row, between them.
+ */
+export const YOUTH_HANDS: SpotTable<PlayerAnim> = {
+  lift: [p(-1, -28), p(-1, -29)],
+};
 
-const KEEPER_HANDS: SpotTable<KeeperAnim> = KEEP.KEEPER_GLOVES;
-
+/** One spot of a table: a copy, mirrored to `-dx` when flipped. */
 function spot<A extends string>(
   table: SpotTable<A>,
   info: AnimInfo,
@@ -345,14 +326,14 @@ function spot<A extends string>(
   if (list === undefined) return null;
   const s = list[frameIndex(frame, info.frames, info.loop)] ?? null;
   if (s === null) return null;
-  return flipX === true ? { x: -s.x - 1, y: s.y } : { x: s.x, y: s.y };
+  return flipX === true ? { x: -s.x, y: s.y } : { x: s.x, y: s.y };
 }
 
 /**
  * The ball's centre as an offset from (x, y) while he has it: the kick's first three
- * frames (the ball at rest in front of him, struck on `KICK_STRIKE_FRAME`) and every
- * juggle frame (touches on frames 0, 2, 4 and 6 — foot, knee, foot, head — and the top
- * of each hop between). Null when he is not touching it.
+ * frames (the ball at rest in front of him, struck on `KICK_STRIKE_FRAME`), every juggle
+ * frame (touches on frames 0, 2, 4 and 6 — foot, knee, foot, head — and the top of each
+ * hop between) and every shot up to its strike. Null when he is not touching it.
  */
 export function ballSpot(
   anim: PlayerAnim,
@@ -382,5 +363,5 @@ export function keeperHands(
   frame: number,
   opts?: { flipX?: boolean },
 ): Spot {
-  return spot(KEEPER_HANDS, KEEPER_ANIMS[anim], anim, frame, opts?.flipX);
+  return spot(KEEPER_GLOVES, KEEPER_ANIMS[anim], anim, frame, opts?.flipX);
 }

@@ -1,11 +1,15 @@
 /**
- * Kits: the colours a person is drawn in. Every slot is a palette colour; three more tones
- * (shorts, socks and glove shade) are derived when drawing.
+ * Kits: the colours a person is drawn in. Every slot is a palette colour; the other tones
+ * of the figure legend (the shorts, socks and glove shades, the highlights and the skin's
+ * dark) are derived when drawing (`kitColors`).
  */
 
-import { shade, type Color } from "~/pixel";
+import { TRANSPARENT, shade, type Color } from "~/pixel";
+import type { Era } from "../era";
 import type { Lighting } from "../lighting";
 import { P } from "../palette";
+import { nextgenKit } from "./nextgen";
+import { retroKit } from "./retro";
 
 export interface Kit {
   outline: Color;
@@ -19,6 +23,15 @@ export interface Kit {
   socks: Color;
   boots: Color;
   gloves: Color;
+  /**
+   * The era it is drawn in (`~/art/era`, .snaps/era-art/THEME.md): picks the sprites
+   * (people.ts). Absent is today.
+   */
+  era?: Era;
+  /** The era's own slots, graded with the kit: letters 1 2 3 4 9 A C D (figure.ts). */
+  eraColors?: readonly Color[];
+  /** The era's lights, never graded: letters 5 6 7 8. */
+  eraGlows?: readonly Color[];
 }
 
 export type KitBase =
@@ -87,7 +100,7 @@ function bottom(shorts: Color, socks: Color, boots: Color = P.night): Bottom {
  */
 export function makeKit(
   base: KitBase,
-  opts?: { look?: Look; variant?: number },
+  opts?: { look?: Look; variant?: number; era?: Era },
 ): Kit {
   const look = LOOKS[opts?.look ?? HERO_LOOK] ?? LOOKS[HERO_LOOK];
   const v = Math.abs(Math.floor(opts?.variant ?? 0));
@@ -141,13 +154,17 @@ export function makeKit(
   // Only the keeper wears gloves; everyone else's glove slot is a bare hand, so a child
   // in the keeper kit gets gloves on the youth frames without art of his own.
   const gloves = base === "keeper" ? P.grassHi : look.skin;
-  return { outline: P.ink, ...look, ...t, ...b, gloves };
+  const kit: Kit = { outline: P.ink, ...look, ...t, ...b, gloves };
+  const era = opts?.era ?? "today";
+  if (era === "retro") return retroKit(base, kit, opts?.look ?? HERO_LOOK, v);
+  if (era === "nextgen") return nextgenKit(base, kit, v);
+  return kit;
 }
 
 /** Every slot graded by `light.lit` (people are always lit as the pitch is). */
 export function litKit(kit: Kit, light: Lighting): Kit {
   const l = light.lit;
-  return {
+  const lit: Kit = {
     outline: l(kit.outline),
     skin: l(kit.skin),
     skinShade: l(kit.skinShade),
@@ -160,6 +177,10 @@ export function litKit(kit: Kit, light: Lighting): Kit {
     boots: l(kit.boots),
     gloves: l(kit.gloves),
   };
+  if (kit.era !== undefined) lit.era = kit.era;
+  if (kit.eraColors !== undefined) lit.eraColors = kit.eraColors.map(l);
+  if (kit.eraGlows !== undefined) lit.eraGlows = kit.eraGlows.slice();
+  return lit;
 }
 
 const shades = new Map<Color, Color>();
@@ -175,8 +196,12 @@ export function darker(c: Color): Color {
   return d;
 }
 
-/** The kit as the colour array for the figure legend "khsStTrpqoObgG". Reuses one array. */
-const scratch: Color[] = new Array<Color>(14);
+/**
+ * The kit as the colour array for the figure legend `LEGEND` (figure.ts): its slots, then
+ * tones derived from the kit's own slots along their ramps (lighter turns warm, darker
+ * turns blue-purple: `shade`). Reuses one array.
+ */
+const scratch: Color[] = new Array<Color>(33);
 export function kitColors(kit: Kit): readonly Color[] {
   scratch[0] = kit.outline;
   scratch[1] = kit.hair;
@@ -193,5 +218,20 @@ export function kitColors(kit: Kit): readonly Color[] {
   scratch[12] = kit.gloves;
   // A bare hand on the far side is in skin shade, like the rest of the far arm.
   scratch[13] = kit.gloves === kit.skin ? kit.skinShade : darker(kit.gloves);
+  scratch[14] = shade(kit.hair, 0.28); // H hair highlight
+  scratch[15] = shade(kit.skinShade, -0.3); // m skin dark
+  scratch[16] = shade(kit.shirt, 0.22); // U shirt highlight
+  scratch[17] = darker(kit.trim); // R trim shade
+  scratch[18] = shade(kit.boots, 0.32); // B boot highlight
+  scratch[19] = shade(kit.gloves, 0.3); // w glove highlight
+  scratch[20] = shade(kit.skin, 0.2); // l skin highlight
+  // the era's slots (THEME.md): 1 2 3 4, the lights 5 6 7 8, then 9 A C D
+  const ec = kit.eraColors;
+  const eg = kit.eraGlows;
+  for (let i = 0; i < 4; i++) {
+    scratch[21 + i] = ec?.[i] ?? TRANSPARENT;
+    scratch[25 + i] = eg?.[i] ?? TRANSPARENT;
+    scratch[29 + i] = ec?.[4 + i] ?? TRANSPARENT;
+  }
   return scratch;
 }

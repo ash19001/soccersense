@@ -16,15 +16,19 @@ import {
   type Grade,
   MAX_TOTAL,
   type Mode,
+  type RankedAnswer,
   type RevealRow,
   type RevealView,
   QUESTION_MS,
   clockView,
   dayKeyFor,
   formatShare,
+  isEraMode,
   isPerfect,
   isShot,
+  pairedMode,
   pips,
+  playPath,
   progressFor,
   questionView,
   resolveToday,
@@ -41,6 +45,7 @@ import {
   PixelStage,
   RevealSheet,
   type RevealYours,
+  fadeThrough,
   useArrivalFocus,
   useDeviceSky,
 } from "~/ui";
@@ -117,12 +122,26 @@ function nothing(): null {
 }
 
 /**
- * The reveal's one plain sentence: how many players gave the answer, and what kind of shot
- * that made it, in the mode's tone.
+ * What the reveal's third column says about an answer: its share of players ("34%") in
+ * HOME and AWAY, its year in RETRO (the first it counted, "1888") and NEXT-GEN (the last,
+ * "2026").
+ */
+export function rowFigure(row: RankedAnswer, mode: Mode): string {
+  if (isEraMode(mode)) return row.year === null ? "" : String(row.year);
+  return formatShare(row.share);
+}
+
+/**
+ * The reveal's one plain sentence: how many players gave the answer (in RETRO and NEXT-GEN,
+ * the year it first or last counted), and what kind of shot that made it, in the mode's
+ * tone.
  */
 export function revealSentence(reveal: RevealView, mode: Mode): string {
   const { answer, row, best, turn } = reveal;
   if (answer && row) {
+    if (isEraMode(mode)) {
+      return text.sentence[mode][row.shot](answer.name, rowFigure(row, mode));
+    }
     const { picked } = text.sentence;
     const share = formatShare(row.share);
     const said = row.share < LONELY_SHARE ? picked.lonely : picked.crowd;
@@ -130,7 +149,7 @@ export function revealSentence(reveal: RevealView, mode: Mode): string {
   }
   const missed = turn.grade === "timeup" ? "timeup" : "skipped";
   if (!best) return text.grades[missed];
-  return text.sentence[missed][mode](best.answer.name, formatShare(best.share));
+  return text.sentence[missed][mode](best.answer.name, rowFigure(best, mode));
 }
 
 /**
@@ -149,15 +168,18 @@ function tablePlace(reveal: RevealView, row: RevealRow): string {
 
 /**
  * The reveal's table, as the kit's league table takes it: one row for each shot that scores
- * (`revealFor(...).rows`), the third column the share, then each answer's shot and its
- * points.
+ * (`revealFor(...).rows`), the third column the share (the year in RETRO and NEXT-GEN:
+ * `rowFigure`), then each answer's shot and its points.
  */
-export function tableRows(reveal: RevealView): LeagueEntry[] {
+export function tableRows(
+  reveal: RevealView,
+  mode: Mode = reveal.question.mode,
+): LeagueEntry[] {
   return reveal.rows.map((row) => ({
     rank: row.rank,
     name: row.answer.name,
     place: tablePlace(reveal, row),
-    distance: formatShare(row.share),
+    distance: rowFigure(row, mode),
     grade: row.shot,
     shot: text.shots[row.shot],
     points: row.points,
@@ -166,24 +188,37 @@ export function tableRows(reveal: RevealView): LeagueEntry[] {
   }));
 }
 
+/** The reveal table's headings: the third column says what it holds in the mode. */
+export function tableLabels(mode: Mode): typeof text.table {
+  return isEraMode(mode)
+    ? { ...text.table, distance: text.table.year[mode] }
+    : text.table;
+}
+
 /**
  * The player's answer above the table, when it did not score and so is not a row: a listed
- * miss with its share, or no answer after a pass or a time-up. Undefined when it is a row.
+ * miss with its share (its year in RETRO and NEXT-GEN), or no answer after a pass or a
+ * time-up. Undefined when it is a row.
  */
-export function yoursLine(reveal: RevealView): RevealYours | undefined {
+export function yoursLine(
+  reveal: RevealView,
+  mode: Mode = reveal.question.mode,
+): RevealYours | undefined {
   if (reveal.playerInRows) return undefined;
   const { answer, row, turn } = reveal;
   const you = text.table.you;
   if (answer && row) {
-    const picked = formatShare(row.share);
+    const picked = rowFigure(row, mode);
     const shot = text.shots[row.shot];
     return {
       you,
       name: answer.name,
-      picked,
+      ...(picked ? { picked } : {}),
       shot,
       points: row.points,
-      spoken: text.yours.spoken(answer.name, picked, shot, row.points),
+      spoken: isEraMode(mode)
+        ? text.yours.spokenYear[mode](answer.name, picked, shot, row.points)
+        : text.yours.spoken(answer.name, picked, shot, row.points),
     };
   }
   const shot = turn.grade === "timeup" ? text.yours.timeup : text.yours.skipped;
@@ -243,7 +278,7 @@ export function Game({ mode }: { mode: Mode }) {
   }, [phase, dayNumber]);
 
   const search = location.search;
-  const other: Mode = mode === "home" ? "away" : "home";
+  const other: Mode = pairedMode(mode);
 
   let top: ReactNode = null;
   let bottom: ReactNode = null;
@@ -335,9 +370,9 @@ export function Game({ mode }: { mode: Mode }) {
                 : undefined
             }
             sentence={revealSentence(reveal, mode)}
-            rows={tableRows(reveal)}
-            tableLabels={text.table}
-            yours={yoursLine(reveal)}
+            rows={tableRows(reveal, mode)}
+            tableLabels={tableLabels(mode)}
+            yours={yoursLine(reveal, mode)}
             nextLabel={reveal.isLast ? text.toFullTime : text.next}
             onNext={game.next}
           />
@@ -345,12 +380,16 @@ export function Game({ mode }: { mode: Mode }) {
       }
     } else if (session.phase === "done") {
       const full = text.fullTime;
-      const shareLabel =
-        view.share === "copied"
-          ? full.copied
-          : view.share === "failed"
-            ? full.notCopied
-            : full.share;
+      const shareLabel = {
+        idle: full.share,
+        making: full.making,
+        shared: full.shared,
+        // Downloaded and copied: SAVED! first, then the controller moves on to COPIED!
+        saved: full.downloaded,
+        downloaded: full.downloaded,
+        copied: full.copied,
+        failed: full.notCopied,
+      }[view.share];
       bottom = (
         <FullTimeCard
           className="ss-play-full"
@@ -363,6 +402,15 @@ export function Game({ mode }: { mode: Mode }) {
           earnedTitle={titleName(mode, session.total)}
           earnedTitleSpoken={full.titleSpoken}
           perfectLine={isPerfect(session.total) ? full.perfect : undefined}
+          streak={
+            view.streak > 0
+              ? {
+                  days: view.streak,
+                  text: full.streak(view.streak),
+                  spoken: full.streakSpoken(view.streak),
+                }
+              : undefined
+          }
           results={results(session).map((line) => ({
             grade: line.turn.grade,
             points: line.turn.points,
@@ -375,14 +423,17 @@ export function Game({ mode }: { mode: Mode }) {
           }))}
           resultsLabel={full.results}
           shareLabel={shareLabel}
+          shareBusy={view.share === "making"}
           onShare={game.share}
           otherLabel={full.other[other]}
+          otherSpoken={full.otherSpoken(full.other[other])}
           otherMode={other}
           onPlayOther={() =>
-            void navigate({ pathname: `/play/${other}`, search })
+            void navigate({ pathname: playPath(other), search })
           }
           menuLabel={full.menu}
-          onMenu={() => void navigate({ pathname: "/", search })}
+          // Home through black (`fadeThrough`): the ink comes, the menu, the ink goes.
+          onMenu={() => fadeThrough(() => navigate({ pathname: "/", search }))}
         />
       );
     }

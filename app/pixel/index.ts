@@ -32,6 +32,7 @@ export {
   type Glyph,
   type TextOptions,
 } from "./text";
+export { font10x14, font6x10 } from "./font-painted";
 export {
   drawSprite,
   frameCount,

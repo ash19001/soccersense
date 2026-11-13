@@ -178,17 +178,17 @@ export function poseAt(
     const side = known && last.x < 0 ? 1 : known && last.x > 0 ? -1 : 1;
     const decay = (k: number): number => Math.exp(-a / k);
     pose.dx += Math.round(
-      side * (2 + 5 * hit) * decay(0.55) * Math.sin((TAU * a) / 1.1),
+      side * (4 + 10 * hit) * decay(0.55) * Math.sin((TAU * a) / 1.1),
     );
     pose.dy += Math.round(
-      (1 + 2.5 * hit) * decay(0.5) * Math.sin((TAU * a) / 0.8),
+      (2 + 5 * hit) * decay(0.5) * Math.sin((TAU * a) / 0.8),
     );
     pose.angle +=
       side * (0.035 + 0.09 * hit) * decay(0.9) * Math.sin((TAU * a) / 1.3);
     const squash = 0.07 * (1 + hit) * decay(0.22) * Math.cos((TAU * a) / 0.42);
     pose.sy = 1 - squash;
     pose.sx = 1 + squash * 0.6;
-    pose.dent = (2.5 + 3 * hit) * decay(0.18) * Math.cos((TAU * a) / 0.7);
+    pose.dent = (5 + 6 * hit) * decay(0.18) * Math.cos((TAU * a) / 0.7);
     // where: the poke, pulled on to the envelope; or the top of its middle
     let px = known ? last.x : rx * 0.12;
     let py = known ? last.y : -ry * 0.8;
@@ -199,14 +199,14 @@ export function poseAt(
     }
     pose.dentX = px;
     pose.dentY = py;
-    pose.dentR = 6 + 5 * hit;
+    pose.dentR = 12 + 10 * hit;
     // the sign flickers, longer the harder the poke
     if (a < 0.25 + 0.45 * hit) pose.flicker = Math.floor(a * 18) % 2 === 1;
   }
   // close to bursting it trembles and swells
   if (stress > 0.7) {
     const k = (stress - 0.7) / 0.3;
-    pose.dx += Math.floor(t * 16) % 2 === 0 ? 0 : k > 0.4 ? 1 : 0;
+    pose.dx += Math.floor(t * 16) % 2 === 0 ? 0 : k > 0.4 ? 2 : 0;
     pose.sx *= 1 + 0.035 * k;
     pose.sy *= 1 + 0.05 * k;
   }

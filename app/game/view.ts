@@ -226,17 +226,20 @@ export function results(session: Session): ResultLine[] {
 
 /**
  * The input for `buildShareText`, from a game. `tierName` is the career tier as shown on
- * screen ("TOP FLIGHT") and `title` the title the total earned ("SEASON TICKET HOLDER", the
- * words for `titleFor`), both from the interface text.
+ * screen ("TOP FLIGHT"), `title` the title the total earned ("SEASON TICKET HOLDER", the
+ * words for `titleFor`) and `modeLabel` the mode's name ("NEXT-GEN"), all from the
+ * interface text.
  */
 export function shareInputFor(
   session: Session,
   tierName: string,
   title?: string,
+  modeLabel?: string,
 ): ShareInput {
   return {
     dayNumber: session.dayNumber,
     mode: session.mode,
+    ...(modeLabel ? { modeLabel } : {}),
     stadiumName: session.stadium.name,
     total: session.total,
     tierName,

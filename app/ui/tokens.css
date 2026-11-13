@@ -79,6 +79,16 @@
   --c-away: #19a9bf;
   --c-away-light: #6fe0dc;
 
+  /* RETRO (old gold) */
+  --c-retro-dark: #6b4426;
+  --c-retro: #c79a3e;
+  --c-retro-light: #f0d58e;
+
+  /* NEXT-GEN (electric magenta) */
+  --c-nextgen-dark: #7e1fb0;
+  --c-nextgen: #f03cc8;
+  --c-nextgen-light: #ff9cee;
+
   /* gold */
   --c-gold-dark: #b9770e;
   --c-gold: #ffc928;

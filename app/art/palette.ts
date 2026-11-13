@@ -104,6 +104,16 @@ const SOURCE = {
   away: "#19a9bf",
   awayLight: "#6fe0dc",
 
+  /** added: RETRO is old gold, a sepia-warmed brass (the past: old kits, old photographs). */
+  retroDark: "#6b4426",
+  retro: "#c79a3e",
+  retroLight: "#f0d58e",
+
+  /** added: NEXT-GEN is electric magenta (the future: neon), never a dark blue. */
+  nextgenDark: "#7e1fb0",
+  nextgen: "#f03cc8",
+  nextgenLight: "#ff9cee",
+
   // gold
   goldDark: "#b9770e",
   gold: "#ffc928",
@@ -156,10 +166,23 @@ export interface ModeRamp {
   light: Color;
 }
 
-/** HOME is warm red-orange, AWAY is teal. Everywhere. */
+/**
+ * HOME is warm red-orange, AWAY teal, RETRO old gold, NEXT-GEN electric magenta.
+ * Everywhere.
+ */
 export const MODE_COLORS: Readonly<Record<Mode, ModeRamp>> = Object.freeze({
   home: Object.freeze({ dark: P.homeDark, base: P.home, light: P.homeLight }),
   away: Object.freeze({ dark: P.awayDark, base: P.away, light: P.awayLight }),
+  retro: Object.freeze({
+    dark: P.retroDark,
+    base: P.retro,
+    light: P.retroLight,
+  }),
+  nextgen: Object.freeze({
+    dark: P.nextgenDark,
+    base: P.nextgen,
+    light: P.nextgenLight,
+  }),
 });
 
 /**

@@ -505,9 +505,11 @@ describe("the game page", () => {
       screen.getByRole("button", { name: text.fullTime.share }),
     ).toBeInTheDocument();
 
-    // PLAY AWAY starts the other mode, from its first question.
+    // AWAY ("Play AWAY" to a screen reader) starts the other mode, from its first question.
     fireEvent.click(
-      screen.getByRole("button", { name: text.fullTime.other.away }),
+      screen.getByRole("button", {
+        name: text.fullTime.otherSpoken(text.fullTime.other.away),
+      }),
     );
     expect(
       screen.getByRole("heading", { level: 1, name: text.heading.away }),

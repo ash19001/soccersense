@@ -93,13 +93,42 @@ Render with the snap tool (no browser, safe to run in parallel with other people
 ```sh
 ./node_modules/.bin/tsx tools/snap.ts --list
 ./node_modules/.bin/tsx tools/snap.ts ball/idle --out .snaps/ball-idle.png
-./node_modules/.bin/tsx tools/snap.ts stadium/full --time night --w 480 --h 270 --scale 3 --out .snaps/x.png
+./node_modules/.bin/tsx tools/snap.ts stadium/full --time night --w 960 --h 540 --scale 1 --out .snaps/x.png
 ./node_modules/.bin/tsx tools/snap.ts career/home-t3 --strip 6 --dt 0.15 --out .snaps/y.png
 ```
 
-Options: `--w --h` (default 130 x 281), `--scale` (default 4), `--t` seconds (default 0),
-`--strip N --dt S` (N frames side by side), `--time day|golden|dusk|night|dawn` or
-`--sun <deg> [--morning]`, `--seed`, `--out`. Then open the PNG with the Read tool and look.
+Options: `--w --h` (default 260 x 562, a phone), `--size all` (the four reference sizes),
+`--scale` (default 2), `--t` seconds (default 0), `--strip N --dt S` (N frames side by side),
+`--time day|golden|dusk|night|dawn` or `--sun <deg> [--morning]`, `--seed`, `--out`. Then open the PNG with the
+Read tool and look.
+
+### The canvas's scale
+
+The canvas has about twice the pixels each way of the interface's logical canvas
+(`app/ui/scale.ts`, `canvasDpFor`; art bible section 2): 960 x 540 at 1920 x 1080. Everything
+drawn at a fixed size is drawn natively at that scale, and every fixed length is written
+plainly in canvas pixels. (History: until 2026-11-12 the art also existed at half the detail,
+behind a switch; it was removed with the switch.)
+
+- **Cost.** Measured in Chrome (2026-11-12), every frame of the home page and of the game
+  (tiers 0, 4 and 6, a shot, a promotion) is under 16 ms at 1920 x 1080, 2560 x 1440 and on a
+  phone at ratio 3: home 3.9 ms on average (worst 15 ms, in the ball's entrance), the game 1.3
+  to 2.1 ms. Building the home picture is the one long frame: 355 ms at 960 x 540, most of it
+  painting the town and the stadium bowl pixel by pixel. Keep per-pixel work out of frames,
+  cache what does not change, and never search a box per pixel (a summed-area table, as
+  `findCrashSite` does, is four lookups).
+
+### Eras
+
+Since 2026-11-13 the career scene is drawn in one of three eras (`app/art/era.ts`:
+`"today"` for HOME and AWAY, `"retro"`, `"nextgen"`; art bible section 10). The career scene
+decides it once from its mode (`eraOf`) and passes it down as a parameter, never a global:
+to the ground (`Paint.era`), on the kits (`Kit.era`), to the props and to the effects. A
+painter that draws differently per era takes it as an **optional last argument that defaults
+to `"today"`**, and with `"today"` draws exactly what it drew before, so existing callers and
+shots keep their pixels. Era art lives in the era's own files; shared painters hold only a
+one-line dispatch. `docs/API_ART.md`, "Eras", has the details. Era code in `app/art` imports
+the type from `~/art/era`, never from `~/scenes`.
 
 ## 4. Scenes (`app/scenes`)
 
@@ -131,7 +160,8 @@ Scenes own animation state and expose plain methods and callbacks for the interf
 (for example `menu.onSelect`, `career.playShot(grade)`), never React.
 
 Cache what does not change: static layers are rendered once per resize or lighting change into
-their own `Surface` and copied each frame. The per-frame budget is 4 ms at 480 x 270.
+their own `Surface` and copied each frame. The per-frame budget is 4 ms at 960 x 540 (see "The
+canvas's scale").
 
 ## 5. Game rules (`app/game`)
 

@@ -70,6 +70,8 @@ bayer4(x, y): number                   // the dither threshold, for hand-rolled 
 ```ts
 FONT_5x7   // A-Z a-z 0-9 punctuation. Capitals 7 px tall, lineHeight 10. Proportional.
 FONT_3x5   // capitals, digits, basic punctuation. 5 px tall, lineHeight 7. Lower case draws as capitals.
+font10x14() // FONT_5x7 drawn again with twice the pixels: the painted words (./font-painted.ts)
+font6x10()  // FONT_3x5 drawn again with twice the pixels: caps, digits, punctuation
 drawText(s, text, x, y, c, opts?): number   // returns the width; y is the top of the capitals
 measureText(text, opts?): number
 wrapText(text, maxWidth, opts?): string[]

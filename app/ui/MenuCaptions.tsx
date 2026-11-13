@@ -12,7 +12,12 @@ import { strings } from "~/i18n";
 import { IconButton } from "./Button";
 import { cx } from "./cx";
 import { ModeBadge } from "./ModeBadge";
+import { PopupButton } from "./Popup";
+import { BELL } from "./RemindMe";
 import { SoundToggle, type SoundToggleLabels } from "./SoundToggle";
+import { StatsButton } from "./Stats";
+import { Streak, type StreakProps } from "./Streak";
+import { HEART } from "./Support";
 import type { UiMode } from "./types";
 import { useStowSlide } from "./useStowSlide";
 
@@ -20,8 +25,15 @@ export interface MenuModeCaption {
   mode: UiMode;
   /** "HOME" */
   label: string;
-  /** One line: "Closest to the stadium wins" */
+  /** One line: "The most common answer wins". Read out everywhere; shown on a monitor. */
   line: string;
+  /**
+   * The same, shorter: "Most common wins". Shown in place of `line` (which screen readers
+   * still hear). Leave out to show `line`.
+   */
+  short?: string;
+  /** Shorter still, for a phone's cards: "Most common". Leave out to show `short` there. */
+  tiny?: string;
   /** The score if this mode was already played today: an amber points box by the badge. */
   score?: number | null;
   /** Read out for the score: "Played today: 347 points". */
@@ -29,7 +41,10 @@ export interface MenuModeCaption {
 }
 
 export interface MenuCaptionsProps {
-  /** HOME then AWAY: they sit left and right, under the two patches of the ball. */
+  /**
+   * The open modes, in pairs: HOME then AWAY, then RETRO then NEXT-GEN. Each pair is a row,
+   * the first of it on the left of the centre line and the second on the right.
+   */
   modes: readonly MenuModeCaption[];
   /**
    * With this the cards are real buttons, so the menu also works without the ball on the
@@ -69,11 +84,32 @@ export interface MenuCaptionsProps {
   howToPlayRef?: Ref<HTMLButtonElement>;
   /** "DAY 12" */
   dayLabel: string;
+  /** The daily streak, a flame and the days in a row after the day. Leave out for none. */
+  streak?: StreakProps;
   /**
    * The sound switch beside the "?" button, with these words (default: `strings.sound`), or
    * `false` for none.
    */
   sound?: SoundToggleLabels | false;
+  /**
+   * The stats button beside the "?" and the sound switch: its name and what a press does,
+   * and `open` while the stats' dialog is up. Leave it out for none.
+   */
+  stats?: { label: string; onClick: () => void; open?: boolean };
+  /** The stats button, for the dialog to give the focus back to. */
+  statsRef?: Ref<HTMLButtonElement>;
+  /**
+   * The bell that opens the daily reminder (`RemindMe`): its name and what a press does,
+   * and `open` while its dialog is up. It stands beside the day plate, over the heart.
+   * Leave it out for none.
+   */
+  remind?: { label: string; onClick: () => void; open?: boolean };
+  /** The bell, for the dialog to give the focus back to. */
+  remindRef?: Ref<HTMLButtonElement>;
+  /** The heart that opens Support (`Support`), the same way. Leave it out for none. */
+  support?: { label: string; onClick: () => void; open?: boolean };
+  /** The heart, for the dialog to give the focus back to. */
+  supportRef?: Ref<HTMLButtonElement>;
   className?: string;
 }
 
@@ -90,18 +126,28 @@ function focusShows(el: Element): boolean {
  * What sits under the ball on the home screen. The markup is the same everywhere; the
  * layout is ui.css section 15, and there are two.
  *
- * On a phone: two cards side by side in the column (the badge over the line), with the day
- * over the "?" and sound buttons, side by side, at their right.
+ * On a phone: the cards two by two across the column (the badge beside the tiny line; on a
+ * phone too short for that, the four badges alone in one row), the day plate over the left
+ * end of them and the "?", sound and stats buttons stacked up the
+ * right edge of the screen beside the ball (over the leaderboard's trophy).
  *
- * On a wide screen (inside a `GameLayout` that is `data-wide`): one row across the foot of
- * the picture, in caption pixels. The gap between the two cards is on the screen's centre
- * line, the badges meet there, each line runs outwards from its badge, and a score sits by
- * its badge like the score in a result. The day and the "?" and sound buttons hang off the
- * row's two ends, and the notice stands beside the ball instead of under it.
+ * On a wide screen (inside a `GameLayout` that is `data-wide`): two rows across the foot of
+ * the picture, in caption pixels, a pair of cards in each. The gap between the cards of a
+ * pair is on the screen's centre line, the badges meet there, each line runs outwards from
+ * its badge, and a score sits by its badge like the score in a result. The day hangs off
+ * the rows' left end, the "?" and sound buttons off the first row's right end and the
+ * stats button under the "?", and the notice stands beside the ball instead of under it.
  *
- * The wide row is placed with CSS `order` and by position (the first card, the last card),
- * so keep the children in this order: the notice, the cards (HOME then AWAY), the day, the
- * "?" button, the sound switch; and in a card the badge, the score, the line.
+ * The bell (Remind me) and the heart (Support) stand beside the day plate, at the other end
+ * from the "?": on a monitor a column of two off the plate's left end, one to a row; on a
+ * phone stacked up the left edge above the plate, the mirror of the "?", sound and stats
+ * buttons. They are inside the day plate in the markup (after the day and the streak), so
+ * that they follow it whatever its width (ui.css section 27).
+ *
+ * The wide rows are placed with CSS `order` and by position (odd and even cards), so keep
+ * the children in this order: the notice, the cards (in pairs), the day, the "?" button,
+ * the sound switch, the stats button; and in a card the badge, the score, the line, the
+ * short line, the tiny line.
  */
 export function MenuCaptions({
   modes,
@@ -114,7 +160,14 @@ export function MenuCaptions({
   howToPlay,
   howToPlayRef,
   dayLabel,
+  streak,
   sound = strings.sound,
+  stats,
+  statsRef,
+  remind,
+  remindRef,
+  support,
+  supportRef,
   className,
 }: MenuCaptionsProps) {
   // Which card the mouse is over, which one has the keyboard's focus, and what the page
@@ -207,9 +260,23 @@ export function MenuCaptions({
                 )}
               </span>
               <span className="ss-menu__line">{item.line}</span>
+              {item.short !== undefined && (
+                <span className="ss-menu__short" aria-hidden="true">
+                  {item.short}
+                </span>
+              )}
+              {item.short !== undefined && item.tiny !== undefined && (
+                <span className="ss-menu__tiny" aria-hidden="true">
+                  {item.tiny}
+                </span>
+              )}
             </>
           );
-          const cardClass = cx("ss-menu__card", lit === item.mode && "is-lit");
+          const cardClass = cx(
+            "ss-menu__card",
+            lit === item.mode && "is-lit",
+            item.short !== undefined && "has-short",
+          );
           return onSelect ? (
             <button
               key={item.mode}
@@ -228,8 +295,39 @@ export function MenuCaptions({
           );
         })}
       </div>
-      <div className="ss-menu__side" data-sound={sound ? "" : undefined}>
-        <span className="ss-menu__day">{dayLabel}</span>
+      <div
+        className="ss-menu__side"
+        data-sound={sound ? "" : undefined}
+        data-stats={stats ? "" : undefined}
+      >
+        <span className="ss-menu__day">
+          {dayLabel}
+          {streak && <Streak {...streak} />}
+          {(remind || support) && (
+            <span className="ss-menu__more">
+              {remind && (
+                <PopupButton
+                  ref={remindRef}
+                  icon={BELL}
+                  label={remind.label}
+                  onClick={remind.onClick}
+                  open={remind.open}
+                  className="ss-remind-btn"
+                />
+              )}
+              {support && (
+                <PopupButton
+                  ref={supportRef}
+                  icon={HEART}
+                  label={support.label}
+                  onClick={support.onClick}
+                  open={support.open}
+                  className="ss-support-btn"
+                />
+              )}
+            </span>
+          )}
+        </span>
         <IconButton
           ref={howToPlayRef}
           icon="question"
@@ -241,6 +339,14 @@ export function MenuCaptions({
           variant="secondary"
         />
         {sound && <SoundToggle labels={sound} />}
+        {stats && (
+          <StatsButton
+            ref={statsRef}
+            label={stats.label}
+            onClick={stats.onClick}
+            open={stats.open}
+          />
+        )}
       </div>
     </div>
   );

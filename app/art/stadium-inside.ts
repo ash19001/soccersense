@@ -38,7 +38,6 @@ import {
   shade,
   type Color,
 } from "~/pixel";
-import { FAN } from "~/art/layout";
 import {
   insideLayout as menuLayout,
   type InsideLayout as MenuLayout,
@@ -53,6 +52,9 @@ import {
 } from "~/art/lighting";
 import { P } from "~/art/palette";
 import { drawSky, sunPosition } from "~/art/sky";
+
+/** This picture's own crowd: a fan 3 x 4 px, repeated every 4 px across and down. */
+const FAN = { w: 3, h: 4, pitch: 4 } as const;
 
 export interface InsideStadiumInfo {
   name: string;
@@ -1108,7 +1110,9 @@ export class InsideBackdrop {
 
   /** Paint the whole backdrop. Covers every pixel of `s`. */
   draw(s: Surface, t: number): void {
-    if (this.w !== s.w || this.h !== s.h) this.resize(s.w, s.h);
+    if (this.w !== s.w || this.h !== s.h) {
+      this.resize(s.w, s.h);
+    }
     if (this.dirty) this.rebuild();
     const g = this.g;
     const light = this.light;

@@ -22,3 +22,6 @@ coverage/
 
 # Rendered art snapshots (scratch)
 /.snaps/
+
+# Windows: `> nul` in Git Bash writes a file called nul instead of discarding
+/nul

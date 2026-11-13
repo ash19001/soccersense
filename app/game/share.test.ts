@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { buildShareText, GRADE_SYMBOLS } from "./share";
+import { HOME_QUESTIONS, STADIUMS } from "~/data";
+import { createSession, reduce } from "./session";
+import { buildShareText, GRADE_SYMBOLS, shareCardFor } from "./share";
 import type { Grade } from "./types";
 
 const STAR = "\u{1F31F}";
@@ -140,5 +142,53 @@ describe("buildShareText", () => {
     });
     expect(text).not.toMatch(/[a-z]{3,}.*\d+ (km|miles)/);
     expect(text.split("\n")[2]).toBe(STAR + BALL);
+  });
+});
+
+describe("shareCardFor", () => {
+  const start = () =>
+    createSession({
+      mode: "home",
+      dayNumber: 5,
+      stadium: STADIUMS[0],
+      questions: HOME_QUESTIONS,
+      now: 0,
+      noTimer: true,
+    });
+
+  it("has one row per question decided: the question, the answer's name, the shot", () => {
+    let s = start();
+    s = reduce(s, { type: "submit", input: "Man Utd", now: 1000 });
+    s = reduce(s, { type: "resolved" });
+    s = reduce(s, { type: "next", now: 2000 });
+    s = reduce(s, { type: "pass", now: 20_000 });
+    const card = shareCardFor(s);
+    expect(card).toMatchObject({
+      dayNumber: 5,
+      mode: "home",
+      stadiumName: STADIUMS[0].name,
+      total: 100,
+      maxTotal: 700,
+    });
+    expect(card.rows).toEqual([
+      {
+        prompt: HOME_QUESTIONS[0].prompt,
+        answer: "Manchester United",
+        year: null,
+        grade: "worldie",
+        points: 100,
+      },
+      {
+        prompt: HOME_QUESTIONS[1].prompt,
+        answer: null,
+        year: null,
+        grade: "skipped",
+        points: 0,
+      },
+    ]);
+  });
+
+  it("has no rows before the first answer", () => {
+    expect(shareCardFor(start()).rows).toEqual([]);
   });
 });

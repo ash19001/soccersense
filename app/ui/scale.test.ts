@@ -5,6 +5,7 @@ import {
   DEFAULT_SCALE,
   WIDE_ROW_CP,
   WIDE_ROW_PX,
+  canvasDpFor,
   deviceToCss,
   isWide,
   noticeDevicePixelRatio,
@@ -26,6 +27,11 @@ describe("pixelScale", () => {
       dpr: 1,
       dp: 3,
       snap: 1,
+      // The canvas: half the interface's pixel, rounded up.
+      canvasW: 195,
+      canvasH: 422,
+      canvasDp: 2,
+      canvasPx: 2,
     });
     expect(pixelScale(360, 740)).toMatchObject({ px: 3, logicalW: 120 });
     expect(pixelScale(375, 667)).toMatchObject({ px: 3, logicalW: 125 });
@@ -161,12 +167,23 @@ function devicePixels(css: number, dpr: number): number {
 describe("pixelScale on a device", () => {
   test("nothing changes at ratios 1, 2 and 3", () => {
     for (const [w, h] of VIEWPORTS) {
-      const one = pixelScale(w, h);
+      const one = pixelScale(w, h, 1);
       for (const dpr of [1, 2, 3]) {
         const s = pixelScale(w, h, dpr);
+        const canvasDp = canvasDpFor(one.px * dpr);
         // (The caption pixel is new, and is half a logical pixel in device pixels: on a
         // 2x screen with a px of 3 that is 1.5 CSS pixels, not the 2 of a 1x screen.)
-        expect(s).toEqual({ ...one, dpr, dp: one.px * dpr, cp: s.cp });
+        // The canvas's pixel is half the interface's in device pixels, rounded up.
+        expect(s).toEqual({
+          ...one,
+          dpr,
+          dp: one.px * dpr,
+          cp: s.cp,
+          canvasDp,
+          canvasPx: deviceToCss(canvasDp, dpr),
+          canvasW: Math.ceil((w * dpr) / canvasDp),
+          canvasH: Math.ceil((h * dpr) / canvasDp),
+        });
         expect(devicePixels(s.cp, dpr)).toBe(
           Math.max(s.fp * dpr, Math.ceil(s.dp / 2)),
         );

@@ -9,7 +9,7 @@
 import { Surface, bayer4, hash2, mix, type Color } from "~/pixel";
 import { distant, skyFor, type Lighting } from "~/art/lighting";
 import { P } from "~/art/palette";
-import { BAYS, paintBowl, wallPoint, type Bowl } from "~/art/stadium-bowl";
+import { BAYS, paintBowlSteps, wallPoint, type Bowl } from "~/art/stadium-bowl";
 import {
   DEFAULT_SCHEME,
   clubOf,
@@ -46,6 +46,7 @@ import {
   staticCar,
 } from "~/art/stadium-parking";
 import { EAST, mapHeading } from "~/art/stadium-cars";
+import { sizeStep } from "~/art/traffic-steps";
 import { paintSkyline } from "~/art/stadium-skyline";
 import {
   box,
@@ -53,6 +54,15 @@ import {
   car,
   castOn,
   coach,
+  drawBin,
+  drawBollard,
+  drawChimney,
+  drawDoor,
+  drawLamp,
+  drawParasol,
+  drawWindow,
+  lampHeight,
+  type LampLook,
   conifer,
   lightPool,
   logShadows,
@@ -121,11 +131,31 @@ export interface Town {
   /** The floodlight heads: the middle of each, on screen. */
   pylons: { x: number; y: number }[];
   /**
+   * The lamps lit: each street lamp's pool of light on the ground (lightPool's centre and
+   * radii, on screen), for the shadows of what passes through it (stadium-life.ts). Empty
+   * by day.
+   */
+  pools: LampPool[];
+  /**
    * For every pixel of the screen, how far away (V) the static thing painted there is:
    * very far for the bare ground. Moving things are hidden by anything nearer.
    */
   depth: Float32Array;
 }
+
+/** A street lamp's pool of light on screen (Town.pools), and how tall its lamp stands. */
+export interface LampPool {
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  /** The lamp's height over its foot, in pixels (stadium-things.ts `lampHeight`). */
+  lamp: number;
+}
+
+/** The depth masks of the last two views (paintTown): never written once made. */
+const depthMasks: { key: string; depth: Float32Array }[] = [];
+const EMPTY_DEPTH = new Float32Array(0);
 
 const SKYLINE_H = 40;
 /** Where the stadium sits in the painting order: behind everything on its near concourse. */
@@ -136,8 +166,14 @@ const BOWL_V = -58;
  * depth painted (by comparing the rows it can reach before and after). A pixel only the
  * slice's shadows darkened is still bare ground (`log`): a tree's shadow on the road
  * must not hide a car driving through it, nor a van's shadow the queue at its hatch.
+ * A generator: it pauses after every `slice` items or so (a few milliseconds), and the
+ * caller sets the shadows' surface and log around each run (stadium-life.ts `castOn`).
  */
-function drawItems(c: Ctx, town: Town, log: ShadowLog): void {
+function* drawItems(
+  c: Ctx,
+  town: Town,
+  log: ShadowLog,
+): Generator<void, void, void> {
   const { s, view } = c;
   const { w, h } = view;
   const items = c.items;
@@ -145,8 +181,17 @@ function drawItems(c: Ctx, town: Town, log: ShadowLog): void {
   const data = s.data;
   const depth = town.depth;
   const prev = new Uint32Array(w * h);
+  // a pause every few items, or every few groups (each compares a band of rows)
+  const slice = Math.max(40, Math.ceil(items.length / 10));
+  let drawn = 0;
+  let groups = 0;
   let i = 0;
   while (i < items.length) {
+    if (drawn >= slice || groups >= 3) {
+      drawn = 0;
+      groups = 0;
+      yield;
+    }
     const first = items[i];
     if (first.bowl) {
       first.draw();
@@ -162,6 +207,7 @@ function drawItems(c: Ctx, town: Town, log: ShadowLog): void {
         }
       }
       i++;
+      drawn += slice;
       continue;
     }
     const far = first.V > 190;
@@ -184,11 +230,90 @@ function drawItems(c: Ctx, town: Town, log: ShadowLog): void {
     for (let p = y0 * w; p < y1 * w; p++) {
       if (data[p] !== prev[p] && !log.onlyShadow(p, prev[p])) depth[p] = lo;
     }
+    drawn += j - i;
+    groups++;
     i = j;
   }
 }
 
+/**
+ * The town for this view, light and seed. When the same view was painted before (in any
+ * light: the lamps coming on too), a change of light does not stop the picture: the town
+ * comes back at once with the last picture in it, and the new one is built a slice a
+ * frame (`advanceTown`, called by the life's draw) and swapped in whole when it is done.
+ * Otherwise it is painted at once.
+ */
 export function paintTown(view: View, light: Lighting, seed: number): Town {
+  const steps = townSteps(view, light, seed);
+  const key = `${townKey(view, seed)}:${light.lightsOn}`;
+  const last = lastTown;
+  // only for the same view (the same picture, relit: a new size or a new backdrop makes a
+  // new view and is painted at once). The lamps coming on or going off are relit the same
+  // way: the depth mask of the new kind of light is made a slice a frame too.
+  if (
+    last !== null &&
+    last.view === view &&
+    last.base === townKey(view, seed)
+  ) {
+    // its own bowl, so filling it in later touches no other town
+    const town: Town = { ...last.town, bowl: { ...last.town.bowl } };
+    // the first slice waits a frame: the frame of the change repaints the rest of the picture
+    pending.set(
+      town,
+      (function* () {
+        yield;
+        return yield* steps;
+      })(),
+    );
+    lastTown = { key, base: townKey(view, seed), town, view };
+    return town;
+  }
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  lastTown = { key, base: townKey(view, seed), town: r.value, view };
+  return r.value;
+}
+
+/**
+ * One slice of a town still being built (`paintTown`): a few milliseconds of work. When
+ * the last slice is done the new picture is swapped into `town` (and its bowl) in one go.
+ * Nothing to do for a town that is finished.
+ */
+export function advanceTown(town: Town): void {
+  const steps = pending.get(town);
+  if (!steps) return;
+  const r = steps.next();
+  if (!r.done) return;
+  pending.delete(town);
+  const made = r.value;
+  // the life drawn over it holds the bowl: it is filled in place
+  Object.assign(town.bowl, made.bowl);
+  Object.assign(town, { ...made, bowl: town.bowl });
+}
+
+/** Whether `town` is still being built (it shows the last picture until it is done). */
+export function townPending(town: Town): boolean {
+  return pending.has(town);
+}
+
+const pending = new WeakMap<Town, Generator<void, Town, void>>();
+let lastTown: {
+  key: string;
+  base: string;
+  town: Town;
+  view: View;
+} | null = null;
+
+function townKey(view: View, seed: number): string {
+  return `${view.w}x${view.h}:${view.k}:${view.cx}:${view.yc}:${view.hy}:${seed}`;
+}
+
+/** paintTown's work, in slices of a few milliseconds each at 960 x 540. */
+function* townSteps(
+  view: View,
+  light: Lighting,
+  seed: number,
+): Generator<void, Town, void> {
   const { w, h, hy } = view;
   const s = new Surface(w, h);
   const night = light.lightsOn;
@@ -213,7 +338,8 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
     turbines: [],
     beacons: [],
     pylons: [],
-    depth: new Float32Array(w * h).fill(1e9),
+    pools: [],
+    depth: EMPTY_DEPTH,
   };
 
   paintHills(c, town);
@@ -221,10 +347,12 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
   s.pushClip(0, view.logoH, w, h);
   town.beacons.push(...paintSkyline(s, view, light, seed));
   s.popClip();
-  paintGround(c);
-  if (night) paintPools(c);
+  yield;
+  yield* paintGround(c);
+  if (night) paintPools(c, town);
+  yield;
 
-  const bowl = paintBowl(
+  const bowl = yield* paintBowlSteps(
     view,
     {
       lit: light.lit,
@@ -242,6 +370,7 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
     bowl: true,
     draw: () => s.blit(bowl.layer, bowl.x, bowl.y),
   });
+  yield;
 
   farTown(c, town);
   northStrip(c);
@@ -251,15 +380,47 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
   southEast(c);
   concourse(c, town);
   lamps(c);
+  yield;
 
-  castOn(s);
-  const log = new ShadowLog(s);
-  logShadows(log);
-  try {
-    drawItems(c, town, log);
-  } finally {
-    logShadows(null);
-    castOn(null);
+  // The depth mask is the same for every light of a kind (day or night: lit windows and the
+  // floodlights' glow add pixels), so a change of light draws the items without noting it.
+  const depthKey = `${townKey(view, seed)}:${night}`;
+  const knownDepth = depthMasks.find((d) => d.key === depthKey);
+  if (knownDepth) {
+    town.depth = knownDepth.depth;
+    const items = c.items;
+    items.sort((a, b) => b.V - a.V);
+    const slice = Math.max(40, Math.ceil(items.length / 10));
+    for (let i = 0; i < items.length; i += slice) {
+      castOn(s);
+      try {
+        for (let j = i; j < Math.min(items.length, i + slice); j++) {
+          items[j].draw();
+        }
+      } finally {
+        castOn(null);
+      }
+      yield;
+    }
+  } else {
+    town.depth = new Float32Array(w * h).fill(1e9);
+    const log = new ShadowLog(s);
+    const steps = drawItems(c, town, log);
+    for (;;) {
+      castOn(s);
+      logShadows(log);
+      let r: IteratorResult<void, void>;
+      try {
+        r = steps.next();
+      } finally {
+        logShadows(null);
+        castOn(null);
+      }
+      if (r.done) break;
+      yield;
+    }
+    depthMasks.unshift({ key: depthKey, depth: town.depth });
+    if (depthMasks.length > 2) depthMasks.length = 2;
   }
 
   const landH = Math.max(1, h - hy);
@@ -270,7 +431,7 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
   for (let i = 0; i < land.data.length; i++) {
     if (land.data[i] === 0) land.data[i] = haze;
   }
-  const skylineY = Math.max(0, hy - SKYLINE_H);
+  const skylineY = Math.max(0, hy - SKYLINE_H * 2);
   const skyline = new Surface(w, Math.max(1, hy - skylineY));
   skyline.blit(s, 0, -skylineY);
   town.land = land;
@@ -283,32 +444,95 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
 // The ground
 // ---------------------------------------------------------------------------
 
-/** The ground itself, row by row: every pixel asks the plan what is there. */
-function paintGround(c: Ctx): void {
-  const { s, view, light, seed } = c;
+/**
+ * What the plan says is on each pixel of the ground, for one view and seed: it does not
+ * depend on the light, so a change of light (every couple of minutes) only recolours it.
+ * `idx` is an index into `colors` (the plan's daylight colours, or a water marker) plus
+ * LIT_BIT when the floodlights reach it; `step` is each pixel's haze step.
+ */
+interface GroundPlan {
+  key: string;
+  idx: Uint16Array;
+  step: Uint8Array;
+  colors: number[];
+}
+const LIT_BIT = 0x8000;
+const groundPlans: GroundPlan[] = [];
+
+function groundPlan(c: Ctx): GroundPlan {
+  const { view, seed } = c;
   const { w, h, hy, cx, k } = view;
-  const sky = skyFor(light);
-  const water = mix(sky.bands[3], light.env(P.skyMid), 0.35);
-  const waterHi = mix(sky.bands[5], light.env(P.skyLow), 0.3);
-  const waterLo = mix(sky.bands[1], light.env(P.skyTop), 0.4);
-  const data = s.data;
+  const key = `${w}x${h}:${k}:${cx}:${view.yc}:${hy}:${seed}`;
+  const known = groundPlans.find((g) => g.key === key);
+  if (known) return known;
+  const n = Math.max(0, h - hy) * w;
+  const idx = new Uint16Array(n);
+  const stepOf = new Uint8Array(n);
+  const colors: number[] = [];
+  const index = new Map<number, number>();
   for (let y = hy; y < h; y++) {
     const V = depthAtRow(view, y + 0.5);
     const sc = (k * ZC) / (ZC + V);
     const e = hazeAt(view, V) * 8;
     const lo = Math.floor(e);
     const f = e - lo;
+    const row = (y - hy) * w;
     for (let x = 0; x < w; x++) {
       const X = (x + 0.5 - cx) / sc;
       const g = groundAt(X, V, sc, seed);
+      let i = index.get(g.c);
+      if (i === undefined) {
+        i = colors.length;
+        colors.push(g.c);
+        index.set(g.c, i);
+      }
+      idx[row + x] = g.lit ? i | LIT_BIT : i;
+      stepOf[row + x] = f > 0.25 + 0.5 * bayer4(x, y) ? lo + 1 : lo;
+    }
+  }
+  const plan: GroundPlan = { key, idx, step: stepOf, colors };
+  groundPlans.unshift(plan);
+  if (groundPlans.length > 2) groundPlans.length = 2;
+  return plan;
+}
+
+/** The ground itself, row by row: every pixel asks the plan what is there (cached per view). */
+function* paintGround(c: Ctx): Generator<void, void, void> {
+  const { s, view, light } = c;
+  const { w, h, hy } = view;
+  const sky = skyFor(light);
+  const water = mix(sky.bands[3], light.env(P.skyMid), 0.35);
+  const waterHi = mix(sky.bands[5], light.env(P.skyLow), 0.3);
+  const waterLo = mix(sky.bands[1], light.env(P.skyTop), 0.4);
+  const data = s.data;
+  const plan = groundPlan(c);
+  const { idx, step, colors } = plan;
+  // this light's colour for each (plan colour, haze step), and lit, made as they are met
+  const STEPS = 10;
+  const toned = new Uint32Array(colors.length * STEPS);
+  const lit = new Uint32Array(colors.length);
+  // about 60,000 pixels a slice
+  const slice = Math.max(1, Math.floor(60000 / w));
+  for (let y = hy; y < h; y++) {
+    if (y > hy && (y - hy) % slice === 0) yield;
+    const row = (y - hy) * w;
+    for (let x = 0; x < w; x++) {
+      const at = row + x;
+      const i = idx[at];
+      const g = colors[i & ~LIT_BIT];
       let col: Color;
-      if (g.c === WATER) col = water;
-      else if (g.c === WATER_HI) col = waterHi;
-      else if (g.c === WATER_LO) col = waterLo;
-      else if (g.lit) col = light.lit(g.c as Color);
-      else {
-        const step = f > 0.25 + 0.5 * bayer4(x, y) ? lo + 1 : lo;
-        col = distant(light, g.c as Color, step / 8);
+      if (g === WATER) col = water;
+      else if (g === WATER_HI) col = waterHi;
+      else if (g === WATER_LO) col = waterLo;
+      else if (i & LIT_BIT) {
+        const j = i & ~LIT_BIT;
+        col = lit[j] as Color;
+        if (col === 0) col = lit[j] = light.lit(g as Color);
+      } else {
+        const t = i * STEPS + step[at];
+        col = toned[t] as Color;
+        if (col === 0)
+          col = toned[t] = distant(light, g as Color, step[at] / 8);
       }
       data[y * w + x] = col;
     }
@@ -322,7 +546,9 @@ function paintHills(c: Ctx, town: Town): void {
   if (hy < 4) return;
   const far = distant(light, P.grassDark, 1);
   const nearer = distant(light, P.grassDeep, 0.86);
-  const unit = Math.max(0.45, k);
+  // the hills' bounds and heights follow the scale, so they keep their size on screen
+  const unit = Math.max(0.9, k);
+  const grow = Math.min(1.5, unit / 2 + 0.3) * 2;
   for (let x = 0; x < w; x++) {
     const u = (x - view.cx) / unit;
     const a =
@@ -334,8 +560,8 @@ function paintHills(c: Ctx, town: Town): void {
       0.6 +
       1.6 * Math.sin(u / 47 + 4 + seed) +
       1.1 * Math.sin(u / 17 + 0.6 * seed);
-    const ha = Math.max(1, Math.round(a * Math.min(1.5, unit + 0.3)));
-    const hb = Math.max(0, Math.round(b * Math.min(1.5, unit + 0.3)));
+    const ha = Math.max(2, Math.round(a * grow));
+    const hb = Math.max(0, Math.round(b * grow));
     s.rect(x, hy - ha, 1, ha, far);
     if (hb > 0) s.rect(x, hy - hb, 1, hb, nearer);
   }
@@ -343,20 +569,29 @@ function paintHills(c: Ctx, town: Town): void {
   const post = distant(light, P.chalk, 0.75);
   for (let i = 0; i < 3; i++) {
     const x = Math.round(view.cx - (212 - i * 17) * unit);
-    if (x < 2 || x > w - 3) continue;
-    const top = hy - 9 - (i % 2);
-    s.rect(x, top, 1, 9, post);
+    if (x < 4 || x > w - 6) continue;
+    const top = hy - (9 + (i % 2)) * 2;
+
+    // a tapering tower: two pixels at its foot, one at its top
+    s.rect(x - 1, top + 6, 2, 12, post);
+    s.rect(x - 1, top, 1, 6, post);
     town.turbines.push({ x, y: top });
   }
   const mx = Math.round(view.cx + 196 * unit);
-  if (mx > 2 && mx < w - 2) {
+  if (mx > 4 && mx < w - 4) {
     const mast = distant(light, P.concreteDark, 0.7);
-    s.rect(mx, hy - 13, 1, 12, mast);
-    s.px(mx - 1, hy - 4, mast);
-    s.px(mx + 1, hy - 4, mast);
-    s.px(mx - 1, hy - 8, mast);
-    s.px(mx + 1, hy - 8, mast);
-    town.beacons.push({ x: mx, y: hy - 14 });
+
+    // a lattice mast with its stays
+    s.rect(mx, hy - 26, 2, 24, mast);
+    for (let y = hy - 24; y < hy - 2; y += 4)
+      s.px(mx + (y % 8 === 0 ? 0 : 1), y, distant(light, P.concrete, 0.7));
+    for (const y of [hy - 8, hy - 16]) {
+      s.px(mx - 1, y, mast);
+      s.px(mx - 2, y + 1, mast);
+      s.px(mx + 2, y, mast);
+      s.px(mx + 3, y + 1, mast);
+    }
+    town.beacons.push({ x: mx, y: hy - 28 });
   }
 }
 
@@ -368,7 +603,7 @@ function at(c: Ctx, X: number, V: number, H = 0): Spot {
   return project(c.view, X, V, H);
 }
 
-function seen(c: Ctx, p: Spot, margin = 30): boolean {
+function seen(c: Ctx, p: Spot, margin = 60): boolean {
   return (
     p.x > -margin &&
     p.x < c.view.w + margin &&
@@ -399,7 +634,7 @@ function treeLook(c: Ctx, V: number, alt: boolean): TreeLook {
 
 function addTree(c: Ctx, X: number, V: number, key: number, kind = 0): void {
   const p = at(c, X, V);
-  if (!seen(c, p, 14)) return;
+  if (!seen(c, p, 28)) return;
   const cls = sizeClass(p.s);
   const r = c.h(key, 77);
   const look = treeLook(c, V, r < 0.38);
@@ -411,7 +646,7 @@ function addTree(c: Ctx, X: number, V: number, key: number, kind = 0): void {
 
 function addBush(c: Ctx, X: number, V: number, key: number): void {
   const p = at(c, X, V);
-  if (!seen(c, p, 8)) return;
+  if (!seen(c, p, 16)) return;
   const look = treeLook(c, V, c.h(key, 78) < 0.5);
   add(c, V, () => bush(c.s, p.x, p.y, sizeClass(p.s), look));
 }
@@ -444,16 +679,42 @@ export function carLook(
     d: tone(p[2], V),
     g: tone(p[3], V),
     k: tone(P.ink, V),
+    n: tone(DEEP.get(p[2]) ?? P.ink, V),
+    w: tone(GLINT.get(p[3]) ?? P.steel, V),
+    m: tone(P.steel, V),
+    y: tone(P.chalk, V),
+    q: tone(P.brick, V),
   };
 }
+
+/** A deep shade one step down the ramp from a car's side colour. */
+const DEEP = new Map<Color, Color>([
+  [P.steel, P.slate],
+  [P.mist, P.steel],
+  [P.night, P.ink],
+  [P.homeDark, P.brickDark],
+  [P.brickDark, P.ink],
+  [P.duskTop, P.night],
+  [P.awayDark, P.night],
+  [P.grassDeep, P.night],
+  [P.goldDark, P.woodDark],
+]);
+/** Glass catching the sky: one step up the ramp from the glass. */
+const GLINT = new Map<Color, Color>([
+  [P.slate, P.steel],
+  [P.night, P.slate],
+  [P.mist, P.steelHi],
+]);
 
 /** A parked car at (X, V) on the map, pointing `dir` (0 east, 1 west, 2 north, 3 south). */
 function addCar(c: Ctx, X: number, V: number, dir: number, key: number): void {
   const p = at(c, X, V);
-  if (!seen(c, p, 10)) return;
+  if (!seen(c, p, 20)) return;
   const look = carLook(c.tone, V, c.h(key, 31));
   const heading = mapHeading(c.view, X, V, dir);
-  add(c, V, () => car(c.s, p.x, p.y, sizeClass(p.s), heading, look));
+  // one of five sizes by the scale (G2, traffic-steps.ts)
+  const step = sizeStep(p.s);
+  add(c, V, () => car(c.s, p.x, p.y, sizeClass(p.s), heading, look, step));
 }
 
 const COACH_PAINTS: readonly (readonly [Color, Color, Color, Color])[] = [
@@ -478,6 +739,11 @@ export function coachLook(
     stripe: tone(p[3], V),
     glass: tone(P.slate, V),
     tyre: tone(P.ink, V),
+    glassHi: tone(P.steel, V),
+    deep: tone(P.night, V),
+    hub: tone(P.steel, V),
+    lamp: tone(P.chalk, V),
+    tail: tone(P.brick, V),
   };
 }
 
@@ -512,7 +778,51 @@ const HAIRS: readonly Color[] = [
 ];
 const SKINS: readonly Color[] = [P.skinA, P.skinB, P.skinC, P.skinA];
 
-/** A supporter's clothes: `kind` 0 home, 1 away, 2 steward, 3 anyone; `club` the day's colours. */
+/** One step down each ramp (shade), and one up (light). */
+const DARK = new Map<Color, Color>([
+  [P.homeLight, P.home],
+  [P.home, P.homeDark],
+  [P.homeDark, P.brickDark],
+  [P.chalk, P.mist],
+  [P.white, P.steelHi],
+  [P.steelHi, P.mist],
+  [P.steel, P.slate],
+  [P.slate, P.night],
+  [P.night, P.ink],
+  [P.mist, P.steel],
+  [P.gold, P.goldDark],
+  [P.goldLight, P.gold],
+  [P.goldDark, P.woodDark],
+  [P.awayLight, P.away],
+  [P.away, P.awayDark],
+  [P.wood, P.woodDark],
+  [P.skyMid, P.skyTop],
+  [P.skinA, P.skinAShade],
+  [P.skinB, P.skinBShade],
+  [P.skinC, P.skinCShade],
+  [P.hairDark, P.ink],
+  [P.hairBrown, P.hairDark],
+  [P.hairBlond, P.goldDark],
+]);
+const LIGHT = new Map<Color, Color>([
+  [P.homeDark, P.home],
+  [P.home, P.homeLight],
+  [P.chalk, P.white],
+  [P.steel, P.mist],
+  [P.slate, P.steel],
+  [P.mist, P.steelHi],
+  [P.gold, P.goldLight],
+  [P.away, P.awayLight],
+  [P.skyMid, P.skyLow],
+  [P.wood, P.brickLight],
+]);
+
+/**
+ * A supporter's clothes: `kind` 0 home, 1 away, 2 steward, 3 anyone; `club` the day's
+ * colours. With the shades and lights of the shirt, skin, hair and trousers, shoes, a
+ * scarf, a vest's band, a hat's bobble, and the head and body styles; the same `r`, the
+ * same person in the same clothes.
+ */
 export function personLook(
   tone: (c: Color) => Color,
   r: number,
@@ -530,11 +840,50 @@ export function personLook(
         : kind === 3
           ? [P.steel, P.chalk, P.slate, P.mist, P.wood, P.skyMid][i % 6]
           : homeShirt(i % SHIRTS_HOME.length, club);
+  const hair = HAIRS[(i >> 2) % HAIRS.length];
+  const skin = SKINS[(i >> 4) % SKINS.length];
+  const legs = i % 3 === 0 ? P.slate : P.night;
+  const dark = (c: Color): Color =>
+    DARK.get(c) ??
+    (c === club.second.base
+      ? club.second.dark
+      : c === club.second.light
+        ? club.second.base
+        : c);
+  const light = (c: Color): Color =>
+    LIGHT.get(c) ??
+    (c === club.second.base
+      ? club.second.light
+      : c === club.second.dark
+        ? club.second.base
+        : c);
+  // the red-haired are home fans in a bobble hat
+  const hat = hair === P.home;
+  const long = !hat && (hair === P.hairBrown || hair === P.hairBlond);
+  const scarfy =
+    kind === 0 ? (i >> 3) % 3 === 0 : kind === 1 && (i >> 3) % 4 === 0;
   return {
     shirt: tone(shirt),
-    hair: tone(HAIRS[(i >> 2) % HAIRS.length]),
-    skin: tone(SKINS[(i >> 4) % SKINS.length]),
-    legs: tone(i % 3 === 0 ? P.slate : P.night),
+    hair: tone(hair),
+    skin: tone(skin),
+    legs: tone(legs),
+    shirtDark: tone(dark(shirt)),
+    shirtLight: tone(light(shirt)),
+    skinDark: tone(dark(skin)),
+    hairDark: tone(hat ? P.homeDark : dark(hair)),
+    legsDark: tone(dark(legs)),
+    shoe: tone([P.ink, P.woodDark, P.chalk, P.ink][(i >> 5) % 4]),
+    scarf: tone(
+      kind === 1
+        ? P.awayLight
+        : shirt === club.second.base || shirt === club.second.light
+          ? P.home
+          : club.second.base,
+    ),
+    band: tone(P.steelHi),
+    bobble: tone(club.second.light),
+    head: hat ? 2 : long && (i >> 6) % 2 === 0 ? 1 : 0,
+    body: kind === 2 ? 2 : scarfy ? 1 : 0,
   };
 }
 
@@ -547,7 +896,7 @@ function addPerson(
   floodlit = false,
 ): void {
   const p = at(c, X, V);
-  if (!seen(c, p, 6)) return;
+  if (!seen(c, p, 12)) return;
   const look = personLook(
     floodlit ? c.lit : (col) => c.tone(col, V),
     c.h(key, 53),
@@ -556,8 +905,13 @@ function addPerson(
   );
   add(c, V - 0.01, () => {
     const cls = sizeClass(p.s);
-    if (cls === 2) shadowBlob(c.s, p.x + 1, p.y, 1.5, 0.5);
-    person(c.s, p.x, p.y, cls, look, 0);
+    // one of five sizes by the scale (G2, traffic-steps.ts)
+    const size = sizeStep(p.s);
+    // the 6-wide person's middle is half a pixel right of its anchor
+    if (size === 4) shadowBlob(c.s, p.x + 2.5, p.y, 3, 1);
+    else if (size === 3) shadowBlob(c.s, p.x + 1.5, p.y, 2, 1);
+
+    person(c.s, p.x, p.y, cls, look, 0, 0, false, size);
   });
 }
 
@@ -624,8 +978,8 @@ function terrace(
   const { view, s } = c;
   const a = at(c, X0, V0);
   const b = at(c, X1, V0);
-  if (b.x < -8 || a.x > view.w + 8) return;
-  if (at(c, X0, V1, HOUSE_H + HOUSE_R).y > view.h + 4 || a.y < view.hy - 2) {
+  if (b.x < -16 || a.x > view.w + 16) return;
+  if (at(c, X0, V1, HOUSE_H + HOUSE_R).y > view.h + 8 || a.y < view.hy - 4) {
     return;
   }
   const cls = sizeClass(a.s);
@@ -642,13 +996,16 @@ function terrace(
       // far away: the chimneys are a row of dots on the ridge
       for (let i = 0; i < n; i += 2) {
         const p = at(c, X0 + i * lw + 1, Vm, HOUSE_H + HOUSE_R);
-        s.px(p.x, p.y - 1, tone(P.brickDark, Vm));
+
+        s.rect(p.x, p.y - 3, 2, 3, tone(P.brickDark, Vm));
+        s.px(p.x, p.y - 3, tone(P.brickLight, Vm));
       }
       if (c.night) {
         for (let i = 0; i < n; i++) {
           if (c.h(i, o.key + 5) < 0.42) {
             const p = at(c, X0 + (i + 0.5) * lw, V0, 2);
-            s.px(p.x, p.y, c.h(i, o.key) < 0.5 ? P.gold : P.amber);
+            const lit = c.h(i, o.key) < 0.5 ? P.gold : P.amber;
+            s.rect(p.x, p.y - 1, 2, 2, lit);
           }
         }
       }
@@ -671,22 +1028,30 @@ function terrace(
           V0 + (Vm - V0) * 0.5,
           HOUSE_H + HOUSE_R * 0.5,
         );
-        s.rect(
-          q.x,
-          q.y,
-          2,
-          2,
-          c.night && r > 0.86 ? P.gold : tone(P.steelHi, V0),
-        );
+        const pane = c.night && r > 0.86 ? P.gold : tone(P.steelHi, V0);
+
+        // a roof light: a frame and two panes catching the sky
+        s.rect(q.x - 1, q.y - 1, 6, 5, tone(P.slate, V0));
+        s.rect(q.x, q.y, 4, 3, pane);
+        s.rect(q.x + 2, q.y, 1, 3, tone(P.slate, V0));
+        if (!c.night) s.px(q.x, q.y, tone(P.white, V0));
       }
       const ch = at(c, Xl + lw * 0.16, Vm, HOUSE_H + HOUSE_R);
       if (cls === 2) {
-        s.rect(ch.x, ch.y - 3, 2, 4, tone(P.brickDark, Vm));
-        s.rect(ch.x, ch.y - 4, 2, 1, tone(P.brickLight, Vm));
+        const top = drawChimney(
+          s,
+          ch.x,
+          ch.y,
+          tone(P.brick, Vm),
+          tone(P.brickDark, Vm),
+          tone(P.brickLight, Vm),
+          tone(P.wood, Vm),
+        );
         if (town && r < 0.3)
-          town.chimneys.push({ x: ch.x, y: ch.y - 5, big: false });
+          town.chimneys.push({ x: ch.x, y: top - 1, big: false });
       } else {
-        s.rect(ch.x, ch.y - 2, 1, 2, tone(P.brickDark, Vm));
+        s.rect(ch.x, ch.y - 4, 2, 4, tone(P.brickDark, Vm));
+        s.px(ch.x, ch.y - 4, tone(P.brickLight, Vm));
       }
       // the wall facing the camera: a window and a door
       const foot = at(c, Xl, V0, 0);
@@ -695,25 +1060,52 @@ function terrace(
       const wpx = Math.round(lw * foot.s);
       const lit = c.night && c.h(i, o.key + 5) < 0.6;
       const glass = lit ? (r < 0.5 ? P.gold : P.goldLight) : windowOff;
-      if (wh >= 6 && wpx >= 9) {
+      const door = [P.woodDark, P.slate, P.homeDark, P.awayDark, P.grassDeep][
+        Math.floor(r * 5)
+      ];
+      if (wh >= 12 && wpx >= 18) {
+        // framed windows with panes and sills, a door with its fanlight and step
+        const frame = tone(P.chalk, V0);
+        const sill = tone(P.concreteLight, V0);
+        const sky = tone(P.mist, V0);
+        const bars = P.goldDark;
         const wx = foot.x + Math.round(wpx * 0.18);
-        s.rect(wx, eave.y + 2, 3, 3, glass);
-        if (!lit) s.px(wx, eave.y + 2, tone(P.mist, V0));
+        drawWindow(s, wx, eave.y + 3, glass, frame, sky, sill, lit, bars);
         const dx = foot.x + Math.round(wpx * 0.62);
-        const door = [P.woodDark, P.slate, P.homeDark, P.awayDark, P.grassDeep][
-          Math.floor(r * 5)
-        ];
-        s.rect(dx, foot.y - 4, 2, 4, tone(door, V0));
-        if (!o.backs) s.px(dx + 3, eave.y + 2, glass);
-      } else if (wh >= 3) {
-        s.px(foot.x + Math.max(1, Math.round(wpx * 0.3)), eave.y + 1, glass);
-        if (wpx >= 6) {
-          s.px(
+        drawDoor(
+          s,
+          dx,
+          foot.y,
+          tone(door, V0),
+          tone(P.ink, V0),
+          lit ? glass : windowOff,
+          tone(P.gold, V0),
+          sill,
+        );
+        if (!o.backs) {
+          drawWindow(s, dx + 6, eave.y + 3, glass, frame, sky, sill, lit, bars);
+        }
+        // the gutter under the eaves
+        s.rect(foot.x, eave.y, wpx, 1, tone(P.slate, V0));
+      } else if (wh >= 6) {
+        s.rect(
+          foot.x + Math.max(2, Math.round(wpx * 0.3)),
+          eave.y + 2,
+          2,
+          2,
+          glass,
+        );
+        if (wpx >= 12) {
+          s.rect(
             foot.x + Math.round(wpx * 0.7),
-            foot.y - 1,
+            foot.y - 3,
+            2,
+            3,
             tone(P.woodDark, V0),
           );
         }
+      } else {
+        // too small for a window
       }
     }
   });
@@ -780,15 +1172,30 @@ function terrace(
       const w0 = at(c, Xl + lw * 0.28, V0 - 5.5, 2.2);
       const w1 = at(c, Xl + lw * 0.34, V0 - depth + 4.5, 2.2);
       add(c, V0 - depth + 4.5, () => {
-        s.line(w0.x, w0.y, w1.x, w1.y, tone(P.steelHi, V0));
         const wash = [P.home, P.white, P.away, P.gold, P.white, P.home];
-        const steps = Math.max(2, Math.floor((w1.y - w0.y) / 3));
+
+        // the line, its post at the end, shirts and towels pegged along it
+        s.line(w0.x, w0.y, w1.x, w1.y, tone(P.steelHi, V0));
+        s.rect(w1.x, w1.y, 1, 6, tone(P.woodDark, V0));
+        const steps = Math.max(2, Math.floor((w1.y - w0.y) / 6));
         for (let j = 1; j < steps; j++) {
-          const yy = w0.y + j * 3;
+          const yy = w0.y + j * 6;
           const xx = Math.round(
             w0.x + ((w1.x - w0.x) * (yy - w0.y)) / Math.max(1, w1.y - w0.y),
           );
-          s.rect(xx, yy - 1, 2, 2, tone(wash[(i + j) % wash.length], V0));
+          const col = tone(wash[(i + j) % wash.length], V0);
+          const fold = tone(P.mist, V0);
+          if ((i + j) % 3 === 0) {
+            // a shirt, sleeves out
+            s.rect(xx - 2, yy, 6, 2, col);
+            s.rect(xx - 1, yy + 2, 4, 3, col);
+            s.rect(xx + 2, yy + 2, 1, 3, fold);
+          } else {
+            // a towel
+            s.rect(xx - 1, yy, 4, 4, col);
+            s.rect(xx - 1, yy + 3, 4, 1, fold);
+          }
+          s.px(xx, yy - 1, tone(P.wood, V0));
         }
       });
     }
@@ -796,22 +1203,46 @@ function terrace(
     if (r > 0.9) {
       const q = at(c, Xl + lw * 0.62, V0 - depth * 0.55);
       add(c, V0 - depth * 0.55, () => {
-        shadowBlob(s, q.x + 1, q.y + 1, 4, 2);
-        s.ellipse(q.x, q.y - 1, 4, 2, tone(P.night, V0), true);
-        s.ellipse(q.x, q.y - 1, 4, 2, tone(P.away, V0));
+        // the mat, its pads round it, the frame's legs
+        shadowBlob(s, q.x + 2, q.y + 2, 8, 4);
+        s.ellipse(q.x, q.y - 2, 8, 4, tone(P.away, V0), true);
+        s.ellipse(q.x, q.y - 2, 6, 3, tone(P.night, V0), true);
+        s.ellipse(q.x, q.y - 2, 8, 4, tone(P.awayLight, V0));
+        s.rect(q.x - 6, q.y + 1, 1, 2, tone(P.slate, V0));
+        s.rect(q.x + 6, q.y + 1, 1, 2, tone(P.slate, V0));
       });
     } else if (r > 0.84) {
       const q = at(c, Xl + lw * 0.6, V0 - depth * 0.5);
       add(c, V0 - depth * 0.5, () => {
-        s.ellipse(q.x, q.y, 3, 1.5, tone(P.skyMid, V0), true);
-        s.px(q.x - 1, q.y, tone(P.skyLow, V0));
+        // a blow-up pool: a ring of plastic, water, a glint
+        s.ellipse(q.x, q.y, 6, 3, tone(P.awayLight, V0), true);
+        s.ellipse(q.x, q.y, 5, 2, tone(P.skyMid, V0), true);
+        s.rect(q.x - 3, q.y - 1, 2, 1, tone(P.skyLow, V0));
+        s.px(q.x - 1, q.y - 1, tone(P.white, V0));
       });
     }
     // wheelie bins by the back gate
     const bin = at(c, Xl + lw * 0.86, V0 - depth - 0.6);
     add(c, V0 - depth - 0.6, () => {
-      s.rect(bin.x, bin.y - 2, 1, 2, tone(P.grassDeep, V0));
-      if (r2 > 0.4) s.rect(bin.x + 2, bin.y - 2, 1, 2, tone(P.awayDark, V0));
+      const wheel = tone(P.ink, V0);
+      drawBin(
+        s,
+        bin.x,
+        bin.y,
+        tone(P.grassDeep, V0),
+        tone(P.grassDark, V0),
+        wheel,
+      );
+      if (r2 > 0.4) {
+        drawBin(
+          s,
+          bin.x + 4,
+          bin.y,
+          tone(P.awayDark, V0),
+          tone(P.away, V0),
+          wheel,
+        );
+      }
     });
   }
 }
@@ -922,51 +1353,76 @@ function southWest(c: Ctx, town: Town): void {
     const Vm = (pv0 + pv1) / 2;
     for (const u of [0.12, 0.86]) {
       const ch = at(c, pubX0 + (pubX1 - pubX0) * u, Vm, 10.4);
-      s.rect(ch.x, ch.y - 4, 2, 5, tone(P.brickDark, Vm));
-      s.rect(ch.x, ch.y - 5, 2, 1, tone(P.chalk, Vm));
-      if (u < 0.5) town.chimneys.push({ x: ch.x, y: ch.y - 6, big: false });
+
+      const top = drawChimney(
+        s,
+        ch.x,
+        ch.y - 2,
+        tone(P.brick, Vm),
+        tone(P.brickDark, Vm),
+        tone(P.chalk, Vm),
+        tone(P.wood, Vm),
+      );
+      if (u < 0.5) town.chimneys.push({ x: ch.x, y: top - 1, big: false });
     }
     const foot = at(c, pubX0, pv0, 0);
     const eave = at(c, pubX0, pv0, 6.4);
     const end = at(c, pubX1, pv0, 0);
     const wide = end.x - foot.x;
     const wh = foot.y - eave.y;
-    if (wh >= 6 && wide >= 20) {
-      // black beams, windows, the door, the sign
-      s.rect(foot.x, eave.y + 1, wide, 1, tone(P.hairDark, pv0));
-      for (let i = 0; i < 4; i++) {
-        const wx = foot.x + 3 + Math.round((i * (wide - 8)) / 4);
-        s.rect(wx, eave.y + 3, 3, 3, c.night ? P.gold : tone(P.slate, pv0));
+    if (wh >= 12 && wide >= 40) {
+      // the black beams of a timbered front, leaded windows, the door under a
+      // lamp, the hanging sign in the club's green and gold
+      const beam = tone(P.hairDark, pv0);
+      s.rect(foot.x, eave.y + 2, wide, 2, beam);
+      s.rect(foot.x, foot.y - 2, wide, 1, beam);
+      for (let i = 0; i <= 8; i++) {
+        s.rect(
+          foot.x + Math.round((i * (wide - 2)) / 8),
+          eave.y + 2,
+          2,
+          foot.y - eave.y - 3,
+          beam,
+        );
       }
+      const glass = c.night ? P.gold : tone(P.slate, pv0);
+      for (let i = 0; i < 4; i++) {
+        const wx = foot.x + 6 + Math.round((i * (wide - 16)) / 4);
+        drawWindow(
+          s,
+          wx,
+          eave.y + 6,
+          glass,
+          beam,
+          tone(P.mist, pv0),
+          tone(P.chalk, pv0),
+          c.night,
+          P.goldDark,
+        );
+      }
+      const dx = foot.x + Math.round(wide * 0.45);
+      s.rect(dx, foot.y - 10, 6, 10, tone(P.homeDark, pv0));
+      s.rect(dx + 5, foot.y - 9, 1, 9, tone(P.brickDark, pv0));
+      s.px(dx + 4, foot.y - 5, tone(P.gold, pv0));
+      s.rect(dx - 1, foot.y - 11, 8, 1, beam);
+      const sx = foot.x + Math.round(wide * 0.3);
+      const sw = Math.round(wide * 0.4);
+      s.rect(sx, eave.y - 2, sw, 6, tone(P.grassDeep, pv0));
+      s.rect(sx + 1, eave.y - 1, sw - 2, 1, tone(P.gold, pv0));
+      s.rect(sx + 1, eave.y + 2, sw - 2, 1, tone(P.gold, pv0));
+      for (let x = sx + 3; x < sx + sw - 3; x += 3) {
+        s.rect(x, eave.y + 1, 2, 1, tone(P.goldLight, pv0));
+      }
+    } else if (wh >= 4) {
       s.rect(
-        foot.x + Math.round(wide * 0.45),
-        foot.y - 5,
-        3,
-        5,
-        tone(P.homeDark, pv0),
-      );
-      s.rect(
-        foot.x + Math.round(wide * 0.3),
-        eave.y - 1,
-        Math.round(wide * 0.4),
-        3,
-        tone(P.grassDeep, pv0),
-      );
-      s.rect(
-        foot.x + Math.round(wide * 0.3) + 1,
-        eave.y,
-        Math.round(wide * 0.4) - 2,
-        1,
-        tone(P.gold, pv0),
-      );
-    } else if (wh >= 2) {
-      s.rect(
-        foot.x + 1,
-        eave.y + 1,
-        Math.max(1, wide - 2),
-        1,
+        foot.x + 2,
+        eave.y + 2,
+        Math.max(2, wide - 4),
+        2,
         c.night ? P.gold : tone(P.slate, pv0),
       );
+    } else {
+      // too far for its front
     }
   });
   // the beer garden
@@ -976,23 +1432,26 @@ function southWest(c: Ctx, town: Town): void {
     const V = pv0 - 3.6 - Math.floor(i / 3) * 5.6;
     const p = at(c, X, V, 2.6);
     const f = at(c, X, V, 0);
-    if (!seen(c, p, 8)) continue;
+    if (!seen(c, p, 16)) continue;
     const cls = sizeClass(p.s);
     add(c, V, () => {
       const a = tone(i % 2 === 0 ? P.home : P.chalk, V);
       const b = tone(i % 2 === 0 ? P.chalk : P.home, V);
+
       if (cls === 2) {
-        shadowBlob(s, f.x + 2, f.y + 1, 4, 1.5);
-        s.ellipse(p.x, p.y, 4, 2, a, true);
-        s.rect(p.x - 1, p.y - 2, 3, 1, b);
-        s.rect(p.x - 4, p.y, 2, 1, b);
-        s.rect(p.x + 3, p.y, 2, 1, b);
-        s.px(p.x, p.y - 1, tone(P.white, V));
+        shadowBlob(s, f.x + 4, f.y + 2, 8, 3);
+        // the pole under the canopy, the table at its foot
+        s.rect(p.x, p.y + 3, 1, f.y - p.y - 3, tone(P.steel, V));
+        s.rect(f.x - 3, f.y - 3, 7, 2, tone(P.woodDark, V));
+        s.rect(f.x - 3, f.y - 3, 7, 1, tone(P.wood, V));
+        drawParasol(s, p.x, p.y, a, b, tone(P.white, V), tone(P.brickDark, V));
       } else if (cls === 1) {
-        s.rect(p.x - 2, p.y - 1, 5, 2, a);
-        s.px(p.x, p.y - 1, b);
+        s.rect(p.x - 4, p.y - 2, 10, 3, a);
+        s.rect(p.x - 3, p.y - 3, 8, 1, a);
+        s.rect(p.x, p.y - 3, 2, 4, b);
+        s.rect(p.x - 4, p.y + 1, 10, 1, tone(P.brickDark, V));
       } else {
-        s.px(p.x, p.y, a);
+        s.rect(p.x, p.y - 1, 2, 2, a);
       }
     });
     addPerson(c, X + 2.6, V - 0.8, 700 + i, i % 3 === 0 ? 3 : 0);
@@ -1044,14 +1503,21 @@ function southEast(c: Ctx): void {
       { H: 3.4 },
     );
     const foot = at(c, GATE.x1 + 0.4, hutV, 0);
-    const tall = Math.max(2, Math.round(4.2 * foot.s));
+    const tall = Math.max(4, Math.round(4.2 * foot.s));
     for (let j = 0; j < tall; j++) {
-      s.px(
+      // the raised boom: red and white bands (two pixels wide)
+      s.rect(
         foot.x,
         foot.y - 1 - j,
-        Math.floor(j / 2) % 2 === 0 ? tone(P.home, hutV) : tone(P.white, hutV),
+        2,
+        1,
+        Math.floor(j / 4) % 2 === 0 ? tone(P.home, hutV) : tone(P.white, hutV),
       );
     }
+
+    // its pivot box at the foot
+    s.rect(foot.x - 1, foot.y - 3, 4, 3, tone(P.slate, hutV));
+    s.px(foot.x - 1, foot.y - 3, tone(P.steel, hutV));
   });
   addPerson(c, GATE.x1 + 2.4, hutV - 1.2, 3301, 2);
 
@@ -1083,7 +1549,7 @@ function southEast(c: Ctx): void {
     const wh = foot.y - top2.y;
     // the awning: stripes of the club's colours
     for (let x = 0; x < wide; x++) {
-      const stripe = Math.floor(x / 2) % 2 === 0 ? P.home : P.chalk;
+      const stripe = Math.floor(x / 4) % 2 === 0 ? P.home : P.chalk;
       s.rect(
         foot.x + x,
         top2.y,
@@ -1092,23 +1558,38 @@ function southEast(c: Ctx): void {
         tone(stripe, vv),
       );
     }
-    if (wh >= 6) {
-      // the hatch, lit from inside, and someone serving
+    if (wh >= 12) {
+      // the awning's scalloped edge, the hatch with someone serving behind the
+      // counter (a face, an apron), a menu board, the wheels
+      const aw = Math.max(2, Math.round(wh * 0.3));
+      for (let x = 0; x < wide; x += 4) {
+        const stripe = Math.floor(x / 4) % 2 === 0 ? P.home : P.chalk;
+        s.rect(foot.x + x, top2.y + aw, 2, 1, tone(stripe, vv));
+      }
+      const hy2 = top2.y + aw + 2;
+      const hh = Math.round(wh * 0.38);
       s.rect(
-        foot.x + 2,
-        top2.y + Math.round(wh * 0.3),
-        wide - 5,
-        Math.round(wh * 0.38),
+        foot.x + 4,
+        hy2,
+        wide - 10,
+        hh,
         c.night ? P.goldLight : tone(P.slate, vv),
       );
-      s.px(
-        foot.x + Math.round(wide * 0.4),
-        top2.y + Math.round(wh * 0.3) + 1,
-        tone(P.skinA, vv),
-      );
-      s.rect(foot.x, foot.y - 1, wide, 1, tone(P.home, vv));
-      s.px(foot.x + 1, foot.y, tone(P.ink, vv));
-      s.px(end.x - 2, foot.y, tone(P.ink, vv));
+      const sx = foot.x + Math.round(wide * 0.4);
+      s.rect(sx, hy2 + 1, 3, 1, tone(P.hairBrown, vv));
+      s.rect(sx, hy2 + 2, 3, 2, tone(P.skinA, vv));
+      s.px(sx + 2, hy2 + 3, tone(P.skinAShade, vv));
+      s.rect(sx - 1, hy2 + 4, 5, Math.max(1, hh - 4), tone(P.chalk, vv));
+      s.rect(foot.x + 6, hy2 + 2, 4, 3, tone(P.ink, vv));
+      s.rect(foot.x + 7, hy2 + 3, 2, 1, tone(P.chalk, vv));
+      s.rect(foot.x + 2, hy2 + hh, wide - 6, 2, tone(P.home, vv));
+      s.rect(foot.x + 2, hy2 + hh, wide - 6, 1, tone(P.homeLight, vv));
+      s.rect(foot.x + 2, foot.y - 1, 4, 2, tone(P.ink, vv));
+      s.rect(end.x - 6, foot.y - 1, 4, 2, tone(P.ink, vv));
+      s.px(foot.x + 3, foot.y - 1, tone(P.steel, vv));
+      s.px(end.x - 5, foot.y - 1, tone(P.steel, vv));
+    } else {
+      // too far for its hatch
     }
   });
 }
@@ -1128,11 +1609,11 @@ function concourse(c: Ctx, town: Town): void {
     const V = sv * 84;
     const foot = at(c, X, V);
     const top = at(c, X, V, 35);
-    const big = foot.s >= 1.1;
-    const mid = foot.s >= 0.6;
-    const hw = big ? 11 : mid ? 7 : 5;
-    const hh = big ? 7 : mid ? 5 : 3;
-    const hx = foot.x - Math.floor(hw / 2) + (big ? 1 : 0);
+    const big = foot.s >= 2.2;
+    const mid = foot.s >= 1.2;
+    const hw = (big ? 11 : mid ? 7 : 5) * 2;
+    const hh = (big ? 7 : mid ? 5 : 3) * 2;
+    const hx = foot.x - Math.floor(hw / 2) + (big ? 2 : 0);
     const hy2 = top.y - hh + 1;
     town.pylons.push({
       x: hx + Math.floor(hw / 2),
@@ -1140,25 +1621,40 @@ function concourse(c: Ctx, town: Town): void {
     });
     add(c, V, () => {
       const hgt = foot.y - top.y;
-      s.rect(foot.x, top.y, 1, hgt, c.tone(P.concreteLight, V));
+
+      // a lattice mast, lit on its left, braced every few pixels, on a plinth
+      const w2 = big ? 4 : 2;
+      s.rect(foot.x, top.y, w2, hgt, c.tone(P.concreteLight, V));
       if (big) {
-        s.rect(foot.x + 1, top.y, 1, hgt, c.tone(P.concrete, V));
-        for (let y = top.y + 2; y < foot.y; y += 3) {
-          s.px(foot.x + (Math.floor(y / 3) % 2), y, c.tone(P.slate, V));
+        s.rect(foot.x + 2, top.y, 2, hgt, c.tone(P.concrete, V));
+        for (let y = top.y + 3; y < foot.y - 4; y += 6) {
+          s.px(foot.x + 1, y, c.tone(P.slate, V));
+          s.px(foot.x + 2, y + 3, c.tone(P.slate, V));
         }
-        s.rect(foot.x - 1, foot.y - 2, 4, 2, c.tone(P.concrete, V));
+        s.rect(foot.x - 2, foot.y - 4, 8, 4, c.tone(P.concrete, V));
+        s.rect(foot.x - 2, foot.y - 4, 8, 1, c.tone(P.concreteLight, V));
+      } else {
+        s.rect(foot.x + 1, top.y, 1, hgt, c.tone(P.concrete, V));
       }
       if (c.night) {
+        // the glow in three bands of light over what is behind it, each with a ragged
+        // edge (a lamp's pool, lightPool): not a screen of dots, which at these fine
+        // pixels reads as a dotted veil
         const cx2 = hx + Math.floor(hw / 2);
         const cy2 = hy2 + Math.floor(hh / 2);
-        s.disc(cx2, cy2, hw, P.steelHi, 0.25);
-        s.disc(cx2, cy2, Math.round(hw * 0.62), P.white, 0.5);
+        for (const k of [1, 0.8, 0.62]) {
+          const r = Math.round(hw * k);
+          lightPool(s, cx2, cy2, r, r, true);
+        }
       }
+      // the head: a frame of lamps in rows, a walkway under it
       s.rect(hx, hy2, hw, hh, c.tone(P.slate, V));
       s.rect(hx, hy2, hw, 1, c.tone(P.steel, V));
-      for (let yy = hy2 + 1; yy < hy2 + hh - 1; yy += 2) {
-        for (let xx = hx + 1; xx < hx + hw - 1; xx += 2) {
-          s.px(xx, yy, c.night ? P.white : c.tone(P.steelHi, V));
+      s.rect(hx, hy2 + hh - 1, hw, 1, c.tone(P.night, V));
+      for (let yy = hy2 + 2; yy < hy2 + hh - 2; yy += 3) {
+        for (let xx = hx + 2; xx < hx + hw - 2; xx += 3) {
+          s.rect(xx, yy, 2, 2, c.night ? P.white : c.tone(P.steelHi, V));
+          if (!c.night) s.px(xx + 1, yy + 1, c.tone(P.mist, V));
         }
       }
     });
@@ -1191,18 +1687,28 @@ function concourse(c: Ctx, town: Town): void {
         );
         const a = at(c, X0, V0, 3.6);
         const b = at(c, X0 + 8, V0 + 4.2, 3.6);
-        for (let x = a.x; x <= at(c, X0 + 8, V0, 3.6).x; x += 2) {
-          s.rect(x, b.y, 1, Math.max(1, a.y - b.y + 1), tone(P.chalk));
+        for (let x = a.x; x <= at(c, X0 + 8, V0, 3.6).x; x += 4) {
+          s.rect(x, b.y, 2, Math.max(1, a.y - b.y + 1), tone(P.chalk));
         }
         const foot = at(c, X0, V0, 0);
-        if (foot.y - a.y >= 5) {
+        if (foot.y - a.y >= 10) {
+          // the canopy's valance, the serving hatch, a price board, the counter
+          const right = at(c, X0 + 8, V0, 0).x;
+          for (let x = a.x; x < right; x += 4) {
+            s.rect(x, a.y + 1, 2, 1, tone(i === 0 ? P.home : P.gold));
+          }
           s.rect(
-            a.x + 1,
-            a.y + 2,
-            at(c, X0 + 8, V0, 0).x - a.x - 2,
-            2,
+            a.x + 2,
+            a.y + 4,
+            right - a.x - 4,
+            4,
             c.night ? P.goldLight : tone(P.slate),
           );
+          s.rect(a.x + 4, a.y + 5, 3, 2, tone(P.ink));
+          s.px(a.x + 5, a.y + 5, tone(P.chalk));
+          s.rect(a.x + 2, a.y + 8, right - a.x - 4, 1, tone(P.concreteLight));
+        } else {
+          // too far for its hatch
         }
       });
     }
@@ -1212,10 +1718,21 @@ function concourse(c: Ctx, town: Town): void {
     for (const V of [ROAD.stadiumV1 + 1.2, ROAD.stadiumV0 - 1.2]) {
       const p = at(c, X, V);
       add(c, V, () => {
-        if (sizeClass(p.s) === 2) {
-          s.rect(p.x, p.y - 2, 1, 2, tone(P.slate));
+        const cls = sizeClass(p.s);
+        if (cls === 2) {
+          drawBollard(
+            s,
+            p.x,
+            p.y,
+            tone(P.slate),
+            tone(P.night),
+            tone(P.gold),
+            tone(P.goldLight),
+          );
+        } else if (cls === 1) {
+          s.rect(p.x, p.y - 2, 2, 2, tone(P.slate));
           s.px(p.x, p.y - 3, tone(P.gold));
-        } else if (sizeClass(p.s) === 1) s.px(p.x, p.y - 1, tone(P.slate));
+        }
       });
     }
   }
@@ -1227,7 +1744,13 @@ function concourse(c: Ctx, town: Town): void {
     for (const off of [-1.6, 1.6]) {
       const q0 = at(c, p0.X + off * Math.sin(a), p0.V - off * Math.cos(a), 0.9);
       const q1 = at(c, p1.X + off * Math.sin(a), p1.V - off * Math.cos(a), 0.9);
-      add(c, p1.V, () => s.line(q0.x, q0.y, q1.x, q1.y, tone(P.steel)));
+      add(c, p1.V, () => {
+        s.line(q0.x, q0.y, q1.x, q1.y, tone(P.steel));
+        // a rail is a thing, twice as thick, lit on top
+
+        s.line(q0.x, q0.y + 1, q1.x, q1.y + 1, tone(P.slate));
+        s.line(q0.x, q0.y, q1.x, q1.y, tone(P.steelHi));
+      });
     }
   }
 }
@@ -1258,7 +1781,7 @@ function westSide(c: Ctx): void {
   for (let V = COACHES.v1 - 12; V > COACHES.v0 + 4; V -= 6.5) {
     n++;
     const p = at(c, -203, V);
-    if (!seen(c, p, 20)) continue;
+    if (!seen(c, p, 40)) continue;
     const r = c.h(n, 61);
     if (V > 84) {
       for (let X = -220; X < -182; X += Math.max(4, 5 / p.s)) {
@@ -1318,8 +1841,13 @@ function westSide(c: Ctx): void {
     const a = at(c, -322, 8, 6.5);
     const b = at(c, -272, 17, 6.5);
     for (let i = 0; i < 5; i++) {
-      const x = Math.round(a.x + ((b.x - a.x) * i) / 5) + 2;
-      s.rect(x, Math.round((a.y + b.y) / 2), 2, 1, tone(P.skyLow, 10));
+      // roof lights over the classrooms: framed, two panes each
+      const x = Math.round(a.x + ((b.x - a.x) * i) / 5) + 4;
+      const y = Math.round((a.y + b.y) / 2);
+      s.rect(x - 1, y - 1, 6, 4, tone(P.concrete, 10));
+      s.rect(x, y, 4, 2, tone(P.skyLow, 10));
+      s.px(x + 2, y, tone(P.concrete, 10));
+      s.px(x, y, tone(P.white, 10));
     }
   });
   add(c, -5, () => {
@@ -1404,44 +1932,71 @@ function eastSide(c: Ctx): void {
   for (let i = 0; i < 5; i++) {
     const p = at(c, 246 + i * 4.4, 70);
     add(c, 70, () => {
+      const a = tone(i % 2 ? P.gold : P.home, 70);
+      const b = tone(i % 2 ? P.chalk : P.gold, 70);
       if (sizeClass(p.s) === 0) {
-        c.s.px(p.x, p.y - 1, tone(i % 2 ? P.gold : P.home, 70));
+        c.s.rect(p.x, p.y - 2, 2, 2, a);
         return;
       }
-      c.s.rect(p.x - 1, p.y - 1, 3, 2, tone(P.grassDeep, 70));
-      c.s.px(p.x - 1, p.y - 1, tone(i % 2 ? P.gold : P.home, 70));
-      c.s.px(p.x + 1, p.y, tone(i % 2 ? P.chalk : P.gold, 70));
+      // a bed edged in dark earth, flowers in two colours among the leaves
+      c.s.rect(p.x - 2, p.y - 3, 6, 4, tone(P.woodDark, 70));
+      c.s.rect(p.x - 2, p.y - 3, 6, 3, tone(P.grassDeep, 70));
+      for (const [dx, dy, col] of [
+        [-2, -3, a],
+        [1, -3, b],
+        [0, -2, a],
+        [3, -2, a],
+        [-1, -1, b],
+        [2, -1, a],
+      ] as const) {
+        c.s.px(p.x + dx, p.y + dy, col);
+      }
     });
   }
   // benches facing the pond
   for (const bx of [-14, 2, 18]) {
     const p = at(c, POND.x + bx, POND.v - POND.b - 5);
-    add(c, POND.v - POND.b - 5, () =>
-      c.s.rect(
-        p.x - 1,
-        p.y - 1,
-        sizeClass(p.s) === 0 ? 2 : 3,
-        1,
-        tone(P.wood, 20),
-      ),
-    );
+    add(c, POND.v - POND.b - 5, () => {
+      // a park bench: its back, the seat, two iron legs
+      const w2 = sizeClass(p.s) === 0 ? 4 : 6;
+      c.s.rect(p.x - 2, p.y - 3, w2, 1, tone(P.woodDark, 20));
+      c.s.rect(p.x - 2, p.y - 2, w2, 1, tone(P.wood, 20));
+      c.s.px(p.x - 2, p.y - 1, tone(P.ink, 20));
+      c.s.px(p.x + w2 - 3, p.y - 1, tone(P.ink, 20));
+    });
   }
   // the playground in the south of the park
   add(c, -92, () => {
     const p = at(c, 300, -92);
     if (!seen(c, p)) return;
-    c.s.rect(p.x - 6, p.y - 5, 1, 5, tone(P.home, -90));
-    c.s.rect(p.x + 6, p.y - 5, 1, 5, tone(P.home, -90));
-    c.s.rect(p.x - 6, p.y - 5, 13, 1, tone(P.gold, -90));
-    c.s.rect(p.x - 3, p.y - 4, 1, 3, tone(P.steel, -90));
-    c.s.rect(p.x + 2, p.y - 4, 1, 3, tone(P.steel, -90));
+
+    // the swings: a frame in the club's colours, two seats on their chains, a slide
+    const red = tone(P.home, -90);
+    const dark = tone(P.homeDark, -90);
+    c.s.rect(p.x - 12, p.y - 10, 2, 10, red);
+    c.s.px(p.x - 11, p.y - 9, dark);
+    c.s.rect(p.x + 12, p.y - 10, 2, 10, red);
+    c.s.rect(p.x + 13, p.y - 9, 1, 9, dark);
+    c.s.rect(p.x - 12, p.y - 10, 26, 2, tone(P.gold, -90));
+    c.s.rect(p.x - 12, p.y - 9, 26, 1, tone(P.goldDark, -90));
+    for (const sx of [-6, 4]) {
+      c.s.rect(p.x + sx, p.y - 8, 1, 5, tone(P.steel, -90));
+      c.s.rect(p.x + sx + 3, p.y - 8, 1, 5, tone(P.steel, -90));
+      c.s.rect(p.x + sx, p.y - 3, 4, 1, tone(P.ink, -90));
+    }
+    // sand under them
+    c.s.rect(p.x - 8, p.y, 18, 1, tone(P.goldLight, -90));
   });
 
-  // cars parked along East Road and Park Lane
+  // cars parked along East Road and West Road
+  // G2: only where no traffic runs beside them, beyond North Road (none on Park Lane,
+  // whose lanes run its whole length): at the size the cars are drawn a row of parked
+  // cars and a lane do not fit side by side on these roads, and the moving cars drove
+  // over the parked ones (traffic-overlap.test.ts).
   for (let V = -100; V < 150; V += 8) {
+    if (V < ROAD.northV1 + 6) continue;
     if (c.h(V, 40) < 0.55) addCar(c, ROAD.eastX1 - 2.2, V, 2, 6400 + V);
     if (c.h(V, 41) < 0.5) addCar(c, ROAD.westX0 + 2.2, V, 3, 6500 + V);
-    if (c.h(V, 42) < 0.5) addCar(c, ROAD.laneX1 - 2, V, 2, 6600 + V);
   }
   streetsGrid(c, 352, 1200, -330, 168, () => false);
 }
@@ -1507,9 +2062,21 @@ function northStrip(c: Ctx): void {
     );
     const t = at(c, 222, 158, 6);
     const top = at(c, 222, 158, 14);
-    s.rect(t.x - 1, top.y, 3, t.y - top.y + 1, tone(P.brickLight, 158));
-    s.rect(t.x - 1, top.y - 1, 3, 1, tone(P.steel, 158));
-    s.px(t.x, top.y + 1, c.night ? P.goldLight : tone(P.chalk, 158));
+
+    // the clock tower: lit on its left, a slate cap, a clock face with its hands
+    s.rect(t.x - 2, top.y, 6, t.y - top.y + 1, tone(P.brickLight, 158));
+    s.rect(t.x + 2, top.y, 2, t.y - top.y + 1, tone(P.brick, 158));
+    s.rect(t.x - 3, top.y - 2, 8, 2, tone(P.steel, 158));
+    s.rect(t.x - 1, top.y - 4, 4, 2, tone(P.concreteDark, 158));
+    s.rect(
+      t.x - 1,
+      top.y + 2,
+      4,
+      4,
+      c.night ? P.goldLight : tone(P.chalk, 158),
+    );
+    s.rect(t.x, top.y + 3, 1, 2, tone(P.ink, 158));
+    s.px(t.x + 1, top.y + 4, tone(P.ink, 158));
   });
   for (const v of [RAIL.v0 + 0.4, RAIL.v1 - 2.4]) {
     add(c, v, () =>
@@ -1637,9 +2204,13 @@ function farTown(c: Ctx, town: Town): void {
             noShadow: true,
           });
           if (c.night) {
-            for (let x = a.x; x < b.x; x++) {
-              if (c.h(x, block + k2 * 3 + 300) < 0.2)
-                s.px(x, a.y - 1, c.h(x, block) < 0.6 ? P.gold : P.amber);
+            for (let x = a.x; x < b.x; x += 2) {
+              // a window is two pixels wide (the same on screen), on the same hash
+              const hx = x >> 1;
+              if (c.h(hx, block + k2 * 3 + 300) < 0.2) {
+                const col = c.h(hx, block) < 0.6 ? P.gold : P.amber;
+                s.rect(x, a.y - 2, 2, 1, col);
+              }
             }
           }
         });
@@ -1671,11 +2242,23 @@ function farTown(c: Ctx, town: Town): void {
       }
       const foot = at(c, X + 40, V + 4, 0);
       const top = at(c, X + 40, V + 4, 42);
-      const wide = foot.s > 0.6 ? 2 : 1;
+      const wide = foot.s > 1.2 ? 4 : 2;
       s.rect(foot.x, top.y, wide, foot.y - top.y, tone(P.brick, V));
-      if (wide === 2)
-        s.rect(foot.x + 1, top.y, 1, foot.y - top.y, tone(P.brickDark, V));
-      s.rect(foot.x, top.y, wide, 1, tone(P.chalk, V));
+      if (wide >= 2)
+        s.rect(
+          foot.x + wide / 2,
+          top.y,
+          wide / 2,
+          foot.y - top.y,
+          tone(P.brickDark, V),
+        );
+      s.rect(foot.x, top.y, wide, 2, tone(P.chalk, V));
+
+      // bands of darker brick up the stack
+      for (let y = top.y + 6; y < foot.y - 4; y += 8) {
+        s.rect(foot.x, y, wide, 1, tone(P.brickDark, V));
+      }
+
       town.chimneys.push({ x: foot.x, y: top.y - 1, big: true });
       void key;
     });
@@ -1706,11 +2289,15 @@ function farTown(c: Ctx, town: Town): void {
       const foot = at(c, X, V, 0);
       const top = at(c, X, V, H);
       const end = at(c, X + 16, V, 0);
-      for (let y = top.y + 1; y < foot.y - 1; y += 2) {
-        for (let x = foot.x + 1; x < end.x - 0; x += 2) {
-          const litW = c.night && c.h(x + key * 50, y) < 0.45;
-          s.px(x, y, litW ? P.gold : tone(P.steel, V));
+
+      // a window on every floor of every flat: 2 x 2 with a balcony slab under each row
+      for (let y = top.y + 2; y < foot.y - 2; y += 4) {
+        for (let x = foot.x + 2; x < end.x - 1; x += 4) {
+          const litW = c.night && c.h((x >> 1) + key * 50, y >> 1) < 0.45;
+          s.rect(x, y, 2, 2, litW ? P.gold : tone(P.steel, V));
+          if (!litW && !c.night) s.px(x, y, tone(P.mist, V));
         }
+        s.rect(foot.x + 1, y + 2, end.x - foot.x - 2, 1, tone(P.mist, V));
       }
     });
   };
@@ -1773,8 +2360,8 @@ function farTown(c: Ctx, town: Town): void {
   if (seen(c, gas, 30)) {
     add(c, 296, () => {
       const top = at(c, -250, 300, 24);
-      const rx = Math.max(2, Math.round(13 * gas.s));
-      const ry = Math.max(1, Math.round(rx * 0.3));
+      const rx = Math.max(4, Math.round(13 * gas.s));
+      const ry = Math.max(2, Math.round(rx * 0.3));
       s.rect(
         gas.x - rx,
         top.y,
@@ -1784,9 +2371,19 @@ function farTown(c: Ctx, town: Town): void {
       );
       s.rect(gas.x, top.y, rx + 1, gas.y - top.y, tone(P.concreteDark, 300));
       s.ellipse(gas.x, top.y, rx, ry, tone(P.concreteLight, 300), true);
-      for (const dx of [-rx - 1, 0, rx + 1]) {
-        s.rect(gas.x + dx, top.y - 3, 1, gas.y - top.y + 3, tone(P.slate, 300));
+      for (const dx of [-rx - 2, 0, rx + 1]) {
+        s.rect(gas.x + dx, top.y - 6, 2, gas.y - top.y + 6, tone(P.slate, 300));
       }
+
+      // the guide frame's girders
+      s.rect(gas.x - rx - 2, top.y - 6, rx * 2 + 5, 1, tone(P.slate, 300));
+      s.rect(
+        gas.x - rx - 2,
+        Math.round((top.y + gas.y) / 2),
+        rx * 2 + 5,
+        1,
+        tone(P.slate, 300),
+      );
     });
   }
   // fields and woods out to the hills: hedgerow trees and farms
@@ -1868,13 +2465,19 @@ function lampSpots(c: Ctx): LampSpot[] {
 }
 
 /** Pools of light on the ground, before anything stands on it. */
-function paintPools(c: Ctx): void {
+function paintPools(c: Ctx, town: Town): void {
   for (const l of lampSpots(c)) {
     const p = at(c, l.X, l.V);
-    if (!seen(c, p, 20)) continue;
-    if (p.s < 0.3) continue;
-    const rx = Math.max(2, Math.round((l.tall ? 9 : 7) * p.s));
-    lightPool(c.s, p.x, p.y, rx, Math.max(1, Math.round(rx * 0.42)), l.cool);
+    if (!seen(c, p, 40)) continue;
+    if (p.s < 0.6) continue;
+    const rx = Math.max(4, Math.round((l.tall ? 9 : 7) * p.s));
+    const ry = Math.max(2, Math.round(rx * 0.42));
+    // the pool lies under the lamp's head, which reaches out over the road
+    const off = l.tall && p.s >= 1.48 ? (l.X < 0 ? 6 : -6) : 0;
+    lightPool(c.s, p.x + off, p.y, rx, ry, l.cool);
+
+    const lamp = lampHeight(sizeClass(p.s), l.tall);
+    town.pools.push({ x: p.x + off, y: p.y, rx, ry, lamp });
   }
 }
 
@@ -1882,7 +2485,7 @@ function lamps(c: Ctx): void {
   const { s } = c;
   for (const l of lampSpots(c)) {
     const p = at(c, l.X, l.V);
-    if (!seen(c, p, 12)) continue;
+    if (!seen(c, p, 24)) continue;
     const cls = sizeClass(p.s);
     const post = c.tone(P.slate, l.V);
     const head = c.night
@@ -1890,18 +2493,16 @@ function lamps(c: Ctx): void {
         ? P.white
         : P.goldLight
       : c.tone(P.steelHi, l.V);
-    add(c, l.V, () => {
-      if (cls === 0) {
-        if (c.night) s.px(p.x, p.y - 2, l.cool ? P.steelHi : P.gold);
-        return;
-      }
-      const hgt = cls === 1 ? (l.tall ? 6 : 5) : l.tall ? 11 : 8;
-      s.rect(p.x, p.y - hgt, 1, hgt, post);
-      if (l.tall) {
-        s.rect(p.x - 1, p.y - hgt, 3, 1, head);
-      } else {
-        s.rect(p.x, p.y - hgt, 2, 1, head);
-      }
-    });
+
+    // two and a half times as tall as the people under them (`lampHeight`)
+    const look: LampLook = {
+      post: c.tone(P.steel, l.V),
+      postShade: post,
+      cap: c.tone(P.night, l.V),
+      glow: c.night ? head : c.tone(P.mist, l.V),
+      night: c.night,
+    };
+    const right = l.X < 0;
+    add(c, l.V, () => drawLamp(s, p.x, p.y, cls, l.tall, look, right));
   }
 }

@@ -35,6 +35,7 @@ import {
   drawAirship,
   drawAirshipPosed,
   paintAirship,
+  signAt,
   signPlace,
   type Airship,
   type SignText,
@@ -69,11 +70,16 @@ import {
   findMascotSpot,
   mascotCues,
   mascotFrame,
-  mascotWork,
   mascotZone,
 } from "~/art/stadium-mascot";
 import { HOME_PAGE } from "~/audio/mix";
 import type { SoundCue } from "~/scenes/scene";
+import {
+  drawFlyby,
+  paintBanner,
+  planeRoute,
+  type Banner,
+} from "~/art/stadium-plane";
 import { paintTown, type Town } from "~/art/stadium-town";
 import { makeView, project, type View } from "~/art/stadium-view";
 
@@ -85,9 +91,9 @@ const FAR_FIREWORK: SoundCue = { kind: "firework", distant: true };
 const ROCKETS_ROAR = 0.45;
 
 export interface MenuSign {
-  /** The first line, for example "DID YOU KNOW?". Short: it does not scroll. */
+  /** The first line, for example "DID YOU KNOW?" or "HOME TODAY". Short: it does not scroll. */
   header: string;
-  /** The fact. It scrolls. */
+  /** Under it: the fact (it scrolls), or a short line such as "360 PTS". */
   text: string;
 }
 
@@ -105,10 +111,15 @@ function signText(sign: MenuSign): SignText {
 function trodden(view: View, life: Life): { x: number; y: number }[] {
   const out: { x: number; y: number }[] = [];
   for (let t = 0; t < 180; t += 0.5) {
-    life.people(t, (X, V) => {
-      const p = project(view, X, V);
-      out.push({ x: p.x, y: p.y });
-    });
+    life.people(
+      t,
+      (X, V) => {
+        const p = project(view, X, V);
+        out.push({ x: p.x, y: p.y });
+      },
+      // every walker of the day, so the mascot stands in the same place at night
+      true,
+    );
   }
   return out;
 }
@@ -116,6 +127,11 @@ function trodden(view: View, life: Life): { x: number; y: number }[] {
 export class MenuBackdrop {
   private readonly seed: number;
   private sign: SignText;
+  /** The sign cycles through these (the player's day) instead of the fact. */
+  private messages: SignText[] = [];
+  /** The plane tows this across the sky (empty: no plane). */
+  private bannerText = "";
+  private banner: Banner | null = null;
   private light: Lighting = lightingFor({ elevation: 45, morning: false });
   private scheme: ClubScheme = DEFAULT_SCHEME;
   private moonPhase: number | undefined = undefined;
@@ -123,6 +139,8 @@ export class MenuBackdrop {
   private w = 0;
   private h = 0;
   private dirty = true;
+  /** Draws left before a change of light repaints the picture. */
+  private relit = 0;
   private view: View = makeView(1, 1);
   private town: Town | null = null;
   private life: Life | null = null;
@@ -136,7 +154,6 @@ export class MenuBackdrop {
   private spot: { x: number; y: number } | null = null;
   private readonly spots = new Map<string, { x: number; y: number } | null>();
   private readonly mascot = new MascotPokes();
-  private readonly mascotWork = mascotWork();
   /** The last point airshipAt found on the airship: a poke at the same moment dents it there. */
   private hit = { x: 0, y: 0, t: Number.NaN };
 
@@ -153,11 +170,16 @@ export class MenuBackdrop {
     this.h = H;
     this.view = makeView(W, H);
     this.dirty = true;
+    this.relit = 0;
   }
 
   setLighting(light: Lighting): void {
     if (light === this.light) return;
     this.light = light;
+    // already painted: the sky moves on in this frame, the menu ball in the next
+    // (menu.ts), the picture in the one after and the town a slice a frame after that, so
+    // no one frame pays for the whole step
+    if (!this.dirty && this.town) this.relit = 2;
     this.dirty = true;
   }
 
@@ -185,6 +207,27 @@ export class MenuBackdrop {
   /** What the sign says. It is drawn in capitals. */
   setSign(sign: MenuSign): void {
     this.sign = signText(sign);
+  }
+
+  /**
+   * What the sign says instead of `setSign`'s: these messages one after
+   * another (stadium-airship.ts `drawSignBoard`). None: `setSign`'s again.
+   */
+  setMessages(messages: readonly MenuSign[]): void {
+    this.messages = messages.map(signText);
+  }
+
+  /** The words on the banner the plane tows across the sky (stadium-plane.ts). Empty: no plane. */
+  setBanner(text: string): void {
+    const words = text.replace(/\s+/g, " ").trim().toUpperCase();
+    if (words === this.bannerText) return;
+    this.bannerText = words;
+    this.banner = null;
+  }
+
+  /** What the sign shows. */
+  private shown(): SignText[] {
+    return this.messages.length > 0 ? this.messages : [this.sign];
   }
 
   setMoonPhase(phase: number): void {
@@ -307,7 +350,7 @@ export class MenuBackdrop {
   /** The pose of the airship in the air at t (null at rest). */
   private poseOf(ship: Airship, t: number): Pose | null {
     const { rx, ry } = ship.place;
-    return poseAt(this.pokes, t, rx, ry, ship.x + ship.layer.w + 2);
+    return poseAt(this.pokes, t, rx, ry, ship.x + ship.layer.w + 4);
   }
 
   /** How far the airship is from its rest at t: its drift and its pose. */
@@ -326,8 +369,16 @@ export class MenuBackdrop {
     kit: FallKit;
     site: CrashSite;
   } {
+    const held =
+      this.relit > 0 &&
+      !!this.town &&
+      !!this.life &&
+      !!this.ship &&
+      !!this.work &&
+      !!this.kit &&
+      !!this.site;
     if (
-      this.dirty ||
+      (this.dirty && !held) ||
       !this.town ||
       !this.life ||
       !this.ship ||
@@ -342,10 +393,10 @@ export class MenuBackdrop {
       const ship = this.ship;
       this.life = makeLife(this.view, light, this.seed, this.town, [
         {
-          x: ship.x - 4,
-          y: ship.y - 4,
-          w: ship.layer.w + 8,
-          h: ship.layer.h + 8,
+          x: ship.x - 8,
+          y: ship.y - 8,
+          w: ship.layer.w + 16,
+          h: ship.layer.h + 16,
         },
       ]);
       this.work = new Surface(this.ship.layer.w, this.ship.layer.h);
@@ -358,8 +409,6 @@ export class MenuBackdrop {
           key,
           findMascotSpot(
             this.view,
-            this.town.land,
-            this.town.top,
             this.town.depth,
             this.seed,
             [{ x: ship.x, y: ship.y, w: ship.layer.w, h: ship.layer.h }],
@@ -396,10 +445,13 @@ export class MenuBackdrop {
   }
 
   draw(s: Surface, t: number): void {
-    if (this.w !== s.w || this.h !== s.h) this.resize(s.w, s.h);
+    if (this.w !== s.w || this.h !== s.h) {
+      this.resize(s.w, s.h);
+    }
     const { life, ship, work, kit, site } = this.paint();
     const v = this.view;
     const town = this.paint().town;
+    if (this.relit > 0) this.relit--;
     const time = Number.isFinite(t) ? t : 0;
     const sky = {
       light: this.light,
@@ -423,13 +475,34 @@ export class MenuBackdrop {
         this.spot.y,
         mascotFrame(this.mascot, time),
         light,
-        this.mascotWork,
       );
     }
-    const text = this.sign;
+    // the plane and its banner, far off: behind the airship
+    if (this.bannerText !== "") {
+      if (
+        this.banner?.light !== light ||
+        this.banner.text !== this.bannerText
+      ) {
+        this.banner = paintBanner(this.bannerText, light);
+      }
+      // the airship down to its gondola's keel
+      const box = {
+        x: ship.x,
+        y: ship.y,
+        w: ship.layer.w,
+        h: ship.gondola.y + ship.gondola.h,
+      };
+      drawFlyby(s, this.banner, planeRoute(v, box), light, time);
+    }
+    const text = this.shown();
     const phase = this.pokes.phase(time);
     if (phase.kind === "down") {
-      drawDown(s, ship, kit, site, text, light, time, phase.since, town.depth);
+      // the wreck's sign keeps the message it showed when it burst
+      const pop = time - phase.since;
+      const z = ship.place.panel;
+      const last =
+        text[signAt(text, z.w, z.h, this.signTime(pop)).index] ?? text[0];
+      drawDown(s, ship, kit, site, last, light, time, phase.since, town.depth);
       return;
     }
     const pose = this.poseOf(ship, time);

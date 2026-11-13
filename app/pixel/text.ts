@@ -25,8 +25,11 @@ import type { Surface } from "./surface";
 export interface Glyph {
   /** Width in pixels. */
   readonly w: number;
-  /** One bit mask per row, top to bottom. Bit `x` (value `1 << x`) is the pixel in column `x`. */
-  readonly rows: Uint8Array;
+  /**
+   * One bit mask per row, top to bottom. Bit `x` (value `1 << x`) is the pixel in column `x`.
+   * 16 bits for the painted fonts (`./font-painted.ts`), whose glyphs are up to 14 wide.
+   */
+  readonly rows: Uint8Array | Uint16Array;
 }
 
 export interface BitmapFont {

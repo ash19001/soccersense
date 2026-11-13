@@ -18,12 +18,10 @@ import {
   vi,
 } from "vitest";
 
-import { menuLayout } from "~/art/layout";
-import { lightingFor } from "~/art/lighting";
 import { factForDay } from "~/data/facts";
 import { leaderboardFor } from "~/data/leaderboard";
-import { dayKeyFor, storageKey } from "~/game";
-import { FONT_3x5, Surface } from "~/pixel";
+import { type Mode, dayKeyFor, storageKey } from "~/game";
+import { FONT_3x5 } from "~/pixel";
 import { strings } from "~/i18n";
 import { MenuScene } from "~/scenes";
 import { LOCKED_MODES } from "~/scenes/menu";
@@ -91,23 +89,19 @@ function run(scene: MenuScene, seconds: number): void {
   });
 }
 
-/** The airship's sign at rest as a scene draws it at 480 x 270, before anything moves. */
-function signOf(scene: MenuScene): number[] {
-  const s = new Surface(480, 270);
-  scene.resize(480, 270);
-  scene.setLighting(lightingFor({ elevation: 45, morning: false }));
-  scene.draw(s);
-  const z = menuLayout(480, 270).scoreboard;
-  const out: number[] = [];
-  for (let y = z.y + 2; y < z.y + z.h - 2; y++) {
-    for (let x = z.x + 2; x < z.x + z.w - 2; x++) out.push(s.get(x, y));
-  }
-  return out;
+/**
+ * The words the plane tows across the home picture: "DID YOU KNOW?" and the fact the page
+ * gave the scene (the airship's sign cycles the page's messages:
+ * `app/art/stadium-airship.test.ts`).
+ */
+function towedBy(scene: MenuScene): string {
+  return (scene as unknown as { backdrop: { bannerText: string } }).backdrop
+    .bannerText;
 }
 
-/** The sign a scene of day `day` with that day's fact shows. */
-function signForDay(day: number): number[] {
-  return signOf(
+/** What the plane of a scene of day `day` with that day's fact tows. */
+function towedForDay(day: number): string {
+  return towedBy(
     new MenuScene({
       seed: day,
       fact: factForDay(day).text,
@@ -122,7 +116,7 @@ function card(name: RegExp): HTMLElement {
 }
 
 /** A finished game, as app/game/storage.ts keeps it. */
-function saveGame(day: number, mode: "home" | "away", points: number[]): void {
+function saveGame(day: number, mode: Mode, points: number[]): void {
   const turns = points.map((p, i) => ({
     questionId: `q${i}`,
     input: "x",
@@ -244,7 +238,7 @@ describe("home page: in the browser", () => {
   });
 
   test.each([1, 2])(
-    "?day=%i puts that day's fact on the airship and in the hidden line",
+    "?day=%i puts that day's fact on the plane's banner and in the hidden line",
     (day) => {
       setSearch(`?day=${day}`);
       mount();
@@ -252,9 +246,9 @@ describe("home page: in the browser", () => {
       expect(
         screen.getByText(strings.home.fact(factForDay(day).text)),
       ).toHaveClass("ss-sr");
-      const sign = signOf(theScene());
-      expect(sign).toEqual(signForDay(day));
-      expect(sign).not.toEqual(signForDay(day === 1 ? 2 : 1));
+      const sign = towedBy(theScene());
+      expect(sign).toEqual(towedForDay(day));
+      expect(sign).not.toEqual(towedForDay(day === 1 ? 2 : 1));
     },
   );
 
@@ -345,7 +339,12 @@ describe("home page: in the browser", () => {
     saveGame(1, "home", [100, 100, 100, 78, 100]);
     saveGame(2, "away", [50]); // another day's game is not today's
     mount();
-    expect(made).toHaveBeenLastCalledWith({ home: 478, away: null });
+    expect(made).toHaveBeenLastCalledWith({
+      home: 478,
+      away: null,
+      retro: null,
+      nextgen: null,
+    });
     expect(screen.getByText("478")).toHaveClass("ss-menu__score");
     expect(screen.getByText(strings.home.played(478))).toHaveClass("ss-sr");
     expect(document.querySelectorAll(".ss-menu__score")).toHaveLength(1);
@@ -359,7 +358,12 @@ describe("home page: in the browser", () => {
       document.dispatchEvent(new Event("visibilitychange"));
     });
     expect(scenes()).toHaveLength(1);
-    expect(made).toHaveBeenLastCalledWith({ home: null, away: 70 });
+    expect(made).toHaveBeenLastCalledWith({
+      home: null,
+      away: 70,
+      retro: null,
+      nextgen: null,
+    });
     expect(screen.getByText("70")).toHaveClass("ss-menu__score");
   });
 });
@@ -397,7 +401,8 @@ describe("home page: today's leaderboard", () => {
     expect(within(table).getAllByRole("row")).toHaveLength(11);
     expect(within(table).queryByText(text.you)).toBeNull();
     const board = leaderboardFor(1, "home");
-    expect(within(sheet).getByText(text.played(board.total))).toBeTruthy();
+    // not played yet: the count, and a nudge
+    expect(within(sheet).getByText(text.nudge(board.total))).toBeTruthy();
     expect(
       within(table).getByRole("rowheader", { name: board.rows[0]!.name }),
     ).toBeTruthy();
@@ -420,7 +425,65 @@ describe("home page: today's leaderboard", () => {
     });
     expect(you.closest("tr")).toHaveTextContent(`${rank}${text.you}`);
     expect(you.closest("tr")?.lastElementChild).toHaveTextContent("480");
-    expect(within(sheet).getByText(text.played(board.total))).toBeTruthy();
+    expect(within(sheet).getByText(text.mine(rank, board.total))).toBeTruthy();
+  });
+
+  test("has a tab for each of the four modes, and each has its own table", () => {
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: text.open }));
+    const sheet = screen.getByRole("dialog");
+    const tabs = within(sheet).getAllByRole("tab");
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "HOME",
+      "AWAY",
+      "RETRO",
+      "NEXT-GEN",
+    ]);
+    for (const mode of ["retro", "nextgen"] as const) {
+      const label = strings.home.modes[mode].label;
+      fireEvent.click(within(sheet).getByRole("tab", { name: label }));
+      const table = within(sheet).getByRole("table", {
+        name: text.caption(label),
+      });
+      const board = leaderboardFor(1, mode);
+      expect(
+        within(table).getByRole("rowheader", { name: board.rows[0]!.name }),
+      ).toBeTruthy();
+    }
+  });
+
+  test("under the table: the player's last seven days in the mode, read out, and a link to the stats", () => {
+    // ?day=1 in the tests: days 1 and before; only day 1 is a game day
+    saveGame(1, "retro", [100, 100, 80, 60, 30, 10, 0]);
+    mount();
+    fireEvent.click(screen.getByRole("button", { name: text.open }));
+    const sheet = screen.getByRole("dialog");
+    // only RETRO was played, so it opens on RETRO
+    expect(
+      within(sheet).getByRole("tab", { name: strings.home.modes.retro.label }),
+    ).toHaveAttribute("aria-selected", "true");
+    const days = sheet.querySelectorAll(".ss-lb__day");
+    expect(days).toHaveLength(7);
+    // today (day 1, a Tuesday) is the last bar: played, 380 points
+    expect(days[6]).toHaveClass("is-today");
+    expect(days[6]).not.toHaveClass("is-empty");
+    expect(days[6]).toHaveTextContent(text.weekdays[2]);
+    expect(days[5]).toHaveClass("is-empty");
+    const spoken = text.weekSpoken(
+      strings.home.modes.retro.label,
+      [
+        ...[3, 4, 5, 6, 0, 1].map((d) =>
+          text.daySpoken(text.weekdaysSpoken[d], null),
+        ),
+        text.daySpoken(text.weekdaysSpoken[2], 380),
+      ].join(", "),
+    );
+    expect(within(sheet).getByText(spoken)).toHaveClass("ss-sr");
+    // the link opens the stats in the sheet's place
+    fireEvent.click(within(sheet).getByRole("button", { name: text.more }));
+    expect(
+      screen.getByRole("dialog", { name: strings.stats.heading }),
+    ).toBeTruthy();
   });
 
   test("the trophy steps aside with the captions when a mode is chosen", () => {
@@ -450,6 +513,35 @@ describe("home page: the captions and the ball", () => {
     expect(hovered).toHaveBeenLastCalledWith(null);
   });
 
+  test("there is a card for each of the four open modes, with its line read out", () => {
+    mount();
+    for (const mode of ["home", "away", "retro", "nextgen"] as const) {
+      const button = card(new RegExp(`^${strings.home.modes[mode].label}`));
+      expect(button).toHaveAttribute("data-mode", mode);
+      expect(button).toHaveTextContent(strings.home.short[mode]);
+      // the full line is read out; the short one is only seen
+      expect(
+        within(button).getByText(strings.home.modes[mode].line),
+      ).toBeTruthy();
+      expect(
+        within(button).getByText(strings.home.short[mode]),
+      ).toHaveAttribute("aria-hidden", "true");
+    }
+  });
+
+  test("hovering RETRO or NEXT-GEN on the ball lights its caption, and the other way", () => {
+    const hovered = vi.spyOn(MenuScene.prototype, "setHovered");
+    mount();
+    const scene = theScene();
+    act(() => scene.onHover?.("retro"));
+    expect(card(/^RETRO/)).toHaveClass("is-lit");
+    act(() => scene.onHover?.("nextgen"));
+    expect(card(/^NEXT-GEN/)).toHaveClass("is-lit");
+    expect(card(/^RETRO/)).not.toHaveClass("is-lit");
+    fireEvent.pointerEnter(card(/^NEXT-GEN/), { pointerType: "mouse" });
+    expect(hovered).toHaveBeenLastCalledWith("nextgen");
+  });
+
   test("hovering a patch on the ball lights its caption", () => {
     mount();
     const scene = theScene();
@@ -468,10 +560,10 @@ describe("home page: the captions and the ball", () => {
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveTextContent("");
 
-    act(() => scene.onLocked?.("nextgen"));
+    act(() => scene.onLocked?.("closest"));
     // the words on screen are the words read out
-    expect(status.textContent).toBe(strings.home.soon.nextgen);
-    expect(status.textContent).toContain(strings.home.canvas.nextgen);
+    expect(status.textContent).toBe(strings.home.soon.closest);
+    expect(status.textContent).toContain(strings.home.canvas.closest);
     act(() => {
       vi.advanceTimersByTime(2000);
     });
@@ -561,6 +653,26 @@ describe("home page: choosing a mode", () => {
       pathname: "/play/away",
       search: "?day=1",
     });
+  });
+
+  test("RETRO and NEXT-GEN kick off from the ball to their own pages", () => {
+    for (const [mode, path] of [
+      ["retro", "/play/retro"],
+      ["nextgen", "/play/next-gen"],
+    ] as const) {
+      const go = vi.fn();
+      nav.spy = go as unknown as NavigateFunction;
+      const { unmount } = mount();
+      const scene = theScene();
+      act(() => {
+        expect(scene.choose(mode)).toBe(true);
+      });
+      expect(document.querySelector(".ss-menu")).toHaveClass("is-stowed");
+      run(scene, 2);
+      expect(go).toHaveBeenCalledTimes(1);
+      expect(go).toHaveBeenCalledWith({ pathname: path, search: "?day=1" });
+      unmount();
+    }
   });
 
   test("the page really arrives at the mode's page", async () => {
@@ -729,7 +841,7 @@ describe("home page: choosing a mode", () => {
       screen.getByText(strings.home.fact(factForDay(4).text)),
     ).toBeInTheDocument();
     expect(theScene()).not.toBe(before);
-    expect(signOf(theScene())).toEqual(signForDay(4));
+    expect(towedBy(theScene())).toEqual(towedForDay(4));
     expect(theScene().phase).toBe("idle");
     // The page listens to the new scene.
     act(() => theScene().onHover?.("home"));

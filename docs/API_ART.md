@@ -64,8 +64,8 @@ cloudSprite(seed, width, tones): Surface   // cached: do not draw on the result
 
 ## Layout (`~/art/layout`)
 
-Shared sizes: `PLAYER` (12 x 18 in a 16 x 20 cell), `YOUTH` (10 x 14 in 14 x 16), `KEEPER`,
-`MATCH_BALL` (3 px, 1 px shadow), `FAN` (3 x 4 on a 4 px pitch), `TROPHY` (9 x 12),
+Shared sizes: `PLAYER` (24 x 36 in a 32 x 40 cell), `YOUTH` (20 x 28 in 28 x 32), `KEEPER`,
+`MATCH_BALL` (6 px, 2 px shadow), `FAN` (6 x 8 on an 8 px pitch), `TROPHY` (18 x 24),
 `UI_COLUMN_W` (135), `STAGE_W` (130), `COVER` (what the interface hides, as fractions of the
 height: `menuLogo` 0.15, `menuCaptions` 0.1, `boardAsking` 0.3, `boardShrunk` 0.18,
 `answerBar` 0.1, `revealSheet` 0.46).
@@ -80,7 +80,7 @@ picture of the home screen (three fields keep the names they had for an older pi
 | `ballR`      | `round(min(W * 0.34, H * 0.165))`                                                                         | 44, 37, 50, 45                                                                        |
 | `ballCy`     | `round(H * 0.70)`; the ball floats, centred on `(cx, ballCy)`                                             | 197, 155, 210, 189                                                                    |
 | `logo`       | zone: the top 15%, full width: keep it clear sky                                                          | h 42, 33, 45, 41                                                                      |
-| `scoreboard` | zone: the sign, the LED panel on the airship, at rest (it drifts 2 px)                                    | (20, 50, 90, 33); (34, 49, 92, 35) at 480                                             |
+| `scoreboard` | zone: the sign at full size; the airship draws it at `AIRSHIP_SIZE` (0.64) round its centre               | (18, 8, 184, 70) at 960 x 540; (-1, 76, 172, 66) at 234 x 507                         |
 | `stand`      | zone: the stadium, the box round the bowl on screen                                                       | (0, 98, 130, 47); (82, 87, 316, 108)                                                  |
 | `pitch`      | zone: the land in front of the stadium, from its near wall to the bottom                                  | y 145, 122, 164, 195                                                                  |
 | `caption`    | zone: the bottom 10% (the DOM captions: its middle 135 px on a phone, a row across its foot on a monitor) | y 253, 200, 270, 243                                                                  |
@@ -91,10 +91,14 @@ picture of the home screen (three fields keep the names they had for an older pi
 `MENU_CAMERA` holds the camera numbers the layout shares with the painter (the horizon's rise
 above the centre spot and the bowl's box, in map units). The sun climbs and sets in the middle
 column, behind the city. The moon is placed where all of it shows: on a monitor high on the
-right beside the wordmark, above the tallest aerial of the city; on a phone in the corner of
-sky left of the stacked wordmark; on a wider phone or tablet beside the airship's tail; where
-none of these has room (160 x 300) wholly behind the airship. The sign is upper left on a
-monitor and under the wordmark on a phone.
+right beside the wordmark (wherever the airship hangs beside it, 1366 x 768 too), above the
+tallest aerial of the city; on a phone in the corner of sky left of the stacked wordmark; on a
+wider phone or tablet right of the airship's tail; where none of these has room (160 x 300)
+wholly behind the airship. The airship hangs high in the top left (the product owner,
+2026-11-13: "blimp even smaller and top left"): beside the wordmark, its envelope's top 12 px
+from the top, where it has room there with 16 px to spare (a monitor, 1366 x 768); else just
+under the logo zone (a phone); its nose lamp and drift always clear of the left edge
+(`max(8, min(24, 4% of W))`).
 
 `careerLayout(w, h)`, same four sizes:
 
@@ -144,8 +148,8 @@ The slots, and what the menu puts on them:
 | ----------- | ------------------------------------------- | ----------------- | --------- | ----------------------------------- |
 | `left`      | level, 31.7 degrees left of the middle      | HOME, red-orange  | `home`    | the menu pose                       |
 | `right`     | level, 31.7 degrees right                   | AWAY, teal        | `away`    | the menu pose                       |
-| `top`       | 58.3 degrees above the middle               | NEXT-GEN, locked  | `forward` | pitch -58.3 degrees: straight on    |
-| `bottom`    | 58.3 degrees below                          | RETRO, locked     | `rewind`  | pitch +58.3 degrees: straight on    |
+| `top`       | 58.3 degrees above the middle               | NEXT-GEN, magenta | `forward` | pitch -58.3 degrees: straight on    |
+| `bottom`    | 58.3 degrees below                          | RETRO, old gold   | `rewind`  | pitch +58.3 degrees: straight on    |
 | `backRight` | on the back, directly behind `right` (AWAY) | CLOSEST, locked   | `pin`     | yaw pi: where `left` (HOME) was     |
 | `backLeft`  | on the back, directly behind `left` (HOME)  | FURTHEST, locked  | `globe`   | yaw pi: where `right` (AWAY) was    |
 | `rimLeft`   | on the rim out past HOME, 31.7 degrees up   | GUESS WHO, locked | `shirt`   | yaw +pi/2, pitch -31.7: straight on |
@@ -174,6 +178,28 @@ it, `goal` a goal with its net and a ball on the spot.
   far round (the top and bottom slots in the menu pose) it wears small five-row pictures beside
   the small padlock from r = 44, the small padlock alone below. Icon `lock` is the padlock
   alone; below r = 30 a locked patch shows only the padlock, below 26 nothing.
+- **The open top and bottom patches** (NEXT-GEN and RETRO: an `accent`, not `locked`) are
+  buttons with HOME's and AWAY's frame and a locked patch's layout (`drawFront`).
+  - **Their border** is the same frame as HOME's and AWAY's: a line in the mode's colour round
+    the very edge of the pentagon, `borderW` deep (3, 2 or 1 px). The depth is chosen once a
+    frame from HOME's and AWAY's words (`chooseLayout`), so all four borders always match.
+    At rest it is lit along the diagonal (the mode's light tone on the side facing the light,
+    its base across the middle, its dark tone on the far side); three deep, its outer pixel
+    is the dark tone, so it reads against the white leather as well as against the black
+    patch. The shine bar crosses them after HOME and AWAY (slots in order, 0.35 s apart, every
+    5 s; the frame's pixels under the bar turn leather white). Hovered, the patch lifts: its
+    fill takes the mode's three tones in the corners, the border's outer pixel goes dark and,
+    three deep, a chalk line runs inside it. Pressed: the dark tone all over with an ink edge,
+    the content down 2 px. Chosen: the 8 Hz flash, white or the light tone, the rim in the base
+    tone.
+  - **Their content** keeps clear of the border (`max(LOCKED_EDGE, borderW + 1)` px in) and
+    has no padlock. In the menu pose they are squashed far round the ball: today's score in the
+    small digits when it fits the squashed room, else the small five-row picture (from r = 30;
+    nothing below r = 26). Shown straight on (`ballShowPose`): the full picture, and under it
+    the word or the score. Their ink is the mode's light tone at rest, chalk while hovered or
+    pressed, the mode's dark tone when chosen. As on a locked patch, what they carry is decided
+    by the radius alone, from room measured once per size, so nothing comes and goes as the
+    ball breathes.
 - **Nothing on a locked patch flickers.** What it carries (picture or not, word bare or on a
   tag) is decided by the radius alone, from room measured once per size at both ends of the
   rock and of a deep nod (0.065 rad): top, bottom and the two rim slots straight on (the rim
@@ -197,14 +223,16 @@ it, `goal` a goal with its net and a ball on the spot.
 
 ```ts
 interface MenuSign {
-  header: string; // the first line, in green: "DID YOU KNOW?" (strings.home.canvas.header)
-  text: string; // the fact of the day, in amber: it scrolls
+  header: string; // the first line, in green: "DID YOU KNOW?", "NEXT-GEN"
+  text: string; // in amber: the fact (it scrolls) or a short line, "360 PTS"
 }
 class MenuBackdrop {
   constructor(opts: { seed: number; sign: MenuSign });
   resize(w, h): void;
   setLighting(light): void;
   setSign(sign: MenuSign): void; // drawn in capitals on one line (runs of spaces and line breaks become one space)
+  setMessages(messages: readonly MenuSign[]): void; // the sign cycles these instead (none: setSign's)
+  setBanner(text: string): void; // the plane's banner, "DID YOU KNOW? ..." (empty: no plane)
   setMoonPhase(phase: number): void; // 0 new, 0.5 full
   target(): { x: number; y: number }; // the centre spot of the pitch: (cx, menuLayout().spotY)
   setRoar(amount: number): void; // 0 an ordinary matchday, 1 the whole place erupting
@@ -242,12 +270,17 @@ in the scheme; colours drawn raw ask `clubRaw(light)`, the second colour `clubOf
 change of scheme repaints (like a change of light). Shots: `stadium/schemes` (all twelve), and
 `stadium/composed --seed N` wears day N's colours.
 
-**The mascot** (`stadium-mascot.ts`): a friendly owl in a big costume, in the club's shirt
-(collar in the second colour, shorts in the second colour, white gloves, black boots), with a
-2 x 2 ball at his feet, out on the lawn left of the stadium among the people walking there.
-Drawn at their scale: a walker is 5 px tall and 3 wide, he is 8 px tall (ear tufts to boots)
-and 7 wide with his gloves, no outline: a little taller and much wider than a person, not a
-giant. Front, side, back and sitting views. Idle (a nine-second loop): bounces on his toes,
+**The mascot** (`stadium-mascot.ts`): a black cat with bright green eyes in a big costume, in
+the club's kit (shirt, collar and shorts in the second colour, black boots), black paws, pointed
+ears pink inside, slit pupils, a pink nose, whiskers and a tail that sways (a step every third of a second,
+up high when he cheers, up his back seen from behind, along the grass sat down), with a 4 x 4
+ball at his feet, out on the lawn left of the stadium among the people walking there. Drawn at
+their scale: a walker is 10 px tall, he is 20 px tall (ear tips to boots) and 17 wide with his
+paws (21 with his tail), no outline: a person in a costume, not a giant. His eyes are raw colour
+(they catch any light); at night his fur's edge is lit by the floodlights (mist on his right,
+steel on top) so he never vanishes on the dark lawn. Front, side, back and sitting views. Shots:
+`mascot/sheet` (his idle loop and every trick on the real picture, day and night) and
+`mascot/poses`. Idle (a nine-second loop): bounces on his toes,
 waves, juggles four touches, blinks, throws his arms up. A click plays the next trick in turn,
 each simple enough to read at this size: a juggle (right foot, left foot, right foot, head,
 trap), a flick over his own head, a spin (pops it up high and turns all the way round under
@@ -302,6 +335,45 @@ ball, the wordmark and the DOM captions.
   **city**: the business district's towers right of the middle, the cathedral and the old town
   left of it, cranes, a television tower. The sun's column is the gap between the two clusters.
 
+The airship is 0.64 of the layout's size (`AIRSHIP_SIZE` in `~/art/layout`, 7/8 until
+2026-11-13: `signPlace` shrinks the panel, to even sizes, and the envelope round the same
+centre; the painter scales every length of its drawing by `place.size`, so its proportions
+hold). The panel is never smaller than `SIGN_MIN_W` x `SIGN_MIN_H` (112 x 44: "DID YOU KNOW?"
+over a big line; 118 x 44 on a monitor, 112 x 44 on a phone). Its sign shows `setMessages`' messages one after another (`drawSignBoard`):
+each for `SIGN_HOLD` (4 s) or until a line too long for it has scrolled once, then a roll of
+`SIGN_ROLL` (0.6 s) in which the panel's lamps carry it up and out and the next one up into
+place, a lamp at a time (`signAt(messages, w, signT)` says which is up, a pure function of
+the sign's clock). A message is a green header in `FONT_3x5` over an amber line: in
+`FONT_5x7` if it fits, else in `FONT_3x5` on one line or two, else in `FONT_5x7` as a
+marquee (two small lines only where the panel is tall enough: not at today's size). A header
+too long for the panel scrolls in step with the line under it. `signFits(m, w, h)` says
+whether a message fits as it is, `signShows(m, w, h)` whether it shows whole (every line in
+the panel's height, a long one scrolling); `signAt(messages, w, h, t)` takes the panel's
+height too. The words come from the page
+(`app/routes/home-sign.ts`). With no messages it is the fact as below. The
+wreck keeps the message it showed when it burst.
+
+**The plane** (`~/art/stadium-plane`): `setBanner(text)` gives the words
+(`bannerWords(header, fact)`). A plane 36 x 16 (propeller, high wing, the pilot's head in
+the cabin window, wheels; ink outline; yellow with the club's red stripe) flies from right to
+left at `PLANE_SPEED` (60 px a second: a pixel a frame), its first pass
+`PLANE_FIRST` (6 s) after the page opens and one every `PLANE_EVERY` (70 s), towing on a
+sagging 2 px rope and a bridle a banner 13 px tall: chalk cloth hemmed in the club's red,
+"DID YOU KNOW?" in red and the fact in ink in `FONT_5x7`'s 7 px capitals (the product owner,
+2026-11-13: "smaller daily facts on plane"; it was `paintedFont(FONT_3x5)`, 10 px, on 18), as
+long as its words (a 110-character fact makes a banner about 660 px long), rippling in whole pixels with folds
+in a tone of shade. At night the cabin windows are lit (`goldDark`, a light source), it shows
+a red wing-tip lamp, a white tail lamp and a blinking red beacon, and lamps along the banner's
+top light it (its cloth and letters take `light.lit`). `planeRoute` flies it where the
+airship hung until 2026-11-13, `PLANE_DROP` (48 px) under the logo zone ("plane with fun fact
+higher, where current blimp is in elevation"), under the airship's gondola where the airship
+hangs across that row (a phone), and never lower than 4 px clear of the stadium's far stand
+(`menuLayout().stand.y`) or the ball, so on a phone and at 1366 x 768 it skims the far roof
+and never crosses it; never in the logo's zone. It is
+drawn after the mascot and before the airship; clicking it does nothing. `planeAt(t, w,
+length)` is the nose's x (null between passes). Sheets: `plane/close`, `plane/home`,
+`plane/phone`.
+
 **The sign** is a dot-matrix panel (`~/art/led`) on the flank of an airship, which drifts 2 px
 either way at the upper left of a monitor (under the wordmark on a phone). Its panel at rest is
 `menuLayout().scoreboard` (92 x 35 on a monitor, 90 x 33 on a 130 px phone). It carries the
@@ -351,7 +423,14 @@ and an airship never poked draws exactly as before. The crash site is chosen onc
   exactly. Kick-off, an interception, a build-up to the left wing, a cross, a header saved (the
   crowd gasps), a break by the away side, a long ball, a goal (arms up all round and a wave
   through the stands), the celebration, the walk back. `matchAt(state, t)` gives 22 players, the
-  referee and the ball in map units; movement is stepped at 8 a second.
+  referee and the ball in map units, and each player's `stride` (-1 standing, else which foot
+  leads). The script says where each means to be; the players run there as people do (no faster
+  than a sprint, picking up and losing pace over a few strides, never on one spot), worked out
+  once at first use (about 50 ms) into a table read between rows, so everybody moves smoothly,
+  at most a pixel a frame, the loop's seam included. The match is sampled every frame (moves are
+  whole pixels); a player stands (both feet down) when he is still and only strides when he
+  moves, a foot a stride's length of ground. The ball is at the feet of whoever has it, where he
+  has really run to. Shot: `match/strip` (consecutive frames at the busy moments and the seam).
 - **The car park** (`stadium-parking.ts`) is parked full for the day and painted with the
   town: no car drives in or out (the product owner found the parking animation odd). Its bays
   run north on the map, so on screen they lean towards the vanishing point; every parked car
@@ -436,8 +515,9 @@ and an airship never poked draws exactly as before. The crash site is chosen onc
   to a turnstile. Supporters stream up the plaza, queue at the turnstiles and stroll in the park;
   traffic on the other roads; flags, chimney smoke, wind turbines, gulls, cloud shadows by
   day; at night headlights and tail lights, lit windows, lamp pools, red lights on the towers.
-- **The match ball** has an ink edge on the grass beside it (never over a player) and the home
-  side wears dark red shorts, so the ball is the only white thing moving on the pitch.
+- **The match ball** has an ink edge on the grass round it, drawn among the players at its depth
+  (the far ones first; in the air, over them), and the home side wears dark shorts, so the ball
+  is the only white thing moving on the pitch.
 - **At night** with the floodlights on, the roof is lit: its inner half pale blue, its outer
   half steel, a bright ring between. It is never darker than that glow, so nothing jumps when
   the lights come on at dusk. By day the roof is unchanged.
@@ -483,11 +563,29 @@ kept as reference in `stadium-inside.ts` (`InsideBackdrop`, with its frozen layo
 drawLedPanel(s, x, y, w, h, { grade? }): Zone   // housing and unlit lamps; returns the lamp field
 drawLedLine(s, text, x, y, width, { font?, color?, t?, align?, speed?, pause?, gap? }): boolean
 ledField(x, y, w, h): Zone
+drawLamps(s, text, x, y, color, { font?, bg? }): number   // lit lamps, first lamp at (x, y); its width
+lampLook(color, bg = ink): { hot, link, glow }            // the lamps' colours
+measureLamps(text, font): number                          // drawLamps' width
+ledLap(text, width, { font?, speed?, pause?, gap? }): number // a marquee's seconds round (0: it fits)
 ```
 
 A line that fits is placed by `align`. A longer one starts flush left, pauses, scrolls one lap in
-whole pixels and is back at its start (returns `true` when it scrolls). It draws the text as
+whole lamps and is back at its start (returns `true` when it scrolls). `speed` and `gap` are in
+lamps (2 px each); the housing is `LED_FRAME` (4 px). It draws the text as
 given: capitalise first.
+
+**Lamps** (`drawLamps`; every LED text in the game: the airship's sign, the tier-3
+scoreboard, the stadium's LED boards). Each pixel of the small face is a lamp
+on the panel's 2 px pitch, drawn as a **hot** lamp (half way from its colour to `goldLight`),
+with the **link** between two neighbouring lit lamps (and across a diagonal step) in the colour
+itself, and a faint **glow** (55% of the way from the field to the colour) in the gaps beside a
+lit lamp where none is lit next to it. A stroke one lamp wide is so three pixels wide, with
+the unlit lamps still showing round it, and a line carries about four fifths of the light of
+solid letters at the same size (two fifths with bare dots and a dim glow): it reads brightly
+from a normal distance. The glow reaches one pixel left
+of and above the first lamp: put text on an even offset of at least 2 from a lamp field.
+Dark words on a light board are paint: their lamps are not made hotter. A layer per face,
+colours and words is cached.
 
 ## The logo (`~/art/logo`)
 
@@ -523,11 +621,13 @@ ball, the trophy and a dust puff. Import from `~/art/characters` only.
 
 ```ts
 interface Kit { outline; skin; skinShade; hair; shirt; shirtShade; trim; shorts; socks; boots; gloves } // Colors
+                                // plus era?, eraColors?, eraGlows? (see "Eras" below)
 type KitBase = "home" | "away" | "casual-home" | "casual-away" | "casual" | "rival" | "keeper"
              | "national-home" | "national-away" | "referee";
-makeKit(base, opts?: { look?: 0 | 1 | 2; variant?: number }): Kit
+makeKit(base, opts?: { look?: 0 | 1 | 2; variant?: number; era?: Era }): Kit
 HERO_LOOK: 0 | 1 | 2            // 1: skinB, dark hair. The hero's look at every tier.
 litKit(kit, light): Kit         // every slot through light.lit; do it once per light, not per frame
+                                // (it keeps the era, grades eraColors, copies eraGlows raw)
 
 type ShotAnim = "kick" | "tapin" | "toepoke" | "trivela" | "chip" | "power" | "finesse" | "bicycle";
 // one per grade: kick = miss, tapin = tap in, toepoke = toe poke, trivela, finesse = golazo,
@@ -539,8 +639,8 @@ KICK_STRIKE_FRAME = 2
 STRIKE_FRAME: Record<ShotAnim, number>   // kick 2, tapin 1, toepoke 1, trivela 2, chip 2, power 2, finesse 2, bicycle 4
 SHOT_ANIMS: readonly ShotAnim[]
 interface Cell { cellW; cellH }
-playerCell(anim, youth?): Cell  // PLAYER / YOUTH, except the bicycle: BICYCLE_CELL 24 x 28, BICYCLE_YOUTH_CELL 20 x 22
-keeperCell(anim): Cell          // KEEPER, except the sprawl: SPRAWL_CELL 24 x 20
+playerCell(anim, youth?): Cell  // PLAYER / YOUTH, except the bicycle: BICYCLE_CELL 48 x 56, BICYCLE_YOUTH_CELL 40 x 44
+keeperCell(anim): Cell          // KEEPER, except the sprawl: SPRAWL_CELL 48 x 40
 drawPlayer(s, anim, frame, x, y, kit, opts?: { flipX?; youth? }): void
 ballSpot(anim, frame, opts?: { flipX?; youth? }): { x; y } | null
 handsSpot(anim, frame, opts?: { flipX?; youth? }): { x; y } | null
@@ -550,21 +650,22 @@ KEEPER_ANIMS: Record<KeeperAnim, { frames; fps; loop }>
 drawKeeper(s, anim, frame, x, y, kit, opts?: { flipX? }): void
 keeperHands(anim, frame, opts?: { flipX? }): { x; y } | null
 
-drawMatchBall(s, x, y, frame, light, opts?: { gold? }): void   // (x, y) the ball's centre
-drawTrophy(s, x, y, light, glint?): void                      // (x, y) the middle of its base
+drawMatchBall(s, x, y, frame, light, opts?: { gold?; era? }): void   // (x, y) the ball's centre
+drawBallRing(s, x, y, ink): void                               // its 2 px ink ring, drawn first
+drawTrophy(s, x, y, light, glint?, era?): void                // (x, y) the middle of its base
 drawPuff(s, x, y, frame, color): void                          // (x, y) the ground point under it
 ```
 
 - **Anchor.** `(x, y)` is the ground point under the standing feet: the soles' outline is row
-  `y - 1`, the cell's left edge `x - floor(cellW / 2)`. Adult 12 x 18 in 16 x 20, youth 10 x 14
-  in 14 x 16 (`PLAYER`, `YOUTH`, `KEEPER` in `~/art/layout`). Two animations need more room
+  `y - 1`, the cell's left edge `x - floor(cellW / 2)`. Adult 24 x 36 in 32 x 40, youth 20 x 28
+  in 28 x 32 (`PLAYER`, `YOUTH`, `KEEPER` in `~/art/layout`). Two animations need more room
   and have their own cell, with the same anchor rule (`playerCell`, `keeperCell`): the
-  bicycle kick, 24 x 28 adult (anchor column 12, soles' outline row 27) and 20 x 22 youth
-  (column 10, row 21), and the keeper's sprawl, 24 x 20 (column 12, row 19). Swapping to them
-  from a 16-wide frame at the same `(x, y)` keeps his feet where they were. Nothing draws
+  bicycle kick, 48 x 56 adult (anchor column 24, soles' outline row 55) and 40 x 44 youth
+  (column 20, row 43), and the keeper's sprawl, 48 x 40 (column 24, row 39). Swapping to them
+  from a 32-wide frame at the same `(x, y)` keeps his feet where they were. Nothing draws
   outside the cell. Everyone faces right; `flipX` faces left. Spots are offsets from
-  `(x, y)`; a flipped spot is `-dx - 1` (the exact mirror of the pixels), and the functions
-  already do this.
+  `(x, y)`; what a spot marks is even-sized (the 6 x 6 ball, the 18-wide trophy), so a
+  flipped spot is `-dx` (the exact mirror of the pixels), and the functions already do this.
 - **Frames.** `frame` is a running counter: looping animations wrap, one-shots hold their last
   frame. Pick it with `frameAt(t, fps, frames)` (loops) or `min(floor(t * fps), frames - 1)`.
 - **Light.** Draw with `litKit(kit, light)`, and pass `light` to the ball and trophy. The
@@ -577,18 +678,18 @@ drawPuff(s, x, y, frame, color): void                          // (x, y) the gro
   black. `look` 0 skinA and brown hair, 1 skinB and dark hair, 2 skinC and dark hair. Only the
   keeper kit has gloves: in every other kit the glove slot is the bare hand.
 - **The tier 0 and 1 keeper** is a child in the keeper kit on the youth frames, drawn with
-  `{ youth: true, flipX: true }`. The youth frames draw his hands in the glove slot, so he
-  wears the gloves. Use idle for ready, and celebrate, dejected and shrug.
+  `{ youth: true, flipX: true }`. The youth frames draw his hands in the glove slot (but the
+  kick's, the lift's, the slide's and juggle 2), so he wears the gloves. Use idle for ready, and celebrate, dejected and shrug.
 
 | anim      | frames @ fps | loop | notes                                                                         |
 | --------- | ------------ | ---- | ----------------------------------------------------------------------------- |
 | idle      | 2 @ 2        | yes  | breathing: head and shoulders drop 1 px                                       |
-| run       | 4 @ 10       | yes  | contact, passing (up 1 px), contact, passing; feet and arms alternate         |
+| run       | 4 @ 10       | yes  | contact, passing (up 2 px), contact, passing; feet and arms alternate         |
 | kick      | 5 @ 10       | no   | wind-up, plant, **strike (2)**, follow-through, recover                       |
 | juggle    | 8 @ 7        | yes  | touches on 0 (foot), 2 (knee), 4 (foot), 6 (head, on his toes); hops between  |
-| celebrate | 3 @ 6        | yes  | crouch, tuck jump with fists up (feet 3 px off the ground), land with arms up |
+| celebrate | 3 @ 6        | yes  | crouch, tuck jump with fists up (feet 6 px off the ground), land with arms up |
 | dejected  | 2 @ 1.5      | yes  | head bowed, hands on hips; a sigh                                             |
-| lift      | 2 @ 3        | yes  | both arms up holding the trophy over his head; the second pumps it up 1 px    |
+| lift      | 2 @ 3        | yes  | both arms up holding the trophy over his head; the second pumps it up 2 px    |
 | shrug     | 2 @ 2.5      | no   | palms out and shoulders up, then back to rest                                 |
 | slide     | 2 @ 4        | yes  | on his knees, leaning back, fists up; move him along the grass yourself       |
 | tapin     | 4 @ 8        | no   | walking step, **prod with the side of the foot (1)**, step on, stand          |
@@ -608,25 +709,25 @@ drawPuff(s, x, y, frame, color): void                          // (x, y) the gro
 
 Spots (adult, then youth; `x` right, `y` up is negative):
 
-- `ballSpot("kick", 0..2)`: the ball at rest in front of him, `(7, -2)` (youth too). Draw it
+- `ballSpot("kick", 0..2)`: the ball at rest in front of him, `(14, -4)` (youth too). Draw it
   there from the set until the strike frame, then fly it from that point. `null` on 3 and 4.
 - The ground shots (`tapin`, `toepoke`, `trivela`, `chip`, `power`, `finesse`, adult and
   youth) work the same way:
-  `(7, -2)` from frame 0 up to `STRIKE_FRAME[anim]`, `null` after it.
-- `ballSpot("bicycle", 0..4)`: the ball is his for the first five frames. Adult `(-5,-10)`
-  (on his chest; he is facing away from the goal), `(-3,-22)` (popped up), `(1,-26)` (top),
-  `(4,-25)` (dropping), `(7,-23)` (**the strike**, over his head, at his boot). Youth
-  `(-5,-7) (-3,-17) (0,-20) (3,-19) (4,-18)`. `null` on 5 to 7. Draw it at the spot, or
+  `(14, -4)` from frame 0 up to `STRIKE_FRAME[anim]`, `null` after it.
+- `ballSpot("bicycle", 0..4)`: the ball is his for the first five frames. Adult `(-10,-20)`
+  (on his chest; he is facing away from the goal), `(-6,-44)` (popped up), `(2,-52)` (top),
+  `(6,-48)` (dropping), `(10,-43)` (**the strike**, over his head, at his boot). Youth
+  `(-9,-13) (-5,-33) (1,-39) (7,-37) (9,-35)`. `null` on 5 to 7. Draw it at the spot, or
   `arc()` between this frame's spot and the next for a smoother hang.
-- `ballSpot("juggle", f)` on every frame. Adult: `(4,-7) (6,-12) (4,-11) (6,-16)` then
-  `(4,-7) (3,-22) (1,-20) (6,-12)`. Youth: `(4,-6) (5,-10) (3,-9) (5,-13)` then
-  `(4,-6) (3,-18) (1,-17) (5,-9)`. Even frames are touches; odd frames are the top of the
+- `ballSpot("juggle", f)` on every frame. Adult: `(8,-13) (12,-24) (8,-18) (12,-32)` then
+  `(8,-13) (6,-44) (2,-39) (12,-24)`. Youth: `(9,-9) (11,-19) (8,-13) (11,-23)` then
+  `(9,-9) (5,-35) (2,-31) (11,-19)`. Even frames are touches; odd frames are the top of the
   hop. For a smoother ball, move it between this frame's spot and the next along `arc()`.
-- `handsSpot("lift", f)`: adult `(0,-17) (0,-18)`, youth `(0,-13) (0,-14)`:
+- `handsSpot("lift", f)`: adult `(0,-34) (0,-36)`, youth `(-1,-28) (-1,-29)`:
   `drawTrophy(s, x + h.x, y + h.y, light, glint)` puts the cup on his raised hands.
-- `keeperHands`: ready `(4,-8) (4,-7)`, leap `(-6,-8) (-5,-18) (-6,-18)`, smother
-  `(5,-5) (2,-3)`, hold `(3,-10)`, beaten `null`, stranded `(4,-7) (-6,-17) (3,-6)`, sprawl
-  `(-8,-7) (-10,-7) (-10,-5)` (the leading glove). For hold and smother 1 it is where the
+- `keeperHands`: ready `(8,-16) (9,-15)`, leap `(-11,-14) (-9,-35) (-11,-35)`, smother
+  `(10,-10) (11,-7)`, hold `(6,-18)`, beaten `null`, stranded `(9,-14) (-11,-33) (7,-12)`,
+  sprawl `(-20,-15) (-19,-13) (-19,-8)` (the leading glove). For hold and smother 1 it is where the
   ball goes: draw the ball there after him.
 
 **Staging the shots** (the hero at `heroX`, facing right; the strike is
@@ -634,17 +735,17 @@ Spots (adult, then youth; `x` right, `y` up is negative):
 `ballSpot(anim, STRIKE_FRAME[anim])`):
 
 - **miss**: `kick`, the ball sent wide or over; keeper `ready` (he watches it go).
-- **tapin**: run him close first, then `tapin`; the ball rolls along the ground (`y - 2`) at
+- **tapin**: run him close first, then `tapin`; the ball rolls along the ground (`y - 4`) at
   walking pace. Keeper: `smother` 0 then 1 without the ball, then `beaten`, or caught
   flat-footed in `ready`.
 - **toepoke** (TOE POKE): he gets there just before the keeper, so stage it close: the keeper
   off his line a few pixels nearer than usual. The strike is only 0.1 s in, so the ball can
-  arrive rolling (bring it in along `y - 2` to `(7, -2)` by the strike) or sit there from
-  frame 0. It leaves fast and scuffed along the ground (`y - 2`, a 1 px bobble now and then),
-  quicker than the tap in. A `drawPuff` of turf under his toe (`(6, 0)`) on the strike. Keeper:
+  arrive rolling (bring it in along `y - 4` to `(14, -4)` by the strike) or sit there from
+  frame 0. It leaves fast and scuffed along the ground (`y - 4`, a 2 px bobble now and then),
+  quicker than the tap in. A `drawPuff` of turf under his toe (`(12, 0)`) on the strike. Keeper:
   `stranded` 0 rushing out as he lunges, then `smother` 0 diving at it a beat late, the ball
-  squeezing past his gloves, then `beaten`. Frames 2 and 3 are the stumble: nudge him 1 to
-  2 px forward over them if you like, then hold 4 and cut to `celebrate`.
+  squeezing past his gloves, then `beaten`. Frames 2 and 3 are the stumble: nudge him 2 to
+  4 px forward over them if you like, then hold 4 and cut to `celebrate`.
 - **trivela** (TRIVELA): struck with the outside of the boot, so it bends away from his
   kicking side: rising off the grass on a curve the other way to the finesse's (in profile:
   up quickly, then flattening and dipping late; on screen a sideways bend that starts at
@@ -673,7 +774,7 @@ same `flipX` for every frame, the beaten frame already looks back at the goal):
 
 - **High save or a top-corner goal** (`topbins`, `worldie` reaction aside): `leap` 0 for one
   frame as the ball is struck, then 1 (full stretch) and 2 (hang) while you lift him on an arc
-  of about 5 px (`y - Math.round(arc(u) * 5)`), then back to `ready`. His gloves are at
+  of about 10 px (`y - Math.round(arc(u) * 10)`), then back to `ready`. His gloves are at
   `keeperHands("leap", f, { flipX: true })` plus the lift: put a tipped-over ball just beyond
   them, or a goal a pixel past them.
 - **Low save** (`ontarget` low, or a smother): `smother` 0 then 1 with the ball drawn at
@@ -683,25 +784,32 @@ same `flipX` for every frame, the beaten frame already looks back at the goal):
   the leap, then `beaten`. `worldie`: hold `ready` frame 0 (frozen), then `beaten`.
 - **Nothing happens** (`wide`, `timeup`, `skipped`): `ready`.
 
-**The props.** The match ball is 3 x 3 (white, mist shade, a slate panel) with 3 spin frames;
-pass a running counter as `frame`. `gold` is the worldie's trail. The scene draws its shadow.
-The trophy is 9 x 12, a two-handled gold cup on a dark plinth, `glint` adds a white flash
-on the bowl (light sources are raw colour: the glint is not graded). The puff is 7 x 5, three
+**The props.** The match ball is 6 x 6 (white, mist and steel shades, a slate panel) with 3
+spin frames, its fill `x - 3 .. x + 2` round the centre; pass a running counter as `frame`.
+`gold` is the worldie's trail. `drawBallRing(s, x, y, ink)` is its 2 px ink ring (10 x 10),
+drawn first on the same centre. The scene draws its shadow. The trophy is 18 x 24
+(`x - 9 .. x + 8`), a two-handled gold cup on a wooden plinth, `glint` adds a white flash
+on the bowl (light sources are raw colour: the glint is not graded). The puff is 14 x 10, three
 frames (a kick of dirt, a cloud, drifting specks), one colour passed in: grade it yourself
 (`light.lit(P.grassHi)` on grass, `light.env(P.woodDark)` for park mud). Out of range frames
 draw nothing.
 
-Shots: `people/sheet`, `youth-sheet`, `keeper-sheet`, `kits`, `props`, `in-context` (a strip
-of pitch at 480 x 90), `park`, and the motion shots `people/run`, `kick`, `juggle`,
-`celebrate`, `lift`, `leap`, `smother`, `youth-run`, `youth-kick`, `youth-juggle` (use
-`--strip 8 --dt 0.1`), and the shots `people/tapin`, `toepoke`, `trivela`, `chip`, `power`,
-`finesse`, `bicycle`, their `people/youth-*` twins and the keeper's `people/stranded`, `sprawl` (each
-plays the shot with a stand-in ball flight; `--strip 11 --dt 0.1` shows a whole bicycle).
+Shots: the sheets `people/sheet` (also `-away`, `-rival`, `-referee`), `kits`, `shots`,
+`shots-kits`, `youth-sheet` (also `-club`, `-rival`), `youth-keeper`, `youth-kits`,
+`youth-shots`, `youth-shots-kits`, `keeper-sheet`, `props`, `fetch-sheet`; one motion shot
+per animation (use `--strip 8 --dt 0.1`): the moves `people/idle`, `run`, `kick`, `juggle`,
+`celebrate`, `dejected`, `lift`, `shrug`, `slide` and their `people/youth-*` twins; the shots
+`people/tapin`, `toepoke`, `trivela`, `chip`, `power`, `finesse`, `bicycle` and their
+`people/youth-*` twins (each plays the shot with a stand-in ball flight; `--strip 11 --dt 0.1`
+shows a whole bicycle); the keeper's `people/ready`, `leap`, `smother`, `hold`, `beaten`,
+`stranded`, `sprawl`.
 
-Files: `kit.ts` (kits), `figure.ts` (fill-only art outlined at load, the shared legend),
-`adult.ts`, `youth.ts`, `keeper.ts` (the frames as text), `adult-shots.ts`, `youth-shots.ts`
-(the seven shots), `people.ts` (tables, cells, spots, drawing), `props.ts`, `index.ts`.
-Sprites are built once per animation, on first use; drawing allocates nothing.
+Files: `kit.ts` (kits and their colour array), `figure.ts` (fill-only art outlined at load,
+the shared legend, parts), `adult.ts` (the moves and the heads), `adult-shots.ts` (the seven
+shots and the rig every frame is painted on), `youth.ts`, `youth-shots.ts` (the same for the
+youth), `keeper.ts`, `fetch.ts` (the keeper's and the ball kid's fetch frames), `people.ts`
+(tables, cells, spots, drawing), `props.ts`, `index.ts`, and a `.shots.ts` sheet beside each
+art file. Sprites are built once per animation, on first use; drawing allocates nothing.
 
 ## Grounds (`~/art/grounds`)
 
@@ -718,7 +826,8 @@ interface GroundPodium { x: number; top: number; w: number }  // tier 7: his fee
 const FINAL_NIGHT: Lighting;                               // the light of tiers 6 and 7
 
 class CareerGround {
-  constructor(opts: { seed: number; mode: Mode; tier: Tier; labels?: GroundLabels });
+  constructor(opts: { seed: number; mode: Mode; tier: Tier; labels?: GroundLabels; era?: Era });
+                                           // era: fixed for the ground's life, "today" by default
   resize(w: number, h: number): void;
   setLighting(light: Lighting): void;      // the player's sky; ignored at tiers 6 and 7
   setMode(mode: Mode): void;
@@ -782,6 +891,158 @@ that moves: a build fills a `Life`, the frame draws it). To add a tier: paint it
 in `far.ts` (heights are measured up from the far touchline `g.F`; his street's foot is
 `g.B`; place things with `sx(g, offsetOnThe130pxStage)`), its near side in `near.ts`, hand
 anything that moves to the `Life`, and call it from `CareerGround.build`.
+
+## Eras (`~/art/era`)
+
+RETRO and NEXT-GEN have a look of their own in the career scene (since 2026-11-13; what they
+look like is `docs/ART_BIBLE.md` section 10). HOME and AWAY are drawn in today's look, which
+did not change by a pixel. The era is a parameter, never a global.
+
+```ts
+type Era = "today" | "retro" | "nextgen";
+ERAS: readonly Era[]
+eraOf(mode: Mode): Era          // retro -> "retro", nextgen -> "nextgen", every other mode -> "today"
+```
+
+- **One rule for every painter.** A painter that draws differently per era takes the era as an
+  optional argument, its last, that defaults to `"today"`; with `"today"` it draws exactly
+  what it drew before. So every shot and every caller that passes nothing gets today's look.
+  Nothing keeps module state keyed on the era, but for caches that have one entry per era.
+- **Who decides it.** The career scene, once, from its mode (`eraOf`), beside its journey,
+  which stays HOME's for RETRO and NEXT-GEN (`docs/API_SCENES.md`). It hands the era on in
+  four ways: to the ground, on the kits, to the props and to the effects.
+- **The ground.** `new CareerGround({ ..., era })` keeps it for its life, so its build caches
+  need no era key. `paintFor(g, light, tier, mode, seed, labels, era = "today")` puts it in
+  the paint context as `Paint.era`, and every ground painter, the crowd and the people read
+  `p.era`. RETRO warms every ground colour at every tier, once, before the light grades it:
+  `paintFor` runs `E`, `S` and `D` through `retroGrade` (`grounds/retro-grade.ts`:
+  `retroWarm(c)` moves a colour `RETRO_WARM` = 0.14 of the way to `mix(P.chalk, P.wood,
+0.45)`), so the promotion from tier 3 to 4 keeps its colour. Lamps, lit windows and the
+  sky are raw and never pass through it; a RETRO painter must not warm again on top.
+- **The goal.** `goalColors(G, tier, era = "today")` puts the era in `GoalColors` (`c.era`)
+  with a `style`: `"wood"` for RETRO at every tier (square wooden posts and a rope net,
+  `goal-retro.ts`; at tier 0 a `cap` on the near pile of jackets). NEXT-GEN's goal is
+  `c.era === "nextgen"`: marker cones at tier 0 (`goalPylon`) and slim posts with a net of
+  light at tiers 1 to 3 (`nextgen-low.ts`); from tier 4 `c.arena` switches to the bolder
+  arena goal, today's 4 px frame in light (`arenaGoalBack`, `arenaGoalFront` in
+  `nextgen-high.ts`, the same signatures as `ngGoalBack` / `ngGoalFront`).
+  `drawGoalBack` and `drawGoalFront` read both, so their signatures did not change, and the
+  goal's geometry (`GroundGoal`, the bulge) is the same in every era.
+- **Movers.** `Life.movers: Mover[]` holds an era's own moving things, made once per build:
+  `interface Mover { sky?(s, t): void; far?(s, t): void }`. `sky` is drawn at the start of
+  the sky's life, after the sky and before the layer is copied over it, so it shows only
+  through the layer's gaps (far skylines, hover traffic, drones, smoke behind the stands);
+  `far` at the end of the far side's life, over the layer and the watchers. Today's list is
+  empty. Drawing a mover allocates nothing. An optional `seen?(layer)`, called once by
+  `CareerGround` when the build is done, lets a mover learn which of its pixels the finished
+  layer leaves in view and redraw only those (NEXT-GEN's city behind the stands: 0.02 ms a
+  frame at 1920 x 1080, where a full copy cost 0.6; the crawling holographic boards at tiers 2
+  and 3, `paintHoloBoards(..., life)`, so the corner flag stays in front). `Life.scoreboard`
+  takes an optional `color` for its lamps (amber by default).
+- **Board words.** NEXT-GEN's boards say their own words: `en.play.canvas.nextgen.boards`
+  reaches the scene as `CareerLabels.nextgen` and replaces `labels.boards` for NEXT-GEN only
+  (`career.ts`), so every NEXT-GEN board that reads `p.labels.boards` shows them, drawn in
+  lamps on dark glass. RETRO and today keep `labels.boards`.
+- **The crowd.** `crowdShirts` and `crowdColors` (`paint.ts`) hand an era its own crowd:
+  RETRO old gold and chalk to tier 4, the nation's brick red and chalk from tier 5
+  (`retroShirts`); NEXT-GEN the hero's magenta (`nextgenShirts`, `nextgenColors` in
+  `grounds/nextgen-people.ts`). The people in `grounds/people.ts` take optional extras, all
+  absent for today: NEXT-GEN's glowing wristband and visor (`drawFanAt(..., band?, visor?)`,
+  `FanLook`, `FanList`, `Watcher`, and a headset of light through `crowdBack(..., glow?)`;
+  the band is a 2 x 2 held up on a wrist, `drawFanBand`, and a remembered fan's is drawn
+  each frame so a white crest can run across the stands, `bandCrest` and `drawFanCrest`,
+  with its halo `FanLook.halo` by night only), RETRO's
+  hats, bowlers and rattles (`hat`, `hatColor`, `rattle`; `grounds/retro-people.ts`).
+  RETRO's near crowd from behind (tiers 3 to 7) has its own lighter dress,
+  `retroNearDress` (`grounds/retro-near-crowd.ts`, from `crowdBacks`), with a striped
+  `neckScarf` on about one in five. The standing watchers (`far.ts` `watcher`): RETRO's
+  coats go through `retroCoat` (today's reds to old gold, teal to slate and night) with a cap
+  or bowler (`retroWatcherHat`); NEXT-GEN's through `nextgenCoat(E, coat, n)` (red to
+  magenta, every other coat a slim jacket in slate, night, steel or panel grey) with
+  `nextgenWatcherLights` (the crowd's wristband, a visor on about half, and `Watcher.trim`,
+  a hem and zip of raw cyan or white light drawn by `drawWatcher`).
+- **The cast.** The era rides on the kit, so no draw call changes:
+  - `Kit.era?: Era`; `makeKit(base, { look, variant, era })` makes today's kit, then hands
+    it to `retroKit` (`characters/retro.ts`) or `nextgenKit` (`characters/nextgen.ts`).
+    `ensureKits(kits, tier, journey, light, era)` (`career-cast.ts`) and `ballKidKit(era)`
+    pass it.
+  - `Kit.eraColors?` (up to 8, graded with the kit by `litKit`) and `Kit.eraGlows?` (up to 4,
+    light sources, copied raw by `litKit`; art bible 3.2). The fill art's legend
+    (`figure.ts` `LEGEND`) ends in twelve era letters that today's art never uses: `1 2 3 4`
+    are `eraColors[0..3]`, `5 6 7 8` the four glows, `9 A C D` `eraColors[4..7]` (`B` is
+    taken by the boot's highlight). `kitColors(kit)` appends all twelve, transparent where a
+    kit leaves a slot empty. Each era gives the letters its own meaning: RETRO a moustache,
+    shirt stripes, a sock band and the keeper's cap; NEXT-GEN a visor strap, glowing seams
+    and trims, and the visor's glass and shine.
+  - **Frame layers.** An era's people are a layer over today's fill art, never a second copy
+    of it. `eraFrames(era, who, anim, art)` (`characters/era-frames.ts`; `who` is
+    `"adult"`, `"youth"`, `"keeper"` or `"fetch"`) passes today's art through and hands the
+    others to `retroFrames` or `nextgenFrames`, which rewrite cells inside the figure frame
+    by frame before `figure()` outlines it. Every frame keeps its size, its soles and its
+    spots, so every move and shot plays as today's. `drawPlayer`, `drawKeeper` and
+    `drawFetch` pick their sprites by `kit.era ?? "today"`, from one sprite cache per era
+    (`playerSprite(anim, youth, era)`, `keeperSprite(anim, era)`, `fetchSprite(anim, era)`).
+  - NEXT-GEN's referee is a man in black with amber light (`nextgenKit`'s `"referee"`, drawn
+    by `drawPlayer` like today's), and its struck shots leave a light trail
+    (`NEXTGEN_TRAIL`).
+- **The props.** `drawMatchBall(..., { gold, era })`: RETRO's brown laced leather ball
+  (`drawRetroBall`, `retro-props.ts`), NEXT-GEN's pearl ball with glowing panels
+  (`drawNextgenBall`); both 6 x 6 with three spin frames and a gold variant, and
+  `drawBallRing` is the same for all. `drawTrophy(..., glint, era)`: RETRO's gilt lidded
+  cup, NEXT-GEN's narrow gold cup with a line of light (flaring over its rim when
+  `light.lightsOn`); both 18 x 24 on today's footprint.
+- **The big grounds** (tiers 4 to 7). RETRO (`retro-high.ts`): `trimFor(tier)` gives the
+  stand's trim, hoardings, band, scoreboard, ball boys, table cloth and podium fringe the
+  crowd's colour (old gold to tier 4, brick from 5); `lampStandard` draws the iron lamp
+  standards with bare bulbs (no lattice pylons) and `searchlightDrum` the drums on the roofs
+  at 6 and 7; `handScoreboard` stands on the end's roof (`endScoreboardX`) or, where that is
+  off the canvas, on the grandstand's (`standScoreboardX`); a probe drops any far mover whose
+  smoke would start inside the pediment's or flag's box; `drawOldBursts(..., bold)` are the
+  goal fireworks. `retro-end.ts` `endBoards` letters the end's boards by hand. NEXT-GEN
+  (`nextgen-high.ts`): the arena goal (above), the band a phone sees (light along the
+  balcony rail and the tier fronts, lit boxes with holo panels, the track's light strip,
+  low broadcast drones), `paintArenaPhotographers` (from tier 3, dispatched by `pitch.ts`
+  `paintPhotographers`; a drone takes the first photographer's place from tier 4), the
+  white-glass plinth, and the holo sign carried by two drones.
+- **The effects** (`app/scenes/career-fx.ts`): `buildColors(grade, era)` (the promotion's
+  close-up, `BuildColors.era`), `drawGoalFireworks(..., era)` and `drawConfetti(..., era)`
+  take the era last and dispatch to `career-fx-retro.ts` and `career-fx-nextgen.ts`, at
+  today's timings so the sounds still fit. At tier 7 `CareerGround.drawFront` swaps the
+  ticker tape for RETRO's torn paper (`drawPaperTape`) or NEXT-GEN's glowing confetti
+  (`drawGlowTape`).
+
+Who draws what (files):
+
+| area                         | RETRO                                                                                                                                                   | NEXT-GEN                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| players, props, crowd people | `characters/retro.ts`, `retro-props.ts`, `grounds/retro-people.ts`                                                                                      | `characters/nextgen.ts`, `grounds/nextgen-people.ts`                      |
+| small grounds (tiers 0 to 3) | `grounds/retro-low.ts` (with the street at every tier, `paintRetroStreet`), `retro-club.ts`, `goal-retro.ts` (the goal at every tier), `retro-grade.ts` | `grounds/nextgen-low.ts` (the goal to tier 3)                             |
+| big grounds (tiers 4 to 7)   | `grounds/retro-high.ts`, `retro-end.ts`, `retro-near.ts`, `retro-near-crowd.ts`, `retro-pitch.ts`                                                       | `grounds/nextgen-high.ts` (the arena goal, the photographers from tier 3) |
+| effects                      | `scenes/career-fx-retro.ts`                                                                                                                             | `scenes/career-fx-nextgen.ts`                                             |
+
+The shared files (`far.ts`, `near.ts`, `pitch.ts`, `end.ts`, `stadium.ts`, `crowd.ts`,
+`goal.ts`, `ground.ts`, `kit.ts`, `people.ts`, `fetch.ts`, `props.ts`, `career.ts`,
+`career-fx.ts`) hold only one-line dispatches on the era. To change an era's look, work in
+its own files.
+
+**Shots.** Every era shot has its own id; today's ids draw today's look.
+
+- People: `people/retro-sheet` (also `-rival`, `-referee`, `-national`), `retro-youth`,
+  `retro-keeper`, `retro-kits`, `retro-props`; `people/nextgen-sheet`, `nextgen-youth-sheet`,
+  `nextgen-keeper-sheet`, `nextgen-fetch-sheet`, `nextgen-kits`, `nextgen-props`.
+- Small grounds: `ground-low/retro-*` (`street`, `park`, `green`, `club`, `proper`, their
+  near sides, `goals`, `tier0` to `tier3`, `pair0` to `pair3`, `row`) and
+  `ground-low/nextgen-*` (`street`, `park`, `club`, `proper`, near sides, `tier1-far`,
+  `tier1-near`, `goal0` to `goal2`, `t0` to `t3`).
+- Big grounds: `ground/retro-t4` to `retro-t7`, `retro-stand`, `retro-end`, `retro-near`,
+  `retro-goal`.
+- The scene: `career/retro-players-*` and `career/nextgen-players-*` (`t0` to `t7`,
+  `shot-<grade>` and `-t0`, `ft0`, `ft4`, `ft7`, `sheet`); `career/retro-low-*` (`t0` to
+  `t3`, `goal-t0` to `-t3`, `promote1`, `promote3`, `ft0`, `ft3`, `sheet`);
+  `career/retro-high-*` (`t4` to `t7`, `goal-t4` to `-t7`, `promote`, `promote5`, `ft4`,
+  `ft7`, `sheet`); `career/nextgen-idle-t4` to `-t7`, `nextgen-golazo-t4` to `-t7`,
+  `nextgen-worldie-t6`, `nextgen-promote-t4`, `-t5`, `nextgen-fulltime`, `-fulltime-t4`,
+  `career/nextgen-high` (a sheet).
 
 ## Known weak points
 
