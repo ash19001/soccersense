@@ -73,20 +73,20 @@ height: `menuLogo` 0.15, `menuCaptions` 0.1, `boardAsking` 0.3, `boardShrunk` 0.
 `menuLayout(w, h)`, values at 130x281 | 120x222 | 160x300 | 480x270. It describes the aerial
 picture of the home screen (three fields keep the names they had for an older picture):
 
-| field        | meaning                                                                                                   | values                                                                                |
-| ------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `cx`         | `round(W / 2)`                                                                                            | 65, 60, 80, 240                                                                       |
-| `horizonY`   | the horizon: sky above, the town from here down (0.27 H to 0.33 H)                                        | 92, 72, 98, 73                                                                        |
-| `ballR`      | `round(min(W * 0.34, H * 0.165))`                                                                         | 44, 37, 50, 45                                                                        |
-| `ballCy`     | `round(H * 0.70)`; the ball floats, centred on `(cx, ballCy)`                                             | 197, 155, 210, 189                                                                    |
-| `logo`       | zone: the top 15%, full width: keep it clear sky                                                          | h 42, 33, 45, 41                                                                      |
-| `scoreboard` | zone: the sign at full size; the airship draws it at `AIRSHIP_SIZE` (0.64) round its centre               | (18, 8, 184, 70) at 960 x 540; (-1, 76, 172, 66) at 234 x 507                         |
-| `stand`      | zone: the stadium, the box round the bowl on screen                                                       | (0, 98, 130, 47); (82, 87, 316, 108)                                                  |
-| `pitch`      | zone: the land in front of the stadium, from its near wall to the bottom                                  | y 145, 122, 164, 195                                                                  |
-| `caption`    | zone: the bottom 10% (the DOM captions: its middle 135 px on a phone, a row across its foot on a monitor) | y 253, 200, 270, 243                                                                  |
-| `sky`        | `{ horizonY, clearTop, sunX, moon }`, spread into drawSky                                                 | horizon 92, clearTop 42, sunX 65 (`cx`); moon (11, 12), (11, 12), (80, 69), (394, 28) |
-| `scale`      | the camera: pixels per map unit at the centre spot (not a whole number)                                   | 0.42, 0.39, 0.52, 0.96                                                                |
-| `spotY`      | the row of the centre spot of the pitch (its column is `cx`)                                              | 116, 95, 128, 129                                                                     |
+| field        | meaning                                                                                                                           | values                                                                                |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `cx`         | `round(W / 2)`                                                                                                                    | 65, 60, 80, 240                                                                       |
+| `horizonY`   | the horizon: sky above, the town from here down (0.27 H to 0.33 H)                                                                | 92, 72, 98, 73                                                                        |
+| `ballR`      | `round(min(W * 0.34, H * 0.165, max(W * 0.31, 73)))`: on a phone 0.31 of the width, never under 73 (the smallest ball with words) | 44, 37, 50, 45                                                                        |
+| `ballCy`     | `round(H * 0.70)`; the ball floats, centred on `(cx, ballCy)`                                                                     | 197, 155, 210, 189                                                                    |
+| `logo`       | zone: the top 15%, full width: keep it clear sky                                                                                  | h 42, 33, 45, 41                                                                      |
+| `scoreboard` | zone: the sign at full size; the airship draws it at `AIRSHIP_SIZE` (0.64) round its centre                                       | (18, 8, 184, 70) at 960 x 540; (-1, 76, 172, 66) at 234 x 507                         |
+| `stand`      | zone: the stadium, the box round the bowl on screen                                                                               | (0, 98, 130, 47); (82, 87, 316, 108)                                                  |
+| `pitch`      | zone: the land in front of the stadium, from its near wall to the bottom                                                          | y 145, 122, 164, 195                                                                  |
+| `caption`    | zone: the bottom 10% (the DOM captions: its middle 135 px on a phone, a row across its foot on a monitor)                         | y 253, 200, 270, 243                                                                  |
+| `sky`        | `{ horizonY, clearTop, sunX, moon }`, spread into drawSky                                                                         | horizon 92, clearTop 42, sunX 65 (`cx`); moon (11, 12), (11, 12), (80, 69), (394, 28) |
+| `scale`      | the camera: pixels per map unit at the centre spot (not a whole number)                                                           | 0.42, 0.39, 0.52, 0.96                                                                |
+| `spotY`      | the row of the centre spot of the pitch (its column is `cx`)                                                                      | 116, 95, 128, 129                                                                     |
 
 `MENU_CAMERA` holds the camera numbers the layout shares with the painter (the horizon's rise
 above the centre spot and the bowl's box, in map units). The sun climbs and sets in the middle

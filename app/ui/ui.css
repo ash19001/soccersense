@@ -3144,7 +3144,8 @@ button.ss-menu__card:active {
  */
 .ss-lb-open {
   position: absolute;
-  right: 0;
+  /* In line with the "?", sound and stats buttons above it (section 26). */
+  right: var(--ss-icon-in, 0px);
   bottom: var(--u3);
 }
 
@@ -4600,6 +4601,18 @@ html:has(.ss-help-dialog[open]) {
   }
 }
 
+/*
+ * A phone: the two stacks of buttons (the bell, heart and day plate on the left; the "?",
+ * sound, stats and trophy on the right) stand this far in from the cards' ends, so that
+ * they never look pressed against the screen's edge: two logical pixels, which leaves four
+ * of picture between them and the edge (8 px on a small phone, 12 on most) where the
+ * column's margin alone left two. The home page works it out (`--ss-icon-room`, from
+ * routes/home-icons.ts): less, as little as none, where the ball would come too close.
+ */
+.ss-game:not([data-wide]) {
+  --ss-icon-in: var(--ss-icon-room, var(--u2));
+}
+
 .ss-game:not([data-wide]) .ss-menu__side {
   display: contents;
 }
@@ -4607,12 +4620,12 @@ html:has(.ss-help-dialog[open]) {
 .ss-game:not([data-wide]) .ss-menu__day {
   position: absolute;
   bottom: calc(100% + var(--u3));
-  left: 0;
+  left: var(--ss-icon-in);
 }
 
 .ss-game:not([data-wide]) .ss-menu__side > .ss-btn {
   position: absolute;
-  right: 0;
+  right: var(--ss-icon-in);
   bottom: calc(100% + var(--u3) * 2 + var(--tap) * 3 + var(--u2) * 2);
 }
 

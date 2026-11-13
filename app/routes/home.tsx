@@ -12,6 +12,7 @@
 // which multiplies the scene's time (0.1 is slow motion, for looking at the kick-off).
 
 import {
+  type CSSProperties,
   useEffect,
   useMemo,
   useRef,
@@ -57,8 +58,10 @@ import {
   useArrivalFocus,
   useDeviceSky,
   useFadeArrival,
+  usePixelScale,
 } from "~/ui";
 import type { Route } from "./+types/home";
+import { menuIconInset } from "./home-icons";
 import { signMessages } from "./home-sign";
 import { howToPlayContent } from "./how-to-play-card";
 import { type StatsContent, statsContent } from "./stats-content";
@@ -283,6 +286,21 @@ function serverMatchday(): null {
   return null;
 }
 
+/** The page's width in CSS px, for placing the icon buttons (home-icons.ts). */
+function subscribeToWidth(onChange: () => void): () => void {
+  window.addEventListener("resize", onChange);
+  return () => window.removeEventListener("resize", onChange);
+}
+
+function readWidth(): number {
+  return document.documentElement.clientWidth;
+}
+
+/** At build time there is no page: 0, which menuIconInset takes as "not known". */
+function noWidth(): number {
+  return 0;
+}
+
 /** Where this device remembers the last streak it showed, for the hop when it goes up. */
 const STREAK_SEEN = "soccersense:streak-seen";
 
@@ -407,6 +425,18 @@ export default function Home() {
   );
   const scene = matchday?.scene ?? null;
   const moonPhase = sky?.moonPhase;
+  // How far the icon buttons stand in from the cards on a phone: clear of the screen's
+  // edge, and of the ball (home-icons.ts). The live scale: the PixelRoot that hands the
+  // canvas its own is further down the page, and both read the same store.
+  const scale = usePixelScale();
+  const pageW = useSyncExternalStore(subscribeToWidth, readWidth, noWidth);
+  const iconRoom = useMemo(
+    () =>
+      ({
+        "--ss-icon-room": `${menuIconInset(scale, pageW)}px`,
+      }) as CSSProperties,
+    [scale, pageW],
+  );
 
   /** The mode whose patch on the ball is under the pointer. */
   const [lit, setLit] = useState<Mode | null>(null);
@@ -547,7 +577,7 @@ export default function Home() {
   };
 
   return (
-    <main>
+    <main style={iconRoom}>
       <GameLayout
         canvas={
           <PixelStage
