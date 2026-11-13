@@ -212,8 +212,13 @@ it, `goal` a goal with its net and a ball on the spot.
 - `hovered`, `pressed` and `chosen` are slots or `null`. `chosen` flashes at 8 Hz off `t`.
   A bar of light crosses HOME then AWAY every five seconds off `t` (off at `t = 0`). There is
   no reduced-motion input: hold `t` still.
-- `badge` writes a score on the patch in place of its word, once the mode has been played:
-  bare figures in the button's colour on all four (no plate since 2026-11-13).
+- `badge` writes a score on the patch once the mode has been played: bare figures in the
+  button's colour on all four (no plate since 2026-11-13). On HOME and AWAY it takes the
+  picture's place, centred in the picture's box over the word, which stays where it was
+  (2026-11-13), in big figures if they fit there, else small (`scoreOver`, from the room table's
+  `roomScoreAt` entries). Where the words do not fit (below r = 37) or the score does not fit
+  there, it takes the word's place under the picture, as before. NEXT-GEN and RETRO show the
+  score alone.
 - `accent` is usually `MODE_COLORS[mode]`.
 - What a button shows depends on the radius: big icons and words from r = 56, icon and word
   from 37, icon only below 37, only the coloured line below 26; and on how far it faces the
@@ -225,7 +230,8 @@ it, `goal` a goal with its net and a ball on the spot.
   patch's pixels. On HOME and AWAY the picture and the word or score are a pair: the fonts
   and the line are chosen with the text on the pentagon's widest rows, then the pair moves
   down in steps of 2 px towards centred as far as what both patches write still fits there
-  (a score goes all the way, a word part of it), the same for both so they stay level.
+  (a score alone goes all the way, a word part of it; a played patch's word and the score
+  over it must both fit), the same for both so they stay level.
 - Shots: `ball/menu`, `states`, `states-small`, `rock`, `sizes`, `flight`, `spin`, `badge`,
   `shine`, `fit`, `modes` (every patch in the pose that shows it), `modes-fit` (those poses at
   r 37 to 59, at both ends of the rock), `rim` (GUESS WHO and SHOOTOUT straight on, big).

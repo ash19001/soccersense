@@ -500,12 +500,13 @@ controller uses too). A card not played yet starts with `picture` (`.ss-menu__pi
 "w" and "." (the home page passes the ball's art, `MODE_PICTURES` from `app/art/ball-icons.ts`)
 drawn in the mode's colour in font pixels, in a box 18 font pixels square, offset in it by
 whole font pixels (`PICTURE_BOX`). Layout (ui.css section 28): a phone reads picture, badge,
-line, and played: score, REVIEW, SHARE (no badge: no room; the buttons as tall as the card, at
-its end); a monitor's left column reads outwards from the centre line (`line badge picture |
+line, and played: score, badge, REVIEW (2026-11-13: no SHARE on a phone's card, it is in the
+review; REVIEW as tall as the card, at its end, a touch target wide, narrowing to its symbol
+where the card is short of room); a monitor's left column reads outwards from the centre line (`line badge picture |
 picture badge line`, `SHARE REVIEW badge score | score badge REVIEW SHARE`, the buttons squares
 as tall as the row, like the "?"); a phone under 710 CSS px tall shows the badge alone, or the
-score once played, and a played card's REVIEW covers the whole card, unseen but for its focus
-ring (SHARE is then in the review).
+score once played (centred, as the badge is), and a played card's REVIEW covers the whole
+card, unseen but for its focus ring.
 
 **Four modes (2026-11-13).** The cards come in pairs, a pair to a row: HOME | AWAY, then
 RETRO | NEXT-GEN (the past on the left, the future on the right). `short` ("Most common wins",

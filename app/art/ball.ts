@@ -963,7 +963,9 @@ const ROOM_MARK_FRONT = 9;
 const ROOM_WORD_FRONT = 10;
 /** The side room again, the text moved down 2, 4, ... SHIFT_MAX rows (`roomAt`). */
 const ROOM_SHIFTED = 11;
-const ROOM_SIZE = ROOM_SHIFTED + (SHIFT_MAX / 2) * 6;
+/** A played side patch's score in its picture's place, over its word (`roomScoreAt`). */
+const ROOM_SCORE = ROOM_SHIFTED + (SHIFT_MAX / 2) * 6;
+const ROOM_SIZE = ROOM_SCORE + (SHIFT_MAX / 2 + 1) * 3 * 4;
 /** The menu's deepest nod, give or take: the squashed room is measured that far each way. */
 const SQUASH_NOD = 0.065;
 
@@ -972,6 +974,35 @@ const SQUASH_NOD = 0.065;
 function roomAt(ring: number, rows: number, shift = 0): number {
   const at = ring * 2 + (rows > 10 ? 1 : 0);
   return shift <= 0 ? at : ROOM_SHIFTED + ((shift >> 1) - 1) * 6 + at;
+}
+
+/**
+ * Index into a room table: the width free for a played side patch's score in the place of
+ * its picture (`scoreTop`), by the line's place, the score's rows (10 or 14), the word's
+ * rows under it (10 or 14), and how far below `textTop` the word is.
+ */
+function roomScoreAt(
+  ring: number,
+  scoreRows: number,
+  labelRows: number,
+  shift: number,
+): number {
+  return (
+    ROOM_SCORE +
+    ((shift >> 1) * 3 + ring) * 4 +
+    (scoreRows > 10 ? 2 : 0) +
+    (labelRows > 10 ? 1 : 0)
+  );
+}
+
+/**
+ * Top row of a played side patch's score: in the middle of where its picture would be,
+ * over its word, whose top row is `labelTop` (the picture is `icon` rows tall). So the
+ * word stays where it was before the mode was played, and the picture becomes the score
+ * (2026-11-13: the patch says what it is and how it went, score over word).
+ */
+function scoreTop(labelTop: number, icon: number, scoreRows: number): number {
+  return labelTop - ICON_GAP - icon + halfRows(icon - scoreRows);
 }
 
 /**
@@ -1065,7 +1096,9 @@ function roomFor(): Int16Array {
     const [x, y] = markOf(1);
     const topS = textTop(y, rowsS);
     const topB = textTop(y, rowsB);
-    const from = Math.min(topS, topB);
+    // a played patch's score, in its picture's place over the word
+    const icon = sideIconRows(rs() >= BIG_ICON_R);
+    const from = Math.min(topS, topB) - ICON_GAP - icon;
     rasteriseRows(
       from,
       Math.max(topS + rowsS, topB + rowsB) + SHIFT_MAX - from,
@@ -1090,6 +1123,20 @@ function roomFor(): Int16Array {
           rowsB,
           edge,
         );
+        for (const scoreRows of [rowsS, rowsB]) {
+          for (const [labelTop, labelRows] of [
+            [topS, rowsS],
+            [topB, rowsB],
+          ]) {
+            room[roomScoreAt(ring, scoreRows, labelRows, shift)] = freeRun(
+              1,
+              x,
+              scoreTop(labelTop + shift, icon, scoreRows),
+              scoreRows,
+              edge,
+            );
+          }
+        }
       }
     }
     // A locked patch in a side place (where CLOSEST and FURTHEST rest after half a turn):
@@ -1217,15 +1264,23 @@ function sideShiftFor(patches: BallPatches, room: Int16Array): number {
     if (!patch || !accentOf(patch) || FRONT_FACE[SLOT_FACE[i]] === 1) continue;
     let text = patch.label;
     let opts: TextOptions | null = labelOpts;
+    const labelRows = labelOpts === F.BIG ? 14 : 10;
+    // a played patch's score over its word, in the small figures at least
+    let scoreW = -1;
     if (hasBadge(patch)) {
-      // the figures `drawContent` will pick
-      text = patch.badge as string;
-      opts =
-        bigIcons && badgeFits(text, F.BIG_DIGITS, 14)
-          ? F.BIG_DIGITS
-          : badgeFits(text, F.SMALL_DIGITS, 10)
-            ? F.SMALL_DIGITS
-            : null;
+      const badge = patch.badge as string;
+      if (scoreOver(badge, labelRows, 0) !== null) {
+        scoreW = measureText(badge, F.SMALL_DIGITS);
+      } else {
+        // the figures `drawContent` will pick, in the word's place
+        text = badge;
+        opts =
+          bigIcons && badgeFits(text, F.BIG_DIGITS, 14)
+            ? F.BIG_DIGITS
+            : badgeFits(text, F.SMALL_DIGITS, 10)
+              ? F.SMALL_DIGITS
+              : null;
+      }
     }
     if (opts === null || text === "") continue;
     const rows = opts === F.BIG || opts === F.BIG_DIGITS ? 14 : 10;
@@ -1233,7 +1288,8 @@ function sideShiftFor(patches: BallPatches, room: Int16Array): number {
     let shift = 0;
     while (
       shift + 2 <= centredShift(rows, icon) &&
-      w <= room[roomAt(ringAt, rows, shift + 2)]
+      w <= room[roomAt(ringAt, rows, shift + 2)] &&
+      scoreW <= room[roomScoreAt(ringAt, 10, rows, shift + 2)]
     ) {
       shift += 2;
     }
@@ -1243,34 +1299,97 @@ function sideShiftFor(patches: BallPatches, room: Int16Array): number {
 }
 
 /**
+ * The figures a played side patch's score is written in, in its picture's place over its
+ * word (`labelRows` tall, `shift` below `textTop`), or null if neither size fits there.
+ */
+function scoreOver(
+  text: string,
+  labelRows: number,
+  shift: number,
+): TextOptions | null {
+  if (!playedWords || labelOpts === null || rs() < ICON_MIN_R) return null;
+  const F = labelFonts();
+  const room = roomFor();
+  if (
+    bigIcons &&
+    measureText(text, F.BIG_DIGITS) <=
+      room[roomScoreAt(ringAt, 14, labelRows, shift)]
+  ) {
+    return F.BIG_DIGITS;
+  }
+  if (
+    measureText(text, F.SMALL_DIGITS) <=
+    room[roomScoreAt(ringAt, 10, labelRows, shift)]
+  ) {
+    return F.SMALL_DIGITS;
+  }
+  return null;
+}
+
+/**
  * Pick the line's place and the label font for this frame (see `ringAt`). Words matter
  * more than the line: on a small ball the line moves out to the pentagon's edge, and on
  * a smaller one still it goes, to leave the label room.
  */
 function chooseLayout(patches: BallPatches, room: Int16Array): void {
   const F = labelFonts();
-  const rowsS = 10;
-  const rowsB = 14;
-  // The widest label in each font, and the widest score in small figures.
+  // The widest label in each font, of every side button and of the ones not played yet,
+  // and the widest score in small figures.
   let small = 0;
   let big = 0;
+  let openSmall = 0;
+  let openBig = 0;
   let score = 0;
   for (let i = 0; i < SLOT_COUNT; i++) {
     const patch = patches[SLOTS[i]];
     // the side buttons (a locked patch has its own layout: see `drawLocked`; so do the
     // buttons on the top and the bottom: see `drawFront`)
     if (!patch || !accentOf(patch) || FRONT_FACE[SLOT_FACE[i]] === 1) continue;
-    if (hasBadge(patch)) {
+    const played = hasBadge(patch);
+    if (played) {
       score = Math.max(
         score,
         measureText(patch.badge as string, F.SMALL_DIGITS),
       );
-    } else if (patch.label !== "") {
-      small = Math.max(small, measureText(patch.label, F.SMALL));
-      big = Math.max(big, measureText(patch.label, F.BIG));
+    }
+    if (patch.label !== "") {
+      const s = measureText(patch.label, F.SMALL);
+      const b = measureText(patch.label, F.BIG);
+      small = Math.max(small, s);
+      big = Math.max(big, b);
+      if (!played) {
+        openSmall = Math.max(openSmall, s);
+        openBig = Math.max(openBig, b);
+      }
     }
   }
   bigIcons = rs() >= BIG_ICON_R;
+  // A played button keeps its word, with the score over it (`drawContent`), where the
+  // words fit; where they do not, it shows its picture and score, as before 2026-11-13.
+  pickWords(small, big, score, room);
+  playedWords = labelOpts !== null;
+  if (!playedWords && score > 0) pickWords(openSmall, openBig, score, room);
+  sideShift = sideShiftFor(patches, room);
+  inkEdge = Math.max(2, ringAt + 1);
+  borderW = ringAt + 1;
+}
+
+/**
+ * Whether the played side buttons write their words this frame, their scores over them
+ * (`chooseLayout`).
+ */
+let playedWords = false;
+
+/** The label font and the line's place for words this wide (see `chooseLayout`). */
+function pickWords(
+  small: number,
+  big: number,
+  score: number,
+  room: Int16Array,
+): void {
+  const F = labelFonts();
+  const rowsS = 10;
+  const rowsB = 14;
   labelOpts = F.SMALL;
   ringAt = 2;
   if (rs() < ICON_MIN_R) {
@@ -1296,9 +1415,6 @@ function chooseLayout(patches: BallPatches, room: Int16Array): void {
     if (ring < 0) labelOpts = null;
     else ringAt = ring;
   }
-  sideShift = sideShiftFor(patches, room);
-  inkEdge = Math.max(2, ringAt + 1);
-  borderW = ringAt + 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -1675,18 +1791,31 @@ function drawContent(
       : null;
   // The icon of an idle button wears its colour.
   const iconInk = mode === NORMAL ? (slotColor[o] as Color) : ink;
-  const badge = hasBadge(patch);
-  const text = badge ? (patch.badge as string) : patch.label;
-  // A badge is news (today's score), so it shows whenever it fits by itself: bare figures
-  // in the button's colour, as NEXT-GEN's and RETRO's are (no plate: the product owner,
-  // 2026-11-13, so that all four scores look alike).
   const F = labelFonts();
+  // A badge is news (today's score): bare figures in the button's colour, as NEXT-GEN's
+  // and RETRO's are (no plate: the product owner, 2026-11-13, so that all four scores look
+  // alike). It takes the picture's place over the word, so the patch still says which mode
+  // it is (2026-11-13); where it cannot, it takes the word's place under the picture, and
+  // shows whenever it fits there by itself.
+  let text = patch.label;
   let opts = labelOpts;
-  if (badge) {
-    opts = F.BIG_DIGITS;
-    if (!bigIcons || !badgeFits(text, opts, 14)) {
-      opts = F.SMALL_DIGITS;
-      if (!badgeFits(text, opts, 10)) opts = null;
+  let score: TextOptions | null = null;
+  if (hasBadge(patch)) {
+    if (icon && labelOpts !== null && text !== "") {
+      const rows = labelOpts === F.BIG ? 14 : 10;
+      score = scoreOver(
+        patch.badge as string,
+        rows,
+        Math.min(sideShift, centredShift(rows, icon.h)),
+      );
+    }
+    if (score === null) {
+      text = patch.badge as string;
+      opts = F.BIG_DIGITS;
+      if (!bigIcons || !badgeFits(text, opts, 14)) {
+        opts = F.SMALL_DIGITS;
+        if (!badgeFits(text, opts, 10)) opts = null;
+      }
     }
   }
   if (opts === null || text === "" || facing < FACING_LABEL) {
@@ -1707,12 +1836,36 @@ function drawContent(
   const free = freeRun(f, cx, top, h, minE(ringAt + 2));
   const left = free > 0 ? runLo + ((free - w) >> 1) : cx - (w >> 1);
   const mid = left + (w >> 1);
+  const figures = opts === F.BIG_DIGITS || opts === F.SMALL_DIGITS;
 
   stamp.erase(0, 0, stamp.w, stamp.h);
-  drawText(stamp, text, 0, 0, badge && mode === NORMAL ? iconInk : ink, opts);
+  drawText(stamp, text, 0, 0, figures && mode === NORMAL ? iconInk : ink, opts);
   plotStamp(s, w, h, left, top, f);
   if (!icon) return;
-  plotSprite(s, icon, mid - (icon.w >> 1), top - ICON_GAP - icon.h, f, iconInk);
+  if (score === null) {
+    plotSprite(
+      s,
+      icon,
+      mid - (icon.w >> 1),
+      top - ICON_GAP - icon.h,
+      f,
+      iconInk,
+    );
+    return;
+  }
+  // The score where the picture was: over the word's middle, kept inside what the patch
+  // has free on its rows.
+  const sw = measureText(patch.badge as string, score);
+  const sh = (score === F.BIG_DIGITS ? 7 : 5) * 2;
+  const sTop = scoreTop(top, icon.h, sh);
+  const sFree = freeRun(f, cx, sTop, sh, minE(ringAt + 2));
+  let sLeft = mid - (sw >> 1);
+  if (sFree >= sw) {
+    sLeft = Math.max(runLo, Math.min(runLo + sFree - sw, sLeft));
+  }
+  stamp.erase(0, 0, stamp.w, stamp.h);
+  drawText(stamp, patch.badge as string, 0, 0, iconInk, score);
+  plotStamp(s, sw, sh, sLeft, sTop, f);
 }
 
 /**

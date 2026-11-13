@@ -119,6 +119,33 @@ describe("drawBall", () => {
     }
   });
 
+  it("keeps a played HOME's and AWAY's word, with the score where the picture was", () => {
+    const played: BallPatches = {
+      ...MENU,
+      left: { ...MENU.left!, badge: "512" },
+      right: { ...MENU.right!, badge: "411" },
+    };
+    for (const r of [74, 90, 112, 118]) {
+      const state = ball({ r });
+      const open = render(state);
+      const scored = render(state, played);
+      for (const slot of ["left", "right"] as const) {
+        // the whole word, as before the mode was played (it is chalk; the score is not)
+        const words = count(open, state, slot, P.chalk);
+        expect(words, `r ${r} ${slot}`).toBeGreaterThan(80);
+        expect(count(scored, state, slot, P.chalk), `r ${r} ${slot}`).toBe(
+          words,
+        );
+      }
+      // and the score in place of the picture
+      expect(scored.data).not.toEqual(open.data);
+    }
+    // Too small a ball for words: the picture and the score, as before.
+    const small = ball({ r: 60 });
+    expect(count(render(small, played), small, "left", P.chalk)).toBe(0);
+    expect(render(small, played).data).not.toEqual(render(small).data);
+  });
+
   it("writes no words below a radius of 52, and big ones from 112", () => {
     const small = ball({ r: 48 });
     expect(count(render(small), small, "left", P.chalk)).toBe(0);

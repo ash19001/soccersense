@@ -5271,35 +5271,43 @@ html:has(.ss-help-dialog[open]) {
 }
 
 /*
- * A phone: the score and the two buttons. There is no room for the badge as well (a 360 px
- * phone's card has 153 px inside, NEXT-GEN's badge alone takes 80 and the buttons 88):
- * the card's stripe, and the ball's patch over it with the same score, say which mode it
- * is. The buttons are as tall as the card (they reach through its padding) and a touch
- * target wide, the whole of its end.
+ * A phone: the score, the badge and REVIEW (the product owner, 2026-11-13). SHARE is in the
+ * review, beside its close button: a 360 px phone's card has 153 px inside, too few for
+ * both buttons and the badge. REVIEW is as tall as the card (it reaches through its padding)
+ * and a touch target wide, the whole of its end; where the card is short of room (NEXT-GEN's
+ * badge is 80 px wide, and a phone under about 395 px has not 44 left for the button) it is
+ * narrower, down to its symbol and a pixel or so either side, and comes closer to the badge.
  */
 .ss-game:not([data-wide]) .ss-menu__card.is-played {
-  gap: var(--u2);
+  gap: var(--u);
 }
 
-.ss-game:not([data-wide]) .ss-menu__card.is-played .ss-menu__top {
+.ss-game:not([data-wide]) .ss-menu__card.is-played .ss-menu__score {
+  margin-right: var(--u);
+}
+
+.ss-game:not([data-wide]) .ss-menu__share {
   display: none;
 }
 
 .ss-game:not([data-wide]) .ss-menu__acts {
+  flex: 0 1 var(--tap);
   align-self: stretch;
   margin-block: calc(var(--u) * -1);
   margin-right: calc(var(--u2) * -1);
 }
 
 .ss-game:not([data-wide]) .ss-menu__acts > .ss-btn {
+  flex: 1 1 0;
+  width: auto;
+  min-width: calc(var(--ip) * 10 + var(--u3));
   height: auto;
 }
 
 /*
  * A phone too short for two rows (section 26): the badges alone, and a played card its
  * score in its badge's place (its stripe, and the ball above, say which mode it is). Its
- * REVIEW is then the whole card, unseen but for its focus ring (its name is read out), and
- * SHARE is in the review.
+ * REVIEW is then the whole card, unseen but for its focus ring (its name is read out).
  */
 @media (max-height: 44.375rem) {
   .ss-game:not([data-wide]) .ss-menu__pic,
@@ -5311,6 +5319,15 @@ html:has(.ss-help-dialog[open]) {
     justify-content: center;
   }
 
+  /* REVIEW is out of the row (below): its holder has no box, and the score is centred. */
+  .ss-game:not([data-wide]) .ss-menu__acts {
+    display: contents;
+  }
+
+  .ss-game:not([data-wide]) .ss-menu__card.is-played .ss-menu__score {
+    margin-right: 0;
+  }
+
   .ss-game:not([data-wide]) .ss-menu__review {
     position: absolute;
     inset: 0;
@@ -5320,10 +5337,6 @@ html:has(.ss-help-dialog[open]) {
     background: transparent;
     color: transparent;
     box-shadow: none;
-  }
-
-  .ss-game:not([data-wide]) .ss-menu__share {
-    display: none;
   }
 }
 

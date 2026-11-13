@@ -366,9 +366,10 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   its full-time card's SHARE does: the same picture and text, through the phone's share sheet,
   or downloaded and copied on a computer. The picture is made ahead, in quiet moments after the
   menu is up, so the share sheet can open in the press itself. Once it has worked, SHARE's icon
-  is a green tick for a moment (no words on screen; screen readers hear how it went). On a phone a played card has no room for
-  the badge beside the score and the two buttons: its stripe, and the ball's patch over it with
-  the same score, say which mode it is.
+  is a green tick for a moment (no words on screen; screen readers hear how it went). On a
+  phone a played card reads score, badge, REVIEW, and has no SHARE (the product owner,
+  2026-11-13): SHARE is in the review, beside its close button. Where a narrow phone's card is
+  short of room (NEXT-GEN's badge under 395 px), REVIEW narrows rather than spill out of it.
   On a monitor the left column's cards read outwards from the centre line, like a result:
   `REVIEW HOME 512 | 411 AWAY REVIEW`. On a phone too short for two rows of cards, a card
   shows its badge alone, or its score once played, and the whole of it is the button.
@@ -377,12 +378,14 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   and out of sight. Then the screen wipes into the career scene.
 - **Each mode is played once a day** (the product owner, 2026-11-13: "the button to play it
   again isn't clickable (you can only play once a day)"). A mode played today shows its score
-  on its patch; its card's REVIEW and its patch on the ball open the **review**, a pop-up over
+  on its patch: on HOME and AWAY in the picture's place, over the word, which stays (the
+  product owner, 2026-11-13: "why ... is there no title for the home and away patch"), or on a
+  ball too small for words, under the picture as before; its card's REVIEW and its patch on the ball open the **review**, a pop-up over
   the home screen (built like the rules', a sheet on a phone, with no line under its heading):
   `YOUR HOME GAME`, the total
   on the full-time card's display, the title it earned, the career tier, the seven answers
-  as the full-time card lists them, and a SHARE icon beside the close button (so a phone too
-  short for the cards' buttons can share too), which turns into a green tick for a moment once
+  as the full-time card lists them, and a SHARE icon beside the close button (on a phone the
+  only SHARE: the cards have none there), which turns into a green tick for a moment once
   it has worked. The game page never starts a second game of a
   mode on the same day: reached any way (its address typed, the full-time card's other-mode
   button), it shows that day's full-time card again. Testing uses `?day=` for another day.
