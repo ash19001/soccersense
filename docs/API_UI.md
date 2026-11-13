@@ -471,8 +471,10 @@ SHARE shares a picture of the game with the text summary (docs/GAME_DESIGN.md 6.
 
 ### `MenuCaptions`
 
-`modes: { mode, label, line, short?, tiny?, score?, scoreSpoken? }[]` (in pairs: HOME, AWAY, RETRO,
-NEXT-GEN), `onSelect?(mode)`,
+`modes: { mode, label, line, short?, tiny?, picture?, score?, scoreSpoken? }[]` (in pairs: HOME,
+AWAY, RETRO, NEXT-GEN), `onSelect?(mode)`, `review?: { spoken(modeLabel), onClick(mode), open? }`
+and `share?: { spoken(modeLabel), onClick(mode), busy?, done? }` (new 2026-11-13: the REVIEW and SHARE
+icon buttons on a played card; see "Played today" below),
 `onHover?(mode | null)`, `lit?`, `notice?`, `noticeKey?`, `stowed?`,
 `howToPlay: { label, to?, onClick?, open? }`, `howToPlayRef?`, `dayLabel`, `sound?` (the sound
 switch beside the "?": labels, default `strings.sound`, or `false`; see `SoundToggle`),
@@ -483,6 +485,27 @@ it out for none),
 `remind?: { label, onClick, open? }` and `remindRef?`, `support?: { label, onClick, open? }` and
 `supportRef?` (new 2026-11-13: the bell and the heart beside the day plate; see "`RemindMe`
 and `Support`" below; leave them out for none)
+
+**Played today (2026-11-13).** A mode is played once a day. A card with a `score` is no longer a
+button (`onSelect` is never called for it): it is a `div.ss-menu__card.is-played` holding the
+score (an amber points box, `aria-hidden` with `scoreSpoken` read out instead), the badge and,
+in `.ss-menu__acts`, two square icon buttons: given `review`, REVIEW (`PopupButton` with
+`REVIEW_ICON`, `.ss-menu__review`, named and titled `review.spoken(label)`,
+`aria-expanded` while `review.open` is its mode), and given `share`, SHARE (`SHARE_ICON`,
+`.ss-menu__share`, named `share.spoken(label)`, `aria-busy` while `share.busy` is its mode:
+busy, not disabled; a green tick, `TICK_ICON` and `is-done`, while `share.done` is its mode). The home page's SHARE is `createTodayShare` (`app/routes/share-today.ts`):
+the full-time card's picture and text from the saved game, made ahead (`prepare`), and
+delivered by `deliverShare` (`app/routes/play/share-flow.ts`, which the full-time card's
+controller uses too). A card not played yet starts with `picture` (`.ss-menu__pic`): rows of
+"w" and "." (the home page passes the ball's art, `MODE_PICTURES` from `app/art/ball-icons.ts`)
+drawn in the mode's colour in font pixels, in a box 18 font pixels square, offset in it by
+whole font pixels (`PICTURE_BOX`). Layout (ui.css section 28): a phone reads picture, badge,
+line, and played: score, REVIEW, SHARE (no badge: no room; the buttons as tall as the card, at
+its end); a monitor's left column reads outwards from the centre line (`line badge picture |
+picture badge line`, `SHARE REVIEW badge score | score badge REVIEW SHARE`, the buttons squares
+as tall as the row, like the "?"); a phone under 710 CSS px tall shows the badge alone, or the
+score once played, and a played card's REVIEW covers the whole card, unseen but for its focus
+ring (SHARE is then in the review).
 
 **Four modes (2026-11-13).** The cards come in pairs, a pair to a row: HOME | AWAY, then
 RETRO | NEXT-GEN (the past on the left, the future on the right). `short` ("Most common wins",
@@ -499,11 +522,35 @@ it is what screen readers hear (the short one is `aria-hidden`). Leave `short` o
   Measured, both rows under the ball: 1920 x 1080 and 1366 x 768 clear of its bottom patch.
 - **A phone**: the four cards two by two across the column, each a touch target tall: the
   badge beside `tiny` ("Most common", `strings.home.tiny`; two lines at most), or `short`
-  where there is no `tiny`. The score is not shown there (the ball's patch shows it, and
-  `scoreSpoken` is still read out). On a phone under 710 CSS px tall (375 x 667) the four
+  where there is no `tiny`, with the picture before the badge; played, the score, the badge
+  and REVIEW (section 28). On a phone under 710 CSS px tall (375 x 667) the four
   badges stand alone in one row, so that the cards stay clear of the ball's bottom patch; the day plate over the left end of the cards, and the "?", speaker and stats buttons
   stacked up the right edge beside the ball, over the leaderboard's trophy (bottom to top:
   trophy, stats, speaker, "?"), where the ball never reaches.
+
+### `Review` (new 2026-11-13)
+
+`labels: { heading, intro, close }`, `mode`, `total`, `maxTotal`, `totalSpoken?`, `careerTitle`,
+`earnedTitle?`, `earnedTitleSpoken?`, `results: FullTimeResult[]`, `resultsLabel?`, `share?:
+{ label, busy?, done?, onClick() }` (SHARE as an icon button, `SHARE_ICON`, in the card's head
+beside the close button, named and titled `label`; busy, not disabled, while its picture is
+made; a green tick, `TICK_ICON`, while `done`), `status?` (how SHARE went: only read out, in a
+live region out of sight), `open`, `onClose()`, `returnFocus?`. `labels.intro` is optional;
+the home page gives none (2026-11-13).
+
+A game played today, again: a `Popup` (class `ss-review`) opened by a played card's REVIEW and
+by the mode's patch on the ball (`MenuScene.onReview`). The total on the full-time card's
+dot-matrix display (`LedNumber` `lg`, amber), centred to the pixel; the title it earned
+(`ss-full__title`, the mode's light colour) and the career tier in gold under it; then the seven
+answers as `FullTimeResults` lists them (where the card is in caption pixels bigger than the
+font pixel, a monitor, the card has `ss-review--caption` and the answers are set in the 15 face
+on the font pixel: they were too big for their rows). The home page builds its props with
+`reviewContent(day, mode)` (`app/routes/review-content.ts`, from `loadGame`, browser storage:
+call it in a handler), and gives the focus back to the card's REVIEW.
+
+`FullTimeResults` (`results`, `label?`, `className?`): the full-time card's list of answers (a
+lamp in the grade's colour, the answer, the shot's name, the points), shared by `FullTimeCard`
+and `Review`.
 
 ### `Streak`
 
@@ -907,7 +954,9 @@ coffee)". Email needs a backend, which is out of scope until the product owner d
 so the reminder is a calendar event the player adds themselves; the pop-up says email reminders
 are coming and asks for no address.)
 
-`Popup`: `open`, `heading`, `intro`, `close` (the close button's name), `onClose()`,
+`Popup`: `open`, `heading`, `intro?` (leave out for no line under the heading), `close` (the close button's name), `action?` (a button of
+the card's own in its head, just before the close button, class `ss-popup__action`: the
+review's SHARE), `onClose()`,
 `returnFocus?`, `children?`, `className?` (on the card). The shared pop-up both are built on:
 the dialog of `HowToPlay` and `Stats`, line for line (a modal `dialog` with `ss-help-dialog`,
 the dither on a monitor, the sheet on a phone, the rise and drop on whole device pixels and

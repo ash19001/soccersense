@@ -21,7 +21,6 @@ import {
   type RevealView,
   QUESTION_MS,
   clockView,
-  dayKeyFor,
   formatShare,
   isEraMode,
   isPerfect,
@@ -58,19 +57,6 @@ import {
 
 const text = strings.play;
 
-/** What the history entry carries once its game has reached full time. */
-interface FullTimeState {
-  fullTime: string;
-}
-
-function isFullTimeState(state: unknown): state is FullTimeState {
-  return (
-    typeof state === "object" &&
-    state !== null &&
-    typeof (state as { fullTime?: unknown }).fullTime === "string"
-  );
-}
-
 /** Under this share of players, an answer is a lonely one: the reveal says so. */
 export const LONELY_SHARE = 2;
 
@@ -89,7 +75,7 @@ interface GameStore {
   read(): GameController | null;
 }
 
-function createGameStore(mode: Mode, arrivedWith: unknown): GameStore {
+function createGameStore(mode: Mode): GameStore {
   let current: GameController | null = null;
   return {
     subscribe(onChange) {
@@ -99,8 +85,6 @@ function createGameStore(mode: Mode, arrivedWith: unknown): GameStore {
         mode,
         today,
         locale: locale(),
-        restoreFullTime:
-          isFullTimeState(arrivedWith) && arrivedWith.fullTime === today.dayKey,
       });
       current = made;
       made.start();
@@ -239,8 +223,7 @@ export function Game({ mode }: { mode: Mode }) {
   const heading = useArrivalFocus<HTMLHeadingElement>();
   /** What is typed, and for which question: every question starts with an empty field. */
   const [field, setField] = useState({ index: -1, value: "" });
-  // The history entry this page was arrived at with says whether it shows a game again.
-  const [store] = useState(() => createGameStore(mode, location.state));
+  const [store] = useState(() => createGameStore(mode));
   const game = useSyncExternalStore(store.subscribe, store.read, nothing);
 
   const view: GameView | null = useSyncExternalStore(
@@ -255,26 +238,13 @@ export function Game({ mode }: { mode: Mode }) {
   const value = field.index === index ? field.value : "";
   const setValue = (typed: string) => setField({ index, value: typed });
 
-  // Full time: the history entry remembers it, so a reload shows the card again (and the
-  // menu's way in starts a new game), and the keyboard goes to SHARE.
+  // Full time (a mode is played once a day: any way back to a finished game shows its card
+  // again), and the keyboard goes to SHARE.
   const dayNumber = session?.dayNumber ?? 0;
   useEffect(() => {
     if (phase !== "done") return;
-    const dayKey = dayKeyFor(dayNumber);
-    const state = location.state as unknown;
-    if (!isFullTimeState(state) || state.fullTime !== dayKey) {
-      void navigate(
-        { pathname: location.pathname, search: location.search },
-        {
-          replace: true,
-          preventScrollReset: true,
-          state: { fullTime: dayKey } satisfies FullTimeState,
-        },
-      );
-    }
     document.querySelector<HTMLElement>(".ss-play-full button")?.focus();
     // Once per arrival at full time.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, dayNumber]);
 
   const search = location.search;

@@ -30,8 +30,8 @@
  * the grass bounces a little light into the dark edge, and under floodlights the far rim
  * lights up white and a second glint appears.
  *
- * Buttons. A slot with an accent wears it as a coloured line round its pentagon, in its
- * icon and in a tab under its label, and every five seconds a bar of light crosses HOME and
+ * Buttons. A slot with an accent wears it as a coloured line round its pentagon and in its
+ * icon, and every five seconds a bar of light crosses HOME and
  * then AWAY, so the two things to press say so before anything is hovered. Hold `t` still
  * to hold the shine still (it is off at t = 0).
  *
@@ -704,6 +704,28 @@ const slotColor = new Uint32Array(SLOT_COUNT * 5);
 const panelX = new Int32Array(FACES);
 const panelY = new Int32Array(FACES);
 /**
+ * Where each panel's contents (picture, word, score) hang: the middle of what the panel
+ * shows. Its centre on the sphere lies further out than that, the more so the further the
+ * panel faces away (NEXT-GEN's and RETRO's, far round the ball, by 5 pixels at r = 90), and
+ * contents put there sat off the middle, out towards the rim (2026-11-13).
+ */
+const markX = new Int32Array(FACES);
+const markY = new Int32Array(FACES);
+/**
+ * The middle of what a panel shows is this share of the way from the ball's centre to the
+ * panel's projected centre: the mean of the panel's pixels, measured, at every size and for
+ * the side, top and bottom patches alike (0.93 to 0.95).
+ */
+const MARK_SHARE = 0.94;
+
+/** Where panel `f`'s contents hang, for the orientation set last (see `markX`). */
+function markOf(f: number): [number, number] {
+  return [
+    Math.round(disc.tx + VIEW[f * 3] * disc.rad * MARK_SHARE),
+    Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad * MARK_SHARE),
+  ];
+}
+/**
  * Where the shine is on an idle patch this frame, as a diagonal offset from the patch
  * centre, or NO_SHINE.
  */
@@ -766,6 +788,9 @@ function prepareSlots(
   for (let i = 0; i < FACES; i++) {
     panelX[i] = Math.round(disc.tx + VIEW[i * 3] * disc.rad);
     panelY[i] = Math.round(disc.ty + VIEW[i * 3 + 1] * disc.rad);
+    // as `markOf`, with no array made every frame
+    markX[i] = Math.round(disc.tx + VIEW[i * 3] * disc.rad * MARK_SHARE);
+    markY[i] = Math.round(disc.ty + VIEW[i * 3 + 1] * disc.rad * MARK_SHARE);
   }
   for (let i = 0; i < SLOT_COUNT; i++) {
     const slot = SLOTS[i];
@@ -884,9 +909,41 @@ function freeRun(
   return hi - lo + 1;
 }
 
-/** Top row of a block of text `h` rows tall on a side patch centred on row `cy`. */
+/** Rows between a side patch's picture and its word. */
+const ICON_GAP = 2;
+
+/**
+ * Top row of a block of text `h` rows tall on a side patch centred on row `cy`: on the
+ * pentagon's widest rows, where a word fits best, with the picture above. That leaves the
+ * pair high on the patch, so it is moved down (`sideShift`) as far as what is written
+ * still fits, at most until the two are centred on the patch (2026-11-13).
+ */
 function textTop(cy: number, h: number): number {
   return cy + 4 - halfRows(h);
+}
+
+/**
+ * How far below `textTop` the text goes to centre it and a picture `icon` rows tall over
+ * it on the patch: in whole coarse units (even rows), never up.
+ */
+function centredShift(h: number, icon: number): number {
+  const centred = -halfRows(icon + ICON_GAP + h) + icon + ICON_GAP;
+  const shift = centred - (4 - halfRows(h));
+  return Math.max(0, Math.min(SHIFT_MAX, (shift >> 1) * 2));
+}
+
+/** The furthest a side patch's pair is ever moved down (the big picture over small text). */
+const SHIFT_MAX = 10;
+
+/** This frame's shift of the side patches' pairs (`chooseLayout`), rows, even. */
+let sideShift = 0;
+
+/** The side patches' pictures' height, small or big (HOME's and AWAY's are the same). */
+function sideIconRows(big: boolean): number {
+  const I = ballIcons();
+  return big
+    ? Math.max(I.homeBig.h, I.awayBig.h)
+    : Math.max(I.home.h, I.away.h);
 }
 
 /**
@@ -904,14 +961,17 @@ const ROOM_SQUASHED = 8;
 /** The picture row and word of the top or bottom patch, shown straight on. */
 const ROOM_MARK_FRONT = 9;
 const ROOM_WORD_FRONT = 10;
-const ROOM_SIZE = 11;
+/** The side room again, the text moved down 2, 4, ... SHIFT_MAX rows (`roomAt`). */
+const ROOM_SHIFTED = 11;
+const ROOM_SIZE = ROOM_SHIFTED + (SHIFT_MAX / 2) * 6;
 /** The menu's deepest nod, give or take: the squashed room is measured that far each way. */
 const SQUASH_NOD = 0.065;
 
 /** Index into a room table: the line's place (0 none, 1 edge, 2 inset), rows of text
- * (10 or 14). */
-function roomAt(ring: number, rows: number): number {
-  return ring * 2 + (rows > 10 ? 1 : 0);
+ * (10 or 14), and how far below `textTop` the text is (0 to SHIFT_MAX, even). */
+function roomAt(ring: number, rows: number, shift = 0): number {
+  const at = ring * 2 + (rows > 10 ? 1 : 0);
+  return shift <= 0 ? at : ROOM_SHIFTED + ((shift >> 1) - 1) * 6 + at;
 }
 
 /**
@@ -1000,14 +1060,37 @@ function roomFor(): Int16Array {
   const lockedEdge = minE(LOCKED_EDGE);
   if (rs() >= ICON_MIN_R) {
     orient(ROCK, 0, 0);
-    // The far patch is the tight one; the ball is symmetrical, so one end is enough.
-    const x = Math.round(disc.tx + VIEW[3] * disc.rad);
-    const y = Math.round(disc.ty + VIEW[4] * disc.rad);
-    rasteriseRows(textTop(y, rowsB), rowsB, 1, x, minE(4));
-    for (let ring = 0; ring <= 2; ring++) {
-      const edge = minE(ring + 2);
-      room[roomAt(ring, rowsS)] = freeRun(1, x, textTop(y, rowsS), rowsS, edge);
-      room[roomAt(ring, rowsB)] = freeRun(1, x, textTop(y, rowsB), rowsB, edge);
+    // The far patch is the tight one; the ball is symmetrical, so one end is enough. The
+    // text is measured at its place on the widest rows and at each step down from there.
+    const [x, y] = markOf(1);
+    const topS = textTop(y, rowsS);
+    const topB = textTop(y, rowsB);
+    const from = Math.min(topS, topB);
+    rasteriseRows(
+      from,
+      Math.max(topS + rowsS, topB + rowsB) + SHIFT_MAX - from,
+      1,
+      x,
+      minE(4),
+    );
+    for (let shift = 0; shift <= SHIFT_MAX; shift += 2) {
+      for (let ring = 0; ring <= 2; ring++) {
+        const edge = minE(ring + 2);
+        room[roomAt(ring, rowsS, shift)] = freeRun(
+          1,
+          x,
+          topS + shift,
+          rowsS,
+          edge,
+        );
+        room[roomAt(ring, rowsB, shift)] = freeRun(
+          1,
+          x,
+          topB + shift,
+          rowsB,
+          edge,
+        );
+      }
     }
     // A locked patch in a side place (where CLOSEST and FURTHEST rest after half a turn):
     // its picture row, and its word under it. And the top and bottom patches of the menu
@@ -1019,8 +1102,8 @@ function roomFor(): Int16Array {
     for (const yaw of [-ROCK, ROCK]) {
       for (const pitch of [-SQUASH_NOD, SQUASH_NOD]) {
         orient(yaw, pitch, 0);
-        const top = lockedTop(Math.round(disc.ty + VIEW[4] * disc.rad));
-        const sx = Math.round(disc.tx + VIEW[3] * disc.rad);
+        const [sx, sy] = markOf(1);
+        const top = lockedTop(sy);
         rasteriseRows(top, lockedRow + lockedGap + rowsS, 1, sx, lockedEdge);
         mark = Math.min(mark, freeRun(1, sx, top, lockedRow, lockedEdge));
         word = Math.min(
@@ -1028,8 +1111,7 @@ function roomFor(): Int16Array {
           freeRun(1, sx, top + lockedRow + lockedGap, rowsS, lockedEdge),
         );
         for (const f of [2, 3]) {
-          const px = Math.round(disc.tx + VIEW[f * 3] * disc.rad);
-          const py = Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad);
+          const [px, py] = markOf(f);
           rasteriseRows(
             py - halfRows(squashedRow),
             squashedRow,
@@ -1066,10 +1148,8 @@ function roomFor(): Int16Array {
         for (const nod of [-SQUASH_NOD, SQUASH_NOD]) {
           for (const roll of rolls) {
             orient(pose.yaw + yaw, pose.pitch + nod, roll);
-            const px = Math.round(disc.tx + VIEW[f * 3] * disc.rad);
-            const top = lockedTop(
-              Math.round(disc.ty + VIEW[f * 3 + 1] * disc.rad),
-            );
+            const [px, py] = markOf(f);
+            const top = lockedTop(py);
             rasteriseRows(
               top,
               lockedRow + lockedGap + rowsS,
@@ -1119,6 +1199,47 @@ function labelFonts(): LabelFonts {
     };
   }
   return fonts;
+}
+
+/**
+ * How far down the side patches' pairs go this frame (`textTop`): the same for both, so
+ * they stay level, and as far towards centred as what each writes still fits, in the font
+ * and with the line where `chooseLayout` put them (a score is narrower than a word, and
+ * goes further). The fonts are chosen as before, on the widest rows.
+ */
+function sideShiftFor(patches: BallPatches, room: Int16Array): number {
+  if (labelOpts === null || rs() < ICON_MIN_R) return 0;
+  const F = labelFonts();
+  const icon = sideIconRows(bigIcons);
+  let best = SHIFT_MAX;
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const patch = patches[SLOTS[i]];
+    if (!patch || !accentOf(patch) || FRONT_FACE[SLOT_FACE[i]] === 1) continue;
+    let text = patch.label;
+    let opts: TextOptions | null = labelOpts;
+    if (hasBadge(patch)) {
+      // the figures `drawContent` will pick
+      text = patch.badge as string;
+      opts =
+        bigIcons && badgeFits(text, F.BIG_DIGITS, 14)
+          ? F.BIG_DIGITS
+          : badgeFits(text, F.SMALL_DIGITS, 10)
+            ? F.SMALL_DIGITS
+            : null;
+    }
+    if (opts === null || text === "") continue;
+    const rows = opts === F.BIG || opts === F.BIG_DIGITS ? 14 : 10;
+    const w = measureText(text, opts);
+    let shift = 0;
+    while (
+      shift + 2 <= centredShift(rows, icon) &&
+      w <= room[roomAt(ringAt, rows, shift + 2)]
+    ) {
+      shift += 2;
+    }
+    best = Math.min(best, shift);
+  }
+  return best;
 }
 
 /**
@@ -1175,6 +1296,7 @@ function chooseLayout(patches: BallPatches, room: Int16Array): void {
     if (ring < 0) labelOpts = null;
     else ringAt = ring;
   }
+  sideShift = sideShiftFor(patches, room);
   inkEdge = Math.max(2, ringAt + 1);
   borderW = ringAt + 1;
 }
@@ -1543,8 +1665,8 @@ function drawContent(
   }
   const mode = slotMode[i];
   const o = i * 5;
-  const cx = panelX[f];
-  const cy = panelY[f] + (mode === PRESSED ? 2 : 0);
+  const cx = markX[f];
+  const cy = markY[f] + (mode === PRESSED ? 2 : 0);
   const ink: Color = mode === CHOSEN ? accent.dark : tones.chalk;
 
   const icon =
@@ -1575,10 +1697,13 @@ function drawContent(
   }
 
   // The label sits on the pentagon's widest rows (it only just fits), centred in what
-  // the panel has free there this frame, with the icon above and the tab below.
+  // the panel has free there this frame, with the icon above. (There was a tab under it, a
+  // bar in the button's colour: gone 2026-11-13, as NEXT-GEN's and RETRO's never had one.)
   const w = Math.min(stamp.w - 8, measureText(text, opts));
   const h = (opts === F.BIG || opts === F.BIG_DIGITS ? 7 : 5) * 2;
-  const top = icon ? textTop(cy, h) : cy - halfRows(h);
+  const top = icon
+    ? textTop(cy, h) + Math.min(sideShift, centredShift(h, icon.h))
+    : cy - halfRows(h);
   const free = freeRun(f, cx, top, h, minE(ringAt + 2));
   const left = free > 0 ? runLo + ((free - w) >> 1) : cx - (w >> 1);
   const mid = left + (w >> 1);
@@ -1587,21 +1712,7 @@ function drawContent(
   drawText(stamp, text, 0, 0, badge && mode === NORMAL ? iconInk : ink, opts);
   plotStamp(s, w, h, left, top, f);
   if (!icon) return;
-  plotSprite(s, icon, mid - (icon.w >> 1), top - 2 - icon.h, f, iconInk);
-  // The tab: a little bar in the button's colour.
-  const tab =
-    mode === NORMAL
-      ? (slotColor[o + 1] as Color)
-      : mode === CHOSEN
-        ? accent.base
-        : ink;
-  const half = (bigIcons ? 5 : 3) * 2;
-  const edge = minE(inkEdge);
-  for (let y = top + h + 4; y < top + h + 8; y++) {
-    for (let x = mid - half; x <= mid + half; x++) {
-      if (spot(s, x, y, f, edge) >= 0) s.data[y * s.w + x] = tab;
-    }
-  }
+  plotSprite(s, icon, mid - (icon.w >> 1), top - ICON_GAP - icon.h, f, iconInk);
 }
 
 /**
@@ -1655,8 +1766,8 @@ function drawLocked(
   const edge = minE(LOCKED_EDGE);
   const rowsS = 10;
   const ink = slotMode[i] === LIFTED ? tones.chalk : tones.mist;
-  const cx = panelX[f];
-  const cy = panelY[f];
+  const cx = markX[f];
+  const cy = markY[f];
   // facing the viewer: the full-size picture and room for the word; squashed far round
   // (the top and bottom of the menu pose, which nods either side of FACING_ICON), the small
   // one, whatever the facing, so that it never comes and goes as the ball breathes
@@ -1746,8 +1857,8 @@ function drawFront(
       : mode === CHOSEN
         ? accent.dark
         : tones.chalk;
-  const cx = panelX[f];
-  const cy = panelY[f] + (mode === PRESSED ? 2 : 0);
+  const cx = markX[f];
+  const cy = markY[f] + (mode === PRESSED ? 2 : 0);
   const facingUs = facing >= FACING_LABEL;
   const badge = hasBadge(patch) ? (patch.badge as string) : "";
   let pic = rad >= 30 ? pictureFor(patch, !facingUs) : null;

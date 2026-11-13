@@ -1347,6 +1347,12 @@ export class MenuScene implements Scene {
   onChoose: ((mode: Mode) => void) | null = null;
   /** A locked patch was pressed and released: which mode it is. */
   onLocked: ((mode: LockedMode) => void) | null = null;
+  /**
+   * The patch of a mode played today (one with a score, `setScores`) was pressed and
+   * released. A mode is played once a day, so there is no kick-off: the page shows the
+   * day's game again instead.
+   */
+  onReview: ((mode: Mode) => void) | null = null;
   /** Something to be heard (the Scene contract): set by the host. */
   onSound: ((cue: SoundCue) => void) | null = null;
 
@@ -1918,6 +1924,10 @@ export class MenuScene implements Scene {
     }
     if (was === null || slot !== was || this.state !== "idle") return;
     const mode = modeOf(was);
+    if (mode !== null && this.played(mode)) {
+      if (this.onReview) this.onReview(mode);
+      return;
+    }
     if (mode !== null) {
       // from a pose that shows another patch, the ball is brought round first
       this.choose(mode);
@@ -2044,7 +2054,8 @@ export class MenuScene implements Scene {
   }
 
   /**
-   * Start the kick-off from the DOM. False if it cannot start now.
+   * Start the kick-off from the DOM. False if it cannot start now, or ever today: a mode
+   * played today (one with a score) is not played again.
    *
    * While the ball is still arriving the choice is taken at once (`onKickoff` says so, the
    * patch shows pressed, and nothing else can be chosen) but the ball is struck only when
@@ -2052,6 +2063,8 @@ export class MenuScene implements Scene {
    */
   choose(mode: Mode): boolean {
     if (!isMode(mode)) return false;
+    // played today: once a day (`onReview` is what its patch does)
+    if (this.played(mode)) return false;
     if (this.state === "kickoff" || this.state === "done") return false;
     if (this.queued !== null) return false;
     const turned = this.state === "idle" && this.spin !== "still";
@@ -2671,6 +2684,11 @@ export class MenuScene implements Scene {
       b.yaw = Math.atan2(m02, m00);
       b.roll = 0;
     }
+  }
+
+  /** The mode has been played today: its patch shows a score. */
+  private played(mode: Mode): boolean {
+    return this.patches[MODE_SLOTS[mode]].badge !== undefined;
   }
 
   private setScore(patch: BallPatch, score: number | null | undefined): void {

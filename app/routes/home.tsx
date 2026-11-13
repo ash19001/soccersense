@@ -20,6 +20,7 @@ import {
 } from "react";
 import { PrefetchPageLinks, useNavigate } from "react-router";
 
+import { MODE_PICTURES } from "~/art/ball-icons";
 import { STADIUMS } from "~/data";
 import { factForDay, type Fact } from "~/data/facts";
 import { leaderboardFor } from "~/data/leaderboard";
@@ -50,6 +51,7 @@ import {
   Panel,
   PixelStage,
   RemindMe,
+  Review,
   Stats,
   Support,
   arrivingThroughFade,
@@ -63,6 +65,9 @@ import type { Route } from "./+types/home";
 import { planeFits } from "./home-plane";
 import { signMessages } from "./home-sign";
 import { howToPlayContent } from "./how-to-play-card";
+import type { ShareOutcome } from "./play/share-flow";
+import { type ReviewContent, reviewContent } from "./review-content";
+import { createTodayShare } from "./share-today";
 import { type StatsContent, statsContent } from "./stats-content";
 
 export const meta: Route.MetaFunction = () => [
@@ -72,6 +77,17 @@ export const meta: Route.MetaFunction = () => [
 
 /** How long the "coming soon" plate for a locked mode stays up. */
 const NOTICE_MS = 2500;
+/** How long SHARE shows its tick once it has worked. */
+const SHARE_LABEL_MS = 2500;
+/**
+ * The pictures of the modes played today are made this long after the menu is up, one after
+ * another in quiet moments, so SHARE has them ready: the system share sheet opens only
+ * straight after a press.
+ */
+const SHARE_PREPARE_MS = 1500;
+
+/** Where a played mode's SHARE is: its picture being made, or how it went. */
+type ShareShown = "making" | Exclude<ShareOutcome, "idle">;
 /**
  * The scene says when its kick-off is over. If it never does (no canvas to run it on),
  * the page moves on by itself after this long.
@@ -89,8 +105,8 @@ const STRANDED_MS = 8000;
  * once when a mode is pointed at or chosen, so the next page has it when it arrives.
  */
 const FACES_AFTER_MS = 1500;
-/** What the rules' pop-up says (the "?" button opens it). */
-const RULES = howToPlayContent();
+/** What the rules' pop-up says (the "?" button opens it): no line under its heading. */
+const RULES = howToPlayContent({ intro: false });
 /** Where the Support pop-up's buttons go: null while a link is still a placeholder. */
 const IDEAS = usableLink(IDEAS_URL);
 const COFFEE = usableLink(COFFEE_URL);
@@ -141,6 +157,8 @@ interface MenuEvents {
   onChoose(mode: Mode): void;
   /** A locked patch was pressed: which mode it is. */
   onLocked(mode: LockedMode): void;
+  /** The patch of a mode played today was pressed: it is played once a day. */
+  onReview(mode: Mode): void;
 }
 
 interface MatchdayStore {
@@ -217,6 +235,7 @@ function createMatchdayStore(): MatchdayStore {
       };
       scene.onChoose = (mode) => listener?.onChoose(mode);
       scene.onLocked = (mode) => listener?.onLocked(mode);
+      scene.onReview = (mode) => listener?.onReview(mode);
     } else {
       scene.setFact(fact.text);
     }
@@ -414,11 +433,12 @@ export default function Home() {
   const [lit, setLit] = useState<Mode | null>(null);
   /** The kick-off is on: the captions are out of the way. */
   const [stowed, setStowed] = useState(false);
+  /** The plate over the cards: a locked mode's "coming soon". */
   const [notice, setNotice] = useState<{
     count: number;
     shown: boolean;
-    mode: LockedMode;
-  }>({ count: 0, shown: false, mode: "closest" });
+    text: string;
+  }>({ count: 0, shown: false, text: "" });
   /**
    * The mode whose page is worth fetching already: the last one pointed at or chosen. Its
    * code is then there when the kick-off ends, and the ink it ends on is one frame long.
@@ -439,6 +459,66 @@ export default function Home() {
   const remindButton = useRef<HTMLButtonElement | null>(null);
   const [support, setSupport] = useState(false);
   const supportButton = useRef<HTMLButtonElement | null>(null);
+  /**
+   * A mode played today, again (its card's REVIEW or its patch on the ball open it), with
+   * what it says (read from storage on opening), and its REVIEW button to give the focus
+   * back to.
+   */
+  const [review, setReview] = useState<ReviewContent | null>(null);
+  const reviewButton = useRef<HTMLElement | null>(null);
+  /** Today's game in `mode` in the review pop-up, if it has been played. */
+  const openReview = (mode: Mode) => {
+    const today = store.read()?.today.dayNumber;
+    if (today === undefined) return;
+    const content = reviewContent(today, mode);
+    if (!content) return;
+    reviewButton.current = document.querySelector<HTMLElement>(
+      `.ss-menu__card[data-mode="${mode}"] .ss-menu__review`,
+    );
+    setReview(content);
+  };
+  /** SHARE for the modes played today: as the full-time card shares them. */
+  const [todayShare] = useState(createTodayShare);
+  const [sharing, setSharing] = useState<{
+    mode: Mode;
+    state: ShareShown;
+  } | null>(null);
+  const shareTimer = useRef(0);
+  /** How SHARE went, only read out: on screen its icon is a tick for a moment. */
+  const [shareStatus, setShareStatus] = useState("");
+  useEffect(() => () => window.clearTimeout(shareTimer.current), []);
+  const shareMode = (mode: Mode) => {
+    const today = store.read()?.today;
+    if (!today || sharing?.state === "making") return;
+    const words = strings.home.share;
+    // Ready: the share sheet opens in the press itself.
+    const ready = todayShare.ready(today, mode);
+    const job = todayShare.share(today, mode);
+    if (!job) return;
+    window.clearTimeout(shareTimer.current);
+    if (!ready) {
+      setSharing({ mode, state: "making" });
+      setShareStatus(words.making);
+    }
+    void job.then((outcome) => {
+      if (outcome === "idle") {
+        setSharing(null);
+        return;
+      }
+      setSharing({ mode, state: outcome });
+      setShareStatus(words[outcome]);
+      shareTimer.current = window.setTimeout(
+        () => setSharing(null),
+        SHARE_LABEL_MS,
+      );
+    });
+  };
+
+  // The ball's patches are heard through the store, which keeps the last listener given.
+  const openReviewRef = useRef(openReview);
+  useEffect(() => {
+    openReviewRef.current = openReview;
+  });
 
   const streak = matchday?.streak ?? null;
   const bump = matchday?.bump ?? false;
@@ -516,7 +596,14 @@ export default function Home() {
       },
       onChoose: leave,
       onLocked(mode) {
-        setNotice((n) => ({ count: n.count + 1, shown: true, mode }));
+        setNotice((n) => ({
+          count: n.count + 1,
+          shown: true,
+          text: strings.home.soon[mode],
+        }));
+      },
+      onReview(mode) {
+        openReviewRef.current(mode);
       },
     });
     return () => {
@@ -534,6 +621,29 @@ export default function Home() {
     }, NOTICE_MS);
     return () => window.clearTimeout(timer);
   }, [notice.count, notice.shown]);
+
+  // The pictures of the modes played today, made ahead for SHARE (see SHARE_PREPARE_MS).
+  const playedToday = matchday
+    ? MODES.filter((mode) => matchday.scores[mode] !== null).join(" ")
+    : "";
+  const dayKey = matchday?.today.dayKey ?? null;
+  useEffect(() => {
+    const today = store.read()?.today;
+    if (!today || playedToday === "") return;
+    let stopped = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        for (const mode of playedToday.split(" ") as Mode[]) {
+          if (stopped) return;
+          await todayShare.prepare(today, mode);
+        }
+      })();
+    }, SHARE_PREPARE_MS);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
+  }, [store, todayShare, playedToday, dayKey]);
 
   const text = strings.home;
   const fact = matchday?.fact ?? null;
@@ -576,17 +686,29 @@ export default function Home() {
                 line: text.modes[mode].line,
                 short: text.short[mode],
                 tiny: text.tiny[mode],
+                picture: MODE_PICTURES[mode],
                 score,
                 scoreSpoken: score === null ? undefined : text.played(score),
               };
             })}
             onSelect={(mode) => scene?.choose(mode)}
+            review={{
+              spoken: text.review.open,
+              onClick: openReview,
+              open: review?.mode ?? null,
+            }}
+            share={{
+              spoken: text.share.open,
+              onClick: shareMode,
+              busy: sharing?.state === "making" ? sharing.mode : null,
+              done: sharing && shareWorked(sharing.state) ? sharing.mode : null,
+            }}
             onHover={(mode) => {
               scene?.setHovered(mode);
               if (mode) setWarm(mode);
             }}
             lit={lit}
-            notice={notice.shown ? text.soon[notice.mode] : null}
+            notice={notice.shown ? notice.text : null}
             noticeKey={notice.count}
             stowed={stowed}
             howToPlay={{
@@ -636,6 +758,10 @@ export default function Home() {
           {strings.siteName}
         </h1>
         {fact && <p className="ss-sr">{text.fact(fact.text)}</p>}
+        {/* How SHARE went on a card, read out (on screen, a tick). */}
+        <p className="ss-sr" aria-live="polite">
+          {review ? "" : shareStatus}
+        </p>
         {/* Known once the day is: nothing of it is in the build-time page. */}
         {boards && (
           <Leaderboard
@@ -675,6 +801,21 @@ export default function Home() {
           onClose={() => setRemind(false)}
           returnFocus={remindButton}
         />
+        {review && (
+          <Review
+            {...review}
+            share={{
+              label: text.share.open(text.modes[review.mode].label),
+              busy: sharing?.mode === review.mode && sharing.state === "making",
+              done: sharing?.mode === review.mode && shareWorked(sharing.state),
+              onClick: () => shareMode(review.mode),
+            }}
+            status={sharing?.mode === review.mode ? shareStatus : undefined}
+            open
+            onClose={() => setReview(null)}
+            returnFocus={reviewButton}
+          />
+        )}
         <Support
           labels={strings.support}
           ideas={IDEAS}
@@ -686,4 +827,9 @@ export default function Home() {
       </GameLayout>
     </main>
   );
+}
+
+/** SHARE worked: the share sheet took it, or the picture was saved or the text copied. */
+function shareWorked(state: ShareShown): boolean {
+  return state !== "making" && state !== "failed";
 }

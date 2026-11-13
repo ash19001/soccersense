@@ -350,3 +350,22 @@ describe("Stats", () => {
     expect(close).toHaveFocus();
   });
 });
+
+describe("Stats with no intro and no small print", () => {
+  test("shows neither, and the dialog has no description", () => {
+    const labels = { ...CARD.labels, intro: undefined, disclaimer: undefined };
+    render(
+      at(
+        DEFAULT_SCALE,
+        <Stats {...CARD} labels={labels} open onClose={() => {}} />,
+      ),
+    );
+    const dialog = document.querySelector("dialog");
+    expect(dialog).not.toHaveAttribute("aria-describedby");
+    expect(dialog?.querySelector(".ss-stats__intro")).toBeNull();
+    expect(dialog?.querySelector(".ss-legal")).toBeNull();
+    expect(screen.getByRole("dialog", { name: CARD.labels.heading })).toBe(
+      dialog,
+    );
+  });
+});

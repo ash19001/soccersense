@@ -280,11 +280,10 @@ describe("home page: in the browser", () => {
     expect(dialog).toHaveAttribute("open");
     expect(help).toHaveAttribute("aria-expanded", "true");
     expect(scenes()).toHaveLength(1);
-    // The day in a line, the six shots and the career; nothing on the modes.
-    expect(
-      within(dialog).getByText(strings.howToPlay.intro),
-    ).toBeInTheDocument();
-    expect(dialog).toHaveAccessibleDescription(strings.howToPlay.intro);
+    // The six shots and the career; no line under the heading (the page keeps it), and
+    // nothing on the modes.
+    expect(within(dialog).queryByText(strings.howToPlay.intro)).toBeNull();
+    expect(dialog).not.toHaveAttribute("aria-describedby");
     expect(dialog.textContent).not.toMatch(/\b(HOME|AWAY)\b/);
     for (const shot of [
       "worldie",

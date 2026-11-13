@@ -43,8 +43,8 @@ export interface StatsLabels {
   heading: string;
   /** The close button's name. */
   close: string;
-  /** The line under the heading, and the dialog's description. */
-  intro: string;
+  /** The line under the heading, and the dialog's description. Leave out for none. */
+  intro?: string;
   /** In place of everything else on a first visit. */
   empty: string;
   /** Over today's result: "TODAY". */
@@ -181,9 +181,11 @@ function Card({
         className="ss-help__body ss-stats__body"
         tabIndex={bodyFocusable ? 0 : undefined}
       >
-        <p id={ids.intro} className="ss-stats__intro">
-          {labels.intro}
-        </p>
+        {labels.intro && (
+          <p id={ids.intro} className="ss-stats__intro">
+            {labels.intro}
+          </p>
+        )}
         {empty ? (
           <p className="ss-stats__empty">{labels.empty}</p>
         ) : (
@@ -593,7 +595,7 @@ function Dialog({
       className={cx("ss-help-dialog ss-stats-dialog", `is-${phase}`, className)}
       data-wide={wide ? "" : undefined}
       aria-labelledby={heading}
-      aria-describedby={intro}
+      aria-describedby={card.labels.intro ? intro : undefined}
       onKeyDown={onKeyDown}
       onPointerDown={(event: PointerEvent<HTMLDialogElement>) => {
         pressedOutside.current = event.target === event.currentTarget;

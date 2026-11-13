@@ -549,6 +549,199 @@ describe("MenuCaptions", () => {
     expect(document.querySelectorAll(".ss-menu__score")).toHaveLength(1);
   });
 
+  test("a played mode is played once a day: its card is no button, its REVIEW is", () => {
+    const onSelect = vi.fn();
+    const onReview = vi.fn();
+    const onShare = vi.fn();
+    const { rerender } = render(
+      <MenuCaptions
+        modes={[
+          {
+            mode: "home",
+            label: "HOME",
+            line: "The most common answer wins",
+            score: 512,
+            scoreSpoken: "Played today: 512 points",
+          },
+          {
+            mode: "away",
+            label: "AWAY",
+            line: "The most uncommon answer wins",
+          },
+        ]}
+        onSelect={onSelect}
+        review={{
+          spoken: (mode) => `Review your ${mode} game`,
+          onClick: onReview,
+        }}
+        share={{
+          spoken: (mode) => `Share your ${mode} game`,
+          onClick: onShare,
+          busy: "home",
+        }}
+        howToPlay={{ label: "How to play", onClick: () => {} }}
+        dayLabel="DAY 12"
+      />,
+    );
+    // HOME's card is not a way to play it again; AWAY's still is.
+    expect(
+      screen.queryByRole("button", { name: /The most common answer wins/ }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /AWAY/ }));
+    expect(onSelect).toHaveBeenCalledWith("away");
+    const review = screen.getByRole("button", {
+      name: "Review your HOME game",
+    });
+    // Icons, not words: named for screen readers and in a tooltip.
+    expect(review).toHaveTextContent("");
+    expect(review).toHaveClass("ss-btn--icon");
+    expect(review).toHaveAttribute("title", "Review your HOME game");
+    expect(review).toHaveAttribute("aria-haspopup", "dialog");
+    expect(review).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(review);
+    expect(onReview).toHaveBeenCalledWith("home");
+    // SHARE beside it, busy while its picture is made (busy, not disabled: it can still
+    // be pressed, and the page ignores it).
+    const shareButton = screen.getByRole("button", {
+      name: "Share your HOME game",
+    });
+    expect(shareButton).toHaveClass("ss-btn--icon", "ss-menu__share");
+    expect(shareButton).toHaveAttribute("aria-busy", "true");
+    expect(shareButton.previousElementSibling).toBe(review);
+    expect(shareButton).not.toHaveClass("is-done");
+    fireEvent.click(shareButton);
+    expect(onShare).toHaveBeenCalledWith("home");
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    // Without `review` a played card has no button at all.
+    rerender(
+      <MenuCaptions
+        modes={[
+          { mode: "home", label: "HOME", line: "x", score: 512 },
+          { mode: "away", label: "AWAY", line: "y" },
+        ]}
+        onSelect={onSelect}
+        howToPlay={{ label: "How to play", onClick: () => {} }}
+        dayLabel="DAY 12"
+      />,
+    );
+    expect(document.querySelector(".ss-menu__review")).toBeNull();
+    expect(document.querySelector(".ss-menu__card.is-played")).toHaveAttribute(
+      "data-mode",
+      "home",
+    );
+  });
+
+  test("a played card and its patch on the ball no longer light each other", () => {
+    const onHover = vi.fn();
+    const modes = [
+      { mode: "home", label: "HOME", line: "x", score: 512 },
+      { mode: "away", label: "AWAY", line: "y" },
+    ] as const;
+    const review = {
+      label: "REVIEW",
+      spoken: (mode: string) => `Review your ${mode} game`,
+      onClick: () => {},
+    };
+    const { rerender } = render(
+      <MenuCaptions
+        modes={modes}
+        onSelect={() => {}}
+        onHover={onHover}
+        review={review}
+        lit="home"
+        howToPlay={{ label: "How to play", onClick: () => {} }}
+        dayLabel="DAY 12"
+      />,
+    );
+    const home = document.querySelector(
+      '.ss-menu__card[data-mode="home"]',
+    ) as HTMLElement;
+    // The ball's HOME patch is under the pointer: the played card stays as it is.
+    expect(home).not.toHaveClass("is-lit");
+    // The mouse on the card, and the keyboard on its REVIEW, light nothing on the ball.
+    fireEvent.pointerEnter(home, { pointerType: "mouse" });
+    act(() =>
+      screen.getByRole("button", { name: "Review your HOME game" }).focus(),
+    );
+    expect(onHover).not.toHaveBeenCalled();
+    // A card not played still does both.
+    rerender(
+      <MenuCaptions
+        modes={modes}
+        onSelect={() => {}}
+        onHover={onHover}
+        review={review}
+        lit="away"
+        howToPlay={{ label: "How to play", onClick: () => {} }}
+        dayLabel="DAY 12"
+      />,
+    );
+    const away = screen.getByRole("button", { name: /AWAY/ });
+    expect(away).toHaveClass("is-lit");
+    fireEvent.pointerEnter(away, { pointerType: "mouse" });
+    expect(onHover).toHaveBeenLastCalledWith("away");
+  });
+
+  test("a card played while it is pointed at lets go of the hover", () => {
+    const onHover = vi.fn();
+    const props = {
+      onSelect: () => {},
+      onHover,
+      howToPlay: { label: "How to play", onClick: () => {} },
+      dayLabel: "DAY 12",
+    };
+    const { rerender } = render(
+      <MenuCaptions
+        {...props}
+        modes={[
+          { mode: "home", label: "HOME", line: "x" },
+          { mode: "away", label: "AWAY", line: "y" },
+        ]}
+      />,
+    );
+    fireEvent.pointerEnter(screen.getByRole("button", { name: /HOME/ }), {
+      pointerType: "mouse",
+    });
+    expect(onHover).toHaveBeenLastCalledWith("home");
+    // Finished in another tab: the card is played now, and the patch is let go.
+    rerender(
+      <MenuCaptions
+        {...props}
+        modes={[
+          { mode: "home", label: "HOME", line: "x", score: 300 },
+          { mode: "away", label: "AWAY", line: "y" },
+        ]}
+      />,
+    );
+    expect(onHover).toHaveBeenLastCalledWith(null);
+  });
+
+  test("a mode not played yet shows its picture in an 18-pixel box, to the whole pixel", () => {
+    render(
+      <MenuCaptions
+        modes={[
+          {
+            mode: "retro",
+            label: "RETRO",
+            line: "The oldest answer wins",
+            // 16 x 14: 2 font pixels to share across, 4 down
+            picture: Array(14).fill("w".repeat(16)),
+          },
+          { mode: "nextgen", label: "NEXT-GEN", line: "y" },
+        ]}
+        onSelect={() => {}}
+        howToPlay={{ label: "How to play", onClick: () => {} }}
+        dayLabel="DAY 12"
+      />,
+    );
+    const pics = document.querySelectorAll<HTMLElement>(".ss-menu__pic");
+    expect(pics).toHaveLength(1);
+    expect(pics[0]).toHaveAttribute("aria-hidden", "true");
+    expect(pics[0].style.paddingTop).toBe("calc(var(--fp) * 2)");
+    expect(pics[0].style.paddingLeft).toBe("calc(var(--fp) * 1)");
+    expect(pics[0].closest("button")).toHaveClass("has-pic");
+  });
+
   const twoModes = [
     { mode: "home", label: "HOME", line: "Closest to the stadium wins" },
     { mode: "away", label: "AWAY", line: "Furthest from it wins" },
@@ -660,8 +853,16 @@ describe("MenuCaptions", () => {
       captions({
         modes: [
           { ...twoModes[0], score: 478, scoreSpoken: "Played today: 478" },
-          twoModes[1],
+          { ...twoModes[1], picture: ["ww", "ww"] },
         ],
+        review: {
+          spoken: (m) => `Review ${m}`,
+          onClick: () => {},
+        },
+        share: {
+          spoken: (m) => `Share ${m}`,
+          onClick: () => {},
+        },
       }),
     );
     const menu = container.querySelector(".ss-menu") as HTMLElement;
@@ -680,12 +881,23 @@ describe("MenuCaptions", () => {
     expect(cards.every((el) => el.classList.contains("ss-menu__card"))).toBe(
       true,
     );
-    // In a card: the badge and the score together, then the line. The wide row reorders
-    // them with `order`, so what is read out stays badge, score, line.
-    const [top, line] = [...(cards[0] as HTMLElement).children];
+    // A played card: the score (read out in words), the badge, then REVIEW. The wide row
+    // mirrors the left column with `order`, so what is read out keeps this order.
+    const [score, spoken, top, review] = [
+      ...(cards[0] as HTMLElement).children,
+    ];
+    expect(score).toHaveClass("ss-menu__score");
+    expect(score).toHaveTextContent("478");
+    expect(spoken).toHaveClass("ss-sr");
     expect(top).toHaveClass("ss-menu__top");
     expect(top?.firstElementChild).toHaveClass("ss-badge");
-    expect(top?.querySelector(".ss-menu__score")).toHaveTextContent("478");
+    expect(review).toHaveClass("ss-menu__acts");
+    expect(review?.children[0]).toHaveClass("ss-menu__review");
+    expect(review?.children[1]).toHaveClass("ss-menu__share");
+    // One not played: its picture, the badge, then the line.
+    const [pic, badge, line] = [...(cards[1] as HTMLElement).children];
+    expect(pic).toHaveClass("ss-menu__pic");
+    expect(badge).toHaveClass("ss-menu__top");
     expect(line).toHaveClass("ss-menu__line");
     // The day is one piece of text, and the button comes after it.
     const side = [...(menu.children[2] as HTMLElement).children];

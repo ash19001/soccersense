@@ -24,14 +24,19 @@ export interface PopupProps {
   open: boolean;
   /** The card's heading, and the dialog's name. */
   heading: string;
-  /** The line under the heading, and the dialog's description. */
-  intro: string;
+  /** The line under the heading, and the dialog's description. Leave out for none. */
+  intro?: string;
   /** The close button's name. */
   close: string;
   /** The close button, Escape or a press outside: called once the card has gone. */
   onClose(): void;
   /** Where the focus goes back to on closing: the button that opened it. */
   returnFocus?: RefObject<HTMLElement | null>;
+  /**
+   * A button of the card's own in its head, just before the close button (the review's
+   * SHARE). Give it the class `ss-popup__action`.
+   */
+  action?: ReactNode;
   /** What follows the line. */
   children?: ReactNode;
   /** On the card (`ss-help ss-popup`), for its own styles. */
@@ -78,6 +83,7 @@ function Dialog({
   close,
   onClose,
   returnFocus,
+  action,
   children,
   className,
 }: Omit<PopupProps, "open">) {
@@ -260,7 +266,7 @@ function Dialog({
       className={cx("ss-help-dialog ss-popup-dialog", `is-${phase}`)}
       data-wide={wide ? "" : undefined}
       aria-labelledby={headingId}
-      aria-describedby={introId}
+      aria-describedby={intro ? introId : undefined}
       onKeyDown={onKeyDown}
       onPointerDown={(event: PointerEvent<HTMLDialogElement>) => {
         pressedOutside.current = event.target === event.currentTarget;
@@ -306,6 +312,7 @@ function Dialog({
           <h2 id={headingId} className="ss-help__title">
             {heading}
           </h2>
+          {action}
           <IconButton
             ref={closeRef}
             icon="close"
@@ -320,9 +327,11 @@ function Dialog({
           className="ss-help__body ss-popup__body"
           tabIndex={scrolls ? 0 : undefined}
         >
-          <p id={introId} className="ss-popup__intro">
-            {intro}
-          </p>
+          {intro && (
+            <p id={introId} className="ss-popup__intro">
+              {intro}
+            </p>
+          )}
           {children}
         </div>
       </div>

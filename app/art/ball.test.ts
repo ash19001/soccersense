@@ -204,6 +204,69 @@ describe("drawBall", () => {
     }
   });
 
+  it("puts what a patch carries in the middle of what the patch shows", () => {
+    // The four open patches, all played: a score on each (narrow, so the side ones can go
+    // all the way to centred). What a score adds is found by drawing without it.
+    const open: BallPatches = {
+      ...MENU,
+      left: { label: "HOME", icon: "home", accent: MODE_COLORS.home },
+      right: { label: "AWAY", icon: "away", accent: MODE_COLORS.away },
+      top: { label: "", icon: "nextgen", accent: MODE_COLORS.nextgen },
+      bottom: { label: "", icon: "retro", accent: MODE_COLORS.retro },
+    };
+    const scored: BallPatches = {
+      ...open,
+      left: { ...open.left!, badge: "350" },
+      right: { ...open.right!, badge: "411" },
+      top: { ...open.top!, badge: "70" },
+      bottom: { ...open.bottom!, badge: "380" },
+    };
+    for (const r of [60, 74, 90]) {
+      const state = ball({ r });
+      const bare: BallPatches = {
+        ...open,
+        left: { ...open.left!, icon: "none", label: "" },
+        right: { ...open.right!, icon: "none", label: "" },
+        top: { ...open.top!, icon: "none" },
+        bottom: { ...open.bottom!, icon: "none" },
+      };
+      const a = render(state, scored);
+      const b = render(state, bare);
+      for (const slot of ["left", "right", "top", "bottom"] as const) {
+        let px = 0;
+        let py = 0;
+        let pn = 0;
+        let cx = 0;
+        let cy = 0;
+        let cn = 0;
+        for (let y = 0; y < 320; y++) {
+          for (let x = 0; x < 320; x++) {
+            if (ballSlotAt(state, x, y) !== slot) continue;
+            px += x;
+            py += y;
+            pn++;
+            if (a.get(x, y) !== b.get(x, y)) {
+              cx += x;
+              cy += y;
+              cn++;
+            }
+          }
+        }
+        expect(cn, `${slot} at r ${r} carries something`).toBeGreaterThan(0);
+        // Within three pixels of the middle, each way (the pair is placed in whole coarse
+        // units of two pixels, and the letters are not symmetrical).
+        expect(
+          Math.abs(cx / cn - px / pn),
+          `${slot} across, r ${r}`,
+        ).toBeLessThanOrEqual(3);
+        expect(
+          Math.abs(cy / cn - py / pn),
+          `${slot} down, r ${r}`,
+        ).toBeLessThanOrEqual(3);
+      }
+    }
+  });
+
   it("is a pure function of its inputs, at any size", () => {
     const state = ball({ yaw: 0.07, hovered: "left", t: 3.21 });
     const a = render(state).data.slice();

@@ -400,6 +400,29 @@ ww......ww
 ....ww....
 `;
 
+/** An art string as rows, without the empty rows above and below the picture. */
+function rows(art: string): readonly string[] {
+  const all = art.split("\n").filter((row) => row !== "");
+  const inked = (row: string) => row.includes(W);
+  const first = all.findIndex(inked);
+  const last = all.length - 1 - [...all].reverse().findIndex(inked);
+  return first < 0 ? [] : all.slice(first, last + 1);
+}
+
+/**
+ * The four open modes' pictures as rows of "w" and ".", for the interface to draw beside
+ * the modes' names (the cards under the ball): the same art as the ball's, at the size it
+ * has when it faces the viewer (HOME's and AWAY's 18 x 18, NEXT-GEN's and RETRO's 16 x 14).
+ */
+export const MODE_PICTURES: Readonly<
+  Record<"home" | "away" | "nextgen" | "retro", readonly string[]>
+> = {
+  home: rows(HOME),
+  away: rows(AWAY),
+  nextgen: rows(NEXTGEN),
+  retro: rows(RETRO),
+};
+
 let made: BallIcons | undefined;
 
 /** The ball's 19 pictures, built on first use. */

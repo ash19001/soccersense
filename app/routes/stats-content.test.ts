@@ -45,7 +45,9 @@ describe("statsContent", () => {
     const content = statsContent(2, []);
     expect(content.empty).toBe(true);
     expect(content.modes.map((m) => m.mode)).toEqual([...MODES]);
-    expect(content.labels.disclaimer).toBe(strings.legal.disclaimer);
+    // No line under the heading and no small print.
+    expect(content.labels.intro).toBeUndefined();
+    expect(content.labels.disclaimer).toBeUndefined();
   });
 
   it("puts a HOME game and an AWAY game on two days into words", () => {

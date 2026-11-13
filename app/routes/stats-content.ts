@@ -27,13 +27,15 @@ export type StatsContent = Pick<
   "labels" | "modes" | "streak" | "empty"
 >;
 
-/** The card's words, from `strings.stats` and the small print. */
+/**
+ * The card's words, from `strings.stats`. No line under the heading and no small print
+ * (the product owner, 2026-11-13): the heading says what it is.
+ */
 export function statsLabels(): StatsLabels {
   const text = strings.stats;
   return {
     heading: text.heading,
     close: text.close,
-    intro: text.intro,
     empty: text.empty,
     today: text.today,
     notPlayed: text.notPlayed,
@@ -51,7 +53,6 @@ export function statsLabels(): StatsLabels {
     days: text.days,
     streakBest: text.streakBest,
     streakSpoken: text.streakSpoken,
-    disclaimer: strings.legal.disclaimer,
   };
 }
 

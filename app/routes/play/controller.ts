@@ -19,12 +19,10 @@
 
 import {
   MAX_TOTAL,
-  type Mode,
   type Session,
   type StorageLike,
   type Today,
   buildShareText,
-  careerFor,
   clockView,
   createSession,
   dayKeyFor,
@@ -38,7 +36,6 @@ import {
   shareCardFor,
   shareInputFor,
   streakFor,
-  titleFor,
 } from "~/game";
 import { questionsFor } from "~/data";
 import { strings } from "~/i18n";
@@ -50,6 +47,8 @@ import {
   loadLive,
   saveLive,
 } from "./progress";
+import { modeName, tierName, titleName } from "./names";
+import { deliverShare } from "./share-flow";
 import {
   type ShareKit,
   browserShareKit,
@@ -100,8 +99,6 @@ export interface GameOptions {
   clock?: () => number;
   /** Omit for `localStorage`; null for none. */
   storage?: StorageLike | null;
-  /** Show today's finished game again (a reload at full time) instead of a new one. */
-  restoreFullTime?: boolean;
   /** The player's language, for miles or kilometres. Default "en-GB". */
   locale?: string;
   /** Copies the share text. Default: the share kit's (the browser's clipboard). */
@@ -110,30 +107,9 @@ export interface GameOptions {
   shareKit?: ShareKit;
 }
 
-/** The tier's name, as the board and the card show it. */
-export function tierName(total: number): string {
-  return strings.play.tiers[careerFor(total).id];
-}
-
-/** The title a total earned in a mode, as the full-time card and the share text show it. */
-export function titleName(mode: Mode, total: number): string {
-  const titles: Readonly<Record<string, string>> = strings.play.titles[mode];
-  return titles[titleFor(mode, total)] ?? "";
-}
-
-/** The mode's name as the badge shows it: "NEXT-GEN". */
-export function modeName(mode: Mode): string {
-  return strings.home.modes[mode].label;
-}
-
-/** The share sheet was closed by the player (rather than refused by the browser). */
-function isAbort(error: unknown): boolean {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    (error as { name?: unknown }).name === "AbortError"
-  );
-}
+// The names a result goes by: also the home screen's (its review and SHARE), so they live
+// in ./names.ts, away from the scene.
+export { modeName, tierName, titleName } from "./names";
 
 export class GameController {
   readonly scene: CareerScene;
@@ -175,11 +151,10 @@ export class GameController {
     };
     const now = this.clock();
 
+    // A mode is played once a day: today's finished game is shown again, at full time.
     let session: Session | null = null;
-    if (options.restoreFullTime) {
-      const done = loadGame(today.dayKey, mode, this.storage);
-      if (done) session = finishedSession(context, done.turns, now);
-    }
+    const done = loadGame(today.dayKey, mode, this.storage);
+    if (done) session = finishedSession(context, done.turns, now);
     session ??= loadLive(context, this.storage);
     session ??= createSession({
       ...context,
@@ -349,7 +324,7 @@ export class GameController {
       ),
     );
     if (!this.kit.canMakeImage()) {
-      this.saveAndCopy(text, null);
+      this.deliver(text, null);
       return;
     }
     const image = this.prepareImage();
@@ -367,70 +342,19 @@ export class GameController {
     });
   };
 
-  /** Hands the picture and the text to the share sheet, or downloads and copies them. */
+  /**
+   * Hands the picture and the text to the share sheet, or downloads and copies them
+   * (./share-flow.ts, as the home screen's SHARE does), then says how it went.
+   */
   private deliver(text: string, blob: Blob | null): void {
     const { session } = this.view;
     const words = strings.play.fullTime.image;
-    const name = words.fileName(session.dayNumber, session.mode);
-    let file: File | null = null;
-    if (blob) {
-      try {
-        file = new File([blob], name, { type: "image/png" });
-      } catch {
-        file = null;
-      }
-    }
-    if (file && this.kit.canShareFiles([file])) {
-      const title = words.title(session.dayNumber, modeName(session.mode));
-      let sharing: Promise<void>;
-      try {
-        sharing = this.kit.shareFiles({ files: [file], text, title });
-      } catch (error) {
-        sharing = Promise.reject(error);
-      }
-      sharing.then(
-        () => this.settleShare("shared"),
-        (error: unknown) => {
-          // The player closed the sheet: nothing to say, SHARE is ready again.
-          if (isAbort(error)) {
-            this.settleShare("idle");
-            return;
-          }
-          // The sheet would not open (the browser took the press as too long ago, say):
-          // download and copy instead.
-          this.saveAndCopy(text, blob);
-        },
-      );
-      return;
-    }
-    this.saveAndCopy(text, blob);
-  }
-
-  /** Downloads the picture (if there is one) and copies the text, then says how it went. */
-  private saveAndCopy(text: string, blob: Blob | null): void {
-    const { session } = this.view;
-    const name = strings.play.fullTime.image.fileName(
-      session.dayNumber,
-      session.mode,
-    );
-    let downloaded = false;
-    if (blob) {
-      try {
-        downloaded = this.kit.download(blob, name);
-      } catch {
-        downloaded = false;
-      }
-    }
-    let copying: Promise<void>;
-    try {
-      copying = this.copy(text);
-    } catch (error) {
-      copying = Promise.reject(error);
-    }
-    copying.then(
-      () => this.settleShare(downloaded ? "saved" : "copied"),
-      () => this.settleShare(downloaded ? "downloaded" : "failed"),
-    );
+    void deliverShare(this.kit, this.copy, {
+      text,
+      blob,
+      fileName: words.fileName(session.dayNumber, session.mode),
+      title: words.title(session.dayNumber, modeName(session.mode)),
+    }).then((outcome) => this.settleShare(outcome));
   }
 
   /** Shows (and reads out) how SHARE went, then puts the button back. */

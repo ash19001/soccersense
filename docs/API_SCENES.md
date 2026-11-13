@@ -199,6 +199,7 @@ class MenuScene implements Scene {
   onKickoff: ((mode: Mode) => void) | null; // a mode was chosen: get the captions out of the way
   onChoose: ((mode: Mode) => void) | null; // the kick-off is over: move on. Once per kick-off
   onLocked: ((mode: LockedMode) => void) | null; // a locked patch was pressed and released
+  onReview: ((mode: Mode) => void) | null; // a played mode's patch (one with a score): no kick-off
   onSound: ((cue: SoundCue) => void) | null; // the Scene contract: what is to be heard
   ambience(): Ambience; // { venue: "town", crowd: 0.3, night: the light's phase is "night" }
 
@@ -284,7 +285,9 @@ the kick-off is a cut: the patch lights for 0.15 s, then ink and `onChoose`.
 - A patch is chosen by pressing and releasing on the same patch without moving more than 3 logical
   pixels (12 CSS px on the reference monitor). Further than that the press is a drag (below) and
   never chooses, wherever it is let go. A locked patch answers with a shake of the ball (0.35 s)
-  and `onLocked(mode)`, and never chooses. The four open modes choose from any pose in which
+  and `onLocked(mode)`, and never chooses. A mode played today (its patch has a score,
+  `setScores`) is played once a day: its patch answers `onReview(mode)` and never kicks off,
+  and `choose(mode)` returns false for it (2026-11-13). The four open modes choose from any pose in which
   they are in view (their pentagon is under the pointer); from a pose other than the menu pose
   the ball is first brought round, as for `choose` mid-spin (below). (A spun ball that comes
   to rest with NEXT-GEN or RETRO facing the viewer goes home, as for HOME and AWAY.)

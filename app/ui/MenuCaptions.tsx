@@ -12,7 +12,14 @@ import { strings } from "~/i18n";
 import { IconButton } from "./Button";
 import { cx } from "./cx";
 import { ModeBadge } from "./ModeBadge";
+import {
+  type Bitmap,
+  type GlyphLayer,
+  PixelGlyph,
+  bitmapSize,
+} from "./PixelGlyph";
 import { PopupButton } from "./Popup";
+import { REVIEW_ICON, SHARE_ICON, TICK_ICON } from "./ResultIcons";
 import { BELL } from "./RemindMe";
 import { SoundToggle, type SoundToggleLabels } from "./SoundToggle";
 import { StatsButton } from "./Stats";
@@ -34,10 +41,48 @@ export interface MenuModeCaption {
   short?: string;
   /** Shorter still, for a phone's cards: "Most common". Leave out to show `short` there. */
   tiny?: string;
-  /** The score if this mode was already played today: an amber points box by the badge. */
+  /**
+   * The mode's picture, before its badge on a card not played yet: rows of "w" and "."
+   * (the ball's art, `MODE_PICTURES` in app/art/ball-icons.ts), drawn in the mode's colour
+   * in font pixels. Leave out for none.
+   */
+  picture?: Bitmap;
+  /**
+   * The score if this mode was already played today. A mode is played once a day, so its
+   * card is then no longer a button: an amber points box, the badge and the REVIEW button
+   * (`review`) in place of the picture, the badge and the line.
+   */
   score?: number | null;
   /** Read out for the score: "Played today: 347 points". */
   scoreSpoken?: string;
+}
+
+/** The picture's ink: the "w" cells of the ball's art, in the current colour. */
+const PICTURE_LAYERS: readonly GlyphLayer[] = [{ char: "w" }];
+
+/**
+ * Every picture stands in a box this many font pixels square (the largest is 18 x 18), in
+ * its middle to the whole font pixel, so the four line up and none lands on half a pixel.
+ */
+export const PICTURE_BOX = 18;
+
+/** A picture in its box: the whole font pixels left above it and before it. */
+function picture(bitmap: Bitmap) {
+  const { w, h } = bitmapSize(bitmap);
+  const top = Math.max(0, Math.floor((PICTURE_BOX - h) / 2));
+  const left = Math.max(0, Math.floor((PICTURE_BOX - w) / 2));
+  return (
+    <span
+      className="ss-menu__pic"
+      aria-hidden="true"
+      style={{
+        paddingTop: `calc(var(--fp) * ${top})`,
+        paddingLeft: `calc(var(--fp) * ${left})`,
+      }}
+    >
+      <PixelGlyph bitmap={bitmap} layers={PICTURE_LAYERS} unit="fp" />
+    </span>
+  );
 }
 
 export interface MenuCaptionsProps {
@@ -47,16 +92,42 @@ export interface MenuCaptionsProps {
    */
   modes: readonly MenuModeCaption[];
   /**
-   * With this the cards are real buttons, so the menu also works without the ball on the
-   * canvas (keyboard, screen readers).
+   * With this the cards of the modes not played today are real buttons, so the menu also
+   * works without the ball on the canvas (keyboard, screen readers).
    */
   onSelect?: (mode: UiMode) => void;
+  /**
+   * The REVIEW button on the card of a mode played today (one with a score): a square icon
+   * button (`REVIEW_ICON`), its name for screen readers and its tooltip ("Review your HOME
+   * game", from the mode's label), what a press does, and `open`: the mode whose review is
+   * up. Leave it out for no button.
+   */
+  review?: {
+    spoken: (mode: string) => string;
+    onClick: (mode: UiMode) => void;
+    open?: UiMode | null;
+  };
+  /**
+   * The SHARE button beside REVIEW (`SHARE_ICON`): its name ("Share your HOME game"), what
+   * a press does (the page shares that mode's game as its full-time card does), `busy`:
+   * the mode whose picture is still being made (its button is marked busy), and `done`:
+   * the mode whose SHARE has just worked (its icon is a green tick for a moment).
+   */
+  share?: {
+    spoken: (mode: string) => string;
+    onClick: (mode: UiMode) => void;
+    busy?: UiMode | null;
+    done?: UiMode | null;
+  };
   /**
    * The mouse is over a card or the keyboard's focus is on it (`null`: neither any more).
    * The page lights that mode's patch on the ball with it. Only called on a change.
    */
   onHover?: (mode: UiMode | null) => void;
-  /** Light this card as if it were hovered: the pointer is over its patch on the ball. */
+  /**
+   * Light this card as if it were hovered: the pointer is over its patch on the ball. A
+   * played card is never lit, and never reports a hover (`onHover`): it plays nothing.
+   */
   lit?: UiMode | null;
   /**
    * A short line on a plate that floats above the cards, for example after a locked patch
@@ -146,12 +217,16 @@ function focusShows(el: Element): boolean {
  *
  * The wide rows are placed with CSS `order` and by position (odd and even cards), so keep
  * the children in this order: the notice, the cards (in pairs), the day, the "?" button,
- * the sound switch, the stats button; and in a card the badge, the score, the line, the
- * short line, the tiny line.
+ * the sound switch, the stats button; in a card not played the picture, the badge, the
+ * line, the short line, the tiny line; and in a played one (a mode is played once a day:
+ * it is no button) the score, the badge, and REVIEW and SHARE (icons) together (ui.css
+ * section 28).
  */
 export function MenuCaptions({
   modes,
   onSelect,
+  review,
+  share,
   onHover,
   lit = null,
   notice = null,
@@ -199,6 +274,25 @@ export function MenuCaptions({
     tell();
   }, [stowed, tell]);
 
+  // A card that has just been played (a game finished in another tab) lets go of its hover.
+  const played = modes
+    .filter((item) => item.score !== undefined && item.score !== null)
+    .map((item) => item.mode)
+    .join(" ");
+  useEffect(() => {
+    const done = new Set(played.split(" "));
+    let changed = false;
+    if (pointed.current && done.has(pointed.current)) {
+      pointed.current = null;
+      changed = true;
+    }
+    if (focused.current && done.has(focused.current)) {
+      focused.current = null;
+      changed = true;
+    }
+    if (changed) tell();
+  }, [played, tell]);
+
   const handlers = (mode: UiMode) => ({
     onPointerEnter: (event: ReactPointerEvent<HTMLElement>) => {
       // A finger does not hover: its tap is the choice.
@@ -241,24 +335,73 @@ export function MenuCaptions({
       </p>
       <div className="ss-menu__modes">
         {modes.map((item) => {
+          const badge = (
+            <span className="ss-menu__top">
+              <ModeBadge mode={item.mode} label={item.label} />
+            </span>
+          );
+          if (item.score !== undefined && item.score !== null) {
+            // Played today, and played once a day: the score, the badge and REVIEW. It is
+            // not a way to the ball's patch any more: the two no longer light each other.
+            return (
+              <div
+                key={item.mode}
+                className="ss-menu__card is-played"
+                data-mode={item.mode}
+              >
+                <span
+                  className="ss-menu__score"
+                  aria-hidden={item.scoreSpoken ? true : undefined}
+                >
+                  {Math.round(item.score)}
+                </span>
+                {item.scoreSpoken && (
+                  <span className="ss-sr">{item.scoreSpoken}</span>
+                )}
+                {badge}
+                {(review || share) && (
+                  <span className="ss-menu__acts">
+                    {review && (
+                      <PopupButton
+                        icon={REVIEW_ICON}
+                        label={review.spoken(item.label)}
+                        onClick={() => review.onClick(item.mode)}
+                        open={review.open === item.mode}
+                        className="ss-menu__review"
+                      />
+                    )}
+                    {share && (
+                      <button
+                        type="button"
+                        className={cx(
+                          "ss-btn ss-btn--icon ss-btn--secondary ss-menu__share",
+                          share.done === item.mode && "is-done",
+                        )}
+                        aria-label={share.spoken(item.label)}
+                        title={share.spoken(item.label)}
+                        // busy, not disabled: the focus stays on it
+                        aria-busy={share.busy === item.mode || undefined}
+                        onClick={() => share.onClick(item.mode)}
+                      >
+                        <span className="ss-btn__label">
+                          <PixelGlyph
+                            bitmap={
+                              share.done === item.mode ? TICK_ICON : SHARE_ICON
+                            }
+                            unit="ip"
+                          />
+                        </span>
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
+            );
+          }
           const inner = (
             <>
-              <span className="ss-menu__top">
-                <ModeBadge mode={item.mode} label={item.label} />
-                {item.score !== undefined && item.score !== null && (
-                  <>
-                    <span
-                      className="ss-menu__score"
-                      aria-hidden={item.scoreSpoken ? true : undefined}
-                    >
-                      {Math.round(item.score)}
-                    </span>
-                    {item.scoreSpoken && (
-                      <span className="ss-sr">{item.scoreSpoken}</span>
-                    )}
-                  </>
-                )}
-              </span>
+              {item.picture && picture(item.picture)}
+              {badge}
               <span className="ss-menu__line">{item.line}</span>
               {item.short !== undefined && (
                 <span className="ss-menu__short" aria-hidden="true">
@@ -276,6 +419,7 @@ export function MenuCaptions({
             "ss-menu__card",
             lit === item.mode && "is-lit",
             item.short !== undefined && "has-short",
+            item.picture !== undefined && "has-pic",
           );
           return onSelect ? (
             <button

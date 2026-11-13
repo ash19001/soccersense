@@ -13,8 +13,12 @@ export type {
   ForcedState,
   IconButtonProps,
 } from "./Button";
-export { FullTimeCard } from "./FullTimeCard";
-export type { FullTimeCardProps, FullTimeResult } from "./FullTimeCard";
+export { FullTimeCard, FullTimeResults } from "./FullTimeCard";
+export type {
+  FullTimeCardProps,
+  FullTimeResult,
+  FullTimeResultsProps,
+} from "./FullTimeCard";
 export { GameLayout } from "./GameLayout";
 export type { GameLayoutProps } from "./GameLayout";
 export { HowToPlay, HowToPlayCard } from "./HowToPlay";
@@ -58,6 +62,9 @@ export { Popup, PopupButton } from "./Popup";
 export type { PopupButtonProps, PopupProps } from "./Popup";
 export { BELL, RemindMe } from "./RemindMe";
 export type { RemindMeLabels, RemindMeProps } from "./RemindMe";
+export { REVIEW_ICON, SHARE_ICON, TICK_ICON } from "./ResultIcons";
+export { Review } from "./Review";
+export type { ReviewLabels, ReviewProps } from "./Review";
 export {
   DEFAULT_REMINDER_TIME,
   REMINDER_FILE,

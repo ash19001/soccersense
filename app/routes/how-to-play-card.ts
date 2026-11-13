@@ -10,13 +10,19 @@ export type HowToPlayContent = Pick<
   "labels" | "shots" | "tiers"
 >;
 
-export function howToPlayContent(): HowToPlayContent {
+/**
+ * The card's content. `intro: false` leaves out the line under the heading: the pop-up on
+ * the home screen has none (the product owner, 2026-11-13); the page keeps it.
+ */
+export function howToPlayContent({
+  intro = true,
+}: { intro?: boolean } = {}): HowToPlayContent {
   const text = strings.howToPlay;
   return {
     labels: {
       heading: text.heading,
       close: text.close,
-      intro: text.intro,
+      intro: intro ? text.intro : undefined,
       shots: text.shots.heading,
       points: text.shots.points,
       career: text.career.heading,

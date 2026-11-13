@@ -137,6 +137,38 @@ describe("the menu", () => {
     }
   });
 
+  it("a mode played today is played once a day: its patch asks for the review, never a kick-off", () => {
+    const [W, H] = SIZES[0];
+    for (const [slot, mode] of [
+      ["left", "home"],
+      ["right", "away"],
+      ["top", "nextgen"],
+      ["bottom", "retro"],
+    ] as const) {
+      const scene = make(W, H);
+      scene.setScores({ [mode]: 412 });
+      const kicked: Mode[] = [];
+      const reviewed: Mode[] = [];
+      scene.onKickoff = (m) => kicked.push(m);
+      scene.onReview = (m) => reviewed.push(m);
+      const p = patch(slot, W, H);
+      scene.pointer({ type: "move", x: p.x, y: p.y });
+      scene.pointer({ type: "down", x: p.x, y: p.y });
+      scene.pointer({ type: "up", x: p.x, y: p.y });
+      expect(reviewed).toEqual([mode]);
+      expect(kicked).toEqual([]);
+      // Nor from the DOM.
+      expect(scene.choose(mode)).toBe(false);
+      for (let i = 0; i < 60; i++) scene.update(STEP);
+      expect(scene.phase).not.toBe("kickoff");
+      expect(kicked).toEqual([]);
+      // Its score taken off (a new day): it kicks off again.
+      scene.setScores({ [mode]: null });
+      expect(scene.choose(mode)).toBe(true);
+      expect(kicked).toEqual([mode]);
+    }
+  });
+
   it("the locked patches stay locked: shown by a quarter turn, a press says no", () => {
     const [W, H] = SIZES[0];
     const m = menuLayout(W, H);

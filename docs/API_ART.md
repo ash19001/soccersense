@@ -138,6 +138,9 @@ type BallPatches = Partial<Record<BallSlot, BallPatch>>;
 drawBall(s, state, patches, light)         // the ball
 ballSlotAt(state, x, y): BallSlot | null   // hit test: exactly what the renderer drew
 ballSlotCenter(state, slot): { x, y, facing }   // facing 1 straight on, 0 on the rim, < 0 behind
+// app/art/ball-icons.ts: the open modes' pictures as rows of "w" and ".", trimmed top and
+// bottom, for the interface (the cards under the ball, 2026-11-13)
+MODE_PICTURES: Record<"home" | "away" | "nextgen" | "retro", readonly string[]>
 ballShowPose(slot): { yaw, pitch, roll }   // the pose that shows a slot
 drawBallShadow(s, state, groundY, light)   // a shadow on a ground line, for a ball that rests on one
 ```
@@ -169,7 +172,7 @@ it, `goal` a goal with its net and a ball on the spot.
   the front to the right, positive `pitch` rolls it up and away (a ball struck towards the
   stand), positive `roll` is clockwise.
 - **A button** (a patch with an `accent` and not `locked`) wears its colour as a line round the
-  pentagon, in its icon and in a tab under its word. **A locked patch** never takes a colour:
+  pentagon and in its icon (no tab under its word since 2026-11-13). **A locked patch** never takes a colour:
   its picture with a small padlock at its foot, in mist (chalk while hovered or pressed, when
   the pentagon also lifts a step), so HOME and AWAY lead. Facing the viewer (`facing` at least
   0.62) it adds its word under them; a word wider than the patch (at r = 45 NEXT-GEN, CLOSEST
@@ -216,6 +219,13 @@ it, `goal` a goal with its net and a ball on the spot.
   from 37, icon only below 37, only the coloured line below 26; and on how far it faces the
   viewer: the icon from `facing` 0.5, the word from 0.62. The menu ball is 36 to 60 px.
 - The menu rocks the ball by 0.12 rad of yaw; the label fit is measured for that.
+- What a patch carries hangs on the middle of what the patch shows (2026-11-13), not on its
+  centre on the sphere, which projects further out (by 5 px for the top and bottom patches
+  at r = 90): `MARK_SHARE` 0.94 of the way from the ball's centre, the measured mean of a
+  patch's pixels. On HOME and AWAY the picture and the word or score are a pair: the fonts
+  and the line are chosen with the text on the pentagon's widest rows, then the pair moves
+  down in steps of 2 px towards centred as far as what both patches write still fits there
+  (a score goes all the way, a word part of it), the same for both so they stay level.
 - Shots: `ball/menu`, `states`, `states-small`, `rock`, `sizes`, `flight`, `spin`, `badge`,
   `shine`, `fit`, `modes` (every patch in the pose that shows it), `modes-fit` (those poses at
   r 37 to 59, at both ends of the rock), `rim` (GUESS WHO and SHOOTOUT straight on, big).

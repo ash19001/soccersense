@@ -95,6 +95,32 @@ export const en = {
     },
     /** Read out for the score on a mode that has been played today. */
     played: (points: number) => `Played today: ${points} points`,
+    /**
+     * A mode played today: each mode is played once a day, so its card has a button that
+     * opens the day's game again in a pop-up (as does its patch on the ball).
+     */
+    review: {
+      /** The button's name for screen readers: "Review your HOME game". */
+      open: (mode: string) => `Review your ${mode} game`,
+      /** The pop-up's heading: "YOUR HOME GAME". */
+      heading: (mode: string) => `YOUR ${mode} GAME`,
+      close: "Close",
+    },
+    /** SHARE on a played mode's card: shared as its full-time card shares it. */
+    share: {
+      /** The button's name and tooltip: "Share your HOME game". */
+      open: (mode: string) => `Share your ${mode} game`,
+      /**
+       * How it went, on the plate over the cards (and read out): short, as the plate is
+       * narrow beside the ball on a monitor.
+       */
+      making: "Making your picture...",
+      shared: "Shared. Nice one!",
+      saved: "Picture saved, result copied.",
+      downloaded: "Picture saved. The text could not be copied.",
+      copied: "Result copied. Paste it anywhere.",
+      failed: "Could not copy your result. Try again.",
+    },
     day: (day: number) => `DAY ${day}`,
     /** In the day's place until the page knows what day it is. */
     dayPending: "TODAY",
@@ -678,7 +704,6 @@ export const en = {
     heading: "YOUR STATS",
     close: "Close",
     /** The one line under the heading, and the dialog's description. */
-    intro: "Your games on this device, over the last year.",
     /** A first visit: nothing finished yet. */
     empty:
       "No games yet. Finish a match and your results start piling up here.",

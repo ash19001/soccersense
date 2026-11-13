@@ -124,7 +124,6 @@ function atFullTime(kit: ShareKit, session = played(GRADES)): GameController {
     mode: session.mode,
     today,
     storage,
-    restoreFullTime: true,
     shareKit: kit,
   });
   game.start();

@@ -60,6 +60,43 @@ export interface FullTimeCardProps {
   className?: string;
 }
 
+export interface FullTimeResultsProps {
+  results: readonly FullTimeResult[];
+  /** The list's name for screen readers: "Your answers". */
+  label?: string;
+  className?: string;
+}
+
+/**
+ * The seven answers of a game, one to a row: the grade's lamp, what was answered, the
+ * shot's name and the points. The full-time card's list, and the review's (`Review`).
+ */
+export function FullTimeResults({
+  results,
+  label,
+  className,
+}: FullTimeResultsProps) {
+  return (
+    <ol
+      className={cx("ss-full__list", className)}
+      aria-label={label}
+      // A keyboard user must be able to scroll the list when it does not fit.
+      tabIndex={0}
+    >
+      {results.map((result, i) => (
+        <li key={i} className="ss-full__row" data-grade={result.grade}>
+          <Pip grade={result.grade} />
+          <span className="ss-full__answer">{result.answer}</span>
+          {result.label && (
+            <span className="ss-full__shot">{result.label}</span>
+          )}
+          <span className="ss-full__points">{result.points}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /**
  * The end of a game: the score, the career title, the seven answers, and what next. It
  * keeps to the lower 46% of the screen so the final tableau stays in view; the answers
@@ -124,23 +161,7 @@ export function FullTimeCard({
           </p>
         )}
       </div>
-      <ol
-        className="ss-full__list"
-        aria-label={resultsLabel}
-        // A keyboard user must be able to scroll the list when it does not fit.
-        tabIndex={0}
-      >
-        {results.map((result, i) => (
-          <li key={i} className="ss-full__row" data-grade={result.grade}>
-            <Pip grade={result.grade} />
-            <span className="ss-full__answer">{result.answer}</span>
-            {result.label && (
-              <span className="ss-full__shot">{result.label}</span>
-            )}
-            <span className="ss-full__points">{result.points}</span>
-          </li>
-        ))}
-      </ol>
+      <FullTimeResults results={results} label={resultsLabel} />
       <div className="ss-full__actions">
         {/* Busy, it is not `disabled`: that would drop the focus from it. */}
         <Button

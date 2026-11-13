@@ -1945,6 +1945,8 @@
   right: 0;
   bottom: calc(100% + var(--u3));
   left: 0;
+  /* Over the day plate on a phone while it is up (2.5 s): it stands where the plate does. */
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: var(--u3);
@@ -2128,15 +2130,24 @@ button.ss-menu__card:active {
   flex: none;
 }
 
+/*
+ * The day (and the streak): one of the mode cards in look (2026-11-13: it was a plain ink
+ * plate): the card's face, a stripe down its left edge in the day's amber, the highlight
+ * along its top, the ink outline and the drop shadow.
+ */
 .ss-menu__day {
   align-self: stretch;
-  padding: 0 var(--u);
-  background: var(--c-ink);
+  padding: 0 var(--u2) 0 var(--u3);
+  background: var(--c-night);
   color: var(--c-amber);
   line-height: var(--plate);
   text-align: center;
   white-space: nowrap;
-  box-shadow: 0 0 0 var(--u) var(--c-ink);
+  box-shadow:
+    inset var(--u) 0 0 0 var(--c-amber),
+    inset 0 var(--u) 0 0 var(--c-slate),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) var(--u) 0 var(--u) var(--c-ink);
 }
 
 /*
@@ -2281,7 +2292,7 @@ button.ss-menu__card:active {
   top: 0;
   right: calc(100% + var(--u2));
   bottom: 0;
-  padding: var(--ss-row-text) var(--u2) 0;
+  padding: var(--ss-row-text) var(--u2) 0 var(--u3);
   line-height: var(--lh-tight);
   text-align: left;
 }
@@ -2965,7 +2976,10 @@ button.ss-menu__card:active {
   }
 }
 
-/* A tab is a mode badge: lit in the mode's colour when chosen, a dark plate when not. */
+/*
+ * A tab is a mode badge: lit in the mode's colour when chosen, a plain dark plate when not
+ * (no line of the mode's colour under it: the product owner, 2026-11-13).
+ */
 .ss-lb__tab {
   --halo: var(--halo-off);
 
@@ -2982,9 +2996,7 @@ button.ss-menu__card:active {
   white-space: nowrap;
   cursor: pointer;
   appearance: none;
-  box-shadow:
-    inset 0 calc(var(--u) * -1) 0 0 var(--mode-dark, var(--c-ink)),
-    var(--halo);
+  box-shadow: var(--halo);
   touch-action: manipulation;
 }
 
@@ -3810,15 +3822,24 @@ button.ss-menu__card:active {
 
 /*
  * A wide screen: the line across the top; under it the shots on the left (two columns of
- * three, best first down each) and the career on the right, the same height.
+ * three, best first down each) and the career on the right, the same height; the small
+ * print across the foot. With no line (the pop-up on the home screen, 2026-11-13) there is
+ * no row for it either.
  */
 .ss-help[data-wide] .ss-help__body {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
   grid-template-areas:
     "intro intro"
-    "shots career";
+    "shots career"
+    "legal legal";
   gap: var(--u5) var(--u8);
+}
+
+.ss-help[data-wide] .ss-help__body:not(:has(> .ss-help__intro)) {
+  grid-template-areas:
+    "shots career"
+    "legal legal";
 }
 
 .ss-help[data-wide] .ss-help__intro {
@@ -4093,6 +4114,10 @@ html:has(.ss-help-dialog[open]) {
 /* The rules on a monitor: under both columns. */
 .ss-help[data-wide] .ss-legal {
   grid-column: 1 / -1;
+}
+
+.ss-help[data-wide] .ss-help__body > .ss-legal {
+  grid-area: legal;
 }
 
 /*
@@ -4385,6 +4410,25 @@ html:has(.ss-help-dialog[open]) {
   margin-left: 0;
 }
 
+/*
+ * And the plate split in two between the day and the streak, as the rows of cards are
+ * (2026-11-13: "it looks strange all being one box"): level with the gap between the rows,
+ * a logical pixel of ink, then the second card's highlight along its top.
+ */
+.ss-game[data-wide] .ss-menu__day:has(.ss-streak)::before {
+  content: "";
+  position: absolute;
+  top: var(--ss-row);
+  right: 0;
+  left: 0;
+  height: calc(var(--u) * 2);
+  background: linear-gradient(
+    var(--c-ink) 0 var(--u),
+    var(--c-slate) var(--u) 100%
+  );
+  pointer-events: none;
+}
+
 .ss-streak__flame {
   position: relative;
   display: block;
@@ -4593,9 +4637,9 @@ html:has(.ss-help-dialog[open]) {
 }
 
 /*
- * Each card one touch target tall: its badge, and beside it the short line (two lines of it
- * at most). Today's score is not shown here: the ball's patch shows it, and screen readers
- * still hear it. So the two rows of cards stay under the ball on a short phone (375 x 667).
+ * Each card one touch target tall, so the two rows of cards stay under the ball on a short
+ * phone (375 x 667): its picture, its badge and beside them the short line (two lines of it
+ * at most); played, its score, its badge and REVIEW (section 28).
  */
 .ss-game:not([data-wide]) .ss-menu__card {
   flex-direction: row;
@@ -4608,10 +4652,6 @@ html:has(.ss-help-dialog[open]) {
 .ss-game:not([data-wide]) .ss-menu__top {
   flex: none;
   align-self: center;
-}
-
-.ss-game:not([data-wide]) .ss-menu__score {
-  display: none;
 }
 
 .ss-menu__tiny {
@@ -4761,6 +4801,29 @@ html:has(.ss-help-dialog[open]) {
       )
     )
   );
+}
+
+/*
+ * Room for NEXT-GEN in its tab and for LAST 7 DAYS and ALL STATS on one line (they ran over
+ * the edges, 2026-11-13): the panel is 8 font pixels wider than section 20 makes it, 3
+ * logical pixels in at its sides instead of 4, the tabs' words 2 in from their left edge
+ * and 1 from their right (not 2), and the strip 1 in from its sides. NEXT-GEN is 62 font
+ * pixels and its tab now holds 64; the strip's heading line is 143 and has 148.
+ */
+.ss-game[data-wide] .ss-lb--docked {
+  --ss-lb-shift: calc(var(--fp) * 136 + var(--px) * 17);
+  --ss-lb-stow: calc(var(--fp) * 136 + var(--px) * 14 + var(--tap) + var(--u8));
+
+  width: calc(var(--fp) * 136 + var(--px) * 14);
+  padding-inline: var(--u3);
+}
+
+.ss-game[data-wide] .ss-lb--docked .ss-lb__tab {
+  padding-inline: var(--u2) var(--u);
+}
+
+.ss-game[data-wide] .ss-lb--docked .ss-lb__week {
+  padding-inline: var(--u);
 }
 
 /*
@@ -5163,4 +5226,221 @@ html:has(.ss-help-dialog[open]) {
   font-family: var(--font-10);
   font-size: calc(var(--fp) * 56 / 3);
   line-height: calc(var(--fp) * 18);
+}
+
+/* ---------- 28. The cards: what a mode is, and once played its score, REVIEW and SHARE (2026-11-13) */
+
+/*
+ * A mode is played once a day. A card not played yet is a button: the mode's picture (the
+ * ball's art, in the mode's colour, in font pixels), its badge and what it is. Played, it
+ * is a plain card: today's score, the badge, and two square icon buttons together at its
+ * far end: REVIEW (the day's game again, the pop-up `Review`, as does the mode's patch on
+ * the ball) and SHARE (as the full-time card shares it).
+ *
+ * The picture stands in a box 18 font pixels square, in its middle to the whole font pixel
+ * (MenuCaptions sets the padding), and the box is put in the card's middle to the pixel.
+ */
+.ss-menu__pic {
+  --pic: calc(var(--fp) * 18);
+
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--pic);
+  height: var(--pic);
+  color: var(--mode, var(--c-chalk));
+  line-height: 0;
+}
+
+.ss-menu__card.is-played {
+  flex-direction: row;
+  align-items: center;
+  cursor: default;
+}
+
+/* REVIEW and SHARE, together at the card's far end. */
+.ss-menu__acts {
+  display: flex;
+  flex: none;
+  gap: var(--u2);
+  margin-left: auto;
+}
+
+.ss-menu__acts > .ss-btn {
+  flex: none;
+}
+
+/*
+ * A phone: the score and the two buttons. There is no room for the badge as well (a 360 px
+ * phone's card has 153 px inside, NEXT-GEN's badge alone takes 80 and the buttons 88):
+ * the card's stripe, and the ball's patch over it with the same score, say which mode it
+ * is. The buttons are as tall as the card (they reach through its padding) and a touch
+ * target wide, the whole of its end.
+ */
+.ss-game:not([data-wide]) .ss-menu__card.is-played {
+  gap: var(--u2);
+}
+
+.ss-game:not([data-wide]) .ss-menu__card.is-played .ss-menu__top {
+  display: none;
+}
+
+.ss-game:not([data-wide]) .ss-menu__acts {
+  align-self: stretch;
+  margin-block: calc(var(--u) * -1);
+  margin-right: calc(var(--u2) * -1);
+}
+
+.ss-game:not([data-wide]) .ss-menu__acts > .ss-btn {
+  height: auto;
+}
+
+/*
+ * A phone too short for two rows (section 26): the badges alone, and a played card its
+ * score in its badge's place (its stripe, and the ball above, say which mode it is). Its
+ * REVIEW is then the whole card, unseen but for its focus ring (its name is read out), and
+ * SHARE is in the review.
+ */
+@media (max-height: 44.375rem) {
+  .ss-game:not([data-wide]) .ss-menu__pic,
+  .ss-game:not([data-wide]) .ss-menu__card.is-played .ss-menu__top {
+    display: none;
+  }
+
+  .ss-game:not([data-wide]) .ss-menu__card.is-played {
+    justify-content: center;
+  }
+
+  .ss-game:not([data-wide]) .ss-menu__review {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    margin: 0;
+    border-color: transparent;
+    background: transparent;
+    color: transparent;
+    box-shadow: none;
+  }
+
+  .ss-game:not([data-wide]) .ss-menu__share {
+    display: none;
+  }
+}
+
+/*
+ * A monitor: the cards of the left column read outwards from the centre line, as the
+ * badges and the scores did (section 26): the picture by the centre line, then the badge,
+ * then the line; played, the score by the centre line (a result: HOME 512 | 411 AWAY),
+ * the badge, and REVIEW and SHARE at the card's outer end, opposite them (SHARE outermost):
+ * squares as tall as the row, like the "?", sound and stats buttons off its ends, their
+ * symbols placed the same way (section 15b).
+ */
+.ss-game[data-wide] .ss-menu__pic {
+  margin-top: calc((var(--fp) * 13 + var(--px) * 4 - var(--pic)) / 2);
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-game[data-wide] .ss-menu__pic {
+    margin-top: round(
+      down,
+      calc((var(--fp) * 13 + var(--px) * 4 - var(--pic)) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+.ss-game[data-wide] .ss-menu__card:nth-child(odd) .ss-menu__pic,
+.ss-game[data-wide] .ss-menu__card.is-played:nth-child(odd) .ss-menu__score {
+  order: 1;
+}
+
+.ss-game[data-wide] .ss-menu__card.is-played {
+  align-items: flex-start;
+}
+
+.ss-game[data-wide] .ss-menu__acts {
+  margin-block: calc(var(--ss-row-pad) * -1);
+}
+
+.ss-game[data-wide] .ss-menu__acts > .ss-btn {
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: var(--ss-row);
+  min-width: 0;
+  height: var(--ss-row);
+  min-height: 0;
+  padding: var(--ss-row-glyph) 0 0 var(--ss-row-glyph);
+}
+
+.ss-game[data-wide] .ss-menu__card.is-played:nth-child(odd) .ss-menu__acts {
+  flex-direction: row-reverse;
+  order: -1;
+  margin-right: auto;
+  margin-left: 0;
+}
+
+/*
+ * The review (Review, a Popup): the score on the full-time card's display, centred on a
+ * whole pixel, the title it earned under it in the mode's light colour, then the career
+ * tier in gold; then the seven answers as the full-time card lists them (section 14).
+ */
+.ss-review__score {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.ss-review__score .ss-led {
+  justify-content: center;
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-review__score .ss-led {
+    justify-content: flex-start;
+    padding-left: round(
+      down,
+      calc((100% - var(--fp) * var(--led-w)) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+/*
+ * Where the card is in caption pixels bigger than the interface's own font pixel (a
+ * monitor: Review adds `ss-review--caption`), its seven answers were twice the size of a
+ * phone's and taller than their rows (2026-11-13: "too large and don't fit"). There they are
+ * set in the 15 face on the interface's own font pixel (the one PixelRoot gives the root, a
+ * third of a logical pixel): three quarters of that size, on whole pixels, with the rows'
+ * line height worked out again from it.
+ */
+.ss-root {
+  --fp-body: var(--fp);
+}
+
+.ss-review--caption .ss-review__list {
+  --fp: var(--fp-body);
+  --lh-tight: calc(var(--fp) * 24);
+
+  font-family: var(--font-15);
+  font-size: calc(var(--fp) * 27);
+  line-height: calc(var(--fp) * 24);
+}
+
+.ss-review__career {
+  color: var(--c-gold);
+  font-family: var(--font-15);
+  font-size: var(--fs-15);
+  line-height: var(--lh-15);
+  text-align: center;
+}
+
+/* A pop-up's own button in its head (the review's SHARE), just before the close button. */
+.ss-help__head > .ss-popup__action {
+  flex: none;
+  margin-left: auto;
+}
+
+/* SHARE has worked: its icon is a tick for a moment, in green (on the cards and in the review). */
+.ss-btn.is-done {
+  --ink-on-face: var(--c-grass-hi);
 }

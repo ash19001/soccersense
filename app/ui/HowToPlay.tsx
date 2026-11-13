@@ -25,8 +25,11 @@ export interface HowToPlayLabels {
   heading: string;
   /** The close button's name: "Close". */
   close: string;
-  /** The one line under the heading, and the dialog's description: "7 questions a day...". */
-  intro: string;
+  /**
+   * The one line under the heading, and the dialog's description: "7 questions a day...".
+   * Leave out for none (the pop-up on the home screen, 2026-11-13).
+   */
+  intro?: string;
   /** Over the shots: "POINTS". */
   shots: string;
   /** Read out for a shot's number: "100 points". */
@@ -126,9 +129,11 @@ function Card({
         className="ss-help__body"
         tabIndex={bodyFocusable ? 0 : undefined}
       >
-        <p id={ids.intro} className="ss-help__intro">
-          {labels.intro}
-        </p>
+        {labels.intro && (
+          <p id={ids.intro} className="ss-help__intro">
+            {labels.intro}
+          </p>
+        )}
 
         <section className="ss-help__part ss-help__part--shots">
           <Section className="ss-help__h">{labels.shots}</Section>
@@ -440,7 +445,7 @@ function Dialog({
       className={cx("ss-help-dialog", `is-${phase}`, className)}
       data-wide={wide ? "" : undefined}
       aria-labelledby={heading}
-      aria-describedby={intro}
+      aria-describedby={card.labels.intro ? intro : undefined}
       onKeyDown={onKeyDown}
       // The dialog is the whole screen and the card is in it: a press on the dialog itself
       // is a press outside the card.

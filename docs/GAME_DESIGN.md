@@ -349,20 +349,43 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   if the user comes on everyday to play then it should keep going up"): a small pixel flame and
   the days in a row with a finished game (`streakFor`, section 6.6) in the day plate under the
   ball (`DAY 12` then the flame and `4`; on a monitor, where the plate is two rows tall, the
-  flame and `4` are on the second row, under the day, beside the heart: the product owner,
-  2026-11-13). The first time it is seen after it went up it hops
+  flame and `4` are on the second row, under the day, beside the heart, the plate split in
+  two like the rows of cards: the product owner, 2026-11-13). The plate is styled as one of the
+  mode cards, with an amber stripe down its left edge. The first time it is seen after it went up it hops
   and throws a ring of gold sparks. With no streak nothing shows. It is also on the full-time
   card (`STREAK 4` under the title) and one of the airship's messages. Screen readers hear
   "Daily streak: 4 days in a row".
 - The sky is the player's own sky: day, dusk, night or dawn, worked out from their device clock
   and time zone (no location permission prompt). At night the floodlights are on.
-- Under the ball: one line per mode (`HOME: the most common answer wins`,
-  `AWAY: the most uncommon answer wins`), a `?` how-to-play button, the sound switch, a
-  stats button (section 6.6) and the day number.
+- Under the ball: a card per mode, a `?` how-to-play button, the sound switch, a stats
+  button (section 6.6) and the day number. A card not played today shows the mode's picture
+  (the same as its patch on the ball: the stadium, the aeroplane, the boots), its badge and
+  what it is (`HOME` / `Most common wins`), and pressing it plays the mode. Once played it
+  shows today's score, the badge and two square icon buttons (the product owner, 2026-11-13):
+  **REVIEW** (a list) and **SHARE** (an arrow out of a tray), which shares that game exactly as
+  its full-time card's SHARE does: the same picture and text, through the phone's share sheet,
+  or downloaded and copied on a computer. The picture is made ahead, in quiet moments after the
+  menu is up, so the share sheet can open in the press itself. Once it has worked, SHARE's icon
+  is a green tick for a moment (no words on screen; screen readers hear how it went). On a phone a played card has no room for
+  the badge beside the score and the two buttons: its stripe, and the ball's patch over it with
+  the same score, say which mode it is.
+  On a monitor the left column's cards read outwards from the centre line, like a result:
+  `REVIEW HOME 512 | 411 AWAY REVIEW`. On a phone too short for two rows of cards, a card
+  shows its badge alone, or its score once played, and the whole of it is the button.
 - Choosing a patch: it lights up in the mode's colour and the ball is struck. HOME: it drops
   into the stadium, onto the pitch, and the ground erupts. AWAY: it sails away over the town
   and out of sight. Then the screen wipes into the career scene.
-- A mode already played today shows its score on its patch. The demo allows replays.
+- **Each mode is played once a day** (the product owner, 2026-11-13: "the button to play it
+  again isn't clickable (you can only play once a day)"). A mode played today shows its score
+  on its patch; its card's REVIEW and its patch on the ball open the **review**, a pop-up over
+  the home screen (built like the rules', a sheet on a phone, with no line under its heading):
+  `YOUR HOME GAME`, the total
+  on the full-time card's display, the title it earned, the career tier, the seven answers
+  as the full-time card lists them, and a SHARE icon beside the close button (so a phone too
+  short for the cards' buttons can share too), which turns into a green tick for a moment once
+  it has worked. The game page never starts a second game of a
+  mode on the same day: reached any way (its address typed, the full-time card's other-mode
+  button), it shows that day's full-time card again. Testing uses `?day=` for another day.
 - **Today's leaderboard** (the product owner, 2026-11-11: "leaderboard in home screen (just
   mock data for now)"): today's top ten for HOME and for AWAY, a tab each, every row a rank, a
   handle and a total out of 700, the leader in gold, and under it how many played today

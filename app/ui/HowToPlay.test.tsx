@@ -214,6 +214,21 @@ describe("HowToPlayCard", () => {
 });
 
 describe("HowToPlay", () => {
+  test("with no intro there is no line under the heading and no description", () => {
+    const labels = { ...CARD.labels, intro: undefined };
+    render(
+      at(
+        DEFAULT_SCALE,
+        <HowToPlay {...CARD} labels={labels} open onClose={() => {}} />,
+      ),
+    );
+    const dialog = document.querySelector("dialog");
+    expect(dialog).not.toHaveAttribute("aria-describedby");
+    expect(dialog?.querySelector(".ss-help__intro")).toBeNull();
+    // The rest is all there.
+    expect(screen.getByText("TOE POKE")).toBeInTheDocument();
+  });
+
   test("is nothing while it is not open", () => {
     render(
       at(

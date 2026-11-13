@@ -716,12 +716,12 @@ describe("the game page", () => {
     expect(shots).toHaveBeenLastCalledWith("timeup", expect.any(Function));
   });
 
-  test("a finished game shows its card again on a reload, and the way in from the menu starts afresh", () => {
+  test("a mode is played once a day: its finished game shows its card again, however the page is reached", () => {
     window.localStorage.setItem(
       `soccersense:v1:${DAY_KEY}:home`,
       JSON.stringify(finished()),
     );
-    // A reload at full time: the history entry remembers it.
+    // A reload at full time.
     site({
       pathname: "/play/home",
       search: "?day=1",
@@ -732,12 +732,17 @@ describe("the game page", () => {
     ).toBeInTheDocument();
     cleanup();
 
-    // From the menu: a new game (the demo allows replays).
+    // The way in from the menu, or the address typed: still no new game today.
     site();
-    expect(questionLamps()).toBe("Question 1 of 7");
     expect(
-      screen.getByLabelText(text.board.totalSpoken(0)),
+      screen.getByRole("heading", { name: text.fullTime.heading }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    cleanup();
+
+    // Another day is another game.
+    site({ pathname: "/play/home", search: "?day=2" });
+    expect(questionLamps()).toBe("Question 1 of 7");
   });
 
   test("?notimer=1: the clock never runs out", () => {
