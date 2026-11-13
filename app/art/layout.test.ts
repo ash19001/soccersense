@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  BALL_WORDS_R,
   COVER,
   FAN,
   PLAYER,
@@ -9,7 +8,6 @@ import {
   STAGE_W_MAX,
   YOUTH,
   careerLayout,
-  menuLayout,
 } from "./layout";
 
 function numbers(o: object): number[] {
@@ -139,36 +137,4 @@ describe("careerLayout", () => {
       expect(c.goalX + 22).toBeLessThan(c.stageRight);
     },
   );
-});
-
-describe("the menu ball", () => {
-  it("takes 0.31 of a phone's width, but never less than its words need", () => {
-    // Canvases of phones at a ratio of 3: 360, 375, 390 and 430 wide.
-    expect(menuLayout(216, 480).ballR).toBe(BALL_WORDS_R);
-    expect(menuLayout(225, 488).ballR).toBe(BALL_WORDS_R);
-    expect(menuLayout(234, 507).ballR).toBe(BALL_WORDS_R);
-    expect(menuLayout(258, 560).ballR).toBe(80);
-    // 412 x 915 at 2.625.
-    expect(menuLayout(271, 601).ballR).toBe(84);
-  });
-
-  it("is never larger than it was (0.34 of the width) nor taller than the height allows", () => {
-    for (let w = 100; w <= 500; w += 7) {
-      for (let h = 180; h <= 1000; h += 11) {
-        const { ballR } = menuLayout(w, h);
-        expect(ballR).toBeLessThanOrEqual(
-          Math.round(Math.min(w * 0.34, h * 0.165)),
-        );
-        expect(ballR).toBeGreaterThanOrEqual(
-          Math.min(Math.round(Math.min(w * 0.34, h * 0.165)), BALL_WORDS_R),
-        );
-      }
-    }
-  });
-
-  it("is the same on a monitor, where the height decides it", () => {
-    expect(menuLayout(960, 540).ballR).toBe(89);
-    expect(menuLayout(683, 384).ballR).toBe(63);
-    expect(menuLayout(480, 270).ballR).toBe(45);
-  });
 });

@@ -23,8 +23,11 @@ export interface PixelGlyphProps {
    * drawn on its own, `cell - gap` units square: a dot matrix.
    */
   gap?: number;
-  /** What a unit is: a logical pixel ("px", the default) or a font pixel ("fp"). */
-  unit?: "px" | "fp";
+  /**
+   * What a unit is: a logical pixel ("px", the default), a font pixel ("fp"), or the pixel
+   * of a symbol on a square icon button ("ip": ui.css sets `--ip` on `.ss-btn--icon`).
+   */
+  unit?: "px" | "fp" | "ip";
   className?: string;
   /** Accessible name. Without it the glyph is decorative and hidden from screen readers. */
   label?: string;

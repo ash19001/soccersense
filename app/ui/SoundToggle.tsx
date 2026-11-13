@@ -83,7 +83,7 @@ export function SoundToggle({ labels, className }: SoundToggleProps) {
       }}
     >
       <span className="ss-btn__label">
-        <PixelGlyph bitmap={muted ? SPEAKER_OFF : SPEAKER_ON} />
+        <PixelGlyph bitmap={muted ? SPEAKER_OFF : SPEAKER_ON} unit="ip" />
       </span>
     </button>
   );

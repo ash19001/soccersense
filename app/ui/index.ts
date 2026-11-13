@@ -108,10 +108,12 @@ export {
   WIDE_ROW_PX,
   canvasDpFor,
   deviceToCss,
+  iconPixel,
   isWide,
   noticeDevicePixelRatio,
   pixelScale,
   pixelVariables,
+  tapSize,
   usePixelRootScale,
   usePixelScale,
 } from "./scale";

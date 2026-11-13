@@ -7,10 +7,12 @@ import {
   WIDE_ROW_PX,
   canvasDpFor,
   deviceToCss,
+  iconPixel,
   isWide,
   noticeDevicePixelRatio,
   pixelScale,
   pixelVariables,
+  tapSize,
   usePixelScale,
 } from "./scale";
 
@@ -320,6 +322,7 @@ describe("pixelScale on a device", () => {
       "--fp": "1px",
       "--cp": "1.66667px",
       "--tx": "2px",
+      "--ip-fit": "2px",
       "--snap": "1px",
       "--nudge": "0px",
     });
@@ -328,9 +331,36 @@ describe("pixelScale on a device", () => {
       "--fp": "0.8px",
       "--cp": "1.6px",
       "--tx": "2.4px",
+      "--ip-fit": "2.4px",
       "--snap": "0.8px",
       "--nudge": "0.0125px",
     });
+  });
+
+  test("iconPixel: a symbol fills about two fifths of its icon button, in whole device pixels", () => {
+    // Phones: 2 px, whether a logical pixel is 2 px (as it always looked) or 3 px.
+    expect(iconPixel(pixelScale(320, 568, 2))).toBe(2);
+    expect(iconPixel(pixelScale(360, 640, 3))).toBe(2);
+    expect(iconPixel(pixelScale(390, 844, 3))).toBe(2);
+    expect(iconPixel(pixelScale(402, 874, 3))).toBe(2);
+    expect(iconPixel(pixelScale(414, 896, 2))).toBe(2);
+    // Fractional ratios: whole device pixels (5 at 2.625, 6 at 2.75).
+    expect(iconPixel(pixelScale(412, 915, 2.625)) * 2.625).toBeCloseTo(5, 3);
+    expect(iconPixel(pixelScale(393, 873, 2.75)) * 2.75).toBeCloseTo(6, 3);
+    // A monitor: 3 px in a 56 px button.
+    expect(iconPixel(pixelScale(1920, 1080))).toBe(3);
+    for (const [w, h, dpr] of [
+      [390, 844, 3],
+      [412, 915, 2.625],
+      [1920, 1080, 1],
+      [1536, 864, 1.25],
+    ]) {
+      const scale = pixelScale(w, h, dpr);
+      const share = (iconPixel(scale) * 9) / tapSize(scale);
+      expect(share).toBeGreaterThan(0.35);
+      expect(share).toBeLessThan(0.5);
+      expect(iconPixel(scale)).toBeLessThanOrEqual(scale.px);
+    }
   });
 
   test("wide is landscape with room for the caption row", () => {

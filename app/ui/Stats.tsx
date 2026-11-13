@@ -358,7 +358,7 @@ export function StatsButton({
       onClick={onClick}
     >
       <span className="ss-btn__label">
-        <PixelGlyph bitmap={STATS_ICON} />
+        <PixelGlyph bitmap={STATS_ICON} unit="ip" />
       </span>
     </button>
   );

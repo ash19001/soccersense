@@ -363,7 +363,7 @@ export function PopupButton({
       onClick={onClick}
     >
       <span className="ss-btn__label">
-        <PixelGlyph bitmap={icon} />
+        <PixelGlyph bitmap={icon} unit="ip" />
       </span>
     </button>
   );

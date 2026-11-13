@@ -399,7 +399,7 @@ function Body({
             onClick={close.onClose}
           >
             <span className="ss-btn__label">
-              <PixelGlyph bitmap={ICONS.close} />
+              <PixelGlyph bitmap={ICONS.close} unit="ip" />
             </span>
           </button>
         )}
@@ -762,7 +762,7 @@ export function Leaderboard({
         onClick={() => setOpen(true)}
       >
         <span className="ss-btn__label">
-          <PixelGlyph bitmap={TROPHY} layers={TROPHY_LAYERS} />
+          <PixelGlyph bitmap={TROPHY} layers={TROPHY_LAYERS} unit="ip" />
         </span>
       </button>
       {sheet && (

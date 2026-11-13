@@ -407,7 +407,15 @@
   width: 100%;
 }
 
+/*
+ * The symbol on a square icon button is drawn in its own pixel, `--ip`: about a 22nd of the
+ * button in whole device pixels and never more than a logical pixel (scale.ts, iconPixel),
+ * so the button's face shows all round it. In logical pixels it filled the face edge to edge
+ * wherever a logical pixel is 3 px (most phones). Without script, a logical pixel.
+ */
 .ss-btn--icon {
+  --ip: var(--ip-fit, var(--px));
+
   width: var(--tap);
   padding: 0;
 }
@@ -419,8 +427,8 @@
 .ss-btn--icon .ss-btn__label {
   align-items: flex-start;
   justify-content: flex-start;
-  width: calc(var(--px) * 10);
-  height: calc(var(--px) * 10);
+  width: calc(var(--ip) * 10);
+  height: calc(var(--ip) * 10);
 }
 
 .ss-btn--primary {
@@ -2293,6 +2301,14 @@ button.ss-menu__card:active {
 }
 
 /*
+ * These squares (and the bell and heart's, section 27) are fitted to the rows round a
+ * symbol in logical pixels (--ss-row-glyph), so it stays in logical pixels here.
+ */
+.ss-game[data-wide] .ss-menu .ss-btn--icon {
+  --ip: var(--px);
+}
+
+/*
  * The notice sits beside the ball, not under it: its right edge is the ball's radius and 6
  * logical pixels left of the centre line, so it is clear of the ball's whole width however
  * high the ball floats or bobs. Its left edge is the left end of the cards (50% of the row
@@ -3144,8 +3160,7 @@ button.ss-menu__card:active {
  */
 .ss-lb-open {
   position: absolute;
-  /* In line with the "?", sound and stats buttons above it (section 26). */
-  right: var(--ss-icon-in, 0px);
+  right: 0;
   bottom: var(--u3);
 }
 
@@ -4601,18 +4616,6 @@ html:has(.ss-help-dialog[open]) {
   }
 }
 
-/*
- * A phone: the two stacks of buttons (the bell, heart and day plate on the left; the "?",
- * sound, stats and trophy on the right) stand this far in from the cards' ends, so that
- * they never look pressed against the screen's edge: two logical pixels, which leaves four
- * of picture between them and the edge (8 px on a small phone, 12 on most) where the
- * column's margin alone left two. The home page works it out (`--ss-icon-room`, from
- * routes/home-icons.ts): less, as little as none, where the ball would come too close.
- */
-.ss-game:not([data-wide]) {
-  --ss-icon-in: var(--ss-icon-room, var(--u2));
-}
-
 .ss-game:not([data-wide]) .ss-menu__side {
   display: contents;
 }
@@ -4620,12 +4623,12 @@ html:has(.ss-help-dialog[open]) {
 .ss-game:not([data-wide]) .ss-menu__day {
   position: absolute;
   bottom: calc(100% + var(--u3));
-  left: var(--ss-icon-in);
+  left: 0;
 }
 
 .ss-game:not([data-wide]) .ss-menu__side > .ss-btn {
   position: absolute;
-  right: var(--ss-icon-in);
+  right: 0;
   bottom: calc(100% + var(--u3) * 2 + var(--tap) * 3 + var(--u2) * 2);
 }
 

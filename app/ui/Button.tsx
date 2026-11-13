@@ -115,7 +115,7 @@ export function IconButton({
   const cls = classes("ss-btn--icon", { variant, forceState, className });
   const glyph = (
     <span className="ss-btn__label">
-      <PixelGlyph bitmap={ICONS[icon]} />
+      <PixelGlyph bitmap={ICONS[icon]} unit="ip" />
     </span>
   );
   if (to !== undefined && !rest.disabled) {

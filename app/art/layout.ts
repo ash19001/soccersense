@@ -100,11 +100,7 @@ export interface MenuLayout {
   horizonY: number;
   /** Everything `drawSky` needs to fit the sky to this screen. */
   sky: MenuSky;
-  /**
-   * Radius of the menu ball: round(min(W * 0.34, H * 0.165, max(W * 0.31, 73))). On a
-   * monitor the height decides it; on a phone the width, down to the smallest ball that
-   * keeps its words (BALL_WORDS_R).
-   */
+  /** Radius of the menu ball: round(min(W * 0.34, H * 0.165)). */
   ballR: number;
   /**
    * Centre of the menu ball: (cx, ballCy), with ballCy = round(H * 0.70). The ball floats
@@ -169,21 +165,6 @@ const AIRSHIP_REACH = 8;
 const AIRSHIP_TOP = 12;
 /** The gap it keeps from the wordmark's widest. */
 const AIRSHIP_CLEAR = 16;
-/**
- * The menu ball on a phone, where the screen's width decides its size. The interface's two
- * stacks of 44 px buttons stand at the sides of it (ui.css section 26, routes/home-icons.ts),
- * so it takes 0.31 of the width (it took 0.34, which left the buttons pressed against the
- * screen's edge on most phones and against the ball on the widest), but never less than
- * BALL_WORDS_R on that account, nor more than 0.34.
- */
-const BALL_SHARE_OF_WIDTH = 0.31;
-const BALL_MAX_SHARE_OF_WIDTH = 0.34;
-/**
- * The smallest menu ball whose HOME and AWAY patches still carry their words (the room
- * ball.ts measures for them; at 72 there is none, and the patches show their pictures
- * alone). A narrow phone's ball (360 wide at a ratio of 3: a canvas 216 wide) is this size.
- */
-export const BALL_WORDS_R = 73;
 
 function unit(x: number): number {
   return x <= 0 ? 0 : x >= 1 ? 1 : x;
@@ -196,13 +177,7 @@ export function menuLayout(w: number, h: number): MenuLayout {
   const cx = Math.round(W / 2);
   const logoH = Math.round(H * COVER.menuLogo);
   const captionH = Math.round(H * COVER.menuCaptions);
-  const ballR = Math.round(
-    Math.min(
-      W * BALL_MAX_SHARE_OF_WIDTH,
-      H * 0.165,
-      Math.max(W * BALL_SHARE_OF_WIDTH, BALL_WORDS_R),
-    ),
-  );
+  const ballR = Math.round(Math.min(W * 0.34, H * 0.165));
   const ballCy = Math.round(H * 0.7);
 
   // The camera. 0 on a phone, 1 on a monitor, smooth between.

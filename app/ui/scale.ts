@@ -220,12 +220,35 @@ export function isWide(scale: PixelScale): boolean {
 }
 
 /**
- * The units as CSS variables, in CSS px, for `PixelRoot` to set. `--px`, `--fp`, `--cp` and
- * `--tx` are each a whole number of device pixels, so at a fractional device pixel ratio
- * they are fractions ("3.2px" at 125%). `--snap` is the step the skin rounds layout to, and
- * `--nudge` a 64th of it, which ui.css adds before it rounds so that a length already on
- * the grid is not knocked off it by the arithmetic. At ratios 1, 2 and 3 `--snap` is 1px
- * and `--nudge` is 0px: the same CSS as there always was.
+ * The smallest touch target in CSS px, as ui.css works out `--tap`: 44 px rounded up to a
+ * whole, even number of snaps, or 14 logical pixels where that is more.
+ */
+export function tapSize(scale: PixelScale): number {
+  const pair = scale.snap * 2;
+  const nudge = Number.isInteger(scale.dpr) ? 0 : scale.snap / 64;
+  return Math.max(Math.ceil((44 - nudge) / pair - 1e-9) * pair, scale.px * 14);
+}
+
+/**
+ * The pixel a symbol on a square icon button is drawn in (`--ip-fit`), in CSS px: a whole
+ * number of device pixels near a 22nd of the button, never larger than a logical pixel.
+ * A 9 x 9 symbol then fills about two fifths of its button, with the button's face showing
+ * all round it, as it always did where a logical pixel is 2 px (a small phone). Drawn in
+ * logical pixels on most phones (3 px), the symbol filled the face edge to edge.
+ */
+export function iconPixel(scale: PixelScale): number {
+  const tapDp = tapSize(scale) * scale.dpr;
+  const dp = Math.max(1, Math.min(scale.dp, Math.round(tapDp / 22)));
+  return deviceToCss(dp, scale.dpr);
+}
+
+/**
+ * The units as CSS variables, in CSS px, for `PixelRoot` to set. `--px`, `--fp`, `--cp`,
+ * `--tx` and `--ip-fit` are each a whole number of device pixels, so at a fractional device
+ * pixel ratio they are fractions ("3.2px" at 125%). `--snap` is the step the skin rounds
+ * layout to, and `--nudge` a 64th of it, which ui.css adds before it rounds so that a
+ * length already on the grid is not knocked off it by the arithmetic. At ratios 1, 2 and 3
+ * `--snap` is 1px and `--nudge` is 0px: the same CSS as there always was.
  */
 export function pixelVariables(scale: PixelScale): Record<string, string> {
   return {
@@ -233,6 +256,7 @@ export function pixelVariables(scale: PixelScale): Record<string, string> {
     "--fp": `${scale.fp}px`,
     "--cp": `${scale.cp}px`,
     "--tx": `${scale.tx}px`,
+    "--ip-fit": `${iconPixel(scale)}px`,
     "--snap": `${scale.snap}px`,
     "--nudge": Number.isInteger(scale.dpr) ? "0px" : `${scale.snap / 64}px`,
   };
