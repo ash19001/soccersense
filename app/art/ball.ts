@@ -97,8 +97,8 @@ export const BALL_SLOTS: readonly BallSlot[] = [
 ];
 
 /**
- * A patch's picture. "home" a stadium, "away" an aeroplane, "nextgen" a modern boot (the
- * future), "retro" an old high-laced boot (the past), "pin" a map pin, "globe" a globe, "shirt" the
+ * A patch's picture. "home" a stadium, "away" an aeroplane, "nextgen" a fast-forward (the
+ * future), "retro" a rewind (the past), "pin" a map pin, "globe" a globe, "shirt" the
  * back of a shirt with its number, "goal" a goal with a ball on the spot, "lock" a padlock
  * alone, "none" nothing.
  */

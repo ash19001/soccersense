@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Surface, TRANSPARENT, rgb } from "~/pixel";
+import { Surface, TRANSPARENT, mix, rgb } from "~/pixel";
 import { ballShowPose, ballSlotCenter, type BallSlot } from "~/art/ball";
 import { menuLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
 import { logoSize } from "~/art/logo";
+import { P } from "~/art/palette";
 import { MenuBackdrop } from "~/art/stadium";
 import type { Mode } from "~/game";
 import { LOCKED_MODES, MODE_SLOTS, MenuScene, type MenuLabels } from "./menu";
@@ -235,46 +236,150 @@ describe("the menu", () => {
       }
       return cues;
     };
-    // NEXT-GEN goes out in a flare, with AWAY's sparkle
-    expect(heard("nextgen")).toEqual(["kick", "sparkle", "transition"]);
-    // RETRO bounces on the road and comes to a stop with a touch
-    expect(heard("retro")).toEqual(["kick", "land", "touch", "transition"]);
+    // neither is struck. NEXT-GEN: time turns on with a whoosh, and the ball of the future
+    // powers on with a twinkle
+    expect(heard("nextgen")).toEqual(["sweep", "sparkle", "transition"]);
+    // RETRO: time turns back with a whoosh, the old ball is finished with a twinkle and
+    // settles with a soft thump
+    expect(heard("retro")).toEqual(["sweep", "sparkle", "land", "transition"]);
   });
 
-  it("RETRO's ball ends left of the middle on the road, NEXT-GEN's high in the sky", () => {
+  it("NEXT-GEN turns the ball into the ball of the future where it hangs, the world goes neon and the iris closes on it", () => {
+    // the future ball's black chrome (its five bands) and its lit seams' core (raw)
+    const chrome = new Set(
+      [
+        mix(P.slate, P.steel, 0.25),
+        mix(P.slate, P.nextgenDark, 0.2),
+        mix(P.night, P.nextgenDark, 0.14),
+        mix(P.night, P.ink, 0.45),
+        mix(P.ink, P.nextgenDark, 0.06),
+      ].map((c): number => DAY.lit(c)),
+    );
+    const white = DAY.lit(P.chalk);
     for (const [w, h] of SIZES) {
-      for (const mode of ["retro", "nextgen"] as const) {
-        const scene = make(w, h);
-        scene.choose(mode);
-        const end = { x: 0, y: 0 };
-        // where the iris closes is where the ball went: read it from the ink
-        for (let i = 0; i < 180 && scene.phase !== "done"; i++) {
-          scene.update(STEP);
-          const s = draw(scene, w, h);
-          let n = 0;
-          let sx = 0;
-          let sy = 0;
-          for (let y = 0; y < h; y += 2) {
-            for (let x = 0; x < w; x += 2) {
-              if (s.data[y * w + x] !== FLAT) continue;
-              n++;
-              sx += x;
-              sy += y;
-            }
-          }
-          if (n > 0 && i > 60) {
-            end.x = sx / n;
-            end.y = sy / n;
+      const m = menuLayout(w, h);
+      const scene = make(w, h);
+      scene.choose("nextgen");
+      const look = (s: Surface) => {
+        let future = 0;
+        let seam = 0;
+        let menu = 0;
+        const r = m.ballR - 2;
+        for (let y = m.ballCy - r; y <= m.ballCy + r; y++) {
+          for (let x = m.cx - r; x <= m.cx + r; x++) {
+            if ((x - m.cx) ** 2 + (y - m.ballCy) ** 2 > (r - 8) ** 2) continue;
+            const c = s.data[y * w + x];
+            if (chrome.has(c)) future++;
+            if (c === P.nextgenLight) seam++;
+            if (c === white) menu++;
           }
         }
-        const m = menuLayout(w, h);
-        if (mode === "retro") {
-          expect(end.x, `${w}`).toBeLessThan(m.cx);
-          expect(end.y, `${w}`).toBeGreaterThan(m.ballCy);
-        } else {
-          expect(end.y, `${w}`).toBeLessThan(m.logo.h + m.ballR);
+        return { future, seam, menu, flat: s.data[2 * w + 2] === FLAT };
+      };
+      let t = 0;
+      const until = (at: number): Surface => {
+        while (t < at - 1e-9) {
+          scene.update(STEP);
+          t += STEP;
+        }
+        return draw(scene, w, h);
+      };
+      // struck? no: the ball is still the menu ball, where it hangs, as its patch flashes
+      const first = look(until(0.15));
+      expect(first.menu, `${w}`).toBeGreaterThan(50);
+      expect(first.future, `${w}`).toBe(0);
+      // spinning down: the ball of the future, its seams dim, the world as it was
+      const spinning = look(until(0.22 + 0.4));
+      expect(spinning.menu, `${w}`).toBe(0);
+      expect(spinning.future, `${w}`).toBeGreaterThan(20);
+      expect(spinning.seam, `${w}`).toBe(0);
+      expect(spinning.flat, `${w}`).toBe(true);
+      // stopped and powered on, the world neon
+      const done = look(until(1.05));
+      expect(done.menu, `${w}`).toBe(0);
+      expect(done.future, `${w}`).toBeGreaterThan(20);
+      expect(done.seam, `${w}`).toBeGreaterThan(10);
+      expect(done.flat, `${w}`).toBe(false);
+      // the iris closes on the ball: what it leaves is round the ball's spot (a little
+      // above it: the light ball lifts)
+      const s = until(1.65);
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (s.data[y * w + x] === P.ink) continue;
+          n++;
+          sx += x;
+          sy += y;
         }
       }
+      expect(n, `${w}`).toBeGreaterThan(0);
+      expect(Math.abs(sx / n - m.cx), `${w}`).toBeLessThan(3);
+      expect(Math.abs(sy / n - m.ballCy), `${w}`).toBeLessThan(m.ballR * 0.12);
+    }
+  });
+
+  it("RETRO turns the ball into an old leather one where it hangs, the world goes sepia and the iris closes on it", () => {
+    const wood = DAY.lit(P.wood);
+    const modern = [DAY.lit(P.chalk), DAY.lit(P.steelHi)];
+    for (const [w, h] of SIZES) {
+      const m = menuLayout(w, h);
+      const scene = make(w, h);
+      scene.choose("retro");
+      // what is inside the ball's disc, and whether the world is still the flat backdrop
+      const look = (s: Surface) => {
+        let leather = 0;
+        let white = 0;
+        const r = m.ballR - 2;
+        for (let y = m.ballCy - r; y <= m.ballCy + r; y++) {
+          for (let x = m.cx - r; x <= m.cx + r; x++) {
+            if ((x - m.cx) ** 2 + (y - m.ballCy) ** 2 > (r - 4) ** 2) continue;
+            const c = s.data[y * w + x];
+            if (c === wood) leather++;
+            if (modern.includes(c as (typeof modern)[number])) white++;
+          }
+        }
+        return { leather, white, flat: s.data[2 * w + 2] === FLAT };
+      };
+      let t = 0;
+      const until = (at: number): Surface => {
+        while (t < at - 1e-9) {
+          scene.update(STEP);
+          t += STEP;
+        }
+        return draw(scene, w, h);
+      };
+      // struck? no: the ball is still the menu ball, where it hangs, as its patch flashes
+      const first = look(until(0.15));
+      expect(first.white, `${w}`).toBeGreaterThan(50);
+      expect(first.leather, `${w}`).toBe(0);
+      // half way up the ball: both
+      const half = look(until(0.22 + 0.25));
+      expect(half.leather, `${w}`).toBeGreaterThan(20);
+      expect(half.white, `${w}`).toBeGreaterThan(20);
+      expect(half.flat, `${w}`).toBe(true);
+      // finished: all leather, and the world an old photograph
+      const done = look(until(1.05));
+      expect(done.white, `${w}`).toBe(0);
+      expect(done.leather, `${w}`).toBeGreaterThan(50);
+      expect(done.flat, `${w}`).toBe(false);
+      // the iris closes on the old ball: what it leaves is round the ball's spot
+      const s = until(1.65);
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (s.data[y * w + x] === P.ink) continue;
+          n++;
+          sx += x;
+          sy += y;
+        }
+      }
+      expect(n, `${w}`).toBeGreaterThan(0);
+      expect(Math.abs(sx / n - m.cx), `${w}`).toBeLessThan(3);
+      expect(Math.abs(sy / n - m.ballCy), `${w}`).toBeLessThan(m.ballR * 0.1);
     }
   });
 
@@ -311,7 +416,9 @@ describe("the menu", () => {
         }
       }
     }
-  });
+    // 32 kick-offs, NEXT-GEN's and RETRO's re-toning the whole picture every frame: about
+    // 2.6 s alone, more with every test file running at once
+  }, 30_000);
 
   it("draws the entrance, the spin and its wind without leaving the canvas bare", () => {
     for (const [w, h] of SIZES) {

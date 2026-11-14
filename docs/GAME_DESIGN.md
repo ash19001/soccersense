@@ -288,11 +288,9 @@ crowd colours and kit differ.
   its rim, warm red-orange: the most common answer wins; it was a house until the product
   owner asked for a stadium on 2026-11-13) and **AWAY** (right, the aeroplane, teal: the most uncommon answer wins).
 - Six more patches are **locked modes**, each with its own picture and a small padlock, in
-  quiet greys so that HOME and AWAY lead: **NEXT-GEN** on the patch above (a modern boot,
-  low, its toe pointing on, with speed lines: the future), **RETRO** on the patch below (an old
-  leather boot laced high over the ankle, its toe pointing back: the past; both were a
-  fast-forward and a rewind until the product owner asked for football pictures on
-  2026-11-13), on the back of the ball, directly
+  quiet greys so that HOME and AWAY lead: **NEXT-GEN** on the patch above (a fast-forward:
+  the future), **RETRO** on the patch below (a rewind: the past; football boots for a day, then
+  back to the arrows: the product owner, 2026-11-14, "that was better"), on the back of the ball, directly
   behind AWAY and HOME, **CLOSEST** (a map pin) and **FURTHEST** (a globe): the old distance
   rules, closest to today's stadium and furthest from it; and on the rim, a quarter turn round
   out past HOME and past AWAY, **GUESS WHO** (the back of a shirt with its number) and
@@ -359,7 +357,7 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   and time zone (no location permission prompt). At night the floodlights are on.
 - Under the ball: a card per mode, a `?` how-to-play button, the sound switch, a stats
   button (section 6.6) and the day number. A card not played today shows the mode's picture
-  (the same as its patch on the ball: the stadium, the aeroplane, the boots), its badge and
+  (the same as its patch on the ball: the stadium, the aeroplane, the arrows), its badge and
   what it is (`HOME` / `Most common wins`), and pressing it plays the mode. Once played it
   shows today's score, the badge and two square icon buttons (the product owner, 2026-11-13):
   **REVIEW** (a list) and **SHARE** (an arrow out of a tray), which shares that game exactly as
@@ -375,7 +373,22 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   shows its badge alone, or its score once played, and the whole of it is the button.
 - Choosing a patch: it lights up in the mode's colour and the ball is struck. HOME: it drops
   into the stadium, onto the pitch, and the ground erupts. AWAY: it sails away over the town
-  and out of sight. Then the screen wipes into the career scene.
+  and out of sight. NEXT-GEN and RETRO are not struck: the ball changes era where it hangs.
+  NEXT-GEN (the product owner, 2026-11-14: "for next gen can we do it turns into a futuristic
+  ball"): the ball spins really fast where it hangs, the other way from RETRO's, and at full
+  speed breaks up into big square pixels and comes back together as the ball of the future (a
+  sleek ball of eight curved panels, gunmetal and black chrome, with light in its seams). It
+  stops as that, its seams flash and light up in NEXT-GEN's magenta with a ring of light round
+  it, and it lifts a little, light, and hovers, while the world round it turns neon, a screen
+  with scan lines and glitches. Then the screen wipes into the career scene. RETRO (the product owner, 2026-11-13: "instead of shooting the ball
+  somewhere, make an animation that transforms the football into an olden brown leather
+  football"): the ball spins really fast where it hangs, air streaming round it, and in the
+  blur it becomes an old brown leather ball (eighteen panels in strips, laced), so that by the
+  time it stops spinning it is the old ball (the product owner, 2026-11-13: "spinning really
+  fast then by the time it stops spinning it's the old leather ball"). It stops with its lace
+  towards the player, a ring of warm light round it, and settles, heavier, while the world
+  round it fades to an old sepia photograph with the scratches of old film. Then the screen
+  wipes into the career scene.
 - **Each mode is played once a day** (the product owner, 2026-11-13: "the button to play it
   again isn't clickable (you can only play once a day)"). A mode played today shows its score
   on its patch: on HOME and AWAY in the picture's place, over the word, which stays (the

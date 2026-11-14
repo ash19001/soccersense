@@ -236,6 +236,87 @@ it, `goal` a goal with its net and a ball on the spot.
   `shine`, `fit`, `modes` (every patch in the pose that shows it), `modes-fit` (those poses at
   r 37 to 59, at both ends of the rock), `rim` (GUESS WHO and SHOOTOUT straight on, big).
 
+## The old leather ball and old film (`~/art/leather-ball`, `~/art/old-film`)
+
+RETRO's kick-off on the home screen (2026-11-13) turns the menu ball into an old brown leather
+one where it hangs, and the world round it into an old photograph (the scene: docs/API_SCENES.md,
+"NEXT-GEN and RETRO").
+
+```ts
+drawLeatherBall(s, ball, light, cover?); // ball: { cx, cy, r, yaw, pitch, roll? }; cover 0 to 1
+sepiaTone(s, level, hole?); // the picture in eight browns, `level` (0 to 1) of the way
+drawFilmDamage(s, frame, seed?); // a frame's scratches and dust
+```
+
+- The ball: eighteen panels in six groups of three strips on the faces of a cube, the strips
+  of neighbouring faces crossing (the career scene's `drawOldBall`, at the menu ball's size
+  and finish); brown leather in five bands lit from the top left (the old gold ramp run into
+  the wood browns); each strip padded (a lit lip where its seam is up or left of it, a shaded
+  one where it is down or right); seams as one-pixel grooves; a warm glint; a 1 px ink
+  outline; a lit far rim under floodlights; every tone through `light.lit`. The lace is a
+  slot down the middle strip of the face in front (+z), its pale thong criss-crossing seven
+  pairs of holes: the thong from r = 40, the slot alone from 24. The pose and the disc are the
+  menu ball's (`yaw`, `pitch`, `roll` in that order; the engine's circle), so the outlines
+  match to the pixel and the one can turn into the other. The menu's rest pose for it is
+  yaw -0.32, pitch 0.28, roll 0.22: the lace on the lit side.
+- The cover: with `cover` under 1 only that share of the old ball's pixels is drawn, in an
+  ordered (Bayer 4 x 4) pattern fixed to the screen, in sixteen steps, each step's pixels
+  kept by the next; the rest is left as it was (the menu ball, in RETRO's kick-off, which
+  dissolves into the old one while both spin fast).
+- Sepia: eight browns from ink brown to cream (`woodDark`, `wood`, `retro`, `retroLight` and
+  `chalk` run together), picked by brightness (lifted by a power of 0.72 so a night picture
+  still shows), a step darker beyond 0.8 of the half width and height and two beyond 1.1 (a
+  vignette, its edges in a Bayer dither), mixed `level` of the way; a `hole` (the ball's
+  disc) is left as it is. Colours are remembered (up to 8192).
+- Film damage: one long scratch down the frame (two now and then), cream or dark brown,
+  wandering a pixel now and then, and three to six specks of dust (2 x 2, 3 x 1 or a little
+  hook), all placed by `frame` and `seed`.
+- Shots: `ball/leather` (rest at 89 and 120, straight on, turned, 60, 30, 16),
+  `ball/leather-turn` (the menu ball turning into it: the cover at 2, 6, 10, 14 and 16
+  sixteenths).
+
+## The ball of the future and the neon world (`~/art/future-ball`, `~/art/neon-world`)
+
+NEXT-GEN's kick-off on the home screen (2026-11-14: "for next gen can we do it turns into a
+futuristic ball") turns the menu ball into a sleek ball with light in its seams where it hangs,
+and the world round it neon: RETRO's change the other way round (the scene: docs/API_SCENES.md,
+"NEXT-GEN and RETRO").
+
+```ts
+drawFutureBall(s, ball, light, power?); // ball: { cx, cy, r, yaw, pitch, roll? }; power 0 to 3
+pixelate(s, cx, cy, r, block, frame?, seed?); // the disc in squares `block` px across
+neonTone(s, level, hole?); // the picture in eight magentas, `level` (0 to 1) of the way
+drawScanGlitch(s, frame, seed?); // a frame's scan bar, glitches and dead pixels
+```
+
+- The ball: eight bonded panels, the octants of the ball, their edges three great circles (one
+  round each axis) that each wave twice either side of the true circle (by 0.3 of the radius),
+  so every panel is a curved triangle with a propeller's sweep; gunmetal and black chrome in
+  turn (a chessboard: the spin shows), each in five bands lit from the top left; a hard glint;
+  a 1 px ink outline; every shell tone through `light.lit`. The seams are lights (NEXT-GEN's
+  magenta, raw): `power` 2 a pale pink core with magenta round it, a little of its light on
+  the panels beside it, a magenta stripe inset along the black panels' edges and a magenta rim
+  on the shaded side; 3 (the flash as it powers on) a white core; 1 a dim violet core and
+  stripe; 0 dark grooves (and the floodlit rim, as the menu ball's). A diamond stud on each of
+  the six crossings that faces us, from r = 24. Seams from r = 8, two pixels wide from 20,
+  their glow and stripe from 40. The pose and the disc are the menu ball's, so the outlines
+  match to the pixel. The menu's rest pose for it is yaw 0.42, pitch -0.38, roll -0.18.
+- Pixelate: each square (on a grid centred on the ball) takes the colour of its middle pixel
+  (palette colours only, no averaging); only squares whose middle is within half a square of
+  the disc change, so the outline steps too; about 7 % of the ball's squares light up in
+  `nextgen`, `nextgenLight` or white (fewer below 8 px squares), somewhere else each `frame`.
+- Neon: eight magentas from violet-black to pale pink (`ink`, `night`, `nextgenDark`,
+  `nextgen`, `nextgenLight` and white run together), picked by brightness (pressed down by a
+  power of 1.15: a dark screen, the hot magenta kept for what is brightest), every third row a
+  step darker (scan lines), mixed `level` of the way; a `hole` (the ball's disc) is left as it
+  is. Colours are remembered (up to 8192).
+- Scan: a bright scan bar (with a dimmer row over it, broken here and there) an eighth of the
+  way further down each frame; one glitch (two now and then), a few short runs of light or dark
+  across a row or two; and two to four dead pixels (2 x 2), all placed by `frame` and `seed`.
+- Shots: `ball/future` (rest at 89 and 120, straight on, turned, 60, 30, 16),
+  `ball/future-power` (power 0 to 3), `ball/future-turn` (the menu ball in squares of 3, 6
+  and 10 px, then the new ball in squares of 10, 6 and 3, and whole).
+
 ## The home-screen stadium (`~/art/stadium`, `~/art/led`)
 
 ```ts

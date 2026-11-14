@@ -256,25 +256,25 @@ On a canvas under 200 logical pixels wide (a phone) the flights are the phone pi
 apex is lower, under the sign, and AWAY flies out over the right edge and comes back in small
 beside the wordmark. The times are the same.
 
-**NEXT-GEN and RETRO** (2026-11-13) keep the same clock (flash at 0, strike at 0.22, iris from
-1.13, ink at 1.76, `onChoose` at 1.81) with flights of their own (constants `NEXT_*` and
-`RETRO_*` in `menu.ts`; shots `menu/kickoff-nextgen`, `menu/kickoff-retro`):
+**NEXT-GEN and RETRO** (2026-11-13) keep the same clock (flash at 0, iris from 1.13, ink at
+1.76, `onChoose` at 1.81). Neither is struck: the ball changes era where it hangs (the product
+owner, 2026-11-13: not shot anywhere, turned into an old brown leather ball; 2026-11-14: "for
+next gen can we do it turns into a futuristic ball"). Both spin as fast, NEXT-GEN's the other
+way round. Constants `ERA_*` (both), `NEXT_*` and `RETRO_*` in `menu.ts`; shots
+`menu/kickoff-nextgen`, `menu/kickoff-retro`, and `ball/future`, `ball/future-power`,
+`ball/future-turn`, `ball/leather`, `ball/leather-turn` for the new balls alone:
 
-| at   | NEXT-GEN: into the future                                                                                                                   | RETRO: back in time                                                                        |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 0.22 | struck from below on AWAY's side (sparks thrown down-right), the picture shakes up and down                                                 | chopped from above (sparks thrown up); the picture shakes; the tape starts to tear (below) |
-| 0.29 | it lights up and climbs, faster and faster (the others slow), almost straight up then over                                                  | it drops away from us onto Stadium Road, left of the middle, shrinking, spinning backwards |
-| 0.49 | a comet: a trail 0.16 s of its way long, as wide as the ball, white hot, then its colours                                                   | it bounces once on the road (a puff of light), and rolls back left, slowing                |
-| 0.75 | out in a flare high beside the wordmark's right end (the airship is at its left): a ring and a cross of light, then a twinkle that winks on |                                                                                            |
-| 0.97 |                                                                                                                                             | it stops in the old town at the left of the picture, small, and lies still                 |
-| 1.13 | the iris closes on the flare, onto a ring of 0.22 of the ball's radius (a little sky)                                                       | the iris closes on the ball, onto a ring of 0.45 of its radius (the corner of the town)    |
+| at   | NEXT-GEN: into the future                                                                                                                                                                                                                 | RETRO: back in time                                                                                                                                                                                                     |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0.22 | no strike and no shake: it starts to spin where it hangs, the other way from RETRO's, its axis leaning the other way, up to 40 rad/s by 0.30; a whoosh (`sweep`), the spin's wind and streaks of air, as RETRO's                          | no strike and no shake: it starts to spin where it hangs, on an axis leaning 0.35 rad, up to 40 rad/s by 0.30; a whoosh (`sweep`), the wind of the spin as strong as it is fast, and the hand's streaks of air round it |
+| 0.32 | at full speed it goes digital: it is drawn in big square pixels (`pixelate`), 3 % of its radius across, then 6, 9 and 11.5 %, a step every thirtieth of a second, a few of them lit in magenta                                            | at full speed it becomes the old ball (`drawLeatherBall`'s cover): its pixels come in over the menu ball in an ordered dissolve, a sixteenth a step, all of it by 0.56                                                  |
+| 0.42 | at the biggest squares it is the ball of the future (`drawFutureBall`), its seams dim, in squares that get smaller (8, 5, 3 %) until it is whole by 0.55                                                                                  |                                                                                                                                                                                                                         |
+| 0.58 | the new ball slows, evenly                                                                                                                                                                                                                | the old ball slows, evenly                                                                                                                                                                                              |
+| 0.72 | the world turns neon round the ball in three steps (`neonTone`: NEXT-GEN's magentas, every third row darker), with a scan bar going down it and glitches (`drawScanGlitch`, 15 frames a second)                                           | the world fades to an old photograph round the ball in three steps (`sepiaTone`), with a vignette and old film's scratches and dust (`drawFilmDamage`, 15 frames a second)                                              |
+| 0.94 | stopped and powered on: its seams flash white (0.07 s), then light, a ring of magenta light goes out round it (three frames) and a twinkle (`sparkle`); the light ball lifts 6 % of its radius and settles back a third of that, hovering | stopped, its lace towards us on its lit side: a ring of warm light goes out round it (three frames) and a twinkle (`sparkle`); the heavy old ball sinks 5 % of its radius and gives, with HOME's soft thump (`land`)    |
+| 1.13 | the iris closes on the ball of the future, onto a ring of 1.15 of its radius (the whole ball)                                                                                                                                             | the iris closes on the old ball, onto a ring of 1.15 of its radius (the whole ball)                                                                                                                                     |
 
-RETRO's picture is a tape being rewound from the strike to the ink: three ghosts of the ball
-(0.05, 0.1 and 0.15 s behind it, see-through balls of its colour, only their outline while big),
-three bands of the screen torn sideways with a line of snow along their tops rolling up it, and
-an old recorder's rewind sign (two arrows, white on an ink shadow, blinking) in the top right
-corner. On a phone NEXT-GEN flies out of the left edge and back in small beside the wordmark
-(AWAY's mirror image), and RETRO bounces further left and stops on the plaza at the left edge.
+NEXT-GEN and RETRO are the same on every canvas, where the ball is.
 
 With reduced motion: no entrance (an `intro` ends at once), no bob, no nod, no shine on the
 patches or the wordmark, no "no" shake, the rock and the town at a quarter of their speed, and
@@ -369,19 +369,19 @@ fact's marquee runs on the ambient clock, so under reduced motion it scrolls slo
 
 Through the Scene contract's `onSound` (above); nothing is sent while it is null.
 
-| when                                                                   | cue                                                                                                                                                     |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| a press on the ball (a click, or the start of a drag); hover is silent | `kick`, power 0.3 (`HOME_PAGE.press`), one per 0.1 s                                                                                                    |
-| every frame the hand's turn is moving (drag, coast, spring, snap)      | `wind`, speed = angular speed / 14 rad/s, 0 to 1                                                                                                        |
-| the strike (0.22 s into the kick-off; at once with reduced motion)     | `kick`, power 1                                                                                                                                         |
-| every frame of the flight                                              | `wind`, 0.9 falling to 0.36 (HOME) or 0.23 (AWAY); NEXT-GEN's rising from 0.36 to 0.9; RETRO's falling to 0.36 as it drops, then to nothing as it rolls |
-| HOME lands (0.89 s), and its bounce comes down (0.2 s later)           | `land`, power 1, then power 0.35; no cheer, no horns                                                                                                    |
-| AWAY's twinkle (0.95 s: its brightest at the flare, 1.07 s)            | `sparkle`; its `wind` dies away over 0.35 s                                                                                                             |
-| NEXT-GEN's flare (0.63 s, its brightest at 0.75 s)                     | `sparkle`; its `wind` dies away over 0.35 s                                                                                                             |
-| RETRO bounces on the road (0.49 s), and comes to a stop (0.97 s)       | `land`, power 0.35; then `touch`, level 0.3                                                                                                             |
-| the iris starts to close (1.13 s; at once with reduced motion)         | `transition`, opening false, once a kick-off                                                                                                            |
-| a poke on the airship / the poke that bursts it                        | `squeak` / `pop` (nothing for `"none"`)                                                                                                                 |
-| every frame but in `done`                                              | `backdrop.cuesBetween(last clock, clock)`, as they are                                                                                                  |
+| when                                                                   | cue                                                                                                                         |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| a press on the ball (a click, or the start of a drag); hover is silent | `kick`, power 0.3 (`HOME_PAGE.press`), one per 0.1 s                                                                        |
+| every frame the hand's turn is moving (drag, coast, spring, snap)      | `wind`, speed = angular speed / 14 rad/s, 0 to 1                                                                            |
+| the strike (0.22 s into the kick-off; at once with reduced motion)     | `kick`, power 1 (not NEXT-GEN's or RETRO's, which are not struck: `sweep` then, as they start to spin)                      |
+| every frame of the flight                                              | `wind`, 0.9 falling to 0.36 (HOME) or 0.23 (AWAY); NEXT-GEN's and RETRO's spin's, 0.9 at full speed, to nothing as it stops |
+| HOME lands (0.89 s), and its bounce comes down (0.2 s later)           | `land`, power 1, then power 0.35; no cheer, no horns                                                                        |
+| AWAY's twinkle (0.95 s: its brightest at the flare, 1.07 s)            | `sparkle`; its `wind` dies away over 0.35 s                                                                                 |
+| NEXT-GEN's ball of the future stops spinning and powers on (0.94 s)    | `sparkle`                                                                                                                   |
+| RETRO's old ball stops spinning (0.94 s), and settles (1.04 s)         | `sparkle`; then `land`, power 0.35                                                                                          |
+| the iris starts to close (1.13 s; at once with reduced motion)         | `transition`, opening false, once a kick-off                                                                                |
+| a poke on the airship / the poke that bursts it                        | `squeak` / `pop` (nothing for `"none"`)                                                                                     |
+| every frame but in `done`                                              | `backdrop.cuesBetween(last clock, clock)`, as they are                                                                      |
 
 Neither `land` nor `sparkle` is sent with reduced motion (there is no flight). The numbers
 (the powers and the wind's speeds) are `HOME_PAGE` in `app/audio/mix.ts`.

@@ -19,11 +19,15 @@
  * crosses the roofs of the city into the sky. A last twinkle, and it is gone: no roar. The
  * iris closes on where it went.
  *
- * NEXT-GEN goes into the future: struck from below, it lights up and climbs faster and
- * faster into the high sky beside the wordmark, a comet with a long trail in its colours,
- * and goes out in a flare. RETRO goes back in time: chopped down onto the road, it bounces
- * and rolls back into the old town spinning backwards, ghosts of it following, while the
- * picture tears like a tape being rewound under an old recorder's rewind sign.
+ * NEXT-GEN and RETRO are not struck: the ball changes era where it hangs. It spins really
+ * fast, air streaming round it, becomes the ball of its era in the blur and slows to a stop
+ * as that. RETRO goes back in time: an old brown leather ball, laced, which settles, heavier,
+ * while the world round it fades to an old photograph (2026-11-13: "transform the football
+ * into an olden brown leather football", "spinning really fast then by the time it stops
+ * spinning it's the old leather ball"). NEXT-GEN goes into the future, the other way round:
+ * it breaks up into big square pixels and comes back together as a sleek ball with light in
+ * its seams, which powers on as it stops and lifts, light, while the world turns neon
+ * (2026-11-14: "for next gen can we do it turns into a futuristic ball").
  *
  *   const menu = new MenuScene({ seed, fact, labels });
  *   menu.onKickoff = (mode) => hideTheCaptions();
@@ -88,9 +92,17 @@ import {
   type BallState,
 } from "~/art/ball";
 import { menuLayout } from "~/art/layout";
+import {
+  drawFutureBall,
+  pixelate,
+  type FutureBallState,
+} from "~/art/future-ball";
+import { drawLeatherBall, type LeatherBallState } from "~/art/leather-ball";
 import { lightingFor, type Lighting } from "~/art/lighting";
 import { drawLogo, logoSize, type LogoOptions } from "~/art/logo";
+import { drawFilmDamage, sepiaTone } from "~/art/old-film";
 import { MODE_COLORS, P } from "~/art/palette";
+import { drawScanGlitch, neonTone } from "~/art/neon-world";
 import { MenuBackdrop, type MenuSign } from "~/art/stadium";
 import { bannerWords } from "~/art/stadium-plane";
 import { schemeForDay } from "~/art/stadium-club";
@@ -394,10 +406,8 @@ const LAND: SoundCue = { kind: "land", power: HOME_PAGE.land };
 const LAND_HOP: SoundCue = { kind: "land", power: HOME_PAGE.hop };
 /** AWAY's last twinkle. */
 const SPARKLE: SoundCue = { kind: "sparkle" };
-/** RETRO's ball coming to a stop in the old town: a light touch. */
-const STOP: SoundCue = { kind: "touch", level: HOME_PAGE.press };
-/** NEXT-GEN's wind as it leaves the boot, a share of the strike's: it rises from there. */
-const NEXT_WIND_START = HOME_PAGE.homeWindEnd;
+/** RETRO and NEXT-GEN: time turning, back or on (a whoosh as the ball whips up to speed). */
+const TIME_TURN: SoundCue = { kind: "sweep" };
 /**
  * AWAY's sparkle rises to its brightest SPARKLE_RISE seconds after it starts (the recording's
  * second, brighter chime), and the twinkle flares TWINKLE_FLARE seconds after the ball
@@ -546,94 +556,99 @@ const AWAY_SWING = 1.6;
 const AWAY_SWING_Y = 0.15;
 
 /**
- * NEXT-GEN: the ball goes into the future. Struck from below on AWAY's side, it lights up
- * and goes up, faster and faster (`u` of the flight is NEXT_EASE + (1 - NEXT_EASE) u of the
- * way, times u), almost straight up into the high sky, a comet with a
- * long trail in the mode's colours, NEXT_TRAIL seconds of its way. It ends NEXT_FAR + 1
- * times as far off as it began and goes out in a flare: a ring and a cross of light, then a
- * twinkle. It flies for NEXT_FLIGHT seconds, less than the others: it is the fastest.
+ * NEXT-GEN and RETRO: the ball changes era where it hangs, and is not struck (the product
+ * owner, 2026-11-13: not shot anywhere, turned into an old brown leather ball; 2026-11-14:
+ * "for next gen can we do it turns into a futuristic ball"). Its patch flashes as the
+ * others' do, and then, all timed from K_HIT:
  *
- * On a monitor it is last seen NEXT_X of the width beyond the wordmark's right end (the
- * airship is beside its left end) and NEXT_Y of the logo zone's height down, high over
- * the spot where AWAY's ball sinks to the horizon, on a curve whose corner is NEXT_LEAN
- * ball radii right of the middle and NEXT_RISE of the way up: it climbs almost straight up
- * first, then leans over, clear of the wordmark. On a phone the only open sky is beside the
- * wordmark: it flies out of the left edge in front of the stadium (the corner NEXT_SWING
- * ball radii beyond it, NEXT_SWING_Y of the way up) and comes back in small at the top,
- * beside the wordmark or just under it, the mirror of AWAY.
+ * - It spins really fast where it hangs ("spinning really fast then by the time it stops
+ *   spinning it's the old leather ball"), on an axis leaning ERA_LEAN from the upright: up
+ *   to ERA_RATE radians a second in ERA_SPIN_UP seconds, at that speed until ERA_FAST, then
+ *   slowing evenly to a stop at ERA_SPIN, in the new ball's rest pose. Streaks of air run
+ *   round it as round a ball spun by hand, as many as its speed brings.
+ * - At full speed it becomes the ball of its era, all of it before it begins to slow, so it
+ *   stops as that.
+ * - As it stops a ring of light goes out from it (ERA_GLOW, a frame each ERA_GLOW_FPS-th of
+ *   a second) and a twinkle is heard.
+ * - From ERA_WORLD_AT, as it slows, the world round it changes era in ERA_WORLD's steps, one
+ *   an ERA_FILM_FPS-th of a second; the ball keeps its colours.
+ *
+ * The iris then closes on the ball, onto a ring ERA_RING radii round it: the whole ball.
  */
-const NEXT_FLIGHT = 0.46;
-const NEXT_EASE = 0.35;
-const NEXT_FAR = 9;
-const NEXT_X = 0.1;
-const NEXT_Y = 0.42;
-const NEXT_LEAN = 0.6;
-const NEXT_RISE = 0.7;
-const NEXT_SWING = 1.1;
-const NEXT_SWING_Y = 0.45;
-/** The comet's trail: this many seconds of the way behind the ball, in this many pieces,
- * as wide as the ball (NEXT_TRAIL_W pixels at most) where it leaves it. */
-const NEXT_TRAIL = 0.16;
-const NEXT_TRAIL_N = 12;
-const NEXT_TRAIL_W = 10;
-/** The flare it goes out in: frames NEXT_FLARE_FPS a second. */
-const NEXT_FLARE_FPS = 20;
+const ERA_SPIN_UP = 0.08;
+const ERA_FAST = 0.36;
+const ERA_SPIN = 0.72;
+const ERA_RATE = 40;
+const ERA_LEAN = 0.35;
+const ERA_GLOW: readonly number[] = [3, 7, 11];
+const ERA_GLOW_FPS = 20;
+const ERA_WORLD_AT = 0.5;
+const ERA_WORLD: readonly number[] = [0.35, 0.7, 1];
+const ERA_FILM_FPS = 15;
+const ERA_RING = 1.15;
 
 /**
- * RETRO: the ball goes back in time. Struck from above, it drops onto the road in front of
- * the stadium (RETRO_ROAD ball radii below its spot, RETRO_LAND_X of the width left of the
- * middle; RETRO_LAND_X_TALL on a phone), shrinking as it falls away from us for RETRO_DROP
- * of the flight, to RETRO_LAND_R of its radius. It bounces once (RETRO_HOP pixels, for
- * RETRO_HOP_LEN seconds) and rolls back along the road into the old town at the left of
- * the picture, slowing to a stop RETRO_END_X of the width from the left edge and
- * RETRO_END_UP of the height above the road, RETRO_END_R pixels in radius. It spins
- * backwards all the way, as a tape does that is being rewound, and the picture is a tape
- * being rewound: ghosts of the ball follow it (RETRO_GHOSTS seconds behind), bands of the
- * screen tear sideways and roll up it (RETRO_BANDS), and the rewind sign of an old video
- * recorder stands in the corner.
+ * RETRO goes back in time. It spins as above, and:
+ *
+ * - From RETRO_TURN_FROM to RETRO_TURN_TO it becomes the old ball: the old one's pixels come
+ *   in over it in an ordered dissolve, a sixteenth more each step (`drawLeatherBall`'s
+ *   cover). The old ball stops in RETRO_REST, its lace towards us on its lit side.
+ * - Stopped, the heavy old ball sinks RETRO_SINK of its radius (RETRO_SINK_LEN seconds) and
+ *   comes back up a little (RETRO_BOB of the sink, RETRO_BOB_LEN): a soft thump as it gives.
+ * - Its ring of light is warm, and the world becomes an old photograph (`sepiaTone`), with
+ *   a vignette and the scratches and dust of old film (`drawFilmDamage`).
  */
-const RETRO_FLIGHT = 0.68;
-const RETRO_DROP = 0.3;
-const RETRO_FAR = 3;
-const RETRO_ROAD = 0.55;
-const RETRO_LAND_X = 0.1;
-const RETRO_LAND_X_TALL = 0.2;
-const RETRO_LAND_R = 0.2;
-const RETRO_HOP = 5;
-const RETRO_HOP_LEN = 0.12;
-const RETRO_END_X = 0.13;
-const RETRO_END_UP = 0.025;
-const RETRO_END_R = 5;
-const RETRO_GHOSTS: readonly number[] = [0.05, 0.1, 0.15];
-/** A ghost no bigger than this share of the ball's radius is a see-through ball; a
- * bigger one is only its outline. */
-const RETRO_GHOST_SOLID = 0.35;
+const RETRO_REST = { yaw: -0.32, pitch: 0.28, roll: 0.22 } as const;
+const RETRO_TURN_FROM = 0.1;
+const RETRO_TURN_TO = 0.34;
+const RETRO_SINK = 0.05;
+const RETRO_SINK_LEN = 0.1;
+const RETRO_BOB = 0.4;
+const RETRO_BOB_LEN = 0.14;
+
 /**
- * The tearing bands: each this many pixels tall, torn this far sideways, and rolling up
- * the screen at this share of its height a second (stepped, RETRO_BAND_FPS a second).
+ * NEXT-GEN goes into the future: RETRO's change the other way round. It spins the other
+ * way, its axis leaning the other way, and:
+ *
+ * - From NEXT_REZ_AT it goes digital: it is drawn in big square pixels (`pixelate`),
+ *   NEXT_REZ's share of its radius across (2 px at least), a step each NEXT_REZ_FPS-th of a
+ *   second, bigger and bigger; at the biggest (step NEXT_REZ_SWAP) it is the ball of the
+ *   future (`drawFutureBall`), in squares that get smaller again until it is whole, its
+ *   seams dim.
+ * - It stops in NEXT_REST and powers on: its seams flash white for NEXT_FLASH seconds, then
+ *   are lit. Light as it is, it lifts NEXT_LIFT of its radius (NEXT_LIFT_LEN seconds) and
+ *   settles back NEXT_BOB of that (NEXT_BOB_LEN), and hovers there.
+ * - Its ring of light is magenta, and the world turns neon (`neonTone`): NEXT-GEN's
+ *   magentas with scan lines, a scan bar going down it and glitches (`drawScanGlitch`).
  */
-const RETRO_BANDS: readonly { at: number; h: number; dx: number }[] = [
-  { at: 0.1, h: 4, dx: 3 },
-  { at: 0.45, h: 2, dx: -2 },
-  { at: 0.72, h: 6, dx: 2 },
-];
-const RETRO_BAND_SPEED = 0.9;
-const RETRO_BAND_FPS = 30;
+const NEXT_REST = { yaw: 0.42, pitch: -0.38, roll: -0.18 } as const;
+const NEXT_REZ_AT = 0.1;
+const NEXT_REZ: readonly number[] = [0.03, 0.06, 0.09, 0.115, 0.08, 0.05, 0.03];
+const NEXT_REZ_SWAP = 3;
+const NEXT_REZ_FPS = 30;
+const NEXT_FLASH = 0.07;
+const NEXT_LIFT = 0.06;
+const NEXT_LIFT_LEN = 0.14;
+const NEXT_BOB = 0.35;
+const NEXT_BOB_LEN = 0.2;
 
 /** The ring the iris slows onto, in ball radii: HOME's shows the pitch and the
- * crowd round it, AWAY's and NEXT-GEN's a little sky, RETRO's the corner of the old town
- * it rolled into. */
+ * crowd round it, AWAY's a little sky (NEXT-GEN's and RETRO's: ERA_RING). */
 const HOME_RING = 0.75;
 const AWAY_RING = 0.22;
-const RETRO_RING = 0.45;
 
-/** How long each mode's ball is in the air. */
+/** How long each mode's ball is in the air (NEXT-GEN's and RETRO's spin where they are). */
 const FLIGHT: Readonly<Record<Mode, number>> = {
   home: HOME_FLIGHT,
   away: AWAY_FLIGHT,
-  nextgen: NEXT_FLIGHT,
-  retro: RETRO_FLIGHT,
+  nextgen: ERA_SPIN,
+  retro: ERA_SPIN,
 };
+
+/** NEXT-GEN and RETRO change era where they hang: they are not struck and do not fly. */
+function isEra(mode: Mode): boolean {
+  return mode === "nextgen" || mode === "retro";
+}
 
 /** The streak behind the ball once it is small: samples this many seconds apart. */
 const TRAIL_GAP = 0.035;
@@ -1046,143 +1061,51 @@ function drawTwinkle(
 }
 
 /**
- * NEXT-GEN's flare as its ball goes out: a hot heart, a ring that opens and a cross of
- * light, long across and short up and down, frame by frame (five), in the mode's colours.
+ * NEXT-GEN's and RETRO's spin, `u` seconds after K_HIT: how fast it goes (radians a
+ * second), up to ERA_RATE in ERA_SPIN_UP, held until ERA_FAST, then slowing evenly to
+ * nothing at ERA_SPIN.
  */
-function drawFlare(
+function eraRate(u: number): number {
+  if (!(u > 0) || u >= ERA_SPIN) return 0;
+  if (u < ERA_SPIN_UP) return (ERA_RATE * u) / ERA_SPIN_UP;
+  if (u < ERA_FAST) return ERA_RATE;
+  return ERA_RATE * (1 - (u - ERA_FAST) / (ERA_SPIN - ERA_FAST));
+}
+
+/** How far the spin has turned the ball by `u` (radians): `eraRate` run up. */
+function eraSpun(u: number): number {
+  if (!(u > 0)) return 0;
+  const up = ERA_SPIN_UP;
+  if (u < up) return (0.5 * ERA_RATE * u * u) / up;
+  const a1 = 0.5 * ERA_RATE * up;
+  if (u < ERA_FAST) return a1 + ERA_RATE * (u - up);
+  const a2 = a1 + ERA_RATE * (ERA_FAST - up);
+  const len = ERA_SPIN - ERA_FAST;
+  const d = Math.min(u, ERA_SPIN) - ERA_FAST;
+  return a2 + ERA_RATE * (d - (d * d) / (2 * len));
+}
+
+/**
+ * The ring of light as the new ball stops: frame `frame` of ERA_GLOW, a circle that many
+ * pixels outside the ball, `hot` in the first frame and `light` after, a second one inside
+ * it a step dimmer and an `edge` outside it for two frames. Raw colours: a light.
+ */
+function drawGlowRing(
   s: Surface,
   x: number,
   y: number,
+  r: number,
   frame: number,
-  core: Color,
-  ramp: { dark: Color; base: Color; light: Color },
+  hot: Color,
+  light: Color,
+  base: Color,
+  edge: Color,
 ): void {
-  if (frame < 0 || frame > 4) return;
-  const ring = [5, 8, 11, 13, 14][frame];
-  const across = [12, 20, 26, 30, 0][frame];
-  const up = [8, 12, 14, 0, 0][frame];
-  const hot = [6, 10, 12, 0, 0][frame];
-  const outer = frame < 2 ? ramp.light : frame < 4 ? ramp.base : ramp.dark;
-  if (frame < 3) {
-    for (let i = 0; i < (frame < 2 ? 2 : 1); i++)
-      s.circle(x, y, ring - i, outer);
-  } else {
-    // in pieces: every other dash of the ring
-    const steps = Math.ceil(ring * 7);
-    for (let j = 0; j < steps; j++) {
-      if (Math.floor((j / steps) * 16) % 2 === 1) continue;
-      const a = (j / steps) * TAU;
-      s.px(
-        Math.round(x + Math.cos(a) * ring),
-        Math.round(y + Math.sin(a) * ring),
-        outer,
-      );
-    }
-  }
-  if (across > 0) {
-    if (frame < 3) {
-      s.hline(x - across, y, across * 2 + 1, outer);
-    } else {
-      for (let i = -across; i <= across; i += 2) s.px(x + i, y, outer);
-    }
-  }
-  if (up > 0) s.vline(x, y - up, up * 2 + 1, outer);
-  if (hot > 0) {
-    s.hline(x - hot, y, hot * 2 + 1, core);
-    s.vline(x, y - (hot >> 1), (hot >> 1) * 2 + 1, core);
-  }
-  if (frame === 0) s.disc(x, y, 3, core);
-  else if (frame === 1) s.disc(x, y, 2, core);
-  else if (frame === 2) s.rect(x - 1, y - 1, 3, 3, core);
-}
-
-/**
- * RETRO's tape being rewound: bands of the picture torn sideways, rolling up the screen,
- * each with a ragged line of snow along its top. `t` is seconds since the strike; the
- * bands move on RETRO_BAND_FPS times a second.
- */
-function tearBands(s: Surface, t: number, seed: number): void {
-  const { w, h, data } = s;
-  const step = Math.floor(t * RETRO_BAND_FPS);
-  const at = step / RETRO_BAND_FPS;
-  for (let b = 0; b < RETRO_BANDS.length; b++) {
-    const band = RETRO_BANDS[b];
-    const u = (((band.at - at * RETRO_BAND_SPEED) % 1) + 1) % 1;
-    const top = Math.floor(u * h);
-    for (let y = top; y < Math.min(h, top + band.h); y++) {
-      const row = y * w;
-      const dx = band.dx;
-      if (dx > 0) {
-        data.copyWithin(row + dx, row, row + w - dx);
-        data.fill(data[row + dx], row, row + dx);
-      } else if (dx < 0) {
-        const k = -dx;
-        data.copyWithin(row, row + k, row + w);
-        data.fill(data[row + w - k - 1], row + w - k, row + w);
-      }
-    }
-    // the snow along its top
-    if (top < h) {
-      const row = top * w;
-      for (let x = 0; x < w; x++) {
-        const v = hash2(x >> 1, step * 7 + b, seed);
-        if (v > 0.9) data[row + x] = P.white;
-        else if (v > 0.72) data[row + x] = P.mist;
-      }
-    }
-  }
-}
-
-/**
- * The rewind sign of an old video recorder: two arrows pointing back, with an ink shadow,
- * `k` pixels a step, its top left at (x, y). It blinks off for a moment twice a second.
- */
-function drawRewindSign(
-  s: Surface,
-  x: number,
-  y: number,
-  k: number,
-  t: number,
-  c: Color,
-  shadow: Color,
-): void {
-  if ((t * 2) % 1 > 0.8) return;
-  for (const [ox, oy, col] of [
-    [k, k, shadow],
-    [0, 0, c],
-  ] as const) {
-    for (let a = 0; a < 2; a++) {
-      // each arrow 5 steps across and 9 down, its point to the left
-      const left = x + ox + a * 5 * k;
-      for (let j = 0; j < 9; j++) {
-        const wide = 5 - Math.abs(j - 4);
-        s.rect(left + (5 - wide) * k, y + oy + j * k, wide * k, k, col);
-      }
-    }
-  }
-}
-
-/** A line `w` pixels thick, thickened across its way. */
-function thickLine(
-  s: Surface,
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-  w: number,
-  c: Color,
-): void {
-  const steep = Math.abs(y1 - y0) > Math.abs(x1 - x0);
-  const from = -((w - 1) >> 1);
-  for (let o = from; o < from + w; o++) {
-    s.line(
-      x0 + (steep ? o : 0),
-      y0 + (steep ? 0 : o),
-      x1 + (steep ? o : 0),
-      y1 + (steep ? 0 : o),
-      c,
-    );
-  }
+  if (frame < 0 || frame >= ERA_GLOW.length) return;
+  const out = r + ERA_GLOW[frame];
+  s.circle(x, y, out, frame === 0 ? hot : light);
+  s.circle(x, y, out - 1, frame === 0 ? light : base);
+  if (frame < 2) s.circle(x, y, out + 1, edge);
 }
 
 /**
@@ -1399,20 +1322,42 @@ export class MenuScene implements Scene {
   /** AWAY: where the ball is last seen. */
   private ax = 0;
   private ay = 0;
-  /** NEXT-GEN: where the ball goes out in its flare. */
-  private ngX = 0;
-  private ngY = 0;
-  /** RETRO: where the ball lands on the road (and its radius there), and where it stops. */
-  private rtLandX = 0;
-  private rtLandY = 0;
-  private rtLandR = 8;
-  private rtX = 0;
-  private rtY = 0;
-  private rtEndR = RETRO_END_R;
-  /** RETRO: the rewind sign in the corner: its top left and its size (pixels a step). */
-  private osdX = 0;
-  private osdY = 0;
-  private osdK = 2;
+  /**
+   * NEXT-GEN and RETRO: how fast the ball is spinning as it changes era (radians a second,
+   * for the streaks of air; negative the other way).
+   */
+  private spinRate = 0;
+  /**
+   * RETRO: the old ball this frame (its pose, from the rest pose and what is left of the
+   * spin) and how much of it covers the menu ball (`oldCover`, 0 to 1: the dissolve).
+   */
+  private readonly oldBall: LeatherBallState = {
+    cx: 0,
+    cy: 0,
+    r: 1,
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+  };
+  private oldCover = 0;
+  /**
+   * NEXT-GEN: the ball of the future this frame (its pose, as the old ball's), whether it is
+   * drawn instead of the menu ball (`newOn`), its seams' power (0 to 3), and the squares the
+   * ball is drawn in as it goes digital (`rezBlock` pixels across, 0 for none, in the
+   * change's frame `rezFrame`).
+   */
+  private readonly newBall: FutureBallState = {
+    cx: 0,
+    cy: 0,
+    r: 1,
+    yaw: 0,
+    pitch: 0,
+    roll: 0,
+  };
+  private newOn = false;
+  private newPower = 2;
+  private rezBlock = 0;
+  private rezFrame = 0;
   /** `backdrop.target()` for this size: where the HOME ball comes down. */
   private tx = 0;
   private ty = 0;
@@ -1672,16 +1617,10 @@ export class MenuScene implements Scene {
     if (this.aimStale) this.aim();
     this.compose();
 
-    if (mode === "nextgen" && kt >= K_FLY) {
-      // the comet's trail, drawn on after the ball has gone, drawing in to the flare
-      this.drawComet(s, kt, accent);
-    }
-    if (mode === "retro" && kt >= K_FLY) this.drawGhosts(s, kt, accent);
-    if (kt >= K_FLY && kt < land && this.ballOn) {
+    const era = isEra(mode);
+    if (!era && kt >= K_FLY && kt < land && this.ballOn) {
       if (this.ball.r < TRAIL_BELOW_R) {
-        if (mode === "home" || mode === "away") {
-          this.drawTrail(s, kt, accent.light, accent.base);
-        }
+        this.drawTrail(s, kt, accent.light, accent.base);
       } else if (this.ball.r >= this.R * RUSH_FROM) {
         this.drawRush(s, kt);
       }
@@ -1705,22 +1644,6 @@ export class MenuScene implements Scene {
       const frame = Math.floor((kt - land) * 15);
       drawBurst(s, this.tx, this.ty, frame, 10, P.white, P.goldLight);
     }
-    // RETRO: a puff where it bounces on the road
-    if (mode === "retro") {
-      const bounce = K_FLY + RETRO_FLIGHT * RETRO_DROP;
-      if (kt >= bounce) {
-        const frame = Math.floor((kt - bounce) * 15);
-        drawBurst(
-          s,
-          this.rtLandX,
-          this.rtLandY + Math.round(this.rtLandR),
-          frame,
-          Math.max(6, Math.round(this.rtLandR * 0.6)),
-          P.white,
-          accent.light,
-        );
-      }
-    }
     if (this.state === "intro") {
       const frame = Math.floor(this.phaseT * IN_STAR_FPS);
       if (frame < IN_STAR.length) {
@@ -1737,27 +1660,26 @@ export class MenuScene implements Scene {
     }
     // the air the turning ball drags round with it, just outside its rim
     if (this.state === "idle") this.drawWind(s);
+    else if (era && kt >= K_HIT) this.drawEraWind(s);
     if (this.ballOn) this.drawBallNow(s);
+    // NEXT-GEN: going digital, in big square pixels
+    if (this.rezBlock > 0) {
+      const b = this.ball;
+      pixelate(s, b.cx, b.cy, b.r, this.rezBlock, this.rezFrame, this.seed);
+    }
 
-    // in front of the ball
-    if (kt >= K_HIT) {
-      // HOME is struck from in front and below, AWAY from below on HOME's side, NEXT-GEN
-      // from below on AWAY's side and RETRO from above
+    // in front of the ball (NEXT-GEN's and RETRO's are not struck)
+    if (kt >= K_HIT && !era) {
+      // HOME is struck from in front and below, AWAY from below on HOME's side
       const reach = Math.round(R * Math.SQRT1_2);
-      const sx =
-        mode === "away" ? cx - reach : mode === "nextgen" ? cx + reach : cx;
-      const sy =
-        mode === "home"
-          ? this.spotY + R - 1
-          : mode === "retro"
-            ? this.spotY - R + 1
-            : this.spotY + reach;
+      const sx = mode === "away" ? cx - reach : cx;
+      const sy = mode === "home" ? this.spotY + R - 1 : this.spotY + reach;
       drawStrike(
         s,
         sx,
         sy,
-        mode === "away" ? -Math.SQRT1_2 : mode === "nextgen" ? Math.SQRT1_2 : 0,
-        mode === "retro" ? -1 : mode === "home" ? 1 : Math.SQRT1_2,
+        mode === "away" ? -Math.SQRT1_2 : 0,
+        mode === "home" ? 1 : Math.SQRT1_2,
         Math.floor((kt - K_HIT) * STRIKE_FPS),
         Math.max(6, R * 0.4),
         this.seed,
@@ -1765,15 +1687,11 @@ export class MenuScene implements Scene {
         accent.light,
         accent.base,
       );
-      if ((mode === "away" || mode === "nextgen") && kt >= land) {
-        const x = mode === "away" ? this.ax : this.ngX;
-        const y = mode === "away" ? this.ay : this.ngY;
-        // NEXT-GEN goes out in a flare first
-        const flare = Math.floor((kt - land) * NEXT_FLARE_FPS);
-        if (mode === "nextgen") drawFlare(s, x, y, flare, P.white, accent);
+      if (mode === "away" && kt >= land) {
+        const x = this.ax;
+        const y = this.ay;
         // the last of it: a twinkle, which goes on winking in the closing iris
-        const frame =
-          Math.floor((kt - land) * 20) - (mode === "nextgen" ? 3 : 0);
+        const frame = Math.floor((kt - land) * 20);
         const wink =
           frame < 0
             ? -2
@@ -1804,19 +1722,19 @@ export class MenuScene implements Scene {
     if (this.shakeY !== 0) shiftRows(s, this.shakeY);
     if (this.shakeX !== 0) shiftCols(s, this.shakeX);
 
-    // RETRO: the tape being rewound
-    if (mode === "retro" && kt >= K_HIT) {
-      tearBands(s, kt - K_HIT, this.seed);
-      drawRewindSign(s, this.osdX, this.osdY, this.osdK, kt, P.white, P.ink);
-    }
+    // RETRO: the world an old photograph round the old ball, its ring of light, and the
+    // scratches and dust of old film over it all; NEXT-GEN: the world neon round the ball
+    // of the future, its ring of light, and the screen's scan bar and glitches
+    if (mode === "retro" && kt >= K_HIT) this.drawOldTimes(s, kt - K_HIT);
+    if (mode === "nextgen" && kt >= K_HIT) this.drawNewTimes(s, kt - K_HIT);
 
     if (kt >= K_IRIS) {
       const fx = this.irisX();
       const fy = this.irisY();
       const hold = home
         ? Math.max(20, Math.round(R * HOME_RING))
-        : mode === "retro"
-          ? Math.max(18, Math.round(R * RETRO_RING))
+        : era
+          ? Math.round(R * ERA_RING)
           : Math.max(14, Math.round(R * AWAY_RING));
       const far =
         Math.ceil(
@@ -1828,27 +1746,84 @@ export class MenuScene implements Scene {
     }
   }
 
-  /** Where the iris closes: where the ball came down, or went. */
+  /**
+   * Where the iris closes: where the ball came down, or went (NEXT-GEN's and RETRO's, where
+   * it is).
+   */
   private irisX(): number {
     const m = this.mode;
-    return m === "home"
-      ? this.tx
-      : m === "away"
-        ? this.ax
-        : m === "nextgen"
-          ? this.ngX
-          : this.rtX;
+    return m === "home" ? this.tx : m === "away" ? this.ax : this.ball.cx;
   }
 
   private irisY(): number {
     const m = this.mode;
-    return m === "home"
-      ? this.ty
-      : m === "away"
-        ? this.ay
-        : m === "nextgen"
-          ? this.ngY
-          : this.rtY;
+    return m === "home" ? this.ty : m === "away" ? this.ay : this.ball.cy;
+  }
+
+  /**
+   * RETRO, `u` seconds after K_HIT: the world fades to an old photograph round the old
+   * ball (in ERA_WORLD's steps), the ring of warm light goes out from the ball as it stops
+   * spinning, and the frame has old film's scratches and dust.
+   */
+  private drawOldTimes(s: Surface, u: number): void {
+    const b = this.ball;
+    if (u >= ERA_WORLD_AT) {
+      const step = Math.floor((u - ERA_WORLD_AT) * ERA_FILM_FPS);
+      const level = ERA_WORLD[Math.min(step, ERA_WORLD.length - 1)];
+      sepiaTone(s, level, b);
+    }
+    if (u >= ERA_SPIN) {
+      const frame = Math.floor((u - ERA_SPIN) * ERA_GLOW_FPS);
+      const r = Math.round(b.r);
+      drawGlowRing(
+        s,
+        b.cx,
+        b.cy,
+        r,
+        frame,
+        P.white,
+        P.goldLight,
+        P.retroLight,
+        P.retro,
+      );
+    }
+    if (u >= ERA_WORLD_AT) {
+      const frame = Math.floor((u - ERA_WORLD_AT) * ERA_FILM_FPS);
+      drawFilmDamage(s, frame, this.seed);
+    }
+  }
+
+  /**
+   * NEXT-GEN, `u` seconds after K_HIT: the world turns neon round the ball of the future
+   * (in ERA_WORLD's steps), the ring of magenta light goes out from the ball as it stops
+   * spinning and powers on, and the screen has its scan bar and glitches.
+   */
+  private drawNewTimes(s: Surface, u: number): void {
+    const b = this.ball;
+    if (u >= ERA_WORLD_AT) {
+      const step = Math.floor((u - ERA_WORLD_AT) * ERA_FILM_FPS);
+      const level = ERA_WORLD[Math.min(step, ERA_WORLD.length - 1)];
+      neonTone(s, level, b);
+    }
+    if (u >= ERA_SPIN) {
+      const frame = Math.floor((u - ERA_SPIN) * ERA_GLOW_FPS);
+      const r = Math.round(b.r);
+      drawGlowRing(
+        s,
+        b.cx,
+        b.cy,
+        r,
+        frame,
+        P.white,
+        P.nextgenLight,
+        P.nextgen,
+        P.nextgenDark,
+      );
+    }
+    if (u >= ERA_WORLD_AT) {
+      const frame = Math.floor((u - ERA_WORLD_AT) * ERA_FILM_FPS);
+      drawScanGlitch(s, frame, this.seed);
+    }
   }
 
   pointer(p: PointerInfo): void {
@@ -2265,11 +2240,12 @@ export class MenuScene implements Scene {
    * strike, the wind of the flight, falling as HOME's ball drops in and dying away after
    * AWAY's vanishes, HOME's landing (a thump as it drops onto the spot and a softer one as
    * its bounce comes down) or AWAY's sparkle as it twinkles out, and the transition as the
-   * iris starts to close. NEXT-GEN's wind rises as it speeds up, and it goes out with
-   * AWAY's sparkle at its flare; RETRO's falls as it drops, bounces with HOME's soft thump
-   * and dies away as it rolls, and a light touch is heard as it comes to a stop. No cheer
-   * and no horns. Each is heard once, however long the step. With reduced motion there is
-   * no flight, and so no landing and no twinkle.
+   * iris starts to close. NEXT-GEN and RETRO are not struck: time turning is a whoosh,
+   * their spin is wind as strong as it is fast, and the new ball stops with a twinkle (as
+   * the ball of the future powers on); RETRO's heavy old ball settles with HOME's soft
+   * thump. No cheer and no horns. Each is heard once, however
+   * long the step. With reduced motion there is no flight, and so no landing and no
+   * twinkle.
    */
   private kickSounds(before: number, after: number): void {
     const at = (t: number): boolean => before <= t && t < after;
@@ -2282,48 +2258,37 @@ export class MenuScene implements Scene {
       }
       return;
     }
-    if (at(K_HIT)) this.sound(STRIKE);
     if (at(K_IRIS)) this.closeSound();
+    if (isEra(mode)) {
+      if (at(K_HIT)) this.sound(TIME_TURN);
+      if (at(K_HIT + ERA_SPIN)) this.sound(SPARKLE);
+      if (mode === "retro" && at(K_HIT + ERA_SPIN + RETRO_SINK_LEN)) {
+        this.sound(LAND_HOP);
+      }
+      // the wind of the spin, as fast as it spins
+      const rate = eraRate(after - K_HIT);
+      if (rate > 0) {
+        this.sound({ kind: "wind", speed: (WIND_STRIKE * rate) / ERA_RATE });
+      }
+      return;
+    }
+    if (at(K_HIT)) this.sound(STRIKE);
     const len = FLIGHT[mode];
     const land = K_FLY + len;
-    const bounce = K_FLY + len * RETRO_DROP;
     if (mode === "home") {
       if (at(land)) this.sound(LAND);
       if (at(land + HOME_HOP_AT + HOME_HOP_LEN)) this.sound(LAND_HOP);
-    } else if (mode === "away") {
-      if (at(land + TWINKLE_FLARE - SPARKLE_RISE)) this.sound(SPARKLE);
-    } else if (mode === "nextgen") {
-      // at its brightest with the flare
-      if (at(land - SPARKLE_RISE)) this.sound(SPARKLE);
-    } else {
-      if (at(bounce)) this.sound(LAND_HOP);
-      if (at(land)) this.sound(STOP);
+    } else if (at(land + TWINKLE_FLARE - SPARKLE_RISE)) {
+      this.sound(SPARKLE);
     }
     let speed = 0;
     if (after >= K_FLY && after < land) {
       const u = (after - K_FLY) / len;
-      if (mode === "nextgen") {
-        speed = WIND_STRIKE * lerp(NEXT_WIND_START, 1, u * u);
-      } else if (mode === "retro") {
-        // falling as it drops, and dying away as it rolls
-        speed =
-          after < bounce
-            ? WIND_STRIKE * lerp(1, HOME_WIND_END, u / RETRO_DROP)
-            : WIND_STRIKE *
-              HOME_WIND_END *
-              (1 - (u - RETRO_DROP) / (1 - RETRO_DROP));
-      } else {
-        speed =
-          WIND_STRIKE *
-          lerp(1, mode === "home" ? HOME_WIND_END : AWAY_WIND_END, u);
-      }
-    } else if (
-      (mode === "away" || mode === "nextgen") &&
-      after >= land &&
-      after < land + WIND_TAIL
-    ) {
-      const end = mode === "away" ? AWAY_WIND_END : 1;
-      speed = WIND_STRIKE * end * (1 - (after - land) / WIND_TAIL);
+      speed =
+        WIND_STRIKE *
+        lerp(1, mode === "home" ? HOME_WIND_END : AWAY_WIND_END, u);
+    } else if (mode === "away" && after >= land && after < land + WIND_TAIL) {
+      speed = WIND_STRIKE * AWAY_WIND_END * (1 - (after - land) / WIND_TAIL);
     }
     if (speed > 0) this.sound({ kind: "wind", speed });
   }
@@ -2741,55 +2706,6 @@ export class MenuScene implements Scene {
       this.ax = Math.min(want, last);
       this.ay = Math.min(this.logoBottom + AWAY_CLEAR, Math.max(0, this.h - 1));
     }
-    this.aimEras();
-  }
-
-  /**
-   * NEXT-GEN and RETRO: where their balls end. NEXT-GEN's high in the sky on the far side
-   * of the wordmark from AWAY (on a phone AWAY's mirror image); RETRO's on the road in the
-   * old town at the left, after a bounce in front of the stadium. And RETRO's rewind sign,
-   * in the top left corner, clear of the wordmark.
-   */
-  private aimEras(): void {
-    const W = this.w;
-    const H = this.h;
-    const first = Math.min(AWAY_EDGE, Math.max(0, W - 1));
-    const left = this.cx - Math.ceil(this.logoW / 2) - AWAY_CLEAR;
-    if (this.open) {
-      // up in the logo zone's sky, right of the wordmark (the airship is on its left)
-      const right = this.cx + Math.ceil(this.logoW / 2) + AWAY_CLEAR;
-      const last = Math.max(first, W - 1 - AWAY_EDGE);
-      this.ngX = clamp(right + Math.round(W * NEXT_X), first, last);
-      this.ngY = Math.max(4, Math.round(this.logoH * NEXT_Y));
-    } else {
-      const reach = Math.max(this.R * AWAY_X, W * AWAY_X_WIDE);
-      const want = this.cx - Math.round(Math.min(W * AWAY_X_MAX, reach));
-      if (left >= first) {
-        this.ngX = clamp(want, first, left);
-        this.ngY = Math.round(this.logoH * AWAY_Y);
-      } else {
-        this.ngX = Math.max(want, first);
-        this.ngY = Math.min(this.logoBottom + AWAY_CLEAR, Math.max(0, H - 1));
-      }
-    }
-    const road = Math.min(
-      Math.max(0, H - 1 - RETRO_END_R),
-      this.cy0 + Math.round(this.R * RETRO_ROAD),
-    );
-    this.rtLandX = Math.round(
-      this.cx - W * (this.open ? RETRO_LAND_X : RETRO_LAND_X_TALL),
-    );
-    this.rtLandY = road;
-    this.rtLandR = Math.max(RETRO_END_R + 2, this.R * RETRO_LAND_R);
-    this.rtEndR = this.open ? RETRO_END_R : RETRO_END_R - 1;
-    this.rtX = Math.max(first, Math.round(W * RETRO_END_X));
-    this.rtY = Math.max(0, road - Math.round(H * RETRO_END_UP));
-    // the sign, in the top right corner (the airship has the top left): two pixels a step
-    // on a monitor, one beside a phone's wordmark
-    this.osdK = this.open ? 2 : 1;
-    const margin = this.open ? 16 : 6;
-    this.osdX = Math.max(0, W - margin - 11 * this.osdK);
-    this.osdY = margin;
   }
 
   /** Ask the backdrop where a ball struck at the stadium comes down. */
@@ -2865,6 +2781,11 @@ export class MenuScene implements Scene {
     this.shakeX = 0;
     this.shakeY = 0;
     this.spinFrame = 0;
+    this.oldCover = 0;
+    this.spinRate = 0;
+    this.newOn = false;
+    this.newPower = 2;
+    this.rezBlock = 0;
 
     if (this.state === "intro") {
       const t = this.phaseT;
@@ -2914,7 +2835,12 @@ export class MenuScene implements Scene {
       b.chosen = slotOf(this.mode);
       b.t = BALL_T_LIT;
       const kt = this.phaseT;
-      if (!this.reduced) {
+      if (!this.reduced && isEra(this.mode)) {
+        // not struck: it changes era where it hangs
+        if (kt < K_FLY) b.t = kt;
+        if (this.mode === "retro") this.composeRetro(kt - K_HIT);
+        else this.composeNext(kt - K_HIT);
+      } else if (!this.reduced) {
         if (kt < K_FLY) b.t = kt;
         if (kt >= K_HIT) {
           const f = Math.floor((kt - K_HIT) * 30);
@@ -2929,10 +2855,8 @@ export class MenuScene implements Scene {
           const deep = Math.max(2, Math.round(R * SQUASH));
           this.squash = kt < K_HIT + K_DEEP ? deep : Math.max(2, deep >> 1);
           // and it gives a pixel, away from the boot
-          if (this.mode === "retro") b.cy += 2;
-          else b.cy -= 2;
+          b.cy -= 2;
           if (this.mode === "away") b.cx += 2;
-          else if (this.mode === "nextgen") b.cx -= 2;
         } else if (kt >= K_FLY) {
           const mode = this.mode;
           const len = FLIGHT[mode];
@@ -2945,14 +2869,13 @@ export class MenuScene implements Scene {
               if (f < THUMP.length) this.shakeY = THUMP[f];
               const hop = clamp((after - HOME_HOP_AT) / HOME_HOP_LEN);
               this.fy -= Math.round(HOME_HOP * Math.sin(Math.PI * hop));
-            } else if (mode !== "retro") {
-              // AWAY and NEXT-GEN are gone; RETRO's lies still where it stopped
+            } else {
+              // AWAY's is gone
               this.ballOn = false;
             }
           }
-          // spin in steps: a retro ball turns a notch at a time
-          const lands = mode === "home" || mode === "retro";
-          const air = lands ? Math.min(kt - K_FLY, len) : kt - K_FLY;
+          // spin in steps
+          const air = mode === "home" ? Math.min(kt - K_FLY, len) : kt - K_FLY;
           const turn = Math.floor(air * 30) / 30;
           this.spinFrame = Math.floor(air * 14);
           b.r = Math.round(this.fr * 2) / 2;
@@ -2960,18 +2883,6 @@ export class MenuScene implements Scene {
           b.cy = Math.round(this.fy);
           if (mode === "home") {
             b.pitch += turn * 11;
-          } else if (mode === "nextgen") {
-            // top spin, fast, as it climbs
-            b.pitch += turn * 16;
-            b.roll = turn * -4;
-            this.spinFrame = Math.floor(air * 24);
-          } else if (mode === "retro") {
-            // spinning backwards as it rolls left: clockwise, and the tiny ball's frames
-            // run backwards; it slows with the ball
-            const spun = this.retroSpin(clamp(air / len));
-            b.roll = spun * 10;
-            b.yaw = spun * 1.5;
-            this.spinFrame = -Math.floor(spun * 9);
           } else {
             b.yaw = turn * -3;
             b.roll = turn * 9;
@@ -2982,18 +2893,97 @@ export class MenuScene implements Scene {
   }
 
   /**
-   * RETRO: how far round its backspin has taken the ball, in seconds of spin at full speed,
-   * `u` of the way through its flight: at full speed as it falls, slowing as it rolls to
-   * its stop. Stepped like the other balls' turns.
+   * RETRO, `u` seconds after K_HIT (nothing before it): the fast spin of both balls (in
+   * whole thirtieths of a second, like the other balls' turns), the old one's pose, how
+   * much of it covers the menu ball, and the heavy ball's settle.
    */
-  private retroSpin(u: number): number {
-    const len = RETRO_FLIGHT;
-    const drop = RETRO_DROP * len;
-    const t = u * len;
-    const v = (t - drop) / (len - drop);
-    const spun =
-      t <= drop ? t : drop + ((len - drop) / 2) * (1 - (1 - v) * (1 - v));
-    return Math.floor(spun * 30) / 30;
+  private composeRetro(u: number): void {
+    if (u < 0) return;
+    const b = this.ball;
+    const us = Math.floor(u * 30) / 30;
+    const spun = eraSpun(us);
+    const left = eraSpun(ERA_SPIN) - spun;
+    this.spinRate = eraRate(u);
+    // the menu ball spins on its leaning axis, the lean coming in as it gets going
+    b.yaw -= spun;
+    b.roll = ERA_LEAN * clamp(us / ERA_SPIN_UP);
+    // the old ball spins the same way and stops in its rest pose
+    const o = this.oldBall;
+    o.yaw = RETRO_REST.yaw + left;
+    o.pitch = RETRO_REST.pitch;
+    o.roll = RETRO_REST.roll;
+    // at full speed it becomes the old ball, a sixteenth a step
+    this.oldCover =
+      Math.floor(
+        clamp((us - RETRO_TURN_FROM) / (RETRO_TURN_TO - RETRO_TURN_FROM)) * 16,
+      ) / 16;
+    // stopped, the heavy old ball sinks a little and gives
+    const after = u - ERA_SPIN;
+    if (after > 0) {
+      const sink = Math.max(2, Math.round(this.R * RETRO_SINK));
+      let dy: number;
+      if (after < RETRO_SINK_LEN) {
+        const k = after / RETRO_SINK_LEN;
+        dy = sink * k * k;
+      } else {
+        const k = clamp((after - RETRO_SINK_LEN) / RETRO_BOB_LEN);
+        dy = sink * (1 - RETRO_BOB * Math.sin(Math.PI * k));
+      }
+      b.cy += Math.round(dy);
+    }
+    o.cx = b.cx;
+    o.cy = b.cy;
+    o.r = b.r;
+  }
+
+  /**
+   * NEXT-GEN, `u` seconds after K_HIT (nothing before it): RETRO's spin the other way
+   * round, the ball of the future's pose, the squares the ball is drawn in as it goes
+   * digital and which ball it is, its seams' power, and the light ball's lift.
+   */
+  private composeNext(u: number): void {
+    if (u < 0) return;
+    const b = this.ball;
+    const us = Math.floor(u * 30) / 30;
+    const spun = eraSpun(us);
+    const left = eraSpun(ERA_SPIN) - spun;
+    this.spinRate = -eraRate(u);
+    // the menu ball spins the other way on an axis leaning the other way
+    b.yaw += spun;
+    b.roll = -ERA_LEAN * clamp(us / ERA_SPIN_UP);
+    // the new ball spins the same way and stops in its rest pose
+    const n = this.newBall;
+    n.yaw = NEXT_REST.yaw - left;
+    n.pitch = NEXT_REST.pitch;
+    n.roll = NEXT_REST.roll;
+    // at full speed it goes digital: in squares, bigger and bigger, then the new ball in
+    // squares, smaller and smaller
+    const step = Math.floor((u - NEXT_REZ_AT) * NEXT_REZ_FPS);
+    this.rezFrame = step;
+    this.rezBlock =
+      step >= 0 && step < NEXT_REZ.length
+        ? Math.max(2, Math.round(this.R * NEXT_REZ[step]))
+        : 0;
+    this.newOn = step >= NEXT_REZ_SWAP;
+    // its seams dim while it spins, a flash as it stops, then lit
+    const after = u - ERA_SPIN;
+    this.newPower = after < 0 ? 1 : after < NEXT_FLASH ? 3 : 2;
+    // stopped, the light new ball lifts, settles back a little and hovers there
+    if (after > 0) {
+      const lift = Math.max(2, Math.round(this.R * NEXT_LIFT));
+      let dy: number;
+      if (after < NEXT_LIFT_LEN) {
+        const k = 1 - after / NEXT_LIFT_LEN;
+        dy = lift * (1 - k * k);
+      } else {
+        const k = clamp((after - NEXT_LIFT_LEN) / NEXT_BOB_LEN);
+        dy = lift * (1 - (NEXT_BOB * (1 - Math.cos(Math.PI * k))) / 2);
+      }
+      b.cy -= Math.round(dy);
+    }
+    n.cx = b.cx;
+    n.cy = b.cy;
+    n.r = b.r;
   }
 
   /**
@@ -3036,43 +3026,6 @@ export class MenuScene implements Scene {
         this.fr = lerp(rApex, rEnd, k * k);
         this.fx = tx;
       }
-    } else if (this.mode === "nextgen") {
-      const nx = this.ngX;
-      const ny = this.ngY;
-      // faster and faster, as if something lit under it
-      const t = u * (NEXT_EASE + (1 - NEXT_EASE) * u);
-      const near = nearAt(t, NEXT_FAR);
-      // the corner: almost straight up first, then over to the left; on a phone out of
-      // the left edge and back in at the top
-      const kx = this.open ? cx + R * NEXT_LEAN : -R * NEXT_SWING;
-      const ky = lerp(y0, ny, this.open ? NEXT_RISE : NEXT_SWING_Y);
-      const a = (1 - t) * (1 - t);
-      const c = 2 * t * (1 - t);
-      const d = t * t;
-      this.fr = lerp(1.5, R, near);
-      this.fx = a * cx + c * kx + d * nx;
-      this.fy = a * y0 + c * ky + d * ny;
-    } else if (this.mode === "retro") {
-      const bx = this.rtLandX;
-      const by = this.rtLandY;
-      const rLand = this.rtLandR;
-      if (u < RETRO_DROP) {
-        // chopped down: it drops away from us onto the road, faster and faster
-        const v = u / RETRO_DROP;
-        const near = nearAt(v, RETRO_FAR);
-        this.fr = lerp(rLand, R, near);
-        this.fx = lerp(cx, bx, 1 - near);
-        this.fy = lerp(y0, by, v * v);
-      } else {
-        // and rolls back into the old town, slowing to a stop, after one small bounce
-        const v = (u - RETRO_DROP) / (1 - RETRO_DROP);
-        const k = 1 - (1 - v) * (1 - v);
-        const since = (u - RETRO_DROP) * RETRO_FLIGHT;
-        const hop = Math.sin(Math.PI * clamp(since / RETRO_HOP_LEN));
-        this.fr = lerp(rLand, this.rtEndR, k);
-        this.fx = lerp(bx, this.rtX, k);
-        this.fy = lerp(by, this.rtY, k) - RETRO_HOP * hop;
-      }
     } else {
       const ax = this.ax;
       const ay = this.ay;
@@ -3096,79 +3049,6 @@ export class MenuScene implements Scene {
       this.fr = lerp(2, R, near);
       this.fx = a * cx + c * kx + d * ax;
       this.fy = a * y0 + c * ky + d * ay;
-    }
-  }
-
-  /**
-   * NEXT-GEN's comet: the last NEXT_TRAIL seconds of the ball's way behind it, as wide as
-   * the ball where it leaves it (NEXT_TRAIL_W at most) and thinning to a pixel, white hot
-   * near the ball, then the mode's light, base and dark tones. Once the ball has gone it
-   * draws in to the flare. A small ball has a glow round it.
-   */
-  private drawComet(
-    s: Surface,
-    kt: number,
-    ramp: { dark: Color; base: Color; light: Color },
-  ): void {
-    const len = NEXT_FLIGHT;
-    const land = K_FLY + len;
-    const head = Math.min(kt, land);
-    const tail = Math.max(K_FLY, kt - NEXT_TRAIL);
-    if (!(head - tail > 0.004)) return;
-    this.flightAt(clamp((head - K_FLY) / len));
-    const hr = this.fr;
-    let px = Math.round(this.fx);
-    let py = Math.round(this.fy);
-    const w0 = clamp(Math.round(hr * 1.6), 2, NEXT_TRAIL_W);
-    for (let i = 1; i <= NEXT_TRAIL_N; i++) {
-      const f = i / NEXT_TRAIL_N;
-      this.flightAt(clamp((head - (head - tail) * f - K_FLY) / len));
-      const x = Math.round(this.fx);
-      const y = Math.round(this.fy);
-      const w = Math.max(1, Math.round(w0 * (1 - f * 0.8)));
-      const outer = f < 0.5 ? ramp.light : f < 0.8 ? ramp.base : ramp.dark;
-      thickLine(s, px, py, x, y, w, outer);
-      if (w >= 3) {
-        thickLine(s, px, py, x, y, w - 2, f < 0.4 ? P.white : ramp.light);
-      }
-      px = x;
-      py = y;
-    }
-    if (kt < land && hr < TRAIL_BELOW_R) {
-      this.flightAt(clamp((kt - K_FLY) / len));
-      s.disc(
-        Math.round(this.fx),
-        Math.round(this.fy),
-        Math.round(hr) + 3,
-        ramp.light,
-        0.5,
-      );
-    }
-  }
-
-  /**
-   * RETRO's ghosts: where the ball was RETRO_GHOSTS seconds ago, each a see-through ball of
-   * the mode's colour (only its outline while it is big), nearest first in its light tone.
-   * None once the ball has stopped.
-   */
-  private drawGhosts(
-    s: Surface,
-    kt: number,
-    ramp: { dark: Color; base: Color; light: Color },
-  ): void {
-    const tones = [ramp.light, ramp.base, ramp.dark];
-    for (let g = RETRO_GHOSTS.length - 1; g >= 0; g--) {
-      const u = (kt - RETRO_GHOSTS[g] - K_FLY) / RETRO_FLIGHT;
-      if (!(u > 0) || u >= 1) continue;
-      this.flightAt(u);
-      const r = Math.round(this.fr);
-      if (r < 2) continue;
-      const x = Math.round(this.fx);
-      const y = Math.round(this.fy);
-      // a big ghost (the ball still near) is only its outline, or it would hide the picture
-      if (r <= this.R * RETRO_GHOST_SOLID) s.disc(x, y, r, tones[g], 0.5);
-      s.circle(x, y, r, tones[g]);
-      if (r > this.R * RETRO_GHOST_SOLID) s.circle(x, y, r - 1, tones[g]);
     }
   }
 
@@ -3215,15 +3095,50 @@ export class MenuScene implements Scene {
   private drawWind(s: Surface): void {
     if (this.reduced || this.spin === "still" || !this.ballOn) return;
     const speed = this.spinSpeed();
+    const since = this.realT - this.flickT;
+    const gust = since >= 0 && since < GUST ? 1 - since / GUST : 0;
+    this.drawStreaks(s, this.ox, this.oy, this.oz, speed, gust);
+  }
+
+  /**
+   * NEXT-GEN's and RETRO's spin has the hand's wind round it: its angular velocity in view
+   * space is its rate about its leaning axis (the upright, leant ERA_LEAN one way or the
+   * other), the streaks as many as its share of the hand's hardest flick, and a gust while it
+   * is at full speed.
+   */
+  private drawEraWind(s: Surface): void {
+    const rate = this.spinRate;
+    if (this.reduced || !(Math.abs(rate) > 0) || !this.ballOn) return;
+    const lean = this.ball.roll ?? 0;
+    const gust = Math.abs(rate) >= ERA_RATE ? 1 : 0;
+    this.drawStreaks(
+      s,
+      -Math.sin(lean) * rate,
+      Math.cos(lean) * rate,
+      0,
+      clamp(Math.abs(rate) / SPIN_MAX),
+      gust,
+    );
+  }
+
+  /**
+   * Streaks of air round the ball turning at (`ox`, `oy`, `oz`) radians a second in view
+   * space, `speed` (0 to 1) of the hand's hardest flick, with `gust` (0 to 1) more.
+   */
+  private drawStreaks(
+    s: Surface,
+    ox: number,
+    oy: number,
+    oz: number,
+    speed: number,
+    gust: number,
+  ): void {
     if (!(speed > WIND_SHOW)) return;
-    const { ox, oy, oz } = this;
     const b = this.ball;
     const R = b.r;
     const across = Math.hypot(ox, oy);
     const fastest = R * (Math.abs(oz) + across);
     if (!(fastest > 0) || !Number.isFinite(fastest)) return;
-    const since = this.realT - this.flickT;
-    const gust = since >= 0 && since < GUST ? 1 - since / GUST : 0;
     // how many: the calm ones fade out one by one as it slows, the gust's on top
     const count =
       ((speed - WIND_SHOW) / (1 - WIND_SHOW)) * WIND_CALM +
@@ -3340,8 +3255,22 @@ export class MenuScene implements Scene {
       );
       return;
     }
+    if (this.newOn) {
+      // NEXT-GEN: the ball of the future
+      drawFutureBall(s, this.newBall, light, this.newPower);
+      return;
+    }
+    if (this.oldCover >= 1) {
+      // RETRO: the old ball, all of it
+      drawLeatherBall(s, this.oldBall, light);
+      return;
+    }
     if (this.squash <= 0) {
       drawBall(s, b, this.patches, light);
+      // RETRO: becoming the old ball as it spins, its pixels coming in over the menu ball
+      if (this.oldCover > 0) {
+        drawLeatherBall(s, this.oldBall, light, this.oldCover);
+      }
       return;
     }
     // Struck in mid-air: the ball is pressed flat where the boot is. It is drawn apart
@@ -3357,24 +3286,17 @@ export class MenuScene implements Scene {
     drawBall(pad, b, this.patches, light);
     b.cx = x;
     b.cy = y;
-    // HOME's flat is level, under the ball, and RETRO's level over it. AWAY's is a
-    // diagonal, below on HOME's side, and NEXT-GEN's below on AWAY's side.
+    // HOME's flat is level, under the ball. AWAY's is a diagonal, below on HOME's side.
+    // (NEXT-GEN's and RETRO's are not struck.)
     const mode = this.mode;
-    const level = mode === "home" || mode === "retro";
+    const level = mode === "home";
     const reach = this.R - this.squash;
     const edge = level ? reach : Math.round(reach * Math.SQRT2);
     const ink = light.lit(P.ink);
     const data = pad.data;
     for (let j = 0; j < side; j++) {
       for (let i = 0; i < side; i++) {
-        const k =
-          mode === "home"
-            ? j - mid
-            : mode === "retro"
-              ? mid - j
-              : mode === "away"
-                ? j - i
-                : j + i - 2 * mid;
+        const k = mode === "home" ? j - mid : j - i;
         const at = j * side + i;
         if (k < edge || data[at] === TRANSPARENT) continue;
         data[at] = k === edge ? ink : TRANSPARENT;

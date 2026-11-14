@@ -1,8 +1,7 @@
 /**
  * The menu ball's 19 one-colour pictures (`ball.ts` draws them on its patches): the extra
  * pixels go into the shapes (a stadium's bowl with its pennants and the pitch's markings, a
- * swept-wing aeroplane, a modern boot with its speed lines and an old high-laced one,
- * padlocks with a real shackle and keyhole, a
+ * swept-wing aeroplane, a fast-forward and a rewind, padlocks with a real shackle and keyhole, a
  * pin with its hole, a globe's meridians, a shirt's collar and its 7, a goal's net and the
  * ball on the spot). Strokes are 2 px where the picture needs its weight.
  *
@@ -34,6 +33,14 @@ export interface BallIcons {
 }
 
 const W = "w";
+
+/** The same art, mirrored left to right (RETRO's rewind from NEXT-GEN's fast-forward). */
+function mirror(art: string): string {
+  return art
+    .split("\n")
+    .map((row) => Array.from(row).reverse().join(""))
+    .join("\n");
+}
 
 /**
  * HOME: a stadium (the product owner, 2026-11-13: a stadium, not a house), the bowl from
@@ -195,74 +202,44 @@ wwwwwwwwww
 `;
 
 /**
- * NEXT-GEN: a modern boot, low and sleek, its toe pointing on (to the right, the future),
- * with speed lines behind it (the product owner, 2026-11-13: football pictures, not a
- * fast-forward).
+ * NEXT-GEN: a fast-forward, two arrows pointing on (to the right, the future); RETRO: the
+ * same mirrored, a rewind (to the left, the past). (Football boots for a day, 2026-11-13;
+ * back to the arrows 2026-11-14: "make retro and next gen logos back into the arrows again
+ * - that was better".)
  */
 const NEXTGEN = `
-................
-................
-................
-....ww..........
-....www.ww......
-ww..wwwwwwww....
-....wwwwwwwwww..
-www.wwwwwwwwwww.
-....wwwwwwwwwwww
-ww..wwwwwwwwwwww
-....wwwwwwwwwwww
-.....ww..ww..ww.
-................
-................
+w.......w.......
+ww......ww......
+www.....www.....
+wwww....wwww....
+wwwww...wwwww...
+wwwwww..wwwwww..
+wwwwwwwwwwwwwww.
+wwwwwwwwwwwwwww.
+wwwwww..wwwwww..
+wwwww...wwwww...
+wwww....wwww....
+www.....www.....
+ww......ww......
+w.......w.......
 `;
 
-/**
- * RETRO: an old leather boot, laced high over the ankle, on bar studs, its toe pointing
- * back (to the left, the past).
- */
-const RETRO = `
-................
-...........wwww.
-...........wwww.
-..........w.www.
-...........wwww.
-..........w.www.
-.........w.wwww.
-......wwwwwwwww.
-...wwwwwwwwwwww.
-.wwwwwwwwwwwwww.
-wwwwwwwwwwwwwwww
-wwwwwwwwwwwwwwww
-.ww..ww..ww..ww.
-................
-`;
+const RETRO = mirror(NEXTGEN);
 
-/** The small NEXT-GEN: the boot alone, long and low (speed lines leave it too short to read). */
 const NEXTGEN_SMALL = `
-............
-............
-............
-.ww.........
-.www.ww.....
-.wwwwwwww...
-.wwwwwwwwww.
-.wwwwwwwwwww
-.wwwwwwwwwww
-..ww..ww..ww
+w.....w.....
+ww....ww....
+www...www...
+wwww..wwww..
+wwwwwwwwwww.
+wwwwwwwwwww.
+wwww..wwww..
+www...www...
+ww....ww....
+w.....w.....
 `;
 
-const RETRO_SMALL = `
-.......wwww.
-.......wwww.
-......w.www.
-.......wwww.
-.....w.wwww.
-...wwwwwwww.
-.wwwwwwwwww.
-wwwwwwwwwwww
-wwwwwwwwwwww
-.ww..ww..ww.
-`;
+const RETRO_SMALL = mirror(NEXTGEN_SMALL);
 
 const PIN = `
 ....wwwwww....

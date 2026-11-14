@@ -12,6 +12,7 @@
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-home --size 480x270 --strip 12 --dt 0.14 --scale 2
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-away --size 480x270 --strip 12 --dt 0.14 --scale 2 --time night
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-nextgen --size 960x540 --t 0.3 --strip 6 --dt 0.1 --scale 1
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-nextgen --size 260x562 --t 0.3 --strip 8 --dt 0.1 --scale 1    (a phone)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-retro --size 960x540 --t 0.3 --strip 6 --dt 0.1 --scale 1
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-retro --size 260x562 --t 0.3 --strip 8 --dt 0.1 --scale 1    (a phone)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/kickoff-home --t 0.2 --strip 10 --dt 0.0167 --scale 2    (the strike)
@@ -288,7 +289,9 @@ export const shots: ShotMap = {
     return frame(ctx, scene);
   },
 
-  // NEXT-GEN: a rising strike into the sky, a comet with a trail, gone in a flare.
+  // NEXT-GEN: not struck; it spins really fast where it hangs the other way from RETRO,
+  // breaks up into big square pixels and comes back together as the ball of the future,
+  // stops as that, powers on and lifts, while the world turns neon.
   "menu/kickoff-nextgen": (ctx) => {
     const scene = make(ctx);
     scene.choose("nextgen");
@@ -296,8 +299,8 @@ export const shots: ShotMap = {
     return frame(ctx, scene);
   },
 
-  // RETRO: chopped down onto the road, it rolls back into the old town, spinning
-  // backwards, while the picture is rewound like a tape.
+  // RETRO: not struck; it spins really fast where it hangs, becomes an old leather ball in
+  // the blur, stops as that and settles, while the world becomes an old photograph.
   "menu/kickoff-retro": (ctx) => {
     const scene = make(ctx);
     scene.choose("retro");
