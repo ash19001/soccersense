@@ -36,8 +36,20 @@ interface Scene {
   cursor?(): SceneCursor; // "default" | "pointer" | "grab" | "grabbing", set on the canvas as is
   onSound?: ((cue: SoundCue) => void) | null; // set by the host: call this.onSound?.(cue)
   ambience?(): Ambience; // the bed of sound under the scene, polled about once a second
+  setFloating?(on: boolean): void; // the host can show a FloatingSprite (told before the first frame)
+  floating?(): readonly FloatingSprite[]; // after each draw, bottom first: { surface, x, y }, x and y any numbers
 }
 ```
+
+**A floating sprite** (2026-11-14) is something a scene draws apart from its frame so the host can
+place it finer than the frame's pixels: the host shows `surface` (transparent where empty) over
+the canvas with its top left at (`x`, `y`) logical pixels rounded to the host's device pixels
+(a quarter of a logical pixel on a monitor, a ninth on most phones). Only a host that says so
+(`setFloating(true)`: `PixelStage` with a 2D context) is given one, and whatever floats is left
+out of the frame; a scene never told draws everything into the frame, so the snap tool and the
+tests see the same pixels as before. A host shows up to `FLOATING_MAX` (3), bottom first. On
+the home screen the airship floats while it only drifts, and the ball over it while it hovers
+(below).
 
 **A frame** is always, in this order: `resize` (if the size changed), `setLighting` (if the light
 changed), `setReducedMotion` (if that changed), `update(dt)`, `draw(surface)`. A scene new to its
@@ -223,12 +235,12 @@ It takes nothing from `~/art` but the backdrop contract (`MenuBackdrop`: `resize
 
 ### Phases and timings
 
-| phase     | how long                     | what happens                                                                                   | leaves by                    |
-| --------- | ---------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------- |
-| `intro`   | 0.88 s                       | the ball swells out of a star under its spot (full size at 0.45 s), floats past it and settles | time; reduced motion ends it |
-| `idle`    | until a mode is chosen       | it hovers: a bob every 4 s (a deep breath every third), a nod, a rock every 5 s, a shine       | a patch, or `choose`         |
-| `kickoff` | 1.81 s (0.15 s when reduced) | flash, strike, flight, iris (below). No input is taken                                         | time: `onChoose` fires       |
-| `done`    | until `reset`                | plain ink                                                                                      | `reset`                      |
+| phase     | how long                     | what happens                                                                                                | leaves by                    |
+| --------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| `intro`   | 0.88 s                       | the ball swells out of a star under its spot (full size at 0.45 s), floats past it and settles              | time; reduced motion ends it |
+| `idle`    | until a mode is chosen       | it hovers: a bob every 4 s (a deep breath every third), a nod, a rock every 5 s, a shine; it floats (above) | a patch, or `choose`         |
+| `kickoff` | 1.81 s (0.15 s when reduced) | flash, strike, flight, iris (below). No input is taken                                                      | time: `onChoose` fires       |
+| `done`    | until `reset`                | plain ink                                                                                                   | `reset`                      |
 
 The kick-off, in seconds from the moment it starts. `onKickoff` fires at 0 and `onChoose` at 1.81.
 
@@ -244,6 +256,26 @@ The kick-off, in seconds from the moment it starts. `onKickoff` fires at 0 and `
 | 1.57 | slowed onto a ring (0.75 of the ball's radius), it goes straight on to shut, faster to the end | the same, on a ring of 0.22 of the radius: a little sky          |
 | 1.76 | ink                                                                                            | ink                                                              |
 | 1.81 | `done`, `onChoose("home")`                                                                     | `done`, `onChoose("away")`                                       |
+
+**The floating ball.** While it hovers (`intro` and `idle`), for a host that can show a floating
+sprite, the ball is drawn on its own (`hover`, a square as big as the strike's pad, the ball in
+its middle) and its row is the hover's height not rounded (`floatCy`); its column is a whole
+pixel. The bob is two logical pixels or so each way (four at the reference size), and in whole
+pixels that was five places a bob, a tick every half second (2026-11-14: "can the ball idle
+animation of it bouncing be made smoother"); floating, it is 17 at 1920 x 1080 and 31 on a 3x
+phone. Nothing else in the picture is drawn over the hovering ball (the wind's streaks are under
+it, the wordmark is clear of it), so it goes on top. From the kick-off it is back in the frame,
+where the strike, the era changes and the iris are drawn over it: the first frame of the
+kick-off moves it less than half a logical pixel.
+
+**The floating airship** (2026-11-14: "can you do that with the idle blimp floating
+animation"). The backdrop does the same for the airship (`MenuBackdrop.setFloating`,
+`floatingShip`): while it only drifts (not arriving, not poked, not falling) and the scene says
+so, which it does only while the ball hovers, the airship, its props, lights and sign are drawn
+on a layer of their own and handed out at its drift not rounded (`driftX`, `driftY` in
+`stadium-airship.ts`: 4 logical pixels each way over 31 s, 2.4 up and down over 9 s); the menu
+scene's `floating()` gives it under the ball. Poked, it wobbles in the picture and floats again
+when it has settled.
 
 The iris's radius is a smooth function of time (an ease in and out onto the ring, then an ease
 in to nothing; `irisRadius` in `menu.ts`), rounded to whole pixels only when it is drawn, so it

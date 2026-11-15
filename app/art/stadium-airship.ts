@@ -433,9 +433,21 @@ function drawPilotWave(
 /** How far the airship has drifted from its rest at time t: whole pixels. */
 export function airshipDrift(t: number): { dx: number; dy: number } {
   return {
-    dx: Math.round(4 * Math.sin((2 * Math.PI * t) / 31)),
-    dy: Math.round(2.4 * Math.sin((2 * Math.PI * t) / 9)),
+    dx: Math.round(driftX(t)),
+    dy: Math.round(driftY(t)),
   };
+}
+
+/**
+ * The same drift not rounded, for a host that shows the airship finer than the picture's
+ * pixels (MenuBackdrop.floatingShip): the sideways part and the up and down part.
+ */
+export function driftX(t: number): number {
+  return 4 * Math.sin((2 * Math.PI * t) / 31);
+}
+
+export function driftY(t: number): number {
+  return 2.4 * Math.sin((2 * Math.PI * t) / 9);
 }
 
 /** One message on the sign: a header in green over a line in amber, capitals. */
@@ -639,7 +651,8 @@ function asMessages(text: SignText | readonly SignText[]): readonly SignText[] {
 
 /**
  * The airship and the sign. `signT` is the sign's own clock (seconds since its first
- * message came up).
+ * message came up). It is drawn moved (`dx`, `dy`) from its rest: by default its drift
+ * at `t` in whole pixels; on a layer of its own, by where that layer's corner is.
  */
 export function drawAirship(
   s: Surface,
@@ -648,8 +661,9 @@ export function drawAirship(
   light: Lighting,
   t: number,
   signT: number,
+  dx = Math.round(driftX(t)),
+  dy = Math.round(driftY(t)),
 ): void {
-  const { dx, dy } = airshipDrift(t);
   const x = ship.x + dx;
   const y = ship.y + dy;
   s.blit(ship.layer, x, y);

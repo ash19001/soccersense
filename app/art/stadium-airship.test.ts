@@ -162,6 +162,56 @@ describe("the airship", { timeout: 60_000 }, () => {
     }
     expect(moved).toBeGreaterThan(6);
   }, 60_000);
+
+  it("floats on its own while it only drifts, at its drift not rounded, for a scene that asks", () => {
+    const w = 683;
+    const h = 384;
+    const t = ARRIVE + 3.3;
+    // not asked: in the picture, nothing floats
+    const plain = backdrop(w, h);
+    const ps = new Surface(w, h);
+    plain.draw(ps, t);
+    expect(plain.floatingShip()).toBeNull();
+
+    const b = backdrop(w, h);
+    const s = new Surface(w, h);
+    b.setFloating(true);
+    b.draw(s, t);
+    const f = b.floatingShip();
+    if (!f) throw new Error("not floating");
+    // the airship is on the sprite and not in the picture: the picture differs from the
+    // plain one only where the airship was
+    expect(holes(f.surface)).toBeLessThan(f.surface.w * f.surface.h);
+    let differ = 0;
+    for (let i = 0; i < s.data.length; i++)
+      if (s.data[i] !== ps.data[i]) differ++;
+    expect(differ).toBeGreaterThan(500);
+    // over its drift it is in places between whole pixels, a little at a time
+    const ys: number[] = [];
+    for (let k = 0; k < 120; k++) {
+      b.setFloating(true);
+      b.draw(s, t + k / 30);
+      const g = b.floatingShip();
+      if (!g) throw new Error("not floating");
+      ys.push(g.y);
+    }
+    expect(ys.some((y) => !Number.isInteger(y))).toBe(true);
+    for (let k = 1; k < ys.length; k++) {
+      expect(Math.abs(ys[k] - ys[k - 1])).toBeLessThan(0.1);
+    }
+    // poked, it wobbles in the picture; then it floats again
+    expect(b.pokeAirship(t + 4.1)).toBe("wobble");
+    b.setFloating(true);
+    b.draw(s, t + 4.2);
+    expect(b.floatingShip()).toBeNull();
+    b.setFloating(true);
+    b.draw(s, t + 10);
+    expect(b.floatingShip()).not.toBeNull();
+    // and a frame that does not ask leaves it in the picture
+    b.setFloating(false);
+    b.draw(s, t + 10.1);
+    expect(b.floatingShip()).toBeNull();
+  }, 60_000);
 });
 
 describe("the sign's messages and the plane", { timeout: 60_000 }, () => {

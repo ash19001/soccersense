@@ -1,8 +1,9 @@
 /**
- * The modes as pages and pairs: the address each one is played at, and the mode it is
- * paired with (the full-time card's "play the other mode"). Pure. The list of modes in the
+ * The modes as pages and in turn: the address each one is played at, and the mode that
+ * comes after it (the full-time card's way on to the next). Pure. The list of modes in the
  * menu's order is `MODES` (./storage.ts); the rule each is scored by, `MODE_RULES`.
  */
+import { MODES } from "./storage";
 import type { EraMode, Mode } from "./types";
 
 /** The two modes ranked by an answer's year: RETRO, then NEXT-GEN. */
@@ -42,18 +43,20 @@ export function modeOfPath(pathname: string): Mode {
 }
 
 /**
- * The mode a mode is paired with: HOME and AWAY, RETRO and NEXT-GEN. The full-time card
- * offers it next.
+ * The mode the full-time card offers next (the product owner, 2026-11-15: "it should always
+ * direct to next available game mode"): the first after `mode` in the menu's order, HOME,
+ * AWAY, RETRO, NEXT-GEN and round to HOME again, that `played` says has not been played
+ * today. Null when all the others have. The locked modes (CLOSEST, FURTHEST) are not modes
+ * yet, so they are never offered.
  */
-export function pairedMode(mode: Mode): Mode {
-  switch (mode) {
-    case "home":
-      return "away";
-    case "away":
-      return "home";
-    case "retro":
-      return "nextgen";
-    case "nextgen":
-      return "retro";
+export function nextMode(
+  mode: Mode,
+  played: (mode: Mode) => boolean,
+): Mode | null {
+  const at = MODES.indexOf(mode);
+  for (let k = 1; k < MODES.length; k++) {
+    const next = MODES[(at + k) % MODES.length];
+    if (!played(next)) return next;
   }
+  return null;
 }

@@ -30,6 +30,7 @@ import {
   isLastQuestion,
   loadGame,
   loadHistory,
+  nextMode,
   progressFor,
   reduce,
   saveSession,
@@ -90,6 +91,11 @@ export interface GameView {
   announcement: string;
   /** At full time, the daily streak this game kept going (days in a row); 0 before. */
   streak: number;
+  /**
+   * At full time, the mode the card offers next: the next in the menu's order not played
+   * today (`nextMode`). Null before full time, and once every other mode has been played.
+   */
+  next: Session["mode"] | null;
 }
 
 export interface GameOptions {
@@ -184,7 +190,17 @@ export class GameController {
       share: "idle",
       announcement: "",
       streak: session.phase === "done" ? this.streakOn(session.dayNumber) : 0,
+      next: session.phase === "done" ? this.nextOn(session) : null,
     };
+  }
+
+  /** The mode to offer after `done`, from the games this device has kept for its day. */
+  private nextOn(done: Session): Session["mode"] | null {
+    const dayKey = dayKeyFor(done.dayNumber);
+    return nextMode(
+      done.mode,
+      (mode) => loadGame(dayKey, mode, this.storage) !== null,
+    );
   }
 
   /** The daily streak on `day`, from the history this device keeps (0 if it cannot list it). */
@@ -276,6 +292,7 @@ export class GameController {
       this.set({
         session: done,
         streak: this.streakOn(done.dayNumber),
+        next: this.nextOn(done),
         announcement: strings.play.fullTime.spoken(
           done.total,
           MAX_TOTAL,

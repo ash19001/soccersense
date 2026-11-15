@@ -34,6 +34,8 @@ import {
   airshipHit,
   drawAirship,
   drawAirshipPosed,
+  driftX,
+  driftY,
   paintAirship,
   signAt,
   signPlace,
@@ -73,7 +75,7 @@ import {
   mascotZone,
 } from "~/art/stadium-mascot";
 import { HOME_PAGE } from "~/audio/mix";
-import type { SoundCue } from "~/scenes/scene";
+import type { FloatingSprite, SoundCue } from "~/scenes/scene";
 import {
   drawFlyby,
   paintBanner,
@@ -156,6 +158,23 @@ export class MenuBackdrop {
   private readonly mascot = new MascotPokes();
   /** The last point airshipAt found on the airship: a poke at the same moment dents it there. */
   private hit = { x: 0, y: 0, t: Number.NaN };
+  /**
+   * The floating airship (`setFloating`): while it only drifts (not poked, not down), it is
+   * drawn on `shipLayer` and handed out as a sprite at its drift not rounded, so that it
+   * glides rather than steps a pixel at a time (2026-11-14: "can you do that with the idle
+   * blimp floating animation"). `shipBox` is the layer's corner from the airship's rest
+   * (`ship.x`, `ship.y`): room for the envelope, the props, the lights and the sign.
+   */
+  private floatShip = false;
+  private shipFloated = false;
+  private shipLayer = new Surface(1, 1);
+  private shipFor: Airship | null = null;
+  private readonly shipBox = { x: 0, y: 0 };
+  private readonly shipSprite: FloatingSprite = {
+    surface: this.shipLayer,
+    x: 0,
+    y: 0,
+  };
 
   constructor(opts: { seed: number; sign: MenuSign }) {
     this.seed = Math.round(Number.isFinite(opts.seed) ? opts.seed : 0) | 0;
@@ -444,7 +463,22 @@ export class MenuBackdrop {
     };
   }
 
+  /**
+   * Whether the next `draw` may hand out the drifting airship as a sprite (`floatingShip`)
+   * instead of drawing it: the scene says so frame by frame (only while nothing it draws
+   * goes over the airship).
+   */
+  setFloating(on: boolean): void {
+    this.floatShip = on;
+  }
+
+  /** The drifting airship, after `draw`, while it floats; null when it is in the picture. */
+  floatingShip(): FloatingSprite | null {
+    return this.floatShip && this.shipFloated ? this.shipSprite : null;
+  }
+
   draw(s: Surface, t: number): void {
+    this.shipFloated = false;
     if (this.w !== s.w || this.h !== s.h) {
       this.resize(s.w, s.h);
     }
@@ -507,6 +541,10 @@ export class MenuBackdrop {
     }
     const pose = this.poseOf(ship, time);
     if (!pose) {
+      if (this.floatShip) {
+        this.floatAirship(ship, text, light, time);
+        return;
+      }
       drawAirship(s, ship, text, light, time, this.signTime(time));
       return;
     }
@@ -521,5 +559,53 @@ export class MenuBackdrop {
       this.signTime(time),
     );
     drawPuffs(s, ship, this.pokes, pose, light, time);
+  }
+
+  /**
+   * The drifting airship on its own layer, its corner where it rests, and the sprite's
+   * place: that corner moved by its drift, not rounded.
+   */
+  private floatAirship(
+    ship: Airship,
+    text: SignText[],
+    light: Lighting,
+    time: number,
+  ): void {
+    if (this.shipFor !== ship) {
+      // the layer: round the envelope's layer and the sign, with room for the props
+      const p = ship.place.panel;
+      const pad = 4;
+      const x0 = Math.min(0, p.x - ship.x) - pad;
+      const y0 = Math.min(0, p.y - ship.y) - pad;
+      const x1 = Math.max(ship.layer.w, p.x + p.w - ship.x) + pad;
+      const y1 = Math.max(ship.layer.h, p.y + p.h - ship.y) + pad;
+      const w = x1 - x0;
+      const h = y1 - y0;
+      if (this.shipLayer.w !== w || this.shipLayer.h !== h) {
+        this.shipLayer = new Surface(w, h);
+        this.shipSprite.surface = this.shipLayer;
+      }
+      this.shipBox.x = x0;
+      this.shipBox.y = y0;
+      this.shipFor = ship;
+    }
+    const layer = this.shipLayer;
+    layer.clear();
+    // drawn as if it rested with its corner on the layer's corner
+    const bx = this.shipBox.x;
+    const by = this.shipBox.y;
+    drawAirship(
+      layer,
+      ship,
+      text,
+      light,
+      time,
+      this.signTime(time),
+      -ship.x - bx,
+      -ship.y - by,
+    );
+    this.shipSprite.x = ship.x + bx + driftX(time);
+    this.shipSprite.y = ship.y + by + driftY(time);
+    this.shipFloated = true;
   }
 }

@@ -79,6 +79,22 @@ export interface Ambience {
   tier?: number;
 }
 
+/**
+ * A sprite the host shows over the frame at a place finer than the frame's own pixels: its
+ * top left at (`x`, `y`) logical pixels, any numbers, which the host rounds to its device
+ * pixels. `surface` is transparent where it is empty. (The menu ball's hover and the
+ * airship's drift, 2026-11-14: a rise and fall of two logical pixels in whole ones was a
+ * tick, not a float.)
+ */
+export interface FloatingSprite {
+  surface: Surface;
+  x: number;
+  y: number;
+}
+
+/** The most floating sprites a host shows at once (more are not shown). */
+export const FLOATING_MAX = 3;
+
 export interface Scene {
   /** The logical size of the surface `draw` will be given. Called before the first frame. */
   resize(w: number, h: number): void;
@@ -104,4 +120,16 @@ export interface Scene {
   onSound?: ((cue: SoundCue) => void) | null;
   /** The bed of sound under the scene right now. The host polls it about once a second. */
   ambience?(): Ambience;
+  /**
+   * Called by a host that can show a `FloatingSprite`, before the first frame (true), and
+   * with false when it can no longer. A scene never told draws everything into the frame
+   * (the snap tool, tests).
+   */
+  setFloating?(on: boolean): void;
+  /**
+   * After each `draw`: the sprites to show over that frame, bottom first (none: empty).
+   * Only asked of a scene told `setFloating(true)`; what it returns is left out of the
+   * frame itself. A host shows at most FLOATING_MAX of them.
+   */
+  floating?(): readonly FloatingSprite[];
 }

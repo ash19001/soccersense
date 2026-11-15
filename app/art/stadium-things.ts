@@ -230,6 +230,37 @@ export function lightPool(
   }
 }
 
+/**
+ * A lamp's own glow in the air (a floodlight's head): solid light `c` over the disc of
+ * radius `r` round (cx, cy), in front of whatever is behind it, so that nothing shows
+ * through (2026-11-14: "why is the background sky layering over the stadium lights?" A
+ * `lightPool` there lit only what was already painted, and the sky is drawn after the town,
+ * under it, so it showed through the glow). Only its rim, beyond `ragged` of the radius, is
+ * every other pixel. Nest a few, largest first, for bands paler to the middle.
+ */
+export function lampHalo(
+  s: Surface,
+  cx: number,
+  cy: number,
+  r: number,
+  c: Color,
+  ragged = 0.85,
+): void {
+  if (!(r > 0)) return;
+  const edge = ragged * ragged;
+  for (let y = Math.ceil(cy - r); y <= Math.floor(cy + r); y++) {
+    if (y < 0 || y >= s.h) continue;
+    const t = (y - cy) / r;
+    const half = r * Math.sqrt(Math.max(0, 1 - t * t));
+    for (let x = Math.ceil(cx - half); x <= Math.floor(cx + half); x++) {
+      if (x < 0 || x >= s.w) continue;
+      const u = (x - cx) / r;
+      if (u * u + t * t > edge && (x + y) % 2 !== 0) continue;
+      s.data[y * s.w + x] = c;
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Buildings
 // ---------------------------------------------------------------------------

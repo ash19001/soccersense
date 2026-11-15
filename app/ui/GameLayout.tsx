@@ -1,4 +1,11 @@
-import { type ReactNode, useEffect, useRef, useSyncExternalStore } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 
 import { strings } from "~/i18n";
 
@@ -29,6 +36,20 @@ export interface GameLayoutProps {
    */
   sound?: SoundToggleLabels | boolean;
   className?: string;
+}
+
+/**
+ * Whether the GameLayout round a component is wide (it carries `data-wide`): for the few
+ * things that move to another place in the markup on a monitor rather than only in the CSS
+ * (the menu captions' sound switch and Support). False outside a GameLayout, in the
+ * build-time HTML and in the first client render over it, as `data-wide` is. (Exported for
+ * the tests, which set it without a window to measure.)
+ */
+export const WideContext = createContext(false);
+
+/** The GameLayout round this component is wide (see WideContext). */
+export function useWideLayout(): boolean {
+  return useContext(WideContext);
 }
 
 /** Keyboards are at least this tall; smaller changes are browser bars sliding. */
@@ -120,15 +141,17 @@ export function GameLayout({
       data-wide={wide ? "" : undefined}
       data-live={live ? "" : undefined}
     >
-      <div className="ss-game__canvas">{canvas}</div>
-      <div className="ss-game__col">
-        <div className="ss-game__top">{top}</div>
-        <div className="ss-game__mid">
-          {soundLabels && <SoundToggle labels={soundLabels} />}
-          {children}
+      <WideContext.Provider value={wide}>
+        <div className="ss-game__canvas">{canvas}</div>
+        <div className="ss-game__col">
+          <div className="ss-game__top">{top}</div>
+          <div className="ss-game__mid">
+            {soundLabels && <SoundToggle labels={soundLabels} />}
+            {children}
+          </div>
+          <div className="ss-game__bottom">{bottom}</div>
         </div>
-        <div className="ss-game__bottom">{bottom}</div>
-      </div>
+      </WideContext.Provider>
     </PixelRoot>
   );
 }

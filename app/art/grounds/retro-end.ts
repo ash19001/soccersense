@@ -24,7 +24,8 @@ import {
   type Color,
 } from "~/pixel";
 import { fanStyle, seatFan } from "./crowd";
-import { endFor, endTopAt, nearTop, type EndGeo } from "./end";
+import { cornerStart, standRoofAt } from "./corner";
+import { cornerFilled, endFor, nearTop, type EndGeo } from "./end";
 import type { Life } from "./life";
 import { rnd, sx, type Paint } from "./paint";
 import {
@@ -54,14 +55,17 @@ export function paintRetroEnd(s: Surface, p: Paint, life: Life): void {
   const e = endFor(g);
   const clipY = Math.min(g.h, nearTop(p));
   const { xA, y0, m, lean, grow } = e;
-  // the town's chimneys hidden behind the end's roof send up no smoke
-  const roofX = xA + lean * TOP;
+  // the town's chimneys hidden behind the end's roof (and the corner's) send up no smoke
+  const roofX = cornerFilled(p) ? e.corner : xA + lean * TOP;
   life.smoke = life.smoke.filter(
-    (c) => c.x < roofX || c.y + 6 < endTopAt(e, c.x, TOP) - 2,
+    (c) => c.x < roofX || c.y + 6 < standRoofAt(p, c.x) - 2,
   );
-  retroCorner(s, p, e);
+  // (an international's corner is a stand of its own, painted with the grandstand, and the
+  // end starts where its bend hands it on: corner.ts)
+  if (!cornerFilled(p)) retroCorner(s, p, e);
+  const start = cornerStart(p);
 
-  const boards = endBoards(p, e, clipY);
+  const boards = endBoards(p, e, clipY, start === null ? 0 : start(WALL));
   const colour = endColors(p, boards);
   const back = p.S(RETRO.tinDark);
   const backEdge = p.S(RETRO.tin);
@@ -75,6 +79,10 @@ export function paintRetroEnd(s: Surface, p: Paint, life: Life): void {
       if (u < 0 || h < 0) continue;
       const z = 1 + grow * u;
       const hu = h / z;
+      if (start !== null && u < start(Math.min(hu, TOP))) {
+        if (hu > TOP + 12 && Y < g.B - 14) break;
+        continue;
+      }
       if (hu >= TOP) {
         // over its top: the back of the roof's slope, down from the town's foot
         if (Y >= g.B) {
@@ -111,6 +119,7 @@ export function paintRetroEnd(s: Surface, p: Paint, life: Life): void {
         const x = Math.round(xA + m * u + lean * hb) - 3;
         const y = Math.round(y0 + u - hb) - 8;
         if (x >= g.w || y + 8 > clipY) break;
+        if (start !== null && u < start(b.base + r * ROW)) continue;
         const a = (u + 40) % AISLE;
         if (a > AISLE - 7 || a < 3) continue;
         if (rnd(p, x, y, 21) < b.empty) continue;
@@ -118,15 +127,24 @@ export function paintRetroEnd(s: Surface, p: Paint, life: Life): void {
       }
     }
   }
+  const from = start ?? (() => 0);
   boardWords(s, p, e, boards, clipY);
-  barriers(s, p, e, clipY);
-  columns(s, p, e, clipY);
-  scoreboard(s, p, e);
+  barriers(s, p, e, clipY, from);
+  columns(s, p, e, clipY, from);
+  scoreboard(s, p);
   // tiers 6 and 7: a searchlight drum on the roof under its beam (retro-high.ts)
   if (p.tier >= 6) {
     const bx = sx(g, 80);
-    if (bx < g.w - 4) searchlightDrum(s, p, bx, endTopAt(e, bx, TOP));
+    if (bx < g.w - 4) searchlightDrum(s, p, bx, standRoofAt(p, bx));
   }
+}
+
+/**
+ * The end's colours for the corner stand at an international (corner.ts): its hoardings
+ * are plain varnished planks, with no words to paint at a slant.
+ */
+export function retroCornerColors(p: Paint): Colour {
+  return endColors(p, [{ u0: -1e6, u1: 1e6, look: 2, word: "" }]);
 }
 
 type Colour = (
@@ -154,12 +172,19 @@ interface EndBoard {
 /** Margin each side of a board's word, in `u`. */
 const BOARD_PAD = 4;
 
-function endBoards(p: Paint, e: EndGeo, clipY: number): EndBoard[] {
+function endBoards(
+  p: Paint,
+  e: EndGeo,
+  clipY: number,
+  from: number,
+): EndBoard[] {
   const words = (p.labels.boards ?? []).map((w) => w.toUpperCase());
   const out: EndBoard[] = [];
-  // as far along as the end shows above the near side
+  // as far along as the end shows above the near side, from its far end or (an
+  // international's) from where the corner's bend hands it on, plain planks before that
   const uMax = clipY - e.y0 + 4;
-  let u = 0;
+  let u = Math.ceil(from);
+  if (u > 0) out.push({ u0: -1e6, u1: u, look: 2, word: "" });
   for (let i = 0, n = 0; u < uMax; i++) {
     const plain = words.length === 0 || i % 3 === 2;
     const word = plain ? "" : words[n % words.length];
@@ -359,8 +384,14 @@ function at(e: EndGeo, u: number, hs: number): [number, number] {
   return [Math.round(e.xA + e.m * u + e.lean * h), Math.round(e.y0 + u - h)];
 }
 
-/** Crush barriers across the terrace on posts, over the fans. */
-function barriers(s: Surface, p: Paint, e: EndGeo, clipY: number): void {
+/** Crush barriers across the terrace on posts, over the fans (from where the end starts). */
+function barriers(
+  s: Surface,
+  p: Paint,
+  e: EndGeo,
+  clipY: number,
+  from: (hu: number) => number,
+): void {
   const { S, g } = p;
   const hi = S(RETRO.ironLit);
   const lo = S(RETRO.ironDark);
@@ -368,6 +399,7 @@ function barriers(s: Surface, p: Paint, e: EndGeo, clipY: number): void {
     for (let u = 2; u < g.h; u += 0.5) {
       const [x, y] = at(e, u, hs);
       if (x >= g.w || y + 2 > clipY) break;
+      if (u < from(hs) + 2) continue;
       const seg = u % 24;
       if (seg > 17) continue;
       s.px(x, y, hi);
@@ -379,14 +411,24 @@ function barriers(s: Surface, p: Paint, e: EndGeo, clipY: number): void {
   }
 }
 
-/** Cast-iron columns from the walkway's lattice up to the roof, over the seated fans. */
-function columns(s: Surface, p: Paint, e: EndGeo, clipY: number): void {
+/**
+ * Cast-iron columns from the walkway's lattice up to the roof, over the seated fans (where
+ * the end has started all the way up).
+ */
+function columns(
+  s: Surface,
+  p: Paint,
+  e: EndGeo,
+  clipY: number,
+  from: (hu: number) => number,
+): void {
   const { S, g } = p;
   const lit = S(RETRO.ironLit);
   const dark = S(RETRO.iron);
   for (let u = 22; u < g.h; u += 46) {
     const [bx, by] = at(e, u, UP);
     if (bx >= g.w || by > clipY) break;
+    if (u < from(UNDER) + 2) continue;
     for (let hs = UP; hs < UNDER; hs += 0.5) {
       const [x, y] = at(e, u, hs);
       if (y >= clipY) continue;
@@ -456,8 +498,8 @@ function retroCorner(s: Surface, p: Paint, e: EndGeo): void {
   }
 }
 
-/** The hand-turned scoreboard on the end's roof, where the canvas shows it. */
-function scoreboard(s: Surface, p: Paint, e: EndGeo): void {
+/** The hand-turned scoreboard on the end's roof (or the corner's, as it bends round), where the canvas shows it. */
+function scoreboard(s: Surface, p: Paint): void {
   const x = endScoreboardX(p.g);
-  if (x !== null) handScoreboard(s, p, x, (xx) => endTopAt(e, xx, TOP));
+  if (x !== null) handScoreboard(s, p, x, (xx) => standRoofAt(p, xx));
 }

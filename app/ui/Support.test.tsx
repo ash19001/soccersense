@@ -5,6 +5,7 @@ import { describe, expect, test, vi } from "vitest";
 import { COFFEE_URL, IDEAS_URL, usableLink } from "~/data/links";
 import { strings } from "~/i18n";
 
+import { WideContext } from "./GameLayout";
 import { MenuCaptions } from "./MenuCaptions";
 import { Support, type SupportLabels } from "./Support";
 
@@ -121,6 +122,60 @@ describe("the Support button", () => {
     expect(heart).toHaveAttribute("title", LABELS.open);
     expect(heart).toHaveAttribute("aria-haspopup", "dialog");
     expect(heart).toHaveAttribute("aria-expanded", "true");
+  });
+
+  /** The captions with a speaker and stats, on a phone or a monitor. */
+  function captions(wide: boolean, onSupport = () => {}) {
+    render(
+      <WideContext value={wide}>
+        <MenuCaptions
+          modes={[
+            { mode: "home", label: "HOME", line: "Common" },
+            { mode: "away", label: "AWAY", line: "Uncommon" },
+          ]}
+          howToPlay={{ label: "How to play", onClick: () => {} }}
+          dayLabel="DAY 2"
+          stats={{ label: "Your stats", onClick: () => {} }}
+          remind={{ label: "Remind me", onClick: () => {} }}
+          support={{ label: LABELS.open, onClick: onSupport }}
+        />
+      </WideContext>,
+    );
+    return {
+      bell: screen.getByRole("button", { name: "Remind me" }),
+      speaker: screen.getByRole("switch", { name: strings.sound.label }),
+      support: screen.getByRole("button", { name: LABELS.open }),
+    };
+  }
+
+  test("on a phone the speaker is beside the '?' and the heart under the bell", () => {
+    const { bell, speaker, support } = captions(false);
+    expect(bell.nextElementSibling).toBe(support);
+    expect(speaker.closest(".ss-menu__more")).toBeNull();
+    expect(support).toHaveClass("ss-support-btn");
+    expect(support.textContent).toBe("");
+  });
+
+  test("on a monitor the speaker takes the heart's place and Support is a gold button with its name, at the other end", () => {
+    const onSupport = vi.fn();
+    const { bell, speaker, support } = captions(true, onSupport);
+    // one of each, the speaker under the bell
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: LABELS.open })).toHaveLength(
+      1,
+    );
+    expect(bell.nextElementSibling).toBe(speaker);
+    // Support: after the stats, out of the day plate, its heart and its name on it
+    expect(support.closest(".ss-menu__day")).toBeNull();
+    expect(support.previousElementSibling).toBe(
+      screen.getByRole("button", { name: "Your stats" }),
+    );
+    expect(support).toHaveClass("ss-btn--primary", "ss-menu__support");
+    expect(support).toHaveTextContent(LABELS.open);
+    expect(support.querySelector("svg")).not.toBeNull();
+    expect(support).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(support);
+    expect(onSupport).toHaveBeenCalledTimes(1);
   });
 });
 

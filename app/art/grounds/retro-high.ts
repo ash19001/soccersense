@@ -40,7 +40,9 @@ import {
   type TextOptions,
 } from "~/pixel";
 import { fanBlock } from "./crowd";
-import { endFor, endRoofAt } from "./end";
+import { paintCornerStand, standRoofAt } from "./corner";
+import { cornerFilled, endFor } from "./end";
+import { retroCornerColors } from "./retro-end";
 import type { Life } from "./life";
 import { crowdColors, rnd, sx, type Geo, type Paint } from "./paint";
 import { STAND } from "./stand";
@@ -211,18 +213,38 @@ export function paintRetroStadium(s: Surface, p: Paint, life: Life): void {
     };
   }
   grandstand(s, p, life, 0, corner);
-  // the stand's end: a brick wall, lit on the left, a stair's slit windows
-  const endH = st.roofTop - st.boards;
-  const wy = F - st.roofTop;
-  s.rect(corner - 4, wy, 4, endH, S(P.brick));
-  s.vline(corner - 4, wy, endH, S(P.brickLight));
-  s.vline(corner - 1, wy, endH, S(P.brickDark));
-  for (let y = wy + 4; y < F - 16; y += 6) {
-    s.px(corner - 3, y, S(P.brickDark));
-    s.px(corner - 2, y + 3, S(P.brickDark));
-  }
-  for (let y = wy + 20; y < F - 24; y += 18) {
-    s.vline(corner - 3, y, 5, p.lamps ? P.goldDark : S(P.night));
+  if (cornerFilled(p)) {
+    // an international's: the terrace and the benches carry on round the corner to the
+    // end (corner.ts), the roof's iron slope with them as far as it goes
+    const R = RETRO;
+    paintCornerStand(s, p, life, {
+      colour: retroCornerColors(p),
+      seatLow: S(R.cinder),
+      seatUp: S(mix(R.timberDark, P.night, 0.35)),
+      glow: 0.18,
+      empty: 0.04,
+      cap: (x, _y, d, t) => {
+        const tall = Math.round(4 * (1 - t));
+        if (d > tall) return null;
+        const rib = mod(x - g.cx, 4);
+        const c = rib === 0 ? R.tinLit : rib === 3 ? R.tinDark : R.tin;
+        return S(d === tall ? R.tinDark : c);
+      },
+    });
+  } else {
+    // the stand's end: a brick wall, lit on the left, a stair's slit windows
+    const endH = st.roofTop - st.boards;
+    const wy = F - st.roofTop;
+    s.rect(corner - 4, wy, 4, endH, S(P.brick));
+    s.vline(corner - 4, wy, endH, S(P.brickLight));
+    s.vline(corner - 1, wy, endH, S(P.brickDark));
+    for (let y = wy + 4; y < F - 16; y += 6) {
+      s.px(corner - 3, y, S(P.brickDark));
+      s.px(corner - 2, y + 3, S(P.brickDark));
+    }
+    for (let y = wy + 20; y < F - 24; y += 18) {
+      s.vline(corner - 3, y, 5, p.lamps ? P.goldDark : S(P.night));
+    }
   }
   // a pigeon on the roof, and one on the pediment
   life.perched.push({ x: sx(g, -40), y: F - st.roofTop - 4 });
@@ -253,7 +275,7 @@ export function paintRetroStadium(s: Surface, p: Paint, life: Life): void {
       searchlightDrum(s, p, x, top - 3);
       life.beams.push({ x, y: top - 12 });
     }
-    life.beams.push({ x: bx, y: endRoofAt(g, bx) - 9 });
+    life.beams.push({ x: bx, y: standRoofAt(p, bx) - 9 });
     life.beamColor = P.chalk;
   }
   if (p.tier >= 7) {

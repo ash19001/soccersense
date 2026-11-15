@@ -149,6 +149,7 @@ export interface Scene {
   pointer?(p: PointerInfo): void;
   setReducedMotion?(on: boolean): void;
   cursor?(): "default" | "pointer" | "grab" | "grabbing";
+  // and sound (onSound, ambience) and a floating sprite (setFloating, floating): API_SCENES.md
 }
 ```
 

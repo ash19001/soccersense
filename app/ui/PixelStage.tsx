@@ -9,7 +9,13 @@ import {
 import type { Lighting } from "~/art/lighting";
 import { soundEngine } from "~/audio";
 import { Surface } from "~/pixel";
-import type { PointerInfo, Scene, SoundCue } from "~/scenes/scene";
+import {
+  FLOATING_MAX,
+  type FloatingSprite,
+  type PointerInfo,
+  type Scene,
+  type SoundCue,
+} from "~/scenes/scene";
 
 import { cx } from "./cx";
 import {
@@ -44,6 +50,11 @@ const LONG_FRAME_MS = 34;
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 /** How often the scene's ambience is asked for (ms). The engine crossfades changes. */
 const AMBIENCE_POLL_MS = 1000;
+/** The floating sprites' canvases, bottom first (Scene.floating). */
+const FLOATS: readonly number[] = Array.from(
+  { length: FLOATING_MAX },
+  (_, i) => i,
+);
 
 /**
  * Everything the loop needs, kept in one object for the life of the component. It is only
@@ -54,6 +65,15 @@ interface Stage {
   /** The framebuffer, and the same memory wrapped as an ImageData. Rebuilt per size. */
   surface: Surface | null;
   image: ImageData | null;
+  /**
+   * The canvases over the first, one for each of the scene's floating sprites
+   * (`Scene.floating`), bottom first. Empty where there is no 2D context, and then the
+   * scene is never told it can float anything.
+   */
+  floats: FloatSlot[];
+  /** Device pixels per logical pixel, and the device pixel ratio: where the sprite goes. */
+  dp: number;
+  dpr: number;
 
   // The inputs, copied in after every render.
   scene: Scene | null;
@@ -84,11 +104,30 @@ interface Stage {
   last: number;
 }
 
+/**
+ * One floating sprite's canvas and context; the sprite's surface wrapped as an ImageData,
+ * made again for another surface; the size its canvas was last given (`size`: logical size
+ * and scale); its place, in device pixels; and whether it is showing.
+ */
+interface FloatSlot {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  surface: Surface | null;
+  image: ImageData | null;
+  size: string;
+  x: number;
+  y: number;
+  shown: boolean;
+}
+
 function newStage(): Stage {
   return {
     ctx: null,
     surface: null,
     image: null,
+    floats: [],
+    dp: 1,
+    dpr: 1,
     scene: null,
     light: null,
     w: 0,
@@ -115,6 +154,21 @@ function context2d(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
     return canvas.getContext("2d") ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * A development aid: `?float=off` on the page's address leaves the floating canvases out,
+ * so that the scene draws everything into the picture as before (to compare the menu ball's
+ * and the airship's movement, 2026-11-14). Read once, when the stage is made. Nothing in a
+ * production build.
+ */
+function floatsOff(): boolean {
+  if (!import.meta.env.DEV) return false;
+  try {
+    return new URLSearchParams(window.location.search).get("float") === "off";
+  } catch {
+    return false;
   }
 }
 
@@ -147,6 +201,7 @@ function renderFrame(st: Stage, dt: number): void {
     st.toldReduced = null;
     // The time since the last frame belongs to the scene that was up then, not this one.
     dt = 0;
+    scene.setFloating?.(st.floats.length > 0);
   }
   if (st.toldW !== w || st.toldH !== h) {
     st.toldW = w;
@@ -177,7 +232,57 @@ function renderFrame(st: Stage, dt: number): void {
   }
   scene.draw(surface);
   ctx.putImageData(image, 0, 0);
+  const sprites = st.floats.length > 0 ? scene.floating?.() : undefined;
+  for (let i = 0; i < st.floats.length; i++) {
+    showFloating(st, st.floats[i], sprites?.[i] ?? null);
+  }
   st.blank = false;
+}
+
+/**
+ * A floating sprite on its canvas: shown at its place rounded to whole device pixels (the
+ * canvases share their top left, which is on a device pixel), at the same scale as the
+ * picture; the canvas hidden when there is none.
+ */
+function showFloating(
+  st: Stage,
+  slot: FloatSlot,
+  sprite: FloatingSprite | null,
+): void {
+  const { canvas, ctx } = slot;
+  if (!sprite || !(sprite.surface.w > 0 && sprite.surface.h > 0)) {
+    if (slot.shown) {
+      canvas.style.visibility = "hidden";
+      slot.shown = false;
+    }
+    return;
+  }
+  const { surface } = sprite;
+  const size = `${surface.w}x${surface.h}@${st.dp}/${st.dpr}`;
+  if (slot.surface !== surface || slot.size !== size) {
+    if (slot.size !== size) {
+      // a new size empties the canvas: it is painted again just below
+      canvas.width = surface.w;
+      canvas.height = surface.h;
+      canvas.style.width = `${deviceToCss(surface.w * st.dp, st.dpr)}px`;
+      canvas.style.height = `${deviceToCss(surface.h * st.dp, st.dpr)}px`;
+      slot.size = size;
+    }
+    slot.surface = surface;
+    slot.image = new ImageData(surface.bytes, surface.w, surface.h);
+  }
+  if (slot.image) ctx.putImageData(slot.image, 0, 0);
+  const x = Math.round(sprite.x * st.dp);
+  const y = Math.round(sprite.y * st.dp);
+  if (x !== slot.x || y !== slot.y) {
+    canvas.style.transform = `translate(${deviceToCss(x, st.dpr)}px, ${deviceToCss(y, st.dpr)}px)`;
+    slot.x = x;
+    slot.y = y;
+  }
+  if (!slot.shown) {
+    canvas.style.visibility = "visible";
+    slot.shown = true;
+  }
 }
 
 function hidden(): boolean {
@@ -261,6 +366,7 @@ export function PixelStage({
     canvasH: logicalH,
   } = usePixelRootScale();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const floatRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const stageRef = useRef<Stage | null>(null);
 
   const speed = Number.isFinite(timeScale) && timeScale >= 0 ? timeScale : 1;
@@ -273,6 +379,26 @@ export function PixelStage({
     if (!canvas) return;
     const st = (stageRef.current ??= newStage());
     st.ctx = context2d(canvas);
+    st.floats = [];
+    if (st.ctx && !floatsOff()) {
+      for (const float of floatRefs.current) {
+        const ctx = float ? context2d(float) : null;
+        if (!float || !ctx) {
+          st.floats = [];
+          break;
+        }
+        st.floats.push({
+          canvas: float,
+          ctx,
+          surface: null,
+          image: null,
+          size: "",
+          x: Number.NaN,
+          y: Number.NaN,
+          shown: false,
+        });
+      }
+    }
 
     const media =
       typeof window.matchMedia === "function"
@@ -321,6 +447,8 @@ export function PixelStage({
     st.light = light;
     st.w = logicalW;
     st.h = logicalH;
+    st.dp = dp;
+    st.dpr = dpr;
     st.timeScale = speed;
     st.running = running;
     if (!st.ctx) return;
@@ -328,6 +456,7 @@ export function PixelStage({
     if (!scene) {
       // No scene: back to plain ink (the canvas is see-through, the slot behind it is ink).
       st.ctx.clearRect(0, 0, logicalW, logicalH);
+      for (const slot of st.floats) showFloating(st, slot, null);
       st.told = null;
       st.blank = false;
       return;
@@ -337,7 +466,7 @@ export function PixelStage({
     // first frame, or `onShown` above when the loop is not to run.
     if (hidden()) return;
     if (st.blank || (!running && stale(st))) repaint(st);
-  }, [scene, light, logicalW, logicalH, speed, running]);
+  }, [scene, light, logicalW, logicalH, dp, dpr, speed, running]);
 
   // 3. The loop. One effect owns it, so there is never more than one: its cleanup always
   //    cancels the pending frame before anything can start another.
@@ -462,6 +591,13 @@ export function PixelStage({
     "--ss-stage-h": cssH,
     "--ss-stage-px": `${px}px`,
   } as CSSProperties;
+  // The floating sprite's canvas takes the same top left (ui.css, from the same variables);
+  // its size, its place and whether it shows are set as it is painted.
+  const floatStyle = {
+    "--ss-stage-w": cssW,
+    "--ss-stage-h": cssH,
+    "--ss-stage-px": `${px}px`,
+  } as CSSProperties;
 
   return (
     <div className={cx("ss-stage", className)}>
@@ -478,6 +614,17 @@ export function PixelStage({
         onPointerLeave={(event) => forward("leave", event)}
         onPointerCancel={(event) => forward("leave", event)}
       />
+      {FLOATS.map((i) => (
+        <canvas
+          key={i}
+          ref={(el) => {
+            floatRefs.current[i] = el;
+          }}
+          className="ss-stage__canvas ss-stage__float"
+          style={floatStyle}
+          aria-hidden="true"
+        />
+      ))}
     </div>
   );
 }

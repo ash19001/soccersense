@@ -420,6 +420,63 @@ describe("the menu", () => {
     // 2.6 s alone, more with every test file running at once
   }, 30_000);
 
+  it("floats the hovering ball on its own, finer than the picture's pixels, for a host that can show it", () => {
+    for (const [w, h] of SIZES) {
+      const m = menuLayout(w, h);
+      // what of the ball's disc is in the picture itself (the backdrop is FLAT here)
+      const inPicture = (s: Surface): number => {
+        let n = 0;
+        const r = m.ballR - 3;
+        for (let y = m.ballCy - r; y <= m.ballCy + r; y++) {
+          for (let x = m.cx - r; x <= m.cx + r; x++) {
+            if ((x - m.cx) ** 2 + (y - m.ballCy) ** 2 > (r - 4) ** 2) continue;
+            if (s.data[y * w + x] !== FLAT) n++;
+          }
+        }
+        return n;
+      };
+      // a host that cannot: the ball is in the picture, and nothing floats
+      const plain = make(w, h);
+      plain.update(STEP);
+      expect(inPicture(draw(plain, w, h)), `${w}`).toBeGreaterThan(100);
+      expect(plain.floating(), `${w}`).toEqual([]);
+
+      const scene = make(w, h);
+      scene.setFloating(true);
+      const ys: number[] = [];
+      for (let i = 0; i < 4 * 60; i++) {
+        scene.update(STEP);
+        const s = draw(scene, w, h);
+        const floating = scene.floating();
+        // the ball, on top (the airship is the backdrop's, which is not drawn here)
+        const f = floating[floating.length - 1];
+        if (!f) throw new Error("not floating");
+        if (i === 0) {
+          // the ball is on the sprite, centred, and not in the picture
+          expect(inPicture(s), `${w}`).toBe(0);
+          const mid = (f.surface.w - 1) >> 1;
+          expect(f.surface.get(mid, mid), `${w}`).not.toBe(TRANSPARENT);
+          expect(f.x + mid, `${w}`).toBe(m.cx);
+        }
+        ys.push(f.y);
+      }
+      // a whole bob, in more places than whole pixels, never more than a fifth of a pixel
+      // a frame
+      expect(
+        ys.some((y) => !Number.isInteger(y)),
+        `${w}`,
+      ).toBe(true);
+      for (let i = 1; i < ys.length; i++) {
+        expect(Math.abs(ys[i] - ys[i - 1]), `${w}`).toBeLessThan(0.2);
+      }
+      // the kick-off: the ball is back in the picture, where its effects are drawn over it
+      scene.choose("home");
+      scene.update(STEP);
+      expect(inPicture(draw(scene, w, h)), `${w}`).toBeGreaterThan(100);
+      expect(scene.floating(), `${w}`).toEqual([]);
+    }
+  });
+
   it("draws the entrance, the spin and its wind without leaving the canvas bare", () => {
     for (const [w, h] of SIZES) {
       const scene = new MenuScene({ seed: 3, fact: "A fact.", labels: LABELS });

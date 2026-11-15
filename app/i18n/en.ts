@@ -630,11 +630,12 @@ export const en = {
         noAnswer: "no answer",
       },
       /**
-       * The button that plays the other mode of the pair: HOME and AWAY, RETRO and
-       * NEXT-GEN. Keyed by the mode it starts. Ten letters at most: "PLAY NEXT-GEN" wraps
-       * the card's row of three buttons at 1920 x 1080 and on a 390 x 844 phone, so every
-       * mode's button is its name alone, the same for all four (in the mode's colour, it
-       * reads as the way there); `otherSpoken` is its name for screen readers.
+       * The button on to the next mode not played today, in the menu's order (HOME, AWAY,
+       * RETRO, NEXT-GEN, round to HOME; none once all four are played). Keyed by the mode
+       * it starts. Ten letters at most: "PLAY NEXT-GEN" wraps the card's row of three
+       * buttons at 1920 x 1080 and on a 390 x 844 phone, so every mode's button is its name
+       * alone, the same for all four (in the mode's colour, it reads as the way there);
+       * `otherSpoken` is its name for screen readers.
        */
       other: {
         home: "HOME",

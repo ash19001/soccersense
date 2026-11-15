@@ -28,7 +28,14 @@ import {
   type TextOptions,
 } from "~/pixel";
 import { aisles, fanBlock } from "./crowd";
-import { endFlags, endFor, endRoofAt } from "./end";
+import {
+  cornerColumns,
+  cornerFilled,
+  cornerRowAt,
+  paintCornerStand,
+  standRoofAt,
+} from "./corner";
+import { END_PROFILE, endFlags, endFor, stadiumColors } from "./end";
 import type { Life } from "./life";
 import {
   HAIR,
@@ -291,13 +298,23 @@ export function paintStadium(s: Surface, p: Paint, life: Life): void {
   const corner = Math.min(g.w, endFor(g).corner);
 
   bigStand(s, p, life, 0, corner, true);
-  // the stand's end: a plain concrete wall, lit on the left, a stair's slit windows
-  const endH = st.roofTop - st.boards;
-  s.rect(corner - 4, F - st.roofTop, 4, endH, S(P.concrete));
-  s.vline(corner - 4, F - st.roofTop, endH, S(P.concreteLight));
-  s.vline(corner - 1, F - st.roofTop, endH, S(P.concreteDark));
-  for (let y = F - st.roofTop + 20; y < F - 24; y += 18) {
-    s.vline(corner - 3, y, 5, p.lamps ? P.goldDark : S(P.slate));
+  if (cornerFilled(p)) {
+    // an international's: the seats carry on round the corner to the end (corner.ts)
+    paintCornerStand(s, p, life, {
+      colour: stadiumColors(p),
+      seatLow: S(P.concreteDark),
+      seatUp: S(P.night),
+      glow: 0.25,
+    });
+  } else {
+    // the stand's end: a plain concrete wall, lit on the left, a stair's slit windows
+    const endH = st.roofTop - st.boards;
+    s.rect(corner - 4, F - st.roofTop, 4, endH, S(P.concrete));
+    s.vline(corner - 4, F - st.roofTop, endH, S(P.concreteLight));
+    s.vline(corner - 1, F - st.roofTop, endH, S(P.concreteDark));
+    for (let y = F - st.roofTop + 20; y < F - 24; y += 18) {
+      s.vline(corner - 3, y, 5, p.lamps ? P.goldDark : S(P.slate));
+    }
   }
   // a pigeon on the roof
   life.perched.push({ x: sx(g, -40), y: F - st.roofTop });
@@ -340,7 +357,7 @@ export function paintStadium(s: Surface, p: Paint, life: Life): void {
       { x: sx(g, -70), y: top },
       { x: sx(g, -8), y: top },
       // the third from the end's roof
-      { x: bx, y: endRoofAt(g, bx) },
+      { x: bx, y: standRoofAt(p, bx) },
     );
     life.beamColor = P.steelHi;
   }
@@ -438,10 +455,10 @@ function dressForNation(
   const top = F - st.roofTop;
   // flags along the roof, and along the end's roof as it steps down towards us
   let n = 0;
-  for (let x = 12; x < corner - 12; x += 52) {
+  const flag = (x: number, foot: number): void => {
     life.flags.push({
       x,
-      top: top - 18,
+      top: foot - 18,
       poleH: 18,
       w: 12,
       h: 8,
@@ -451,6 +468,15 @@ function dressForNation(
       phase: n,
     });
     n++;
+  };
+  let fx = 12;
+  for (; fx < corner - 12; fx += 52) flag(fx, top);
+  // over the corner's roof as it rises round to the end's (corner.ts), short of the end's
+  // first flag
+  if (cornerFilled(p)) {
+    const [, x1] = cornerColumns(p);
+    for (; fx <= x1 - 24; fx += 52)
+      flag(fx, Math.floor(cornerRowAt(p, fx, END_PROFILE.TOP)));
   }
   endFlags(p, life, a, b);
   // banners hung over the balcony, tied at the corners, the labels painted on them

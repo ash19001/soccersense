@@ -25,7 +25,6 @@ import {
   isEraMode,
   isPerfect,
   isShot,
-  pairedMode,
   pips,
   playPath,
   progressFor,
@@ -248,7 +247,8 @@ export function Game({ mode }: { mode: Mode }) {
   }, [phase, dayNumber]);
 
   const search = location.search;
-  const other: Mode = pairedMode(mode);
+  // the next mode not played today (none once all four have been)
+  const other: Mode | null = view?.next ?? null;
 
   let top: ReactNode = null;
   let bottom: ReactNode = null;
@@ -395,12 +395,13 @@ export function Game({ mode }: { mode: Mode }) {
           shareLabel={shareLabel}
           shareBusy={view.share === "making"}
           onShare={game.share}
-          otherLabel={full.other[other]}
-          otherSpoken={full.otherSpoken(full.other[other])}
-          otherMode={other}
-          onPlayOther={() =>
-            void navigate({ pathname: playPath(other), search })
-          }
+          {...(other && {
+            otherLabel: full.other[other],
+            otherSpoken: full.otherSpoken(full.other[other]),
+            otherMode: other,
+            onPlayOther: () =>
+              void navigate({ pathname: playPath(other), search }),
+          })}
           menuLabel={full.menu}
           // Home through black (`fadeThrough`): the ink comes, the menu, the ink goes.
           onMenu={() => fadeThrough(() => navigate({ pathname: "/", search }))}

@@ -64,6 +64,7 @@ import {
   lampHeight,
   type LampLook,
   conifer,
+  lampHalo,
   lightPool,
   logShadows,
   person,
@@ -1594,6 +1595,17 @@ function southEast(c: Ctx): void {
   });
 }
 
+/**
+ * A floodlight's glow at night, outermost band first: the cool white of the lamps, raw (a
+ * light is not graded by the sky), and each band's radius as a share of the head's width.
+ */
+const FLOOD_GLOW: readonly Color[] = [
+  mix(P.steel, P.mist, 0.4),
+  mix(P.mist, P.steelHi, 0.45),
+  mix(P.steelHi, P.white, 0.55),
+];
+const FLOOD_GLOW_R: readonly number[] = [1, 0.8, 0.62];
+
 /** The concourse: kiosks and bollards. People are in stadium-life.ts, so they can move. */
 function concourse(c: Ctx, town: Town): void {
   const { s, view } = c;
@@ -1637,15 +1649,15 @@ function concourse(c: Ctx, town: Town): void {
         s.rect(foot.x + 1, top.y, 1, hgt, c.tone(P.concrete, V));
       }
       if (c.night) {
-        // the glow in three bands of light over what is behind it, each with a ragged
-        // edge (a lamp's pool, lightPool): not a screen of dots, which at these fine
-        // pixels reads as a dotted veil
+        // the glow in three bands of the lamps' own light, paler to the middle, in front of
+        // what is behind (the sky, the far city, a crane: nothing shows through it), each
+        // band's rim ragged (lampHalo): not a screen of dots, which at these fine pixels
+        // reads as a dotted veil
         const cx2 = hx + Math.floor(hw / 2);
         const cy2 = hy2 + Math.floor(hh / 2);
-        for (const k of [1, 0.8, 0.62]) {
-          const r = Math.round(hw * k);
-          lightPool(s, cx2, cy2, r, r, true);
-        }
+        FLOOD_GLOW.forEach((glow, i) => {
+          lampHalo(s, cx2, cy2, Math.round(hw * FLOOD_GLOW_R[i]), glow);
+        });
       }
       // the head: a frame of lamps in rows, a walkway under it
       s.rect(hx, hy2, hw, hh, c.tone(P.slate, V));

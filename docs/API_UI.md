@@ -418,8 +418,10 @@ unless `inlinePlace`. A distance such as `"540 miles"` is split at its last spac
 `mode`, `heading`, `total`, `maxTotal`, `totalSpoken?`, `careerTitle`, `earnedTitle?`,
 `earnedTitleSpoken?`, `perfectLine?`, `streak?` (new 2026-11-12: `StreakProps`, a flame and
 `STREAK 4` under the title; nothing at 0), `results: { grade, points, answer, label? }[]`,
-`resultsLabel?`, `shareLabel`, `shareBusy?`, `onShare()`, `otherLabel`, `otherMode`,
-`onPlayOther()`, `menuLabel`, `onMenu()`
+`resultsLabel?`, `shareLabel`, `shareBusy?`, `onShare()`, `otherLabel?`, `otherSpoken?`,
+`otherMode?`, `onPlayOther?()`, `menuLabel`, `onMenu()`. The middle button goes on to the
+next mode not played today (docs/GAME_DESIGN.md 6.4); leave out `otherMode` and
+`onPlayOther` once every mode is played and the card has SHARE and MENU only (2026-11-15).
 
 Heading and career tier (`careerTitle`), the score as a large LED (gold with `perfectLine`),
 under it the title the total earned (`earnedTitle`, new 2026-11-11: big type, the mode's light
@@ -1022,12 +1024,21 @@ buttons are unchanged and the stats button is still the side's last child. They 
 other end of the captions from the "?" (ui.css section 27):
 
 - **A monitor**: a column of two squares off the day plate's left end, each as tall as a row
-  (like the "?"), the bell level with the first row and the heart with the second. Checked at
-  1920 x 1080, 1536 x 864 at 125%, 1366 x 768, 1280 x 720, 2560 x 1440 and 844 x 390 at 3:
-  inside the screen, clear of the picture's ball.
-- **A phone**: stacked up the left edge above the day plate, the bell on top, flush with the
-  cards: the mirror of the "?", sound and stats buttons up the right edge, so the ball never
-  reaches them either. Checked at 390 x 844 at 3, 375 x 667 at 2, 360 x 740 at 3 and 1024 x 768.
+  (like the "?"), the bell level with the first row and the sound switch with the second
+  (2026-11-14: "on a large screen can you put the sound icon/button where the support
+  us/heart button is"). Support is not a square there but a gold button (`ss-btn--primary`,
+  `.ss-menu__support`) with a red heart over its name ("Support us", in the cards' type), as
+  tall as both rows, off their right end after the column of the "?" and the stats ("somewhere
+  else and more prominent"); as wide as its name, never wider than the room the screen leaves
+  there, its name wrapping where that is short (ui.css section 29). The markup itself differs:
+  `MenuCaptions` reads `useWideLayout()` (GameLayout's `data-wide`, as a context), puts the
+  sound switch in `.ss-menu__more` and Support after the stats button, so each is still one
+  button. Checked at 1920 x 1080, 1366 x 768, 1280 x 720, 932 x 430 at 3 and 844 x 390 at 3
+  (there the leaderboard covers the top of the "?" and of Support, as it covered the "?"
+  before).
+- **A phone**: stacked up the left edge above the day plate, the bell on top and the heart
+  under it, flush with the cards: the mirror of the "?", sound and stats buttons up the right
+  edge, so the ball never reaches them either. Checked at 390 x 844 at 3, 375 x 667 at 2, 360 x 740 at 3 and 1024 x 768.
 
 The home page keeps `remind` and `support` (open or not) and a ref for each button, and renders
 `<RemindMe labels={strings.remind} ... />` and `<Support labels={strings.support} ideas={IDEAS}
@@ -1159,6 +1170,13 @@ first `update`, and that first `update` has `dt` 0.
 - While the document is hidden **nothing is painted**, whatever changes: nobody is looking, and
   a new light costs the scene tens of milliseconds. What changed is painted when the document
   is shown again: by the loop's first frame, or at once if the stage is `paused`.
+- **Floating sprites** (`Scene.floating`, 2026-11-14): `FLOATING_MAX` (3) more canvases over
+  the first, bottom first (`.ss-stage__float`, the same top left from the same CSS variables, no pointer events: the
+  first canvas takes the pointer through it). A scene new to the stage is told
+  `setFloating(true)` when the stage has a 2D context; after each `draw` the stage asks it for
+  the sprites and puts each surface on a canvas, at the picture's scale, moved by
+  `translate` to its place rounded to whole device pixels, and hides the canvases left over.
+  On the home screen the airship floats while it drifts and the ball while it hovers.
 - Reduced motion is the `(prefers-reduced-motion: reduce)` media query, followed live.
 - If the scene throws in the loop, the loop stops (one error, not sixty a second). Hiding and
   showing the tab, or a new `paused` value, starts it again. If it throws in one of the

@@ -119,6 +119,7 @@ import {
 } from "~/pixel";
 import type {
   Ambience,
+  FloatingSprite,
   PointerInfo,
   Scene,
   SceneCursor,
@@ -228,7 +229,7 @@ const MAX_DT = 600;
 
 /**
  * The hover. The ball hangs in the air and breathes: it rises and sinks BOB of its radius
- * (a pixel or two, in whole pixels) once every BOB_PERIOD seconds, and nods NOD radians
+ * (a pixel or two) once every BOB_PERIOD seconds, and nods NOD radians
  * as it goes, NOD_LAG of a period behind, so the panels trail the outline a little. The
  * rock keeps its own, longer period, so the three never fall into step.
  */
@@ -1309,6 +1310,21 @@ export class MenuScene implements Scene {
   private cy0 = 0;
   /** Room to draw the ball apart from the picture, for the frames it is pressed flat. */
   private pad = new Surface(1, 1);
+  /**
+   * The floating ball (`setFloating`): while it hovers (the entrance and idle) a host that
+   * can show a sprite finer than the picture's pixels is given the ball on its own, on
+   * `hover` (as big as `pad`), and the picture leaves it out. The hover's rise and fall is
+   * two logical pixels or so, and in whole ones it was a tick every half second, not a float
+   * (2026-11-14: "can the ball idle animation of it bouncing be made smoother"): the host
+   * moves it in its own device pixels, a quarter of a logical one on a monitor.
+   */
+  private floatOn = false;
+  private hover = new Surface(1, 1);
+  private readonly sprite: FloatingSprite = { surface: this.hover, x: 0, y: 0 };
+  /** What `floating` hands out: the airship's (the backdrop's) and the ball's, made once. */
+  private readonly sprites: FloatingSprite[] = [];
+  /** The last `draw` put the ball on `hover`, at `sprite`'s place. */
+  private floated = false;
   /** The bottom of the logo zone. */
   private logoH = 0;
   /** The wordmark as it is drawn: its width and the first row under it. */
@@ -1448,6 +1464,8 @@ export class MenuScene implements Scene {
   private ballOn = true;
   /** The row of the hovering ball's centre: where a kick-off finds it. */
   private spotY = 0;
+  /** The same not yet rounded to a pixel: where the floating ball's centre is. */
+  private floatCy = 0;
   /** How many pixels deep the struck ball is pressed flat. */
   private squash = 0;
   private spinFrame = 0;
@@ -1522,7 +1540,11 @@ export class MenuScene implements Scene {
     );
     this.endR = this.open ? clamp(Math.round(this.R * HOME_END_R), 4, 8) : 4;
     const side = 2 * this.R + 5;
-    if (this.pad.w !== side) this.pad = new Surface(side, side);
+    if (this.pad.w !== side) {
+      this.pad = new Surface(side, side);
+      this.hover = new Surface(side, side);
+      this.sprite.surface = this.hover;
+    }
     this.backdrop.resize(W, H);
     this.aim();
     this.aimStale = true;
@@ -1589,6 +1611,9 @@ export class MenuScene implements Scene {
       this.resize(s.w, s.h);
     }
     this.drawn = true;
+    this.floated = false;
+    // the airship floats only in a frame that says so (below): not in the ink of the end
+    this.backdrop.setFloating(false);
     const kick = this.state === "kickoff";
     const kt = kick && !this.reduced ? this.phaseT : -1;
     if (this.state === "done" || kt >= K_INK) {
@@ -1612,6 +1637,9 @@ export class MenuScene implements Scene {
       roar = 1 - k * k;
     }
     this.setRoar(roar);
+    // While the ball hovers nothing the scene draws goes over the airship: it may float.
+    const hovering = this.state === "intro" || this.state === "idle";
+    this.backdrop.setFloating(this.floatOn && hovering);
     this.backdrop.draw(s, this.clock);
     // the backdrop has now built whatever the last change made stale: ask again
     if (this.aimStale) this.aim();
@@ -1661,7 +1689,13 @@ export class MenuScene implements Scene {
     // the air the turning ball drags round with it, just outside its rim
     if (this.state === "idle") this.drawWind(s);
     else if (era && kt >= K_HIT) this.drawEraWind(s);
-    if (this.ballOn) this.drawBallNow(s);
+    if (this.ballOn) {
+      if (this.floatOn && hovering) {
+        this.drawFloating();
+      } else {
+        this.drawBallNow(s);
+      }
+    }
     // NEXT-GEN: going digital, in big square pixels
     if (this.rezBlock > 0) {
       const b = this.ball;
@@ -1914,6 +1948,24 @@ export class MenuScene implements Scene {
     this.noSlot = was;
     this.restT = 0;
     if (this.onLocked) this.onLocked(locked);
+  }
+
+  /** The host can show a sprite over the picture: the hovering ball floats on its own. */
+  setFloating(on: boolean): void {
+    this.floatOn = on;
+  }
+
+  /**
+   * After `draw`, while they float: the drifting airship (the backdrop's) and the hovering
+   * ball over it. Neither while the kick-off is on: what it draws goes over both.
+   */
+  floating(): readonly FloatingSprite[] {
+    const out = this.sprites;
+    out.length = 0;
+    const ship = this.backdrop.floatingShip();
+    if (ship) out.push(ship);
+    if (this.floated) out.push(this.sprite);
+    return out;
   }
 
   setReducedMotion(on: boolean): void {
@@ -2760,6 +2812,7 @@ export class MenuScene implements Scene {
     // a struck ball hangs where the kick-off found it
     this.hoverAt(this.state === "kickoff" ? this.kickClock : this.clock);
     this.spotY = this.cy0 - Math.round(this.lift);
+    this.floatCy = this.cy0 - this.lift;
     b.cx = cx;
     b.cy = this.spotY;
     b.r = R;
@@ -2799,6 +2852,7 @@ export class MenuScene implements Scene {
       const above =
         Math.max(2, R * IN_OVER) * over * over - R * IN_BELOW * k * k;
       b.cy = this.cy0 - Math.round(this.lift + above);
+      this.floatCy = this.cy0 - (this.lift + above);
       // facing us by the time there is room for a word on a patch
       const side = 1 - clamp(b.r / Math.min(R, IN_FACING_R));
       b.yaw += IN_TURN * side * Math.sqrt(side);
@@ -3233,6 +3287,27 @@ export class MenuScene implements Scene {
       s.line(x0, y0, xm, ym, near);
     }
     s.popClip();
+  }
+
+  /**
+   * The hovering ball on `hover`, centred, and its place: its column a whole pixel (the
+   * picture's), its row `floatCy`, not rounded.
+   */
+  private drawFloating(): void {
+    const b = this.ball;
+    const layer = this.hover;
+    const mid = (layer.w - 1) >> 1;
+    const x = b.cx;
+    const y = b.cy;
+    layer.clear();
+    b.cx = mid;
+    b.cy = mid;
+    this.drawBallNow(layer);
+    b.cx = x;
+    b.cy = y;
+    this.sprite.x = x - mid;
+    this.sprite.y = this.floatCy - mid;
+    this.floated = true;
   }
 
   private drawBallNow(s: Surface): void {

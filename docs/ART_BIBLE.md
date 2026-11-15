@@ -134,23 +134,23 @@ Never darken by adding black, never lighten by adding white.
 Reference canvases 960 x 540 and 260 x 562 (section 2). Scale positions with the canvas; never
 scale sprites.
 
-| thing                     | size or position                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------------------ |
-| adult player sprite       | 24 wide x 36 tall, drawn in a 32 x 40 cell, anchored bottom-centre                         |
-| youth player (tiers 0, 1) | 20 x 28 in a 28 x 32 cell                                                                  |
-| goalkeeper                | adult size (24 x 36), gloves, a kit colour used by nobody else in the scene                |
-| match ball (career)       | 6 x 6 px plus a 2 px shadow, 2 or 3 spin frames                                            |
-| crowd fan                 | 6 x 8 px on an 8 px pitch                                                                  |
-| trophy                    | about 18 x 24 px, generic gold cup                                                         |
-| walker (home screen)      | 6 x 10 at the near size class                                                              |
-| car (home screen)         | 14 x 8 pointing east at the near size class                                                |
-| the mascot                | 14 x 16                                                                                    |
-| the airship               | 0.64 of the layout's sign zone (`AIRSHIP_SIZE`, `signPlace`), in its proportions; top left |
-| the plane                 | 36 x 16, towing a banner 13 px tall (letters 7, `FONT_5x7` capitals)                       |
-| menu ball                 | radius `round(min(W * 0.34, H * 0.165))`, centre `(W/2, round(H * 0.70))`: 89 at 960 x 540 |
-| menu horizon              | the aerial picture's horizon, `menuLayout().horizonY`: row 146 at 960 x 540                |
-| career ground line (feet) | `groundY = round(H * 0.52)`                                                                |
-| career stage              | 260 wide on a phone (384 at 960 x 540). Hero at `cx - 52`, goal at `cx + 88`               |
+| thing                     | size or position                                                                                                                              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| adult player sprite       | 24 wide x 36 tall, drawn in a 32 x 40 cell, anchored bottom-centre                                                                            |
+| youth player (tiers 0, 1) | 20 x 28 in a 28 x 32 cell                                                                                                                     |
+| goalkeeper                | adult size (24 x 36), gloves, a kit colour used by nobody else in the scene                                                                   |
+| match ball (career)       | 6 x 6 px plus a 2 px shadow, 2 or 3 spin frames                                                                                               |
+| crowd fan                 | 6 x 8 px on an 8 px pitch                                                                                                                     |
+| trophy                    | about 18 x 24 px, generic gold cup                                                                                                            |
+| walker (home screen)      | 6 x 10 at the near size class                                                                                                                 |
+| car (home screen)         | 14 x 8 pointing east at the near size class                                                                                                   |
+| the mascot                | 14 x 16                                                                                                                                       |
+| the airship               | 0.64 of the layout's sign zone (`AIRSHIP_SIZE`, `signPlace`), in its proportions; top left                                                    |
+| the plane                 | 36 x 16, towing a banner 13 px tall (letters 7, `FONT_5x7` capitals)                                                                          |
+| menu ball                 | radius `round(min(W * 0.34, H * 0.165))`, centre `(W/2, round(H * 0.68))` (0.70 until 2026-11-14, raised clear of the cards): 89 at 960 x 540 |
+| menu horizon              | the aerial picture's horizon, `menuLayout().horizonY`: row 146 at 960 x 540                                                                   |
+| career ground line (feet) | `groundY = round(H * 0.52)`                                                                                                                   |
+| career stage              | 260 wide on a phone (384 at 960 x 540). Hero at `cx - 52`, goal at `cx + 88`                                                                  |
 
 The home picture draws its people, cars and props in three size classes (`sizeClass` in
 `app/art/stadium-view.ts`), each drawn natively for its class, never scaled.
@@ -328,7 +328,7 @@ green and the cast stands out. Never a brown fog.
 | 2 non-league      | timber lamp standards with arc lamps, a tea hut of planks with an old gold and chalk awning, a corrugated stand with a painted gable, hand-painted boards, the trainer's bench with a bucket and sponge                                                                                                                                                                              |
 | 3 lower leagues   | a wooden grandstand with a gable and a clock, a timber terrace with wooden barriers, a hand-turned scoreboard with a ladder (kept whole on the narrowest phone); timber lamp towers that light the pitch at night; cinders and iron barriers on the near side                                                                                                                        |
 | 4 top flight      | a grand old grandstand: corrugated roof, cream timber fascia, a pediment with a clock and the club flag, cast-iron columns, a lattice balcony, a paddock with crush barriers, painted hoardings, a newsreel box (its cranks turning), iron lamp standards with two arms of bare bulbs (a stepped halo by night); the trim in the crowd's colour, old gold to tier 4 and brick from 5 |
-| 5 international   | + bunting, roof flags, cloth banners, a brass band on a painted platform in the upper tier, two horns glinting at a time                                                                                                                                                                                                                                                             |
+| 5 international   | + bunting, roof flags, cloth banners, a brass band on a painted platform in the upper tier, two horns glinting at a time; the corner a curved bowl: benches, terrace, lattice and iron roof swept round to the end                                                                                                                                                                   |
 | 6 World Cup final | + searchlight drums on the grandstand and end roofs, giant flags; the cup on a draped table                                                                                                                                                                                                                                                                                          |
 | 7 winner          | + fireworks of the era (rockets on sticks, gold willows, red stars, 2 px heads with a powder puff); torn newspaper and streamers for ticker tape; a podium of timber boxes, the winner's raised, lit top planks, the numbers clear                                                                                                                                                   |
 
@@ -393,7 +393,7 @@ halos, by night only where a real lamp would glow.
 | 2 non-league      | light masts, a kiosk pod with a holographic cup, a light-framed stand with a glass roof, holographic boards that crawl, glass dugouts                                                                                                                                                                                                                                                 |
 | 3 lower leagues   | light towers, a scoreboard on dark glass, a white terrace with glass barriers, a main stand with a glass bar and strip lights; holographic boards at the end                                                                                                                                                                                                                          |
 | 4 top flight      | an arena of glass and light: a white canopy roof with a magenta light ribbon, a crown of glass vaults, a glass balcony with a band of cyan light along its rail, lit hospitality boxes (every third a magenta holo panel), a magenta strip along the lower tier's front, holographic boards that crawl, camera drones, a holo sign of teal scanlines carried by two drones on tethers |
-| 5 international   | + holographic flags, LED banners, light sticks in the crowd                                                                                                                                                                                                                                                                                                                           |
+| 5 international   | + holographic flags, LED banners, light sticks in the crowd; the corner a curved bowl, its glass vaults and light ribbon swept round to the end                                                                                                                                                                                                                                       |
 | 6 World Cup final | + the ribs of a dome over the sky and three sweeping lasers, giant flags; the trophy on a white glass pedestal ringed with light                                                                                                                                                                                                                                                      |
 | 7 winner          | + a drone light show for fireworks (no dome, no lasers), glowing confetti for ticker tape; a podium of white glass steps                                                                                                                                                                                                                                                              |
 

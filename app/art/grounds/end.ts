@@ -21,6 +21,8 @@
 import { P } from "~/art/palette";
 import { bayer4, hash2, mix, shade, type Color, type Surface } from "~/pixel";
 import { fanStyle, seatFan } from "./crowd";
+import { END_PROFILE } from "./end-profile";
+import { cornerStart } from "./corner";
 import { BOARD_LOOKS } from "./far-tables";
 import type { Life } from "./life";
 import { across, rnd, type Geo, type Paint } from "./paint";
@@ -48,40 +50,25 @@ export interface EndGeo {
 /** Each pixel up the stand steps back this much: the rake seen from the side. */
 const LEAN = 0.3;
 
-/** The stadium's end, in stand pixels from its foot (the far end's size). */
-const WALL = 16;
-const LOW = 16;
-const WALK = 64;
-const UP = 72;
-const BACK = 120;
-const UNDER = 124;
-const FASCIA = 128;
-const TOP = 140;
+/** The stadium's end, in stand pixels from its foot (the far end's size): end-profile.ts. */
+const { WALL, LOW, WALK, UP, BACK, UNDER, FASCIA, TOP, ROW, AISLE } =
+  END_PROFILE;
 
 /** Tier 3's open terrace: a wall of painted boards, five rows, a lit back wall. */
 const T_ROWS = 5;
 const T_BACK = LOW + T_ROWS * 8;
 const T_TOP = T_BACK + 6;
 
-/** A row of seats is 8 stand pixels, and a seat 8 px along the row (6.9 rows of the front). */
-const ROW = 8;
+/** The stadium end's profile, for an era's own colours along it (nextgen-high.ts, corner.ts). */
+export { END_PROFILE };
 
-/** Aisles: one every this many rows of the front, 4 wide. */
-const AISLE = 83;
-
-/** The stadium end's profile, for an era's own colours along it (nextgen-high.ts). */
-export const END_PROFILE = Object.freeze({
-  WALL,
-  LOW,
-  WALK,
-  UP,
-  BACK,
-  UNDER,
-  FASCIA,
-  TOP,
-  ROW,
-  AISLE,
-});
+/**
+ * Whether this build fills its corners with a stand of their own (corner.ts): the stadium,
+ * dressed for an international (tiers 5 to 7).
+ */
+export function cornerFilled(p: Paint): boolean {
+  return p.tier >= 5;
+}
 
 export function endFor(g: Geo): EndGeo {
   const corner = across(g, g.goalX, g.F) + 2;
@@ -156,8 +143,14 @@ export function paintEnd(s: Surface, p: Paint, life: Life): void {
   // (NEXT-GEN's tier 3 takes the arena's glass corner too, and its own terrace:
   // nextgen-low.ts)
   const ngTerrace = !stadium && p.era === "nextgen";
-  if (arena || ngTerrace) paintArenaCorner(s, p, e);
+  // (an international's corner is a stand of its own, painted with the far side: corner.ts)
+  const filled = stadium && cornerFilled(p);
+  if (filled) {
+    // nothing at the corner's foot
+  } else if (arena || ngTerrace) paintArenaCorner(s, p, e);
   else paintCorner(s, p, e);
+  // (and the end starts where the corner's bend hands it on: its far end is the corner's)
+  const start = filled ? cornerStart(p) : null;
 
   const colour = arena
     ? arenaEndColors(p)
@@ -177,6 +170,10 @@ export function paintEnd(s: Surface, p: Paint, life: Life): void {
       if (u < 0 || h < 0) continue;
       const z = 1 + grow * u;
       const hu = h / z;
+      if (start !== null && u < start(Math.min(hu, top))) {
+        if (hu > top + 12 && Y < g.B - 14) break;
+        continue;
+      }
       if (hu >= top) {
         // over its top: what lies behind it, down from the town's foot
         if (Y >= g.B) {
@@ -229,6 +226,7 @@ export function paintEnd(s: Surface, p: Paint, life: Life): void {
         const x = Math.round(xA + m * u + lean * hb) - 3;
         const y = Math.round(y0 + u - hb) - 8;
         if (x >= g.w || y + 8 > clipY) break;
+        if (start !== null && u < start(b.base + r * ROW)) continue;
         const a = (u + 40) % AISLE;
         if (a > AISLE - 7 || a < 3) continue;
         if (rnd(p, x, y, 21) < b.empty) continue;
@@ -239,7 +237,7 @@ export function paintEnd(s: Surface, p: Paint, life: Life): void {
   if (!stadium) terraceBarriers(s, p, e, clipY);
 }
 
-type Colour = (
+export type Colour = (
   hu: number,
   u: number,
   h: number,
@@ -249,7 +247,7 @@ type Colour = (
 ) => Color;
 
 /** The stadium's end, part by part from its foot up to the roof's lit edge. */
-function stadiumColors(p: Paint): Colour {
+export function stadiumColors(p: Paint): Colour {
   const { S } = p;
   const lit = p.lamps;
   const boardBg = LED_LOOKS.map((l) => (lit ? l.bg : S(l.bg)));
@@ -499,7 +497,8 @@ function paintCorner(s: Surface, p: Paint, e: EndGeo): void {
 export function endFlags(p: Paint, life: Life, a: Color, b: Color): void {
   const { g, S } = p;
   const e = endFor(g);
-  const start = Math.ceil(e.xA + e.lean * TOP) + 14;
+  // (from the end's far end, or where the corner's bend hands its roof on: corner.ts)
+  const start = Math.ceil(endRoofStart(p)) + 14;
   let n = 0;
   for (let x = start; x < g.w; x += 52) {
     const top = endTopAt(e, x, TOP);
@@ -518,7 +517,14 @@ export function endFlags(p: Paint, life: Life, a: Color, b: Color): void {
   }
 }
 
-/** The top of the end's roof in column `x` (the stadium), for beams and flags. */
-export function endRoofAt(g: Geo, x: number): number {
-  return endTopAt(endFor(g), x, TOP);
+/**
+ * The column where the end's roof starts: its far end's top, or at an international where
+ * the corner's bend hands it on (corner.ts).
+ */
+export function endRoofStart(p: Paint): number {
+  const e = endFor(p.g);
+  const start = cornerStart(p);
+  if (start === null) return e.xA + e.lean * TOP;
+  const u = start(TOP);
+  return e.xA + e.m * u + e.lean * TOP * (1 + e.grow * u);
 }

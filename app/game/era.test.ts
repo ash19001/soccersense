@@ -6,13 +6,7 @@ import { describe, expect, it } from "vitest";
 import { NEXT_GEN_QUESTIONS, RETRO_QUESTIONS, STADIUMS } from "~/data";
 import { questionsFor } from "~/data";
 
-import {
-  ERA_MODES,
-  isEraMode,
-  modeOfPath,
-  pairedMode,
-  playPath,
-} from "./modes";
+import { ERA_MODES, isEraMode, modeOfPath, nextMode, playPath } from "./modes";
 import { SCORING_SHOTS, revealRows } from "./reveal";
 import {
   MODE_RULES,
@@ -98,7 +92,7 @@ describe("the modes", () => {
     }
   });
 
-  it("each have a page and a partner", () => {
+  it("each have a page", () => {
     expect(MODES.map(playPath)).toEqual([
       "/play/home",
       "/play/away",
@@ -108,13 +102,32 @@ describe("the modes", () => {
     for (const mode of MODES) {
       expect(modeOfPath(playPath(mode))).toBe(mode);
       expect(modeOfPath(`${playPath(mode)}/`)).toBe(mode);
-      expect(pairedMode(pairedMode(mode))).toBe(mode);
     }
     expect(modeOfPath("/play/nextgen")).toBe("nextgen");
     expect(modeOfPath("/")).toBe("home");
     expect(modeOfPath("/play/nowhere")).toBe("home");
-    expect(pairedMode("home")).toBe("away");
-    expect(pairedMode("retro")).toBe("nextgen");
+  });
+
+  it("go on to the next one not played today, in the menu's order and round again", () => {
+    const none = (): boolean => false;
+    expect(nextMode("home", none)).toBe("away");
+    expect(nextMode("away", none)).toBe("retro");
+    expect(nextMode("retro", none)).toBe("nextgen");
+    expect(nextMode("nextgen", none)).toBe("home");
+    // the ones already played are passed over
+    const done =
+      (...modes: string[]) =>
+      (m: string) =>
+        modes.includes(m);
+    expect(nextMode("home", done("home", "away"))).toBe("retro");
+    expect(nextMode("away", done("away", "retro"))).toBe("nextgen");
+    expect(nextMode("nextgen", done("nextgen", "home"))).toBe("away");
+    expect(nextMode("retro", done("retro", "nextgen", "home"))).toBe("away");
+    // never the mode itself, and none once every other has been played
+    expect(nextMode("away", done("home", "retro", "nextgen"))).toBeNull();
+    expect(
+      nextMode("away", done("away", "home", "retro", "nextgen")),
+    ).toBeNull();
   });
 });
 

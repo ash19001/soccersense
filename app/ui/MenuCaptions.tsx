@@ -18,6 +18,7 @@ import {
   PixelGlyph,
   bitmapSize,
 } from "./PixelGlyph";
+import { useWideLayout } from "./GameLayout";
 import { PopupButton } from "./Popup";
 import { REVIEW_ICON, SHARE_ICON, TICK_ICON } from "./ResultIcons";
 import { BELL } from "./RemindMe";
@@ -206,18 +207,24 @@ function focusShows(el: Element): boolean {
  * the picture, in caption pixels, a pair of cards in each. The gap between the cards of a
  * pair is on the screen's centre line, the badges meet there, each line runs outwards from
  * its badge, and a score sits by its badge like the score in a result. The day hangs off
- * the rows' left end, the "?" and sound buttons off the first row's right end and the
- * stats button under the "?", and the notice stands beside the ball instead of under it.
+ * the rows' left end, the "?" button off the first row's right end and the stats button
+ * under it, and the notice stands beside the ball instead of under it.
  *
  * The bell (Remind me) and the heart (Support) stand beside the day plate, at the other end
- * from the "?": on a monitor a column of two off the plate's left end, one to a row; on a
- * phone stacked up the left edge above the plate, the mirror of the "?", sound and stats
- * buttons. They are inside the day plate in the markup (after the day and the streak), so
- * that they follow it whatever its width (ui.css section 27).
+ * from the "?": on a phone stacked up the left edge above the plate, the mirror of the "?",
+ * sound and stats buttons. They are inside the day plate in the markup (after the day and
+ * the streak), so that they follow it whatever its width (ui.css section 27).
+ *
+ * On a monitor (`useWideLayout`: the markup itself differs there, 2026-11-14: "on a large
+ * screen can you put the sound icon/button where the support us/heart button is ... and
+ * more prominent") the speaker takes the heart's place, under the bell off the plate's left
+ * end, and Support is a gold button with the heart and its name on it, as tall as both rows,
+ * off their right end after the "?" and the stats (ui.css section 29).
  *
  * The wide rows are placed with CSS `order` and by position (odd and even cards), so keep
  * the children in this order: the notice, the cards (in pairs), the day, the "?" button,
- * the sound switch, the stats button; in a card not played the picture, the badge, the
+ * the sound switch (a phone), the stats button, Support (a monitor); in a card not played
+ * the picture, the badge, the
  * line, the short line, the tiny line; and in a played one (a mode is played once a day:
  * it is no button) the score, the badge, and REVIEW and SHARE (icons) together (ui.css
  * section 28).
@@ -261,6 +268,9 @@ export function MenuCaptions({
     told.current = next;
     onHoverRef.current?.(next);
   }, []);
+
+  // On a monitor the speaker and Support are somewhere else in the markup (see above).
+  const wide = useWideLayout();
 
   // At the kick-off they slide down off the screen (with the phone's trophy button).
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -447,7 +457,7 @@ export function MenuCaptions({
         <span className="ss-menu__day">
           {dayLabel}
           {streak && <Streak {...streak} />}
-          {(remind || support) && (
+          {(remind || (wide ? sound : support)) && (
             <span className="ss-menu__more">
               {remind && (
                 <PopupButton
@@ -459,16 +469,19 @@ export function MenuCaptions({
                   className="ss-remind-btn"
                 />
               )}
-              {support && (
-                <PopupButton
-                  ref={supportRef}
-                  icon={HEART}
-                  label={support.label}
-                  onClick={support.onClick}
-                  open={support.open}
-                  className="ss-support-btn"
-                />
-              )}
+              {/* A monitor: the speaker under the bell; Support is at the other end. */}
+              {wide
+                ? sound && <SoundToggle labels={sound} />
+                : support && (
+                    <PopupButton
+                      ref={supportRef}
+                      icon={HEART}
+                      label={support.label}
+                      onClick={support.onClick}
+                      open={support.open}
+                      className="ss-support-btn"
+                    />
+                  )}
             </span>
           )}
         </span>
@@ -482,7 +495,7 @@ export function MenuCaptions({
           aria-expanded={howToPlay.open}
           variant="secondary"
         />
-        {sound && <SoundToggle labels={sound} />}
+        {sound && !wide && <SoundToggle labels={sound} />}
         {stats && (
           <StatsButton
             ref={statsRef}
@@ -490,6 +503,22 @@ export function MenuCaptions({
             onClick={stats.onClick}
             open={stats.open}
           />
+        )}
+        {support && wide && (
+          <button
+            ref={supportRef}
+            type="button"
+            className="ss-btn ss-btn--primary ss-menu__support"
+            title={support.label}
+            aria-haspopup="dialog"
+            aria-expanded={support.open}
+            onClick={support.onClick}
+          >
+            <span className="ss-btn__label">
+              <PixelGlyph bitmap={HEART} unit="px" />
+              <span className="ss-menu__support-words">{support.label}</span>
+            </span>
+          </button>
         )}
       </div>
     </div>

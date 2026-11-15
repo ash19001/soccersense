@@ -745,6 +745,37 @@ describe("the game page", () => {
     expect(questionLamps()).toBe("Question 1 of 7");
   });
 
+  test("full time offers the next mode not played today, and none once all four are", () => {
+    const game = JSON.stringify(finished());
+    const save = (mode: string): void =>
+      window.localStorage.setItem(`soccersense:v1:${DAY_KEY}:${mode}`, game);
+    const offered = (): (string | null)[] =>
+      (["home", "away", "retro", "nextgen"] as const).map((mode) => {
+        const name = text.fullTime.otherSpoken(text.fullTime.other[mode]);
+        return screen.queryByRole("button", { name }) ? mode : null;
+      });
+    const full = { pathname: "/play/home", search: "?day=1" };
+
+    // HOME and AWAY played: on past AWAY to RETRO
+    save("home");
+    save("away");
+    site(full);
+    expect(offered()).toEqual([null, null, "retro", null]);
+    cleanup();
+
+    // and past RETRO and NEXT-GEN too: none left, SHARE and MENU only
+    save("retro");
+    save("nextgen");
+    site(full);
+    expect(offered()).toEqual([null, null, null, null]);
+    expect(
+      screen.getByRole("button", { name: text.fullTime.share }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: text.fullTime.menu }),
+    ).toBeInTheDocument();
+  });
+
   test("?notimer=1: the clock never runs out", () => {
     site({ pathname: "/play/home", search: "?day=1&notimer=1" });
     wait(120_000);

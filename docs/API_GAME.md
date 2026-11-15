@@ -41,7 +41,7 @@ same standing, the same shot, the same rank. Their questions are `RETRO_QUESTION
 (`EraAnswer`, `EraQuestion` in `types.ts`, moved from the data file). The data's shots were
 filed with `closest` and `furthest` as stand-ins; they are the same under `oldest` and
 `newest` (a test keeps them so). New: `modes.ts` (`ERA_MODES`, `isEraMode`, `MODE_SLUGS`,
-`playPath`, `modeOfPath`, `pairedMode`), `MODE_RULES`, `isYearRule`, `rankingYear`,
+`playPath`, `modeOfPath`, `nextMode`), `MODE_RULES`, `isYearRule`, `rankingYear`,
 `RankedAnswer.year`, `ShareCardRow.year`, `ShareInput.modeLabel` (and the fourth argument
 of `shareInputFor`), `RetroTitleId`, `NextgenTitleId`, `TITLES.retro`, `TITLES.nextgen`.
 NEXT-GEN's address is `/play/next-gen` (`playPath`); `/play/nextgen` plays it too.
@@ -200,7 +200,7 @@ modes.ts (new 2026-11-13)
 - ERA_MODES: readonly EraMode[]. ["retro", "nextgen"]. isEraMode(mode): mode is EraMode.
 - MODE_SLUGS: Record<Mode, string>. The last part of each mode's address: home, away, retro, next-gen.
 - playPath(mode): string. "/play/next-gen". modeOfPath(pathname): Mode. The other way round; also takes a mode's id ("/play/nextgen"); HOME for anything else.
-- pairedMode(mode): Mode. HOME and AWAY, RETRO and NEXT-GEN: the full-time card's "play the other mode".
+- nextMode(mode, played: (mode) => boolean): Mode | null (2026-11-15, in place of `pairedMode`). The full-time card's next mode: the first after `mode` in `MODES` order (HOME, AWAY, RETRO, NEXT-GEN, round to HOME) that `played` says is not played today; never `mode` itself; null when all the others are. The play page's controller gives it as `GameView.next` at full time, from the games kept for that day.
 
 shots.ts (new)
 - SHOT_ORDER: readonly Shot[]. ["worldie", "golazo", "trivela", "toepoke", "tapin", "miss"], best first.

@@ -236,6 +236,14 @@ row of houses behind it, slowly hidden by the stands he fills.
 
 He wears the home kit (warm red-orange). The crowd wears his colours.
 
+From tier 3 the stand behind the goal wraps round towards us; at tiers 3 and 4 there is a gap
+at the far corner where the town and the church spire show through. From tier 5 (the product
+owner, 2026-11-15: "make seatings in the corners as well when it wraps around rather than
+just a gap", then "make it look like it curves around") the corner is filled like a bowl's:
+the seats, the fans, the walkway and the roof sweep round from the side stand into the end in
+one curve, in all three eras, so closing the corners is part of reaching the international
+stage.
+
 ### 5.2 AWAY: the journeyman
 
 The uncommon answer is the road less travelled, and so is his career: every step up is a ground
@@ -347,7 +355,7 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   if the user comes on everyday to play then it should keep going up"): a small pixel flame and
   the days in a row with a finished game (`streakFor`, section 6.6) in the day plate under the
   ball (`DAY 12` then the flame and `4`; on a monitor, where the plate is two rows tall, the
-  flame and `4` are on the second row, under the day, beside the heart, the plate split in
+  flame and `4` are on the second row, under the day, beside the sound switch, the plate split in
   two like the rows of cards: the product owner, 2026-11-13). The plate is styled as one of the
   mode cards, with an amber stripe down its left edge. The first time it is seen after it went up it hops
   and throws a ring of gold sparks. With no streak nothing shows. It is also on the full-time
@@ -356,7 +364,10 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
 - The sky is the player's own sky: day, dusk, night or dawn, worked out from their device clock
   and time zone (no location permission prompt). At night the floodlights are on.
 - Under the ball: a card per mode, a `?` how-to-play button, the sound switch, a stats
-  button (section 6.6) and the day number. A card not played today shows the mode's picture
+  button (section 6.6) and the day number. On a monitor the sound switch is under the bell at
+  the left end and Support is a gold button with a heart and its name at the right end, after
+  the `?` and the stats (the product owner, 2026-11-14: "put the sound icon/button where the
+  support us/heart button is ... make it somewhere else and more prominent"). A card not played today shows the mode's picture
   (the same as its patch on the ball: the stadium, the aeroplane, the arrows), its badge and
   what it is (`HOME` / `Most common wins`), and pressing it plays the mode. Once played it
   shows today's score, the badge and two square icon buttons (the product owner, 2026-11-13):
@@ -400,8 +411,8 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   as the full-time card lists them, and a SHARE icon beside the close button (on a phone the
   only SHARE: the cards have none there), which turns into a green tick for a moment once
   it has worked. The game page never starts a second game of a
-  mode on the same day: reached any way (its address typed, the full-time card's other-mode
-  button), it shows that day's full-time card again. Testing uses `?day=` for another day.
+  mode on the same day: reached any way (its address typed, an old link), it shows that
+  day's full-time card again. Testing uses `?day=` for another day.
 - **Today's leaderboard** (the product owner, 2026-11-11: "leaderboard in home screen (just
   mock data for now)"): today's top ten for HOME and for AWAY, a tab each, every row a rank, a
   handle and a total out of 700, the leader in gold, and under it how many played today
@@ -452,10 +463,14 @@ sets itself tighter rather than cut a row (docs/API_UI.md, `RevealSheet`, "Its h
 
 The final tableau for the tier reached, `FULL TIME`, the career tier reached, the total out of
 700 and, big under it in the mode's colour, the **title** the total earned; the seven pips with
-each answer and its shot, and three buttons: SHARE, play the other mode of the pair (HOME and
-AWAY, RETRO and NEXT-GEN: the other mode's name alone, in its colour, `HOME`, `AWAY`, `RETRO`
-or `NEXT-GEN`, read out "Play AWAY" and so on, since "PLAY NEXT-GEN" wraps the row of
-buttons), back to the menu.
+each answer and its shot, and three buttons: SHARE, on to the next mode, back to the menu.
+The next mode (the product owner, 2026-11-15: "it should always direct to next available game
+mode") is the first after this one in the menu's order, HOME, AWAY, RETRO, NEXT-GEN and round
+to HOME again, that has not been played today: finishing HOME offers AWAY, or RETRO if AWAY is
+done. The locked modes are never offered. Its button is the mode's name alone, in its colour,
+`HOME`, `AWAY`, `RETRO` or `NEXT-GEN`, read out "Play AWAY" and so on, since "PLAY
+NEXT-GEN" wraps the row of buttons. Once all four have been played there is nothing to go on
+to and the card has SHARE and MENU only.
 
 **SHARE** (the product owner, 2026-11-12: "pressing share should produce an image you can
 share which shows what you answered for each question and your points and final result")

@@ -73,20 +73,20 @@ height: `menuLogo` 0.15, `menuCaptions` 0.1, `boardAsking` 0.3, `boardShrunk` 0.
 `menuLayout(w, h)`, values at 130x281 | 120x222 | 160x300 | 480x270. It describes the aerial
 picture of the home screen (three fields keep the names they had for an older picture):
 
-| field        | meaning                                                                                                   | values                                                                                |
-| ------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `cx`         | `round(W / 2)`                                                                                            | 65, 60, 80, 240                                                                       |
-| `horizonY`   | the horizon: sky above, the town from here down (0.27 H to 0.33 H)                                        | 92, 72, 98, 73                                                                        |
-| `ballR`      | `round(min(W * 0.34, H * 0.165))`                                                                         | 44, 37, 50, 45                                                                        |
-| `ballCy`     | `round(H * 0.70)`; the ball floats, centred on `(cx, ballCy)`                                             | 197, 155, 210, 189                                                                    |
-| `logo`       | zone: the top 15%, full width: keep it clear sky                                                          | h 42, 33, 45, 41                                                                      |
-| `scoreboard` | zone: the sign at full size; the airship draws it at `AIRSHIP_SIZE` (0.64) round its centre               | (18, 8, 184, 70) at 960 x 540; (-1, 76, 172, 66) at 234 x 507                         |
-| `stand`      | zone: the stadium, the box round the bowl on screen                                                       | (0, 98, 130, 47); (82, 87, 316, 108)                                                  |
-| `pitch`      | zone: the land in front of the stadium, from its near wall to the bottom                                  | y 145, 122, 164, 195                                                                  |
-| `caption`    | zone: the bottom 10% (the DOM captions: its middle 135 px on a phone, a row across its foot on a monitor) | y 253, 200, 270, 243                                                                  |
-| `sky`        | `{ horizonY, clearTop, sunX, moon }`, spread into drawSky                                                 | horizon 92, clearTop 42, sunX 65 (`cx`); moon (11, 12), (11, 12), (80, 69), (394, 28) |
-| `scale`      | the camera: pixels per map unit at the centre spot (not a whole number)                                   | 0.42, 0.39, 0.52, 0.96                                                                |
-| `spotY`      | the row of the centre spot of the pitch (its column is `cx`)                                              | 116, 95, 128, 129                                                                     |
+| field        | meaning                                                                                                                                                                       | values                                                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `cx`         | `round(W / 2)`                                                                                                                                                                | 65, 60, 80, 240                                                                       |
+| `horizonY`   | the horizon: sky above, the town from here down (0.27 H to 0.33 H)                                                                                                            | 92, 72, 98, 73                                                                        |
+| `ballR`      | `round(min(W * 0.34, H * 0.165))`                                                                                                                                             | 44, 37, 50, 45                                                                        |
+| `ballCy`     | `round(H * 0.68)`; the ball floats, centred on `(cx, ballCy)` (it was 0.70: the picture is still framed for that, so the stadium did not move when it was raised, 2026-11-14) | 191, 151, 204, 184                                                                    |
+| `logo`       | zone: the top 15%, full width: keep it clear sky                                                                                                                              | h 42, 33, 45, 41                                                                      |
+| `scoreboard` | zone: the sign at full size; the airship draws it at `AIRSHIP_SIZE` (0.64) round its centre                                                                                   | (18, 8, 184, 70) at 960 x 540; (-1, 76, 172, 66) at 234 x 507                         |
+| `stand`      | zone: the stadium, the box round the bowl on screen                                                                                                                           | (0, 98, 130, 47); (82, 87, 316, 108)                                                  |
+| `pitch`      | zone: the land in front of the stadium, from its near wall to the bottom                                                                                                      | y 145, 122, 164, 195                                                                  |
+| `caption`    | zone: the bottom 10% (the DOM captions: its middle 135 px on a phone, a row across its foot on a monitor)                                                                     | y 253, 200, 270, 243                                                                  |
+| `sky`        | `{ horizonY, clearTop, sunX, moon }`, spread into drawSky                                                                                                                     | horizon 92, clearTop 42, sunX 65 (`cx`); moon (11, 12), (11, 12), (80, 69), (394, 28) |
+| `scale`      | the camera: pixels per map unit at the centre spot (not a whole number)                                                                                                       | 0.42, 0.39, 0.52, 0.96                                                                |
+| `spotY`      | the row of the centre spot of the pitch (its column is `cx`)                                                                                                                  | 116, 95, 128, 129                                                                     |
 
 `MENU_CAMERA` holds the camera numbers the layout shares with the painter (the horizon's rise
 above the centre spot and the bowl's box, in map units). The sun climbs and sets in the middle
@@ -639,7 +639,11 @@ kept as reference in `stadium-inside.ts` (`InsideBackdrop`, with its frozen layo
   `ShadowLog` tells it apart while the mask is noted), so a walker or a car crossing a tree's
   shadow stays in sight. A moving car's shadow goes through the mask like the car
   (`shadowBlob(s, cx, cy, rx, ry, depth, V)`): it never darkens a tree or a roof that stands in
-  front of the car. A frame is the
+  front of the car. A street lamp lights the ground under it with `lightPool` (a tint of what
+  is there), but a floodlight's head glows in the air with `lampHalo`: three solid bands of
+  cool white, paler to the middle, only their rims every other pixel, painted over what is
+  behind (2026-11-14: a `lightPool` there lit only what the town had painted, and the sky,
+  drawn under the town later, showed through the glow). A frame is the
   sky, two copies and the moving things: 0.2 to 0.5 ms at 480 x 270 (0.9 ms at 720 x 360); the first frame after a change of size or
   light costs 15 to 35 ms on a phone, about 45 ms at 480 x 270 and 90 ms at 720 x 360.
 - Those figures are from Node with the code warm. In Chrome at 1920 x 1080 (480 x 270) a whole
@@ -1089,6 +1093,32 @@ eraOf(mode: Mode): Era          // retro -> "retro", nextgen -> "nextgen", every
   `drawBallRing` is the same for all. `drawTrophy(..., glint, era)`: RETRO's gilt lidded
   cup, NEXT-GEN's narrow gold cup with a line of light (flaring over its rim when
   `light.lightsOn`); both 18 x 24 on today's footprint.
+- **The corner stand** (tiers 5 to 7, every era, 2026-11-15: `grounds/corner.ts`). At tiers 3
+  and 4 the side stand stops at `endFor(g).corner` and the town shows between it and the end.
+  From tier 5 (`cornerFilled(p)`, end.ts) `paintCornerStand(s, p, life, look)` fills that
+  corner like a bowl's (the product owner, same day: "make it look like it curves around"),
+  called by each era's far side in place of the side stand's end wall. Each row `hu` up the
+  end's profile (`END_PROFILE`, in its own import-free `end-profile.ts`) is a quadratic
+  curve: from the side stand's end `A`, level on the same part of the side stand (`SIDE`, its
+  boxes squeezed into the walkway), about the point `I` where the side's row and the end's
+  straight row would cross, to `B` on the end's row, `REACH` (0.5) as far from `I` as `A` is
+  on screen and never below the far touchline (the pitch is painted after). The end then
+  starts at `B`: `cornerStart(p)` gives that `u` for each `hu` (null below tier 5), and
+  `paintEnd`, `paintRetroEnd`, their fans, RETRO's hoardings (plain planks up to it),
+  barriers and columns all begin there, so the end's far end is taken into the bend.
+  The corner paints exactly the pixels the end will not, from its roof down to the far
+  touchline, each in its end's colours (`stadiumColors`, `retroCornerColors`,
+  `arenaEndColors`) through `CornerLook` (`colour`, the seats under the fans, the night
+  `glow`, RETRO's `empty` seats and `cap`, the iron roof slope fading out round the bend),
+  with the end's measure `u` carried on back round the bend by its length, so panels,
+  aisles and lamps run on across the seam. Its fans run on from the end's first on each
+  row, 6 px apart, and keep `FAN_CLEAR` (6) apart up and down. `cornerColumns`,
+  `cornerRowAt` and `cornerRound` place things along its roof (today's roof flags,
+  NEXT-GEN's vaults, stretched to meet the end's in step, and its ribbon of light);
+  `standRoofAt(p, x)` is the roof from the corner on (round the bend, then the end's) for
+  the beams, drums, lasers, dome ribs and RETRO's scoreboard that stand on it, and
+  `endRoofStart(p)` (end.ts) where the end's roof starts, for its flags. The ends no longer
+  paint their corner's foot (concourse, cobbles, glass) then.
 - **The big grounds** (tiers 4 to 7). RETRO (`retro-high.ts`): `trimFor(tier)` gives the
   stand's trim, hoardings, band, scoreboard, ball boys, table cloth and podium fringe the
   crowd's colour (old gold to tier 4, brick from 5); `lampStandard` draws the iron lamp
@@ -1118,7 +1148,7 @@ Who draws what (files):
 | big grounds (tiers 4 to 7)   | `grounds/retro-high.ts`, `retro-end.ts`, `retro-near.ts`, `retro-near-crowd.ts`, `retro-pitch.ts`                                                       | `grounds/nextgen-high.ts` (the arena goal, the photographers from tier 3) |
 | effects                      | `scenes/career-fx-retro.ts`                                                                                                                             | `scenes/career-fx-nextgen.ts`                                             |
 
-The shared files (`far.ts`, `near.ts`, `pitch.ts`, `end.ts`, `stadium.ts`, `crowd.ts`,
+The shared files (`far.ts`, `near.ts`, `pitch.ts`, `end.ts`, `corner.ts`, `stadium.ts`, `crowd.ts`,
 `goal.ts`, `ground.ts`, `kit.ts`, `people.ts`, `fetch.ts`, `props.ts`, `career.ts`,
 `career-fx.ts`) hold only one-line dispatches on the era. To change an era's look, work in
 its own files.

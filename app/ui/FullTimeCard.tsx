@@ -47,13 +47,16 @@ export interface FullTimeCardProps {
    */
   shareBusy?: boolean;
   onShare: () => void;
-  /** "AWAY" */
-  otherLabel: string;
+  /**
+   * The button on to the next mode not played today, "AWAY". Left out (with `otherMode` and
+   * `onPlayOther`) once every mode has been played: the card has SHARE and MENU only.
+   */
+  otherLabel?: string;
   /** Its name for screen readers, when the label alone is not enough: "Play AWAY". */
   otherSpoken?: string;
   /** The mode that button starts, so it takes that mode's colour. */
-  otherMode: UiMode;
-  onPlayOther: () => void;
+  otherMode?: UiMode;
+  onPlayOther?: () => void;
   /** "MENU" */
   menuLabel: string;
   onMenu: () => void;
@@ -172,14 +175,16 @@ export function FullTimeCard({
         >
           {shareLabel}
         </Button>
-        <Button
-          variant="mode"
-          mode={otherMode}
-          onClick={onPlayOther}
-          aria-label={otherSpoken}
-        >
-          {otherLabel}
-        </Button>
+        {otherMode && onPlayOther && (
+          <Button
+            variant="mode"
+            mode={otherMode}
+            onClick={onPlayOther}
+            aria-label={otherSpoken}
+          >
+            {otherLabel}
+          </Button>
+        )}
         <Button variant="secondary" onClick={onMenu}>
           {menuLabel}
         </Button>

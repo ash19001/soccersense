@@ -50,7 +50,20 @@ import {
   type Color,
 } from "~/pixel";
 import { crowdBacks, fanBlock } from "./crowd";
-import { endFor, endTopAt, END_PROFILE, type EndGeo } from "./end";
+import {
+  cornerRound,
+  cornerRowAt,
+  paintCornerStand,
+  standRoofAt,
+} from "./corner";
+import {
+  cornerFilled,
+  endFor,
+  endRoofStart,
+  endTopAt,
+  type EndGeo,
+} from "./end";
+import { END_PROFILE } from "./end-profile";
 import type { Life } from "./life";
 import { grass } from "./near";
 import {
@@ -88,16 +101,26 @@ export function paintArena(s: Surface, p: Paint, life: Life): void {
   const corner = Math.min(g.w, endFor(g).corner);
 
   arenaStand(s, p, life, 0, corner);
-  // the stand's end: a slim glass wall, a light down its edge
   const endH = st.roofTop - st.boards;
   const top = F - st.roofTop;
-  s.rect(corner - 4, top, 4, endH, S(P.slate));
-  s.vline(corner - 4, top, endH, S(P.mist));
-  s.vline(corner - 3, top, endH, S(P.steel));
-  s.vline(corner - 1, top + ROOF_UNDER, endH - ROOF_UNDER, P.skyMid);
-  if (p.lamps) {
-    for (let y = top + 20; y < F - 24; y += 18)
-      s.vline(corner - 2, y, 6, P.skyLow);
+  if (cornerFilled(p)) {
+    // an international's: the seats carry on round the corner to the end (corner.ts)
+    paintCornerStand(s, p, life, {
+      colour: arenaEndColors(p),
+      seatLow: S(P.concreteDark),
+      seatUp: S(P.night),
+      glow: 0,
+    });
+  } else {
+    // the stand's end: a slim glass wall, a light down its edge
+    s.rect(corner - 4, top, 4, endH, S(P.slate));
+    s.vline(corner - 4, top, endH, S(P.mist));
+    s.vline(corner - 3, top, endH, S(P.steel));
+    s.vline(corner - 1, top + ROOF_UNDER, endH - ROOF_UNDER, P.skyMid);
+    if (p.lamps) {
+      for (let y = top + 20; y < F - 24; y += 18)
+        s.vline(corner - 2, y, 6, P.skyLow);
+    }
   }
   arenaBoards(s, p, life, corner);
   crown(s, p, corner);
@@ -142,7 +165,7 @@ export function paintArena(s: Surface, p: Paint, life: Life): void {
       lasers(life, [
         [sx(g, -100), top],
         [sx(g, -32), top],
-        [bx, endTopAt(endFor(g), bx, END_PROFILE.TOP)],
+        [bx, standRoofAt(p, bx)],
       ]);
     }
   }
@@ -476,12 +499,33 @@ function crown(s: Surface, p: Paint, corner: number): void {
   for (let x = 0; x < corner - 4; x++) column(x, top, vaultAt(g, x), vOf(x));
   const e = endFor(g);
   const T = END_PROFILE.TOP;
-  const start = Math.ceil(e.xA + e.lean * T) + 2;
+  const filled = cornerFilled(p);
+  const start = Math.ceil(endRoofStart(p)) + (filled ? 0 : 2);
+  // the end's vaults: one every 34 along its roof, growing as it comes towards us
+  const uOf = (x: number): number =>
+    Math.max(0, (x - e.xA - e.lean * T) / (e.m + e.lean * T * e.grow));
+  if (filled) {
+    // over the corner's roof as it bends round: the side's vaults carried on, stretched
+    // a little to meet the end's in step where its roof is the end's
+    const x0 = corner - 4;
+    const v0 = vOf(x0);
+    const span = Math.max(1, start - x0);
+    const uS = uOf(start);
+    const vS = (uS / 34) % 1;
+    const step = (((vS - v0) % 1) + 1) % 1;
+    const v1 =
+      v0 + step + Math.max(step < 0.5 ? 1 : 0, Math.round(span / VAULT - step));
+    const grown = 0.8 * (1 + e.grow * uS);
+    for (let x = x0; x < Math.min(g.w, start); x++) {
+      const v = v0 + ((v1 - v0) * (x - x0)) / span;
+      const f = v - Math.floor(v);
+      const k = 1 + (grown - 1) * cornerRound(p, x);
+      const h = Math.round(k * VAULT_H * Math.sqrt(Math.sin(Math.PI * f)));
+      column(x, Math.floor(cornerRowAt(p, x, T)), h, f);
+    }
+  }
   for (let x = Math.max(start, corner); x < g.w; x++) {
-    const u = Math.max(
-      0,
-      (x - e.xA - e.lean * T) / (e.m + e.lean * T * e.grow),
-    );
+    const u = uOf(x);
     const z = 1 + e.grow * u;
     const v = (u / 34) % 1;
     const h = Math.round(z * VAULT_H * 0.8 * Math.sqrt(Math.sin(Math.PI * v)));
@@ -584,7 +628,15 @@ function ribbon(p: Paint, life: Life, corner: number): void {
     ys.push(top);
   }
   const T = END_PROFILE.TOP;
-  const start = Math.ceil(e.xA + e.lean * T) + 2;
+  const filled = cornerFilled(p);
+  const start = Math.ceil(endRoofStart(p)) + (filled ? 0 : 2);
+  if (filled) {
+    // round the corner's fascia (corner.ts)
+    for (let x = corner - 4; x < Math.min(start, g.w); x++) {
+      xs.push(x);
+      ys.push(Math.round(cornerRowAt(p, x, T - ROOF_RIBBON - 0.5)));
+    }
+  }
   for (let x = Math.max(start, corner); x < g.w; x++) {
     const y = endTopAt(e, x, T - ROOF_RIBBON - 0.5);
     if (y < 0) continue;
@@ -811,7 +863,7 @@ function dressArena(s: Surface, p: Paint, life: Life, corner: number): void {
   }
   const e = endFor(g);
   const T = END_PROFILE.TOP;
-  for (let x = Math.ceil(e.xA + e.lean * T) + 14; x < g.w; x += 52) {
+  for (let x = Math.ceil(endRoofStart(p)) + 14; x < g.w; x += 52) {
     fx.push(x);
     fy.push(endTopAt(e, x, T) - 24);
   }
@@ -947,12 +999,13 @@ function dome(s: Surface, p: Paint, corner: number): void {
     (x - mx) * (x - mx) + (y - my) * (y - my) > mr * mr &&
     s.get(x, y) === TRANSPARENT;
   const roofAt = (x: number): number =>
-    x < corner ? top - 1 : endTopAt(e, x, T) - 1;
+    x < corner ? top - 1 : standRoofAt(p, x) - 1;
   const endStart = Math.ceil(e.xA + e.lean * T) + 2;
   const step = 112;
   for (let b = g.cx - step * 8; b < g.w + step; b += step) {
     if (b < 4 || b > g.w - 4 || b === g.cx) continue;
-    if (b >= corner - 8 && b < endStart + 8) continue;
+    // (over an open corner, none: an international's carries the roof round, corner.ts)
+    if (!cornerFilled(p) && b >= corner - 8 && b < endStart + 8) continue;
     const yb = roofAt(b);
     if (yb < 8) continue;
     const xt = g.cx + (b - g.cx) * 1.9;

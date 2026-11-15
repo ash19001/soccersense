@@ -5457,3 +5457,61 @@ html:has(.ss-help-dialog[open]) {
 .ss-btn.is-done {
   --ink-on-face: var(--c-grass-hi);
 }
+
+/* ---------- 29. A monitor's speaker and Support (MenuCaptions, 2026-11-14) ---------------------- */
+
+/*
+ * On a monitor the speaker takes the heart's place (2026-11-14: "on a large screen can you
+ * put the sound icon/button where the support us/heart button is"): it is in the markup
+ * under the bell, in the column of squares off the day plate's left end (section 27).
+ *
+ * Support leaves that column for a place of its own, "somewhere else and more prominent": a
+ * gold button off the rows' right end, after the column of the "?" and the stats, as tall as
+ * both rows, a red heart over its name. It is as wide as its name needs and never wider
+ * than the room the screen leaves there (the rows are centred, so 50vw - 50% is the room on
+ * either side of them); where that is short (a phone on its side) the name wraps.
+ */
+.ss-game[data-wide] .ss-menu__side > .ss-menu__support {
+  top: 0;
+  bottom: 0;
+  left: calc(100% + var(--u2) * 2 + var(--ss-row));
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  max-width: calc(50vw - 50% - var(--u2) * 4 - var(--ss-row));
+  height: auto;
+  padding: 0 var(--u4);
+  /* The cards' own type (section 15), not a button's: it reads as one of the row. */
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: normal;
+}
+
+.ss-menu__support .ss-btn__label {
+  flex-direction: column;
+  gap: var(--u2);
+}
+
+/* The heart in logical pixels (an icon's are smaller): it is the button's sign. */
+.ss-menu__support .ss-glyph {
+  color: var(--c-home-dark);
+}
+
+.ss-menu__support-words {
+  display: block;
+  text-align: center;
+  line-height: var(--lh-tight);
+}
+
+/*
+ * The scene's floating sprite (PixelStage, Scene.floating: the menu ball while it hovers),
+ * a second canvas over the first with the same top left (section 19), moved by whole device
+ * pixels and shown only while there is one. The first canvas takes the pointer through it.
+ */
+.ss-stage__float {
+  visibility: hidden;
+  pointer-events: none;
+  transform-origin: 0 0;
+  will-change: transform;
+}

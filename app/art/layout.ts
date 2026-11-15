@@ -103,7 +103,7 @@ export interface MenuLayout {
   /** Radius of the menu ball: round(min(W * 0.34, H * 0.165)). */
   ballR: number;
   /**
-   * Centre of the menu ball: (cx, ballCy), with ballCy = round(H * 0.70). The ball floats
+   * Centre of the menu ball: (cx, ballCy), with ballCy = round(H * 0.68). The ball floats
    * in front of the picture; the scene bobs it by a pixel or two.
    */
   ballCy: number;
@@ -166,6 +166,20 @@ const AIRSHIP_TOP = 12;
 /** The gap it keeps from the wordmark's widest. */
 const AIRSHIP_CLEAR = 16;
 
+/**
+ * The menu ball's centre, as a share of the height: 0.68, so that its foot (16.5% of the
+ * height below that) clears the row of cards under it, bob and all, on a monitor, where the
+ * cards cover about 13% of the bottom (2026-11-14: "make the ball slightly higher so it
+ * doesn't clash with the cards"; it was 0.70, and touched them at 1366 x 768 and 1280 x
+ * 720).
+ */
+const BALL_Y = 0.68;
+/**
+ * The ball's centre the picture is framed for (the pitch shows over its top, the stadium
+ * sits behind it): where the ball was before it was raised, so that the stadium stayed put.
+ */
+const FRAME_BALL_Y = 0.7;
+
 function unit(x: number): number {
   return x <= 0 ? 0 : x >= 1 ? 1 : x;
 }
@@ -178,14 +192,16 @@ export function menuLayout(w: number, h: number): MenuLayout {
   const logoH = Math.round(H * COVER.menuLogo);
   const captionH = Math.round(H * COVER.menuCaptions);
   const ballR = Math.round(Math.min(W * 0.34, H * 0.165));
-  const ballCy = Math.round(H * 0.7);
+  const ballCy = Math.round(H * BALL_Y);
 
   // The camera. 0 on a phone, 1 on a monitor, smooth between.
   const ratio = unit((W / H - 0.9) / 0.55);
   const wideness = ratio * ratio * (3 - 2 * ratio);
   const wide = wideness > 0.5;
   const rise = MENU_CAMERA.horizonRise;
-  const ballTop = ballCy - ballR;
+  // The picture is framed for the ball where it was (FRAME_BALL_Y), not where it is: raising
+  // the ball does not move the stadium.
+  const ballTop = Math.round(H * FRAME_BALL_Y) - ballR;
   // The stadium takes 60% of a monitor's width and all of a phone's...
   const byWidth = (W * (0.97 - 0.37 * wideness)) / 2 / MENU_CAMERA.stadiumHalf;
   // ...but the pitch must show above the ball with the horizon no more than a third of
