@@ -59,7 +59,7 @@ Menu
 Game
   let s = createSession({ mode, dayNumber: today.dayNumber, stadium: today.stadium, questions, now, noTimer: today.noTimer })
   s = reduce(s, action). If the result === s, nothing happened.
-  Every frame while asking: reduce(s, { type: "tick", now }) and clockView(s, now).
+  Every frame while asking: reduce(s, { type: "tick", now, draft }) (draft: what is in the answer field) and clockView(s, now).
   Board: questionView(s), pips(s), progressFor(s), clockView(s, now)
   Answer bar: s.rejected (new object per rejection, key the shake on it), clockView(s, now).canPass
   Shot (phase "resolving"): currentTurn(s).grade, progressFor(s).promotions; then dispatch { type: "resolved" }
@@ -169,10 +169,10 @@ session.ts
 - interface Turn { questionId: string; input: string | null; answerId: string | null; grade: Grade; points: number; km: number | null; share: number | null; rank: number | null; msLeft: number }. share is new (null without an answer).
 - interface Rejection { input: string; reason: "unknown" | "ambiguous" }
 - interface Session { mode; dayNumber; stadium; questions: readonly Question[]; index: number; phase: Phase; turns: readonly Turn[]; total: number; startedAt: number; deadline: number | null; rejected: Rejection | null; noTimer: boolean }
-- type Action = { type: "submit"; input: string; now: number } | { type: "pass"; now: number } | { type: "tick"; now: number } | { type: "resolved" } | { type: "next"; now: number }
+- type Action = { type: "submit"; input: string; now: number } | { type: "pass"; now: number } | { type: "tick"; now: number; draft?: string } | { type: "resolved" } | { type: "next"; now: number }
 - interface SessionOptions { mode; dayNumber; stadium; questions; now: number; noTimer?: boolean }
 - createSession(options: SessionOptions): Session. Throws on no questions or a non-finite now.
-- reduce(session: Session, action: Action): Session. Never mutates. Ignored actions return the same object. A rejection returns a new object with `rejected` set. Time-up at now >= deadline for tick, submit and pass alike. Pass is allowed from exactly 8 s. Next on the last question gives "done"; everything after done is ignored.
+- reduce(session: Session, action: Action): Session. Never mutates. Ignored actions return the same object. A rejection returns a new object with `rejected` set. At now >= deadline the clock has run out for tick, submit and pass alike: the whistle. Changed 2026-11-15: what the field held then counts as sent: a tick's draft, or a late submit's input, is judged, and a match is recorded as the answer with msLeft 0; nothing, an unknown or ambiguous input, or a pass is a time-up. Pass is allowed from exactly 8 s. Next on the last question gives "done"; everything after done is ignored.
 - currentQuestion(session): Question. Stays on the last question once done.
 - currentTurn(session): Turn | null. Null while asking.
 - isLastQuestion(session): boolean

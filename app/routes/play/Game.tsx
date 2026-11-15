@@ -269,7 +269,11 @@ export function Game({ mode }: { mode: Mode }) {
   const index = session?.index ?? 0;
 
   const value = field.index === index ? field.value : "";
-  const setValue = (typed: string) => setField({ index, value: typed });
+  const setValue = (typed: string) => {
+    setField({ index, value: typed });
+    // If the clock runs out before Enter, what is typed counts as sent.
+    game?.type(typed);
+  };
 
   // Full time (a mode is played once a day: any way back to a finished game shows its card
   // again), and the keyboard goes to SHARE.

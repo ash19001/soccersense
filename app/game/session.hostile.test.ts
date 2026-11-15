@@ -267,12 +267,12 @@ describe("the deadline, to the millisecond", () => {
     });
   });
 
-  it("is time up exactly at the deadline, for tick, submit and pass alike", () => {
+  it("is time up exactly at the deadline, for tick, a rubbish submit and pass alike", () => {
     const s = start();
     expect(msLeft(s, DEADLINE)).toBe(0);
     for (const action of [
       tick(DEADLINE),
-      submit("Alpha", DEADLINE),
+      submit("Zulu", DEADLINE),
       pass(DEADLINE),
     ]) {
       const after = reduce(s, action);
@@ -291,6 +291,27 @@ describe("the deadline, to the millisecond", () => {
       expect(after.total).toBe(0);
       expect(after.deadline).toBeNull();
     }
+  });
+
+  it("counts an answer sent or typed at the whistle, with nothing left on the clock", () => {
+    const s = start();
+    for (const action of [
+      submit("Alpha", DEADLINE),
+      submit("Alpha", DEADLINE + 5),
+      { type: "tick", now: DEADLINE, draft: "Alpha" } as Action,
+    ]) {
+      const after = reduce(s, action);
+      expect(after.phase).toBe("resolving");
+      expect(currentTurn(after)).toMatchObject({
+        input: "Alpha",
+        grade: "worldie",
+        points: 100,
+        msLeft: 0,
+      });
+      expect(after.deadline).toBeNull();
+    }
+    // PASS at the whistle is a pass that came too late: a time-up.
+    expect(currentTurn(reduce(s, pass(DEADLINE)))?.grade).toBe("timeup");
   });
 
   it("is still time up for a rubbish or empty submit after the deadline", () => {
@@ -393,11 +414,14 @@ describe("double actions", () => {
   });
 
   it("a submit and a tick racing at the deadline record one turn", () => {
-    const a = run(start(), tick(DEADLINE), submit("Alpha", DEADLINE));
-    const b = run(start(), submit("Alpha", DEADLINE), tick(DEADLINE));
+    // The tick carries what is in the field, as the page sends it: the same answer.
+    const whistle: Action = { type: "tick", now: DEADLINE, draft: "Alpha" };
+    const a = run(start(), whistle, submit("Alpha", DEADLINE));
+    const b = run(start(), submit("Alpha", DEADLINE), whistle);
     expect(a.turns).toHaveLength(1);
     expect(b.turns).toHaveLength(1);
     expect(a.turns[0]).toEqual(b.turns[0]);
+    expect(a.turns[0]).toMatchObject({ grade: "worldie", msLeft: 0 });
   });
 
   it("a double pass, a double resolved and a double next each count once", () => {
@@ -533,6 +557,9 @@ describe("rejections", () => {
     const out = reduce(r, tick(DEADLINE));
     expect(currentTurn(out)?.grade).toBe("timeup");
     expect(out.rejected).toBeNull();
+    // Left in the field, a rejected answer is still nothing at the whistle.
+    const left = reduce(r, { type: "tick", now: DEADLINE, draft: "Zulu" });
+    expect(currentTurn(left)?.grade).toBe("timeup");
   });
 
   it("is cleared by the next question", () => {
@@ -633,11 +660,17 @@ describe("a long random walk", () => {
             ? submit(INPUTS[Math.floor(rand() * INPUTS.length)], now)
             : roll < 0.5
               ? pass(now)
-              : roll < 0.7
+              : roll < 0.6
                 ? tick(now)
-                : roll < 0.85
-                  ? resolved
-                  : next(now);
+                : roll < 0.7
+                  ? {
+                      type: "tick",
+                      now,
+                      draft: INPUTS[Math.floor(rand() * INPUTS.length)],
+                    }
+                  : roll < 0.85
+                    ? resolved
+                    : next(now);
         const before = s;
         s = reduce(s, action);
         const check = (ok: boolean, what: string) => {

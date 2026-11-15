@@ -717,6 +717,35 @@ describe("the game page", () => {
     expect(shots).toHaveBeenLastCalledWith("timeup", expect.any(Function));
   });
 
+  test("an answer typed but not sent when the clock runs out counts as sent", () => {
+    site();
+    // Question 1: typed, Enter never pressed.
+    fireEvent.change(field(), { target: { value: "Man United" } });
+    wait(30_000);
+    expect(shots).toHaveBeenLastCalledWith("worldie", expect.any(Function));
+    play(2.5);
+    expect(
+      screen.getByRole("heading", { name: text.grades.worldie }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("+100")).toBeInTheDocument();
+    next();
+    wait(PROMOTION_PATIENCE_MS);
+
+    // Question 2: what is left typed is one the judge does not know: a time-up.
+    expect(questionLamps()).toBe("Question 2 of 7");
+    fireEvent.change(field(), { target: { value: "Bob" } });
+    wait(30_000);
+    expect(shots).toHaveBeenLastCalledWith("timeup", expect.any(Function));
+    play(2.5);
+    next();
+
+    // Question 3: what was typed on question 2 is not carried over.
+    expect(questionLamps()).toBe("Question 3 of 7");
+    expect(field()).toHaveValue("");
+    wait(30_000);
+    expect(shots).toHaveBeenLastCalledWith("timeup", expect.any(Function));
+  });
+
   test("a mode is played once a day: its finished game shows its card again, however the page is reached", () => {
     window.localStorage.setItem(
       `soccersense:v1:${DAY_KEY}:home`,

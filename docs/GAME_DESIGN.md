@@ -72,7 +72,11 @@ gold (a sepia-warmed brass), NEXT-GEN electric magenta.
    - Not recognised: the input shakes and says `Not on the teamsheet. Try another.` The clock
      keeps running. There is no penalty and no limit on tries.
    - After 8 seconds a **PASS** button appears. Passing scores 0.
-   - Clock hits zero: `TIME'S UP`, 0 points.
+   - Clock hits zero: an answer still in the field counts as though SHOOT had been pressed
+     at the whistle (the product owner, 2026-11-15: "if an answer is typed but enter wasn't
+     pressed and time ran out then it still counts as submitted"). The judge checks it as
+     above; recognised, it is the player's answer, with 0 seconds left. An empty field, or
+     one the judge does not know, is `TIME'S UP`, 0 points.
 4. Recognised answer: the footballer takes a shot, the answer's own (see 4): a worldie, a
    golazo, a trivela, a toe poke, a tap-in or a miss.
 5. The career meter fills. If the total crosses a threshold he is promoted and the ground changes.
@@ -146,7 +150,7 @@ their answer's shot. Many answers can share a shot.
 | `toepoke` | 30     | TOE POKE  | some of the crowd went that way / a few got there too           |
 | `tapin`   | 10     | TAP IN    | most of the crowd went elsewhere / plenty got there first       |
 | `miss`    | 0      | MISS      | a right answer, but hardly anyone's / everybody's               |
-| `timeup`  | 0      | TIME'S UP | no answer: the whistle went                                     |
+| `timeup`  | 0      | TIME'S UP | no answer the judge knows when the whistle went                 |
 | `skipped` | 0      | PASSED    | no answer: passed                                               |
 
 A worldie is a wonder goal (the footballer plays it as a bicycle kick), a golazo a beauty

@@ -76,7 +76,11 @@ export interface Session {
 export type Action =
   | { type: "submit"; input: string; now: number }
   | { type: "pass"; now: number }
-  | { type: "tick"; now: number }
+  /**
+   * `draft`: what is in the answer field, not sent with Enter. If the clock has run out, it
+   * is judged as though it had been sent at the whistle.
+   */
+  | { type: "tick"; now: number; draft?: string }
   | { type: "resolved" }
   | { type: "next"; now: number };
 
@@ -240,6 +244,45 @@ function blank(session: Session, grade: Grade, left: number): Session {
   });
 }
 
+/** Records a matched answer to the current question, with `left` on the clock. */
+function answered(
+  session: Session,
+  input: string,
+  answerId: string,
+  left: number,
+): Session {
+  const question = currentQuestion(session);
+  const table = tableOf(question, session.stadium, ruleOf(session));
+  const row = rankedFor(table, answerId);
+  if (!row) return session;
+  return record(session, {
+    questionId: question.id,
+    input,
+    answerId: row.answer.id,
+    grade: row.shot,
+    points: row.points,
+    km: row.km,
+    share: row.share,
+    rank: row.rank,
+    msLeft: left,
+  });
+}
+
+/**
+ * The whistle: what was in the field when the clock ran out counts as sent, if the judge
+ * knows it (with 0 left on the clock). Nothing, or anything it does not know, is a time-up.
+ */
+function whistle(session: Session, draft: string | undefined): Session {
+  if (typeof draft === "string") {
+    const result = judge(currentQuestion(session), draft);
+    if (result.kind === "match") {
+      const turn = answered(session, draft.trim(), result.answer.id, 0);
+      if (turn !== session) return turn;
+    }
+  }
+  return blank(session, "timeup", 0);
+}
+
 /**
  * Advance the game. Actions that make no sense in the current phase return the same session
  * object, so `next === session` means nothing happened.
@@ -247,13 +290,16 @@ function blank(session: Session, grade: Grade, left: number): Session {
  * - `submit` (asking): an empty input is ignored. An unknown or ambiguous one sets `rejected`
  *   and the clock keeps running. A match records the turn and moves to `resolving`.
  * - `pass` (asking, once `canPass`): records `skipped` for 0 points, moves to `resolving`.
- * - `tick` (asking): at or past the deadline, records `timeup` for 0 points, moves to
- *   `resolving`. Otherwise nothing.
+ * - `tick` (asking): at or past the deadline, the whistle: its `draft` (what was typed but
+ *   not sent) is judged as an answer with 0 left on the clock, and anything that is not one
+ *   records `timeup` for 0 points. Either moves to `resolving`. Before the deadline, nothing.
  * - `resolved` (resolving): the shot has played. Moves to `reveal`.
  * - `next` (reveal): the next question with a fresh clock, or `done` after the last.
  *
- * The clock is the referee: a `submit` or `pass` that arrives at or after the deadline is a
- * time-up, whatever it carried. An action whose `now` is not a finite number is ignored.
+ * The clock is the referee: a `submit` that arrives at or after the deadline is the whistle
+ * with its input as the draft (so an answer sent just as time ran out still counts, with 0
+ * left), and a `pass` then is a time-up. An action whose `now` is not a finite number is
+ * ignored.
  */
 export function reduce(session: Session, action: Action): Session {
   if ("now" in action && !Number.isFinite(action.now)) return session;
@@ -262,7 +308,7 @@ export function reduce(session: Session, action: Action): Session {
       if (session.phase !== "asking" || !timedOut(session, action.now)) {
         return session;
       }
-      return blank(session, "timeup", 0);
+      return whistle(session, action.draft);
     }
     case "pass": {
       if (session.phase !== "asking") return session;
@@ -273,28 +319,19 @@ export function reduce(session: Session, action: Action): Session {
     case "submit": {
       if (session.phase !== "asking") return session;
       if (typeof action.input !== "string") return session;
-      if (timedOut(session, action.now)) return blank(session, "timeup", 0);
-      const question = currentQuestion(session);
-      const result = judge(question, action.input);
+      if (timedOut(session, action.now)) return whistle(session, action.input);
+      const result = judge(currentQuestion(session), action.input);
       if (result.kind === "empty") return session;
       const input = action.input.trim();
       if (result.kind !== "match") {
         return { ...session, rejected: { input, reason: result.kind } };
       }
-      const table = tableOf(question, session.stadium, ruleOf(session));
-      const row = rankedFor(table, result.answer.id);
-      if (!row) return session;
-      return record(session, {
-        questionId: question.id,
+      return answered(
+        session,
         input,
-        answerId: row.answer.id,
-        grade: row.shot,
-        points: row.points,
-        km: row.km,
-        share: row.share,
-        rank: row.rank,
-        msLeft: msLeft(session, action.now),
-      });
+        result.answer.id,
+        msLeft(session, action.now),
+      );
     }
     case "resolved": {
       if (session.phase !== "resolving") return session;

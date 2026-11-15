@@ -250,7 +250,10 @@ parts stand in for one and change when it arrives:
   to show: it is 36 characters.
 - **The questions and the answers.** Every mode's questions and every answer's share ship in
   the page's code (`app/data`), so anyone can read them. The backend sends only today's
-  questions, judges the answers itself and sends each reveal after it is answered.
+  questions, judges the answers itself and sends each reveal after it is answered. An answer still
+  typed when the clock runs out counts as sent (2026-11-15, `reduce`'s whistle): the page sends
+  it as the clock reaches zero, so it arrives a moment after the deadline. The server accepts
+  it within a second or two of grace, and nothing later.
 - **The rest already noted elsewhere:** popularity shares are estimates until real answers are
   counted (`shotsFor`, docs/data-notes/popularity.md); the leaderboard is mock data behind
   `leaderboardFor` (docs/API_UI.md); streaks, stats and the history are kept on the device only
@@ -258,3 +261,34 @@ parts stand in for one and change when it arrives:
 - **The rendering rules** in CLAUDE.md (`ssr: false`, prerender, no `action`, `clientLoader`
   for anything fetched at runtime) assume no runtime server, and section 1 of this file allows
   only the clock's request. Both are revisited with the backend.
+
+### The plan agreed with the product owner (2026-11-15)
+
+Nothing of this is built yet ("Don't build it yet, just tell me").
+
+- **Platform: Cloudflare.** One Worker serves the static site and an `/api`; D1 (SQL) holds the
+  data; R2 keeps archived days; cron triggers run the nightly jobs. Chosen over Supabase,
+  Firebase and AWS Lambda for cost at 100,000+ daily players (about $25–35 a month against
+  $60–120 on AWS) and for having one place to maintain. D1 caps a database at 10 GB: archive
+  raw games to R2 nightly after counting.
+- **Lean design:** one row per finished game (its seven answers inside it); ranks from a
+  per-day, per-mode tally of the 71 possible totals (0 to 700 in tens); the top ten and today's
+  questions cached and refreshed every minute or so; answer popularity counted nightly. About 20
+  requests and 2 writes per daily player.
+- **Accounts:** optional. Everyone plays at once as `soccerfanNNNN`; after a first game the page
+  offers an account to keep the streak, stats and name on every device, and the games already
+  on the device go with it. Sign-in by emailed link and Google (no passwords), with Better Auth
+  on the Worker (not a hosted service: those charge per user). Email through Resend.
+- **Leaderboards:** everyone on them, accounts or not; only the first game of a day and mode
+  counts.
+- **Membership** (Paddle, which sells as merchant of record and handles VAT; about £2.99 a month
+  or £19.99 a year):
+  - Free, no account needed: HOME, AWAY, RETRO and NEXT-GEN, once a day each.
+  - Members: the locked modes (CLOSEST, FURTHEST, and GUESS WHO, SHOOTOUT and any later ones),
+    once a day each with their own daily leaderboards; and unlimited play: any past day from
+    the archive, in any mode they have. Replays never count on a leaderboard.
+  - The server decides what a player may open; the page only shows it.
+- **For the product owner to set up first:** a Cloudflare account, the domain, a Paddle
+  application (its checks take days and it reviews the site), Resend, a Google OAuth client;
+  privacy, terms and refund pages; the ICO data protection fee if it applies. Each day needs its
+  own questions before the leaderboard means anything.

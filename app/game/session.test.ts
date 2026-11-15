@@ -250,14 +250,25 @@ describe("submit", () => {
     });
   });
 
-  it("counts as time up when it arrives at or after the deadline", () => {
+  it("counts at the whistle when it arrives at or after the deadline", () => {
     const s = start();
     const late = reduce(s, {
       type: "submit",
       input: "Alpha Near",
       now: T0 + QUESTION_MS,
     });
-    expect(late.turns[0]).toMatchObject({ grade: "timeup", points: 0 });
+    // Sent just as the clock ran out: it counts, with nothing left on the clock.
+    expect(late.turns[0]).toMatchObject({
+      grade: "worldie",
+      points: 100,
+      msLeft: 0,
+    });
+    const unknown = reduce(s, {
+      type: "submit",
+      input: "nope",
+      now: T0 + QUESTION_MS,
+    });
+    expect(unknown.turns[0]).toMatchObject({ grade: "timeup", points: 0 });
     const justInTime = reduce(s, {
       type: "submit",
       input: "Alpha Near",
@@ -383,6 +394,49 @@ describe("tick", () => {
       { type: "tick", now: T0 + 10 * QUESTION_MS },
     );
     expect(r.turns[0].grade).toBe("timeup");
+    expect(r.rejected).toBeNull();
+  });
+
+  it("counts an answer typed but not sent, with nothing left on the clock", () => {
+    const s = start();
+    // Before the whistle the draft does nothing.
+    expect(
+      reduce(s, { type: "tick", now: T0 + 1000, draft: "Alpha Near" }),
+    ).toBe(s);
+    const r = reduce(s, {
+      type: "tick",
+      now: T0 + QUESTION_MS,
+      draft: "  alpha near ",
+    });
+    expect(r.phase).toBe("resolving");
+    expect(r.deadline).toBeNull();
+    expect(r.total).toBe(100);
+    expect(r.turns[0]).toMatchObject({
+      questionId: "q1",
+      input: "alpha near",
+      answerId: "alpha-near",
+      grade: "worldie",
+      points: 100,
+      rank: 1,
+      msLeft: 0,
+    });
+  });
+
+  it("is a time-up when the draft is empty, unknown or ambiguous", () => {
+    // "Smith" could be Bravo or Charlie.
+    for (const draft of ["", "   ", "nope", "Smith"]) {
+      const r = reduce(start(), { type: "tick", now: T0 + QUESTION_MS, draft });
+      expect(r.turns[0]).toMatchObject({ grade: "timeup", input: null });
+    }
+  });
+
+  it("judges the draft, not the answer turned down earlier", () => {
+    const r = run(
+      start(),
+      { type: "submit", input: "nope", now: T0 + 1000 },
+      { type: "tick", now: T0 + QUESTION_MS, draft: "Echo Far" },
+    );
+    expect(r.turns[0]).toMatchObject({ input: "Echo Far", grade: "miss" });
     expect(r.rejected).toBeNull();
   });
 

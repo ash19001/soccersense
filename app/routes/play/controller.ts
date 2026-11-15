@@ -8,6 +8,7 @@
 // The flow (docs/GAME_DESIGN.md sections 3 to 6):
 //   asking     the clock runs. An answer the judge does not know shakes the bar (the
 //              clock runs on); one it knows, PASS, or the clock running out ends the turn.
+//              At the whistle, an answer typed but not sent counts as sent (`type`).
 //   resolving  the clock has stopped and the shot plays (`scene.playShot(grade)`).
 //   reveal     the sheet. NEXT: if the total crossed a tier line, the promotion plays first
 //              (`scene.promote(total)`, no clock meanwhile), then the next question.
@@ -137,6 +138,8 @@ export class GameController {
   private ticker: ReturnType<typeof setInterval> | null = null;
   private patience: ReturnType<typeof setTimeout> | null = null;
   private shareTimer: ReturnType<typeof setTimeout> | null = null;
+  /** What is in the answer field, not sent yet, and for which question: the whistle's. */
+  private draft: { index: number; text: string } = { index: -1, text: "" };
   /** Bumped whenever the game stops waiting for the scene: a late call back is ignored. */
   private waitToken = 0;
   private started = false;
@@ -256,6 +259,14 @@ export class GameController {
   }
 
   // --- the player's moves -------------------------------------------------------------
+
+  /**
+   * The answer field changed. Nothing happens now, but if the clock runs out before the
+   * player presses Enter, what is there counts as sent (`reduce`'s whistle).
+   */
+  type = (text: string): void => {
+    this.draft = { index: this.view.session.index, text };
+  };
 
   submit = (input: string): void => {
     const { session } = this.view;
@@ -497,7 +508,9 @@ export class GameController {
     if (this.disposed) return;
     const now = this.clock();
     const { session } = this.view;
-    const next = reduce(session, { type: "tick", now });
+    const draft =
+      this.draft.index === session.index ? this.draft.text : undefined;
+    const next = reduce(session, { type: "tick", now, draft });
     if (next !== session) {
       this.shoot(next);
       return;
