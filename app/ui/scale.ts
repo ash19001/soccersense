@@ -277,7 +277,26 @@ let lastW = -1;
 let lastH = -1;
 let lastRatio = -1;
 
-function isEditing(): boolean {
+/**
+ * How long after a field is left the keyboard may still be on its way down. Until then a
+ * shorter window is the keyboard, not a new screen.
+ */
+export const KEYBOARD_LEAVE_MS = 700;
+
+/** When a text field last lost the focus (`performance.now()`). */
+let leftFieldAt = -Infinity;
+
+/**
+ * A field was left a moment ago: its keyboard is still sliding away, and the window has not
+ * got its height back yet. Measuring now would shrink every pixel for a moment (seen on an
+ * iPhone, 2026-11-15: the game "zoomed out for a split second" when the keyboard closed).
+ */
+function keyboardLeaving(): boolean {
+  return performance.now() - leftFieldAt < KEYBOARD_LEAVE_MS;
+}
+
+/** A text field has the focus: an on-screen keyboard may be up. Browser only. */
+export function isEditing(): boolean {
   const el = document.activeElement;
   return (
     el instanceof HTMLInputElement ||
@@ -309,7 +328,7 @@ function readScale(): PixelScale {
   if (w === lastW && h === lastH && same) return snapshot;
   // An on-screen keyboard can shrink the layout height on some browsers. That must not
   // flip the orientation or change the pixel size under the player's thumbs.
-  if (lastW === w && h < lastH && same && isEditing()) {
+  if (lastW === w && h < lastH && same && (isEditing() || keyboardLeaving())) {
     return snapshot;
   }
   lastW = w;
@@ -369,14 +388,22 @@ function subscribe(onChange: () => void): () => void {
   window.addEventListener("resize", onChange);
   window.addEventListener("orientationchange", onChange);
   // The keyboard closing fires no window resize where it only moved the visual viewport,
-  // but a blur can let a postponed measurement through.
-  window.addEventListener("focusout", onChange);
+  // but a blur can let a postponed measurement through: once the keyboard has had time to
+  // go (measuring at the blur itself would catch the window still short).
+  let leaving: ReturnType<typeof setTimeout> | null = null;
+  const left = () => {
+    leftFieldAt = performance.now();
+    if (leaving !== null) clearTimeout(leaving);
+    leaving = setTimeout(onChange, KEYBOARD_LEAVE_MS + 50);
+  };
+  window.addEventListener("focusout", left);
   const stopWatching = watchRatio(onChange);
   return () => {
     subscribers.delete(onChange);
     window.removeEventListener("resize", onChange);
     window.removeEventListener("orientationchange", onChange);
-    window.removeEventListener("focusout", onChange);
+    window.removeEventListener("focusout", left);
+    if (leaving !== null) clearTimeout(leaving);
     stopWatching();
   };
 }

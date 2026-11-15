@@ -223,8 +223,20 @@ lie down in it (see "On a wide screen" below).
 ```
 
 - The slots take pointer events; the rest of the column lets them through to the canvas.
-- The column follows the visual viewport, so the answer bar stays above an on-screen keyboard
-  while the canvas does not move. `data-keyboard="open"` is set on the root meanwhile.
+- Where the pointer is fine (a mouse), the column follows the visual viewport, so the answer
+  bar stays above an on-screen keyboard while the canvas does not move; `data-keyboard="open"`
+  is set on the root meanwhile.
+- On a touch screen (`(pointer: coarse)`) the column is never moved: a phone slides the page
+  itself to show a covered field, and following the visual viewport there fought it (seen on
+  a real iPhone, 2026-11-15: board and bar both off the screen). Only `data-keyboard="open"`
+  is set: while a text field has the focus (`isEditing`, scale.ts) and the visual viewport is
+  more than 120 px shorter than the most the screen had at this width before the typing began;
+  or, until that measurement has been seen to work on the device, from a finger going down on
+  the field until the field is left.
+- While `data-keyboard="open"`, the board comes down to sit on the answer bar (changed
+  2026-11-15, the product owner: "the screen slides up then the question slides down"),
+  without its hangers and its second rule line, with a short drop (none with reduced motion).
+  The bar itself is never moved.
 - If `top` and `bottom` ever need more height than there is, `bottom` stays whole and covers
   the end of `top`. The answer bar is never pushed off the screen.
 - `contained` fills the parent instead of the viewport (the gallery). The parent then needs a

@@ -11,7 +11,7 @@ import { strings } from "~/i18n";
 
 import { cx } from "./cx";
 import { PixelRoot } from "./PixelRoot";
-import { isWide, usePixelScale } from "./scale";
+import { isEditing, isWide, usePixelScale } from "./scale";
 import { SoundToggle, type SoundToggleLabels } from "./SoundToggle";
 
 export interface GameLayoutProps {
@@ -72,6 +72,12 @@ const atBuildTime = () => false;
  * ever need more height than there is, the bottom one stays whole and covers the end of
  * the top one.
  *
+ * On a touch screen (a phone) the column does not follow the visual viewport: the phone
+ * slides the page itself to show the field. While a field is typed into with the keyboard
+ * up, the root carries `data-keyboard="open"` and the board comes down to sit on the answer
+ * bar, which is never moved (the product owner, 2026-11-15: "the screen slides up then the
+ * question slides down").
+ *
  * On a wide screen (a monitor: landscape, with room for a row of captions, see
  * `isWide` in scale.ts) the root carries `data-wide`. The menu captions read it:
  * there they leave the column and lie in one row across the foot of the picture. A
@@ -107,11 +113,46 @@ export function GameLayout({
     const root = rootRef.current;
     const vv = window.visualViewport;
     if (!root || !vv || contained) return;
+    // A touch screen (a phone). The column is never moved there: the phone slides the page
+    // itself to show a covered field, and chasing the visual viewport fights it (seen on a
+    // real iPhone, 2026-11-15: the board and the bar ended up off the screen). Only
+    // `data-keyboard` is set, which brings the board down onto the bar (ui.css).
+    const coarse =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(pointer: coarse)").matches;
+
+    // The height with no keyboard up, at this width. Some browsers shrink the window with
+    // the keyboard, so the window alone cannot say how much the keyboard covers: this is
+    // the most there was before the typing began.
+    let width = window.innerWidth;
+    let full = Math.max(window.innerHeight, vv.height);
+    // A finger went down on the field: a phone answers that with its keyboard. Believed
+    // only until the measurement has been seen to work on this device.
+    let touched = false;
+    let measures = false;
 
     const apply = () => {
-      const covered = window.innerHeight - vv.height;
+      const typing = isEditing();
+      if (window.innerWidth !== width || !typing) {
+        width = window.innerWidth;
+        full = Math.max(window.innerHeight, vv.height);
+      } else {
+        full = Math.max(full, window.innerHeight);
+      }
+      if (!typing) touched = false;
       const zoomed = Math.abs(vv.scale - 1) > 0.01;
-      if (!zoomed && covered > KEYBOARD_MIN) {
+      const covered = !zoomed && full - vv.height > KEYBOARD_MIN;
+      if (covered && typing) measures = true;
+
+      if (coarse) {
+        if (typing && (covered || (touched && !measures))) {
+          root.dataset.keyboard = "open";
+        } else {
+          delete root.dataset.keyboard;
+        }
+        return;
+      }
+      if (!zoomed && window.innerHeight - vv.height > KEYBOARD_MIN) {
         root.style.setProperty("--ss-vv-top", `${Math.round(vv.offsetTop)}px`);
         root.style.setProperty("--ss-vv-h", `${Math.round(vv.height)}px`);
         root.dataset.keyboard = "open";
@@ -122,12 +163,33 @@ export function GameLayout({
       }
     };
 
+    // Focus moves before the keyboard does; look again once it has landed.
+    let frame = 0;
+    const soon = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(apply);
+    };
+    const pressed = (event: Event) => {
+      const el = event.target;
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        touched = true;
+        soon();
+      }
+    };
+
     apply();
     vv.addEventListener("resize", apply);
     vv.addEventListener("scroll", apply);
+    window.addEventListener("focusin", soon);
+    window.addEventListener("focusout", soon);
+    if (coarse) root.addEventListener("pointerdown", pressed);
     return () => {
+      cancelAnimationFrame(frame);
       vv.removeEventListener("resize", apply);
       vv.removeEventListener("scroll", apply);
+      window.removeEventListener("focusin", soon);
+      window.removeEventListener("focusout", soon);
+      root.removeEventListener("pointerdown", pressed);
       root.style.removeProperty("--ss-vv-top");
       root.style.removeProperty("--ss-vv-h");
       delete root.dataset.keyboard;

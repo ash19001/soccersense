@@ -2444,6 +2444,46 @@ button.ss-menu__card:active {
   --ss-pad-b: var(--u2);
 }
 
+/*
+ * Typing with an on-screen keyboard up (GameLayout): the board comes down to sit on the
+ * answer bar, so the question is just above the field. The bar itself is never moved: a
+ * phone slides the page to show it, and the board goes with it (the product owner,
+ * 2026-11-15: "the screen slides up then the question slides down").
+ */
+.ss-game[data-keyboard="open"] .ss-game__col {
+  justify-content: flex-end;
+  gap: var(--u2);
+}
+
+.ss-game[data-keyboard="open"] .ss-game__mid {
+  flex-grow: 0;
+}
+
+/* Nothing hangs it from the top of the screen any more, and the second rule line goes. */
+.ss-game[data-keyboard="open"] :is(.ss-board__hanger, .ss-board__measure) {
+  display: none;
+}
+
+.ss-game[data-keyboard="open"] .ss-game__top > .ss-board {
+  animation: ss-board-drop 200ms steps(5, end);
+}
+
+@keyframes ss-board-drop {
+  from {
+    transform: translateY(calc(var(--u6) * -4));
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-game[data-keyboard="open"] .ss-game__top > .ss-board {
+    animation: none;
+  }
+}
+
 .ss-game__top,
 .ss-game__bottom {
   flex: none;

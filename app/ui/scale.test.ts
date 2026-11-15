@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   DEFAULT_SCALE,
+  KEYBOARD_LEAVE_MS,
   WIDE_ROW_CP,
   WIDE_ROW_PX,
   canvasDpFor,
@@ -512,6 +513,47 @@ describe("usePixelScale", () => {
     });
     const second = renderHook(() => usePixelScale());
     expect(second.result.current.logicalH).toBe(Math.ceil((983 * dpr) / 3));
+  });
+
+  test("a keyboard never changes the scale: not while it is up, and not while it slides away", () => {
+    vi.useFakeTimers();
+    try {
+      setWindow(390, 844, 3);
+      const { result, unmount } = renderHook(() => usePixelScale());
+      const full = result.current;
+      const field = document.createElement("input");
+      document.body.append(field);
+      // The keyboard comes up, on a phone that shrinks the window with it.
+      act(() => {
+        field.focus();
+        setWindow(390, 400, 3);
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(result.current).toBe(full);
+      // The field is left: the window is still short for a moment.
+      act(() => {
+        field.blur();
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(result.current).toBe(full);
+      // The keyboard has gone and the window has its height back.
+      act(() => {
+        setWindow(390, 844, 3);
+        window.dispatchEvent(new Event("resize"));
+        vi.advanceTimersByTime(KEYBOARD_LEAVE_MS + 100);
+      });
+      expect(result.current).toBe(full);
+      // A window that really is shorter after that is believed.
+      act(() => {
+        setWindow(390, 400, 3);
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(result.current).toEqual(pixelScale(390, 400, 3));
+      field.remove();
+      unmount();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test("the build-time render and the first client render are the default scale", () => {
