@@ -4,6 +4,7 @@ export * from "./day";
 export * from "./geo";
 export * from "./judge";
 export * from "./modes";
+export * from "./nickname";
 export * from "./reveal";
 export * from "./scoring";
 export * from "./session";

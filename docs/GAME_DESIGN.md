@@ -40,6 +40,9 @@ gold (a sepia-warmed brass), NEXT-GEN electric magenta.
 
 - The day changes at midnight UTC, for everyone at once. `dayNumber` counts whole UTC days from
   2026-11-10, which is day 1.
+- The day is the site's server's, not the device's (2026-11-15): turning the phone's clock on or
+  back does not open another day's game. The page reads the time from the `Date` header of a
+  request to its own address, and a game does not start until it has (`gameClock`, docs/API_UI.md).
 - One stadium per day, shared by every mode: the day's venue, drawn on the home screen and named
   on the board. In the demo it rotates through `app/data/stadiums.ts`: index
   `(dayNumber - 1) mod count`. Anfield is first. It does not score HOME or AWAY; it will be the
@@ -51,8 +54,9 @@ gold (a sepia-warmed brass), NEXT-GEN electric magenta.
   question add up to about 100. There is no backend yet, so in the demo it is an **estimate**
   built into the sample questions (method: `docs/data-notes/popularity.md`). A backend will
   count the answers real players give and replace the estimates.
-- Debug overrides (query string, demo only): `?stadium=<id>`, `?day=<n>`, `?time=HH:MM`
-  (forces the sky's time of day), `?notimer=1`.
+- Debug overrides (query string): `?stadium=<id>`, `?day=<n>`, `?time=HH:MM` (forces the sky's
+  time of day), `?notimer=1`. `?day=`, `?stadium=` and `?notimer=` change the game itself, so
+  they work in development builds only (`gameSearch`); a production build ignores them.
 
 ## 3. One question, start to finish
 
@@ -412,13 +416,13 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   only SHARE: the cards have none there), which turns into a green tick for a moment once
   it has worked. The game page never starts a second game of a
   mode on the same day: reached any way (its address typed, an old link), it shows that
-  day's full-time card again. Testing uses `?day=` for another day.
+  day's full-time card again. Testing uses `?day=` for another day (development builds only).
 - **Today's leaderboard** (the product owner, 2026-11-11: "leaderboard in home screen (just
   mock data for now)"): today's top ten for HOME and for AWAY, a tab each, every row a rank, a
   handle and a total out of 700, the leader in gold, and under it how many played today
-  ("1,137 played today"). A player who has played the mode today is in its table as **YOU**,
-  at their rank (first among equal totals): highlighted in place if they made the top ten,
-  otherwise under it after a gap ("289 YOU 420"). The tab shown first is the mode they played,
+  ("1,137 played today"). A player who has played the mode today is in its table under their
+  **nickname**, at their rank (first among equal totals): highlighted in place if they made the
+  top ten, otherwise under it after a gap ("289 soccerfan4821 420"). The tab shown first is the mode they played,
   if they played only one. On a monitor it is a bolted scoreboard panel standing on the right
   of the picture over the park, always open, level with the airship on the other side of the
   logo (higher on a short screen, so it stays clear of the captions), and it slides away with
@@ -429,6 +433,17 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   "Row Z Rita", "TifoTony94"; nothing about real people, clubs or nations) and totals that are
   sums of seven shots (0, 10, 30, 60, 80 or 100 each): mostly in the 300s, a handful in the
   600s, a 700 about one day in thirty. A backend replaces it behind the same function.
+- **Nicknames** (the product owner, 2026-11-15: "everyone who joins gets a nickname assigned to
+  them. They can change this. But this is what's used for leaderboard names"; then "make the
+  names just soccerfan followed by numbers that increment so its always unique"). The first
+  visit gives the player **soccerfan** and a number ("soccerfan4821"), kept on the device. A
+  line under the leaderboard's table shows it with **CHANGE**, which opens **YOUR NAME**: a
+  field and **SAVE**. A name is 3 to 13 characters of letters, numbers, spaces, - and _, with a
+  letter (13: soccerfan and four digits). Numbers that go up one by one and never repeat need
+  someone to count: until a backend does, the number is a random one from 1000 to 9999, and the
+  backend will hand out the next in order (soccerfan1, soccerfan2, ...; docs/ARCHITECTURE.md
+  section 8). Where the leaderboard's column is too short (the monitor's panel), a name ending
+  in a number loses letters, never the number: "soccerf…4821".
 
 ### 6.2 Game screen
 

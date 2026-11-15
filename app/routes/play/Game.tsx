@@ -38,12 +38,16 @@ import {
   AnswerBar,
   Board,
   FullTimeCard,
+  type ClockStatus,
   GameLayout,
   type LeagueEntry,
+  Panel,
   PixelStage,
   RevealSheet,
   type RevealYours,
   fadeThrough,
+  gameClock,
+  gameSearch,
   useArrivalFocus,
   useDeviceSky,
 } from "~/ui";
@@ -68,7 +72,11 @@ function locale(): string {
   }
 }
 
-/** Makes the game once React subscribes, which is after mounting, and ends it on the way out. */
+/**
+ * Makes the game once React subscribes, which is after mounting, and ends it on the way out.
+ * It waits for the game's clock (the server's time, `gameClock`): the day is the server's,
+ * whatever the device's clock says, and so is every question's time.
+ */
 interface GameStore {
   subscribe(onChange: () => void): () => void;
   read(): GameController | null;
@@ -78,23 +86,48 @@ function createGameStore(mode: Mode): GameStore {
   let current: GameController | null = null;
   return {
     subscribe(onChange) {
-      // The day, the storage and the clock are the browser's.
-      const today = resolveToday(new Date(), window.location.search, STADIUMS);
-      const made = new GameController({
-        mode,
-        today,
-        locale: locale(),
-      });
-      current = made;
-      made.start();
-      onChange();
+      const clock = gameClock();
+      let made: GameController | null = null;
+      const begin = () => {
+        const now = clock.now();
+        if (made || now === null) return;
+        const today = resolveToday(
+          new Date(now),
+          gameSearch(window.location.search),
+          STADIUMS,
+        );
+        made = new GameController({
+          mode,
+          today,
+          locale: locale(),
+          clock: () => clock.now() ?? now,
+        });
+        current = made;
+        made.start();
+        onChange();
+      };
+      const stop = clock.subscribe(begin);
+      begin();
       return () => {
-        made.dispose();
+        stop();
+        made?.dispose();
         if (current === made) current = null;
       };
     },
     read: () => current,
   };
+}
+
+/** The game's clock's status, for the line that says the date cannot be checked. */
+function useClockStatus(): ClockStatus {
+  const [clock] = useState<{
+    subscribe(onChange: () => void): () => void;
+    read(): ClockStatus;
+  }>(() => ({
+    subscribe: (onChange) => gameClock().subscribe(onChange),
+    read: () => gameClock().status(),
+  }));
+  return useSyncExternalStore(clock.subscribe, clock.read, () => "checking");
 }
 
 function noSubscription(): () => void {
@@ -224,6 +257,7 @@ export function Game({ mode }: { mode: Mode }) {
   const [field, setField] = useState({ index: -1, value: "" });
   const [store] = useState(() => createGameStore(mode));
   const game = useSyncExternalStore(store.subscribe, store.read, nothing);
+  const clockStatus = useClockStatus();
 
   const view: GameView | null = useSyncExternalStore(
     game?.subscribe ?? noSubscription,
@@ -408,6 +442,13 @@ export function Game({ mode }: { mode: Mode }) {
         />
       );
     }
+  } else if (clockStatus === "failing") {
+    // No game until the server has said what day it is: it keeps asking meanwhile.
+    bottom = (
+      <Panel variant="plain" className="ss-t10" role="status">
+        {text.clock.failing}
+      </Panel>
+    );
   }
 
   const stadium = session?.stadium ?? null;

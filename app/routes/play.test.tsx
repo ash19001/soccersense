@@ -31,6 +31,7 @@ import {
 import { HOME_QUESTIONS, STADIUMS } from "~/data";
 import { strings } from "~/i18n";
 import { CareerScene } from "~/scenes/career";
+import { type ClockStatus, deviceClock, setGameClock } from "~/ui/game-clock";
 import { resetArrivalFocus } from "~/ui/useArrivalFocus";
 import Play, { meta } from "./play";
 import { PROMOTION_PATIENCE_MS, SHOT_PATIENCE_MS } from "./play/controller";
@@ -743,6 +744,76 @@ describe("the game page", () => {
     // Another day is another game.
     site({ pathname: "/play/home", search: "?day=2" });
     expect(questionLamps()).toBe("Question 1 of 7");
+  });
+
+  test("the day is the site's server's: a phone set a day on still opens today's game", () => {
+    window.localStorage.setItem(
+      `soccersense:v1:${DAY_KEY}:home`,
+      JSON.stringify(finished()),
+    );
+    // The phone says tomorrow; the server says today, day 1, played.
+    vi.setSystemTime(new Date("2026-11-11T12:00:00Z"));
+    setGameClock(deviceClock(() => Date.UTC(2026, 10, 10, 12)));
+    site({ pathname: "/play/home", search: "" });
+    expect(
+      screen.getByRole("heading", { name: text.fullTime.heading }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  test("no game until the server has said what day it is, and a line while it cannot", () => {
+    let now: number | null = null;
+    let status: ClockStatus = "checking";
+    const listeners = new Set<() => void>();
+    const tell = () => listeners.forEach((listener) => listener());
+    setGameClock({
+      now: () => now,
+      status: () => status,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      check: () => {},
+    });
+    site();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText(text.clock.failing)).toBeNull();
+
+    act(() => {
+      status = "failing";
+      tell();
+    });
+    expect(screen.getByText(text.clock.failing)).toHaveAttribute(
+      "role",
+      "status",
+    );
+    expect(screen.queryByRole("textbox")).toBeNull();
+
+    act(() => {
+      status = "ready";
+      now = Date.now();
+      tell();
+    });
+    expect(questionLamps()).toBe("Question 1 of 7");
+    expect(screen.queryByText(text.clock.failing)).toBeNull();
+  });
+
+  test("?day= is for development: a production build plays today's game", () => {
+    window.localStorage.setItem(
+      `soccersense:v1:${DAY_KEY}:home`,
+      JSON.stringify(finished()),
+    );
+    vi.stubEnv("DEV", false);
+    try {
+      site({ pathname: "/play/home", search: "?day=2&notimer=1" });
+      expect(
+        screen.getByRole("heading", { name: text.fullTime.heading }),
+      ).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   test("full time offers the next mode not played today, and none once all four are", () => {

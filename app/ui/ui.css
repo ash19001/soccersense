@@ -4862,6 +4862,90 @@ html:has(.ss-help-dialog[open]) {
   color: var(--mode-light, var(--c-chalk));
 }
 
+/*
+ * The player's nickname (2026-11-15) on one line under the table: the name on the chalk
+ * plate of the player's own row, and CHANGE at the right end. A long name gives way to the
+ * link, never the other way round.
+ */
+.ss-lb__me {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--u3);
+  margin: var(--u2) 0 0;
+  white-space: nowrap;
+}
+
+.ss-lb__me-name {
+  display: flex;
+  min-width: 0;
+  padding: 0 var(--u2);
+  background: var(--c-chalk);
+  color: var(--c-ink);
+}
+
+/*
+ * A name in the leaderboard (Name): its words give way to an ellipsis, never the number at
+ * its end, so "soccerf…4821" still says which soccerfan it is. A flex box of its own: beside
+ * the flag of the player's row under the gap, it takes the room the flag leaves.
+ */
+.ss-lb__nm {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.ss-lb__nm-head {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ss-lb__nm-tail {
+  flex: none;
+}
+
+.ss-lb__me .ss-lb__change {
+  flex: none;
+  margin: 0;
+}
+
+/* The name pop-up (Nickname): the field, why a name cannot be used, the rules, SAVE. */
+.ss-nick__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--u2);
+}
+
+/*
+ * The answer bar's field, in a column here: its own height, not the bar's share of the row,
+ * and its type worked out from the card's font pixel (as the reminder's time is).
+ */
+.ss-nick__form .ss-input {
+  flex: none;
+  font-size: calc(var(--fp) * 27);
+  line-height: calc(var(--fp) * 24);
+}
+
+/* Why the name cannot be used: in the red of the referee's card. */
+.ss-nick__error {
+  color: var(--c-led-red);
+}
+
+.ss-nick__error:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.ss-nick__save {
+  margin-top: var(--u2);
+}
+
 .ss-lb__week {
   margin-top: var(--u2);
   padding: var(--u2) var(--u2) var(--u);

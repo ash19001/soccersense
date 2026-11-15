@@ -42,8 +42,11 @@ export type {
   LeaderboardBoard,
   LeaderboardEntry,
   LeaderboardLabels,
+  LeaderboardMe,
   LeaderboardProps,
 } from "./Leaderboard";
+export { Nickname } from "./Nickname";
+export type { NicknameLabels, NicknameProps } from "./Nickname";
 export { LedNumber } from "./LedNumber";
 export type { LedNumberProps, LedSize, LedTone } from "./LedNumber";
 export { MenuCaptions } from "./MenuCaptions";
@@ -143,6 +146,18 @@ export {
   useFadeArrival,
 } from "./fade";
 export { HEADING_FACES, fetchHeadingFaces } from "./fonts";
+export {
+  CLOCK_RETRY_MS,
+  CLOCK_SLACK_MS,
+  CLOCK_TIMEOUT_MS,
+  deviceClock,
+  gameClock,
+  gameSearch,
+  serverClock,
+  serverTimeOf,
+  setGameClock,
+} from "./game-clock";
+export type { ClockStatus, GameClock, ServerClockOptions } from "./game-clock";
 export { useDeviceSky } from "./useDeviceSky";
 export type { DeviceSky } from "./useDeviceSky";
 export { UI_GRADES } from "./types";

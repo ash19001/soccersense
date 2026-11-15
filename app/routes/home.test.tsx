@@ -20,11 +20,18 @@ import {
 
 import { factForDay } from "~/data/facts";
 import { leaderboardFor } from "~/data/leaderboard";
-import { type Mode, dayKeyFor, storageKey } from "~/game";
+import {
+  type Mode,
+  NICKNAME_KEY,
+  checkNickname,
+  dayKeyFor,
+  storageKey,
+} from "~/game";
 import { FONT_3x5 } from "~/pixel";
 import { strings } from "~/i18n";
 import { MenuScene } from "~/scenes";
 import { LOCKED_MODES } from "~/scenes/menu";
+import { setGameClock } from "~/ui/game-clock";
 import Home, { meta } from "./home";
 
 // `useNavigate` can be swapped for a spy, to count what the page asks for. With no spy it
@@ -422,9 +429,65 @@ describe("home page: today's leaderboard", () => {
     const you = within(sheet).getByRole("rowheader", {
       name: text.youSpoken(rank, board.total),
     });
-    expect(you.closest("tr")).toHaveTextContent(`${rank}${text.you}`);
+    // named by the player's nickname
+    const nickname = window.localStorage.getItem(NICKNAME_KEY) ?? "";
+    expect(nickname).not.toBe("");
+    expect(you.closest("tr")).toHaveTextContent(`${rank}${nickname}`);
     expect(you.closest("tr")?.lastElementChild).toHaveTextContent("480");
     expect(within(sheet).getByText(text.mine(rank, board.total))).toBeTruthy();
+  });
+
+  test("a first visit is given soccerfan and a number, kept on the device, shown under the table", () => {
+    expect(window.localStorage.getItem(NICKNAME_KEY)).toBeNull();
+    const { unmount } = mount();
+    const nickname = window.localStorage.getItem(NICKNAME_KEY) ?? "";
+    expect(nickname).toMatch(/^soccerfan\d{4}$/);
+    expect(checkNickname(nickname)).toEqual({ ok: true, name: nickname });
+    fireEvent.click(screen.getByRole("button", { name: text.open }));
+    const sheet = screen.getByRole("dialog");
+    expect(sheet.querySelector(".ss-lb__me")).toHaveTextContent(nickname);
+    expect(
+      within(sheet).getByRole("button", { name: text.changeSpoken(nickname) }),
+    ).toBeTruthy();
+    // Back another time: the same name.
+    unmount();
+    mount();
+    expect(window.localStorage.getItem(NICKNAME_KEY)).toBe(nickname);
+  });
+
+  test("CHANGE opens the name; a new one is kept and named in the table", () => {
+    window.localStorage.setItem(NICKNAME_KEY, "HeaderWes1");
+    saveGame(1, "away", [100, 100, 100, 100, 80, 0, 0]);
+    mount();
+    const trophy = screen.getByRole("button", { name: text.open });
+    fireEvent.click(trophy);
+    fireEvent.click(
+      screen.getByRole("button", { name: text.changeSpoken("HeaderWes1") }),
+    );
+    const words = strings.nickname;
+    const card = screen.getByRole("dialog", { name: words.heading });
+    const field = within(card).getByRole("textbox", { name: words.field });
+    expect(field).toHaveValue("HeaderWes1");
+
+    // A name that cannot be used says why.
+    fireEvent.change(field, { target: { value: "!!!" } });
+    fireEvent.click(within(card).getByRole("button", { name: words.save }));
+    expect(within(card).getByText(words.problems.characters)).toBeTruthy();
+
+    fireEvent.change(field, { target: { value: " Top  Bins " } });
+    fireEvent.click(within(card).getByRole("button", { name: words.save }));
+    expect(screen.queryByRole("dialog", { name: words.heading })).toBeNull();
+    expect(window.localStorage.getItem(NICKNAME_KEY)).toBe("Top Bins");
+    expect(document.activeElement).toBe(trophy);
+
+    fireEvent.click(trophy);
+    const sheet = screen.getByRole("dialog");
+    const board = leaderboardFor(1, "away", 480);
+    const you = within(sheet).getByRole("rowheader", {
+      name: text.youSpoken(board.yourRank ?? 0, board.total),
+    });
+    expect(you.closest("tr")).toHaveTextContent("Top Bins");
+    expect(sheet.querySelector(".ss-lb__me")).toHaveTextContent("Top Bins");
   });
 
   test("has a tab for each of the four modes, and each has its own table", () => {
@@ -845,5 +908,48 @@ describe("home page: choosing a mode", () => {
     // The page listens to the new scene.
     act(() => theScene().onHover?.("home"));
     expect(card(/HOME/)).toHaveClass("is-lit");
+  });
+
+  test("the day is the site's server's: a phone set a day on shows today once the server has answered", () => {
+    vi.useFakeTimers();
+    // The phone says day 4.
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 13, 12)));
+    let server: number | null = null;
+    const listeners = new Set<() => void>();
+    setGameClock({
+      now: () => server,
+      status: () => (server === null ? "checking" : "ready"),
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      check: () => {},
+    });
+    setSearch("");
+    mount();
+    // Until the server answers, the phone's day.
+    expect(screen.getByText(strings.home.day(4))).toBeInTheDocument();
+
+    act(() => {
+      server = Date.UTC(2026, 10, 12, 12);
+      listeners.forEach((listener) => listener());
+    });
+    expect(screen.getByText(strings.home.day(3))).toBeInTheDocument();
+    expect(towedBy(theScene())).toEqual(towedForDay(3));
+  });
+
+  test("?day= is for development: a production build shows today", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 12, 12)));
+    vi.stubEnv("DEV", false);
+    try {
+      setSearch("?day=5");
+      mount();
+      expect(screen.getByText(strings.home.day(3))).toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

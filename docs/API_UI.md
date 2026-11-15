@@ -640,7 +640,23 @@ card the badge, the score, the line. Screen readers get that order on both layou
 ### `Leaderboard`
 
 `boards: LeaderboardBoard[]` (HOME, AWAY, RETRO, NEXT-GEN), `labels: LeaderboardLabels`,
-`initialMode?`, `stowed?`, `onStats?()` (new 2026-11-13: the link to the player's stats)
+`initialMode?`, `stowed?`, `onStats?()` (new 2026-11-13: the link to the player's stats),
+`me?: LeaderboardMe` (new 2026-11-15: the player's nickname)
+
+**2026-11-15: the player's nickname** (the product owner: "everyone who joins gets a nickname
+assigned to them. They can change this. But this is what's used for leaderboard names"). The
+player's own row shows `entry.name`, their nickname (YOU only when it is empty). With `me`
+(`{ name, changeSpoken, onChange(from) }`), a line under the table holds the nickname on the
+chalk plate of the player's row and, at its right end, `labels.change` ("CHANGE", the link-like
+button of ALL STATS, named `changeSpoken`: "Change your name, soccerfan4821";
+`aria-haspopup`); `labels.me` ("Your name:") is read out before the name. A long name gives way
+before the link does. Every name in the panel is a `Name`: a name ending in a number has the
+number in a box of its own (`ss-lb__nm-tail`) that never shrinks, so where the column is short
+the letters end in the ellipsis and the number stays ("soccerf…4821": the monitor's panel fits
+about ten characters, a phone's sheet all thirteen). CHANGE calls `onChange(from)`, `from` the element the focus should go back
+to once the name is done: the link on a monitor; on a phone the sheet goes down first (as for
+ALL STATS) and `from` is the trophy. The line is one row of body text: at 1366 x 768 the panel
+still ends above the captions (checked).
 
 **2026-11-13: four modes, and the player's own days.** The tabs are two by two. Under the
 table, for the selected mode: `board.mine` in place of `played` when given (the player's own
@@ -668,7 +684,7 @@ above the two rows of captions; its top rises for that (`--ss-lb-top`, section 2
 - `LeaderboardLabels`: `heading`, `tabs` (the tab list's name), `rank`, `name`, `points` (the
   column headings), `you`, `gap`, `open` (the trophy button), `close` (the sheet's button),
   `toggle`, `hide`, `show` (the tab that slides the panel away on a monitor: its name and its
-  two tooltips).
+  two tooltips), `more?` (ALL STATS), `me?` and `change?` (the nickname's line).
 - Also exported: `TROPHY`, the 9 x 9 cup bitmap of the trophy button (a generic cup, not any
   real trophy); from `./Leaderboard` also `ARROW_RIGHT`, `ARROW_LEFT` and `LEADERBOARD_KEY`.
 
@@ -960,7 +976,9 @@ are coming and asks for no address.)
 `Popup`: `open`, `heading`, `intro?` (leave out for no line under the heading), `close` (the close button's name), `action?` (a button of
 the card's own in its head, just before the close button, class `ss-popup__action`: the
 review's SHARE), `onClose()`,
-`returnFocus?`, `children?`, `className?` (on the card). The shared pop-up both are built on:
+`returnFocus?`, `children?`, `className?` (on the card), `dismissRef?` (new 2026-11-15: filled
+with a function that closes the card as its close button does, way out and all, for a card
+that closes itself: `Nickname`'s SAVE). The shared pop-up both are built on:
 the dialog of `HowToPlay` and `Stats`, line for line (a modal `dialog` with `ss-help-dialog`,
 the dither on a monitor, the sheet on a phone, the rise and drop on whole device pixels and
 none under reduced motion, the close button, Escape, a press outside, the focus kept inside
@@ -1044,6 +1062,29 @@ The home page keeps `remind` and `support` (open or not) and a ref for each butt
 `<RemindMe labels={strings.remind} ... />` and `<Support labels={strings.support} ideas={IDEAS}
 coffee={COFFEE} ... />` beside the stats. The click sound is the usual one (the delegated
 listener in `~/audio`: the buttons, the links dressed as buttons; a disabled button is silent).
+
+### `Nickname` (new 2026-11-15)
+
+`labels: NicknameLabels` (`strings.nickname`), `open`, `name` (the nickname now: the field
+starts with it), `maxLength`, `problem(text)` (what is wrong with a name as typed, in words, or
+null), `onSave(text)`, `onClose()`, `returnFocus?`.
+
+A `Popup`: "YOUR NAME"; the line ("The name the leaderboards show for you. Change it any
+time."); **NAME** over the answer bar's field (`ss-input`, its own height and the card's type
+here), described by the rules under it ("3 to 13 letters or numbers. Spaces, - and _ are fine
+too."); **SAVE** (gold, the card's width, and Enter). (NEW ONE, another made-up name, went
+when first names became soccerfan and a number.) SAVE with a name `problem` turns down puts its words under the field in the referee's red
+(`aria-live`, the field `aria-invalid` and described by them), and the card stays up; typing
+again takes them away. A good name goes to `onSave` and the card closes (`dismissRef`), the
+focus back to `returnFocus`.
+
+The home page owns the name (`app/routes/nickname.ts`, `nicknameStore` for
+`useSyncExternalStore`): the first time a page subscribes it reads the name kept on the device,
+or gives the player one (`freshNickname()`: `fanNickname(fanNumber(Math.random()))`,
+"soccerfan" and a random number from 1000 to 9999) and keeps it (`ensureNickname`,
+`~/game/nickname`). `problem` is `checkNickname` in
+words (`strings.nickname.problems`), `maxLength` `NICKNAME_MAX`, `onSave` `nicknameStore.save`.
+The leaderboard's rows and its `me` line read the store, so a saved name shows at once.
 
 ### `ClickBurst`
 
@@ -1591,6 +1632,32 @@ must and must not do with a scene is in `docs/API_SCENES.md`). Beyond that:
   time: `0.1` is slow motion) and `?match=<n>` (the stadium match's plays in seed `n`'s order
   rather than a fresh one each visit: `1` opens with THE HEADER, `3` with THE BREAK, the away
   goal, `8` with THE LONG BALL). The query is carried to the mode pages, and they carry it back.
+  `?day=`, `?stadium=` and `?notimer=` work in development builds only (`gameSearch`).
+- The day is the game clock's (`gameClock`, below): the device's clock only until the server
+  has answered, and a correction from it is a refresh like any other (a new day, a new scene).
+
+**The game clock** (`app/ui/game-clock.ts`, browser only, 2026-11-15). The day is the site's
+server's, so turning the phone's clock on does not open another day's game.
+
+- `gameClock(): GameClock`: the page's one clock, made and first asked on first use. It sends a
+  HEAD request to the site's own `favicon.svg` (a fresh query each time, `cache: "no-store"`) and
+  reads the answer's `Date` header (plus `Age`, if a cache kept it): `serverTimeOf(answer,
+sentAt, receivedAt)`, the middle of that second, half the round trip ago. From then on the
+  time runs on `performance.now()`, which no change to the device's clock moves. It asks again
+  when the tab comes back into view or the connection comes back; a reading within
+  `CLOCK_SLACK_MS` (2 s) of the running time leaves it alone.
+- `GameClock`: `now()` (ms since 1970, or null until the server has answered), `status()`
+  (`"checking"`, `"ready"`, `"failing"`: no answer yet and the last request failed or took over
+  `CLOCK_TIMEOUT_MS`, 5 s; it asks again after `CLOCK_RETRY_MS`, 1 s up to 15 s), `subscribe`,
+  `check()`. A server that answers with no `Date` leaves the device's clock.
+- The game page makes no game until `now()` is known; the game's day and every question's time
+  are the clock's. While it is `"failing"`, a plain `Panel` says `strings.play.clock.failing`.
+- `serverClock(options)` is the clock itself, with its request, monotonic clock, device clock
+  and timers injectable for tests; `deviceClock()` is always ready on the device's clock, and
+  `setGameClock(clock)` swaps the page's one (vitest.setup.ts sets the device clock for every
+  test).
+- `gameSearch(search, debug = import.meta.env.DEV)`: the query as the game may read it; in a
+  production build, without `?day=`, `?stadium=` and `?notimer=`.
 - The "?" button opens the rules over the menu (`HowToPlay`, a modal dialog); the address does
   not change, and closing them puts the focus back on the "?".
 - The mode's page is fetched ahead of the kick-off (`PrefetchPageLinks`), from the moment a mode

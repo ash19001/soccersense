@@ -27,7 +27,12 @@ export function storageKey(dayKey: string, mode: Mode): string {
   return `${STORAGE_PREFIX}:${dayKey}:${mode}`;
 }
 
-function resolveStorage(
+/**
+ * The storage to use: `given` if it is given (null for none), else `localStorage` when there
+ * is a usable one. The one place in app/game that reads `localStorage` (`./nickname` uses it
+ * too).
+ */
+export function resolveStorage(
   given: StorageLike | null | undefined,
 ): StorageLike | null {
   if (given !== undefined) return given;

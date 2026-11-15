@@ -6,7 +6,9 @@ what the shared contracts are, and how to check your work.
 ## 1. Shape of the app
 
 - React Router v8 static site (`ssr: false`, pages prerendered at build time). Everything in
-  this iteration runs in the browser. No backend, no network calls.
+  this iteration runs in the browser. No backend, and no calls to any other site. Beyond its own
+  files, the page makes one kind of request: a HEAD to its own address, for the server's time
+  (`app/ui/game-clock.ts`), so the day is not the device's clock.
 - **Scenes are drawn in software.** A scene paints into a `Surface` (a `Uint32Array`
   framebuffer at logical resolution). The browser copies it to a `<canvas>` with
   `putImageData` and scales it up with `image-rendering: pixelated`. Node can render the same
@@ -219,3 +221,40 @@ uses them). The summary below is the original outline.
 10. **Write only inside the repository** (and a scratchpad you were given). Never create files
     anywhere else, and never on another drive. Keep renders small and delete intermediates. If a
     write fails for lack of disk space, stop, check your files are whole, and report it.
+
+## 8. When the backend comes
+
+There is no backend yet (the product owner, 2026-11-15: "I will add backend later on"). These
+parts stand in for one and change when it arrives:
+
+- **The day and the time.** `app/ui/game-clock.ts` takes the time from the `Date` header of a
+  HEAD request to the static host, so a changed phone clock cannot open another day's game.
+  With a backend, the backend says what day it is (say, `/api/today` with the day number and
+  the time) and the clock reads that instead. Only `serverClock`'s request and `serverTimeOf`
+  change; the game page already waits for the clock, and the home screen already takes its
+  correction. `gameSearch` keeps `?day=`, `?stadium=` and `?notimer=` to development builds.
+- **Once a day.** Whether a mode was played today is the device's local storage
+  (`soccersense:v1:<day>:<mode>`, `app/game/storage.ts`; the game in progress is
+  `...:live`, `app/routes/play/progress.ts`). Clearing site data, a private window or another
+  browser gives a fresh game. The backend records each player's game per day and mode and
+  refuses a second; local storage becomes a cache of it.
+- **Nicknames.** Each player's first nickname is `soccerfan` and a number, given and kept on the
+  device (`app/game/nickname.ts`, `app/routes/nickname.ts`); the leaderboard shows it only on the
+  player's own row. The product owner wants the numbers to go up one by one so that no two
+  players share one (2026-11-15). A device cannot know which numbers others have, so for now it
+  picks a random one from 1000 to 9999 (`fanNumber`). The backend hands out the next number from
+  a counter (`fanNickname(n)` makes the name: soccerfan1, soccerfan2, ...), checks a changed name
+  is free, turns down offensive or impersonating ones (the device only checks length and
+  characters), and sends the real players' names in `leaderboardFor`'s place. A UUID is the
+  right thing to identify a player behind the scenes (it is what anonymous sign-in gives), not
+  to show: it is 36 characters.
+- **The questions and the answers.** Every mode's questions and every answer's share ship in
+  the page's code (`app/data`), so anyone can read them. The backend sends only today's
+  questions, judges the answers itself and sends each reveal after it is answered.
+- **The rest already noted elsewhere:** popularity shares are estimates until real answers are
+  counted (`shotsFor`, docs/data-notes/popularity.md); the leaderboard is mock data behind
+  `leaderboardFor` (docs/API_UI.md); streaks, stats and the history are kept on the device only
+  (GAME_DESIGN.md section 6.6).
+- **The rendering rules** in CLAUDE.md (`ssr: false`, prerender, no `action`, `clientLoader`
+  for anything fetched at runtime) assume no runtime server, and section 1 of this file allows
+  only the clock's request. Both are revisited with the backend.

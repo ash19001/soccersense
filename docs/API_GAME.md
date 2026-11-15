@@ -50,10 +50,11 @@ NEXT-GEN's address is `/play/next-gen` (`playPath`); `/play/nextgen` plays it to
 
 ```
 Menu
-  const today = resolveToday(new Date(), location.search, STADIUMS)
+  const today = resolveToday(new Date(gameClock().now() ?? Date.now()), gameSearch(location.search), STADIUMS)
+    (the server's time and the production build's query: gameClock and gameSearch, docs/API_UI.md)
   today.stadium, today.dayNumber, today.time (forced sky time, optional)
   loadDay(today.dayKey) gives { home, away }, each null or { total, turns } for the patch scores
-  msUntilNextDay(new Date()) to refresh at midnight UTC
+  msUntilNextDay(new Date(gameClock().now() ?? Date.now())) to refresh at midnight UTC
 
 Game
   let s = createSession({ mode, dayNumber: today.dayNumber, stadium: today.stadium, questions, now, noTimer: today.noTimer })
@@ -228,6 +229,7 @@ storage.ts (key "soccersense:v1:<dayKey>:<mode>", value { total, turns }; none o
 - storageKey(dayKey: string, mode: Mode): string
 - saveGame(dayKey: string, mode: Mode, game: StoredGame, storage?: StorageLike | null): boolean. Overwrites; returns whether it was written.
 - saveSession(session: Session, storage?: StorageLike | null, today?: number): boolean. Saves a finished game under dayKeyFor(session.dayNumber) and session.mode; false if the game is not done. Then prunes the history (pruneHistory) from min(session.dayNumber, today): pass the real game day (dayNumber(new Date()), no ?day= override) so a game played on a far-off ?day= never deletes real games; the controller does.
+- nickname.ts (2026-11-15): the player's nickname, kept on the device under NICKNAME_KEY ("soccersense:v1:nickname"). A first nickname is fanNickname(n): FAN_PREFIX ("soccerfan") and the number ("soccerfan4821"; anything but a whole number from 1 is 1); fanNumber(random) turns a random value from 0 to 1 into FAN_FIRST (1000) to FAN_LAST (9999), each as likely, until a backend hands out the numbers in order. checkNickname(text): { ok: true, name } (tidied: no spaces at the ends, one between words) or { ok: false, problem: "short" | "long" | "characters" | "letter" }: NICKNAME_MIN (3) to NICKNAME_MAX (13: soccerfan and four digits) letters, numbers, spaces, - and _, with a letter. loadNickname(storage?) (null for none or junk), saveNickname(text, storage?) (the name kept, or null), ensureNickname(fresh, storage?) (the kept name, or fresh() kept from now on; fresh() for the visit where nothing can be kept). Storage as storage.ts (resolveStorage, now exported, is the one lookup of localStorage).
 - loadGame(dayKey: string, mode: Mode, storage?): StoredGame | null. Null for junk, including a total that is not the sum of its turns.
 - loadDay(dayKey: string, storage?): Record<Mode, StoredGame | null>. One entry per mode in MODES.
 - clearGame(dayKey: string, mode: Mode, storage?): void

@@ -272,6 +272,88 @@ describe("Leaderboard with four modes", () => {
     expect(within(panel).queryByRole("button")).toBeNull();
   });
 
+  test("the player's row is named by their nickname, when it is given", () => {
+    const named = BOARDS.map((board) => ({
+      ...board,
+      rows: board.rows.map((row) =>
+        row.you ? { ...row, name: "HeaderWes1" } : row,
+      ),
+      you: board.you && { ...board.you, name: "HeaderWes1" },
+    }));
+    render(at(MONITOR, <Leaderboard boards={named} labels={LABELS} />));
+    const row = screen
+      .getByRole("rowheader", { name: "You: 37th of 1,284" })
+      .closest("tr");
+    expect(row).toHaveTextContent("37HeaderWes1");
+    expect(row).not.toHaveTextContent("YOU");
+  });
+
+  test("a name's number is kept apart from its words, so a short column cuts the words", () => {
+    const named = BOARDS.map((board) => ({
+      ...board,
+      you: board.you && { ...board.you, name: "soccerfan4821" },
+    }));
+    render(at(MONITOR, <Leaderboard boards={named} labels={LABELS} />));
+    const row = screen
+      .getByRole("rowheader", { name: "You: 37th of 1,284" })
+      .closest("tr") as HTMLElement;
+    expect(row.querySelector(".ss-lb__nm-head")).toHaveTextContent(
+      /^soccerfan$/,
+    );
+    expect(row.querySelector(".ss-lb__nm-tail")).toHaveTextContent(/^4821$/);
+    // A name with no number at its end is all words.
+    const top = screen.getByRole("rowheader", { name: "TopBinsTom" });
+    expect(top.querySelector(".ss-lb__nm-tail")).toBeNull();
+  });
+
+  test("the nickname has its own line under the table, and CHANGE", () => {
+    const onChange = vi.fn();
+    render(
+      at(
+        MONITOR,
+        <Leaderboard
+          boards={BOARDS}
+          labels={{ ...LABELS, me: "Your name:", change: "CHANGE" }}
+          me={{
+            name: "HeaderWes1",
+            changeSpoken: "Change your name, HeaderWes1",
+            onChange,
+          }}
+        />,
+      ),
+    );
+    const line = document.querySelector(".ss-lb__me") as HTMLElement;
+    expect(line).toHaveTextContent("Your name: HeaderWes1CHANGE");
+    expect(within(line).getByText("Your name:")).toHaveClass("ss-sr");
+    const change = screen.getByRole("button", {
+      name: "Change your name, HeaderWes1",
+    });
+    expect(change).toHaveAttribute("aria-haspopup", "dialog");
+    fireEvent.click(change);
+    // The focus comes back to the link once the name is done.
+    expect(onChange).toHaveBeenCalledWith(change);
+  });
+
+  test("on a phone CHANGE closes the sheet, and the focus goes back to the trophy", () => {
+    const onChange = vi.fn();
+    render(
+      at(
+        DEFAULT_SCALE,
+        <Leaderboard
+          boards={BOARDS}
+          labels={{ ...LABELS, change: "CHANGE" }}
+          me={{ name: "HeaderWes1", changeSpoken: "Change", onChange }}
+        />,
+      ),
+    );
+    const trophy = screen.getByRole("button", { name: LABELS.open });
+    fireEvent.click(trophy);
+    const sheet = document.querySelector("dialog") as HTMLElement;
+    fireEvent.click(within(sheet).getByRole("button", { name: "Change" }));
+    expect(onChange).toHaveBeenCalledWith(trophy);
+    expect(document.querySelector("dialog")).toBeNull();
+  });
+
   test("on a phone the link closes the sheet and opens the stats", () => {
     const onStats = vi.fn();
     render(

@@ -9,6 +9,7 @@ import type {
   Grade,
   HomeTitleId,
   NextgenTitleId,
+  NicknameProblem,
   RetroTitleId,
   Shot,
   TierId,
@@ -154,6 +155,11 @@ export const en = {
         return `You: ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
       },
       gap: "Rows left out",
+      /** Read out before the player's nickname, on its line under the table. */
+      me: "Your name:",
+      change: "CHANGE",
+      /** Read out for CHANGE. */
+      changeSpoken: (name: string) => `Change your name, ${name}`,
       played: (count: number) =>
         `${count.toLocaleString("en-GB")} played today`,
       open: "Today's top 10",
@@ -242,6 +248,10 @@ export const en = {
     /** Read out under the heading once the day is known. */
     stadium: (name: string, city: string, country: string) =>
       `Today's stadium: ${name}, ${city}, ${country}.`,
+    /** The game waits for the site's server to say what day it is (`gameClock`). */
+    clock: {
+      failing: "Can't check today's date. Check your connection.",
+    },
 
     board: {
       label: "Scoreboard",
@@ -745,6 +755,23 @@ export const en = {
    * (RemindMe in ~/ui). The player picks a time and adds an event that repeats every day to
    * their calendar: a file made on the device, or Google Calendar or Outlook on the web.
    */
+  /** The player's nickname: made up on the first visit, changed from the leaderboard. */
+  nickname: {
+    heading: "YOUR NAME",
+    /** The one line under the heading, and the dialog's description. */
+    intro: "The name the leaderboards show for you. Change it any time.",
+    close: "Close",
+    field: "NAME",
+    rules: "3 to 13 letters or numbers. Spaces, - and _ are fine too.",
+    save: "SAVE",
+    /** Under the field when a name cannot be used (`NicknameProblem` in ~/game). */
+    problems: {
+      short: "Too short: 3 characters at least.",
+      long: "Too long: 13 characters at most.",
+      characters: "Only letters, numbers, spaces, - and _.",
+      letter: "It needs at least one letter.",
+    } satisfies Record<NicknameProblem, string>,
+  },
   remind: {
     /** The button's name and tooltip. */
     open: "Remind me",

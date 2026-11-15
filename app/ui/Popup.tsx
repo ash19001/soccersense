@@ -41,6 +41,11 @@ export interface PopupProps {
   children?: ReactNode;
   /** On the card (`ss-help ss-popup`), for its own styles. */
   className?: string;
+  /**
+   * Filled with a function that closes the card as its close button does (its way out
+   * played, then `onClose`): for a card that closes itself, once a name is saved, say.
+   */
+  dismissRef?: RefObject<(() => void) | null>;
 }
 
 /** The longest the way out may take before the dialog closes anyway. */
@@ -86,6 +91,7 @@ function Dialog({
   action,
   children,
   className,
+  dismissRef,
 }: Omit<PopupProps, "open">) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const closeRef = useRef<HTMLButtonElement | null>(null);
@@ -128,6 +134,14 @@ function Dialog({
     setPhase("leaving");
     st.timer = window.setTimeout(finish, EXIT_PATIENCE_MS);
   }, [finish]);
+
+  useEffect(() => {
+    if (!dismissRef) return;
+    dismissRef.current = requestClose;
+    return () => {
+      if (dismissRef.current === requestClose) dismissRef.current = null;
+    };
+  }, [dismissRef, requestClose]);
 
   // Below the screen until the dialog's first frame has been drawn, then it rises.
   useEffect(() => {

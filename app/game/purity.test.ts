@@ -51,6 +51,7 @@ describe("the source of app/game", () => {
       "index.ts",
       "judge.ts",
       "modes.ts",
+      "nickname.ts",
       "reveal.ts",
       "scoring.ts",
       "session.ts",

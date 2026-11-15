@@ -7,9 +7,13 @@
 // storage to read. So the first render shows only what never changes (the captions and
 // the name), and everything that depends on the day arrives after mounting.
 //
-// Debug: ?day=<n> (the day's fact and the day's stadium), ?stadium=<id> (see
-// app/data/stadiums.ts: it is the game's, not this page's), ?time=HH:MM, and ?speed=<n>,
-// which multiplies the scene's time (0.1 is slow motion, for looking at the kick-off).
+// The day is the site's server's, not the device's (`gameClock`): turning the phone's clock
+// on does not open tomorrow's game.
+//
+// Debug: ?day=<n> (the day's fact and the day's stadium) and ?stadium=<id> (see
+// app/data/stadiums.ts: it is the game's, not this page's), in development builds only
+// (`gameSearch`); ?time=HH:MM, and ?speed=<n>, which multiplies the scene's time (0.1 is
+// slow motion, for looking at the kick-off).
 
 import {
   useEffect,
@@ -32,6 +36,8 @@ import {
   type Today,
   EPOCH_UTC,
   MS_PER_DAY,
+  NICKNAME_MAX,
+  checkNickname,
   loadDay,
   loadHistory,
   msUntilNextDay,
@@ -47,7 +53,9 @@ import {
   HowToPlay,
   Leaderboard,
   type LeaderboardBoard,
+  type LeaderboardMe,
   MenuCaptions,
+  Nickname,
   Panel,
   PixelStage,
   RemindMe,
@@ -56,6 +64,8 @@ import {
   Support,
   arrivingThroughFade,
   fetchHeadingFaces,
+  gameClock,
+  gameSearch,
   useArrivalFocus,
   useDeviceSky,
   useFadeArrival,
@@ -65,6 +75,7 @@ import type { Route } from "./+types/home";
 import { planeFits } from "./home-plane";
 import { signMessages } from "./home-sign";
 import { howToPlayContent } from "./how-to-play-card";
+import { nicknameStore } from "./nickname";
 import type { ShareOutcome } from "./play/share-flow";
 import { type ReviewContent, reviewContent } from "./review-content";
 import { createTodayShare } from "./share-today";
@@ -202,7 +213,10 @@ function createMatchdayStore(): MatchdayStore {
     if (chosen || phase === "kickoff" || phase === "done") return false;
 
     const search = window.location.search;
-    const today = resolveToday(new Date(), search, STADIUMS);
+    // The day by the site's server: the device's clock only until it has answered (the
+    // games themselves wait for it, on their own page).
+    const now = gameClock().now() ?? Date.now();
+    const today = resolveToday(new Date(now), gameSearch(search), STADIUMS);
     const fact = factForDay(today.dayNumber);
     const saved = loadDay(today.dayKey);
     const scores = {
@@ -275,25 +289,34 @@ function createMatchdayStore(): MatchdayStore {
       const look = () => {
         if (refresh()) onChange();
       };
+      const clock = gameClock();
       let timer = 0;
       const waitForMidnight = () => {
+        window.clearTimeout(timer);
         timer = window.setTimeout(
           () => {
             look();
             waitForMidnight();
           },
-          msUntilNextDay(new Date()) + 1000,
+          msUntilNextDay(new Date(clock.now() ?? Date.now())) + 1000,
         );
       };
       const onVisibility = () => {
         if (document.visibilityState !== "hidden") look();
       };
+      // The server has answered, or put the time right: perhaps another day, and another
+      // midnight.
+      const stopClock = clock.subscribe(() => {
+        look();
+        waitForMidnight();
+      });
       document.addEventListener("visibilitychange", onVisibility);
       waitForMidnight();
       // The first value: React is told like any other change, and renders again with it.
       look();
       return () => {
         window.clearTimeout(timer);
+        stopClock();
         document.removeEventListener("visibilitychange", onVisibility);
       };
     },
@@ -368,6 +391,8 @@ function leaderboards(
   day: number,
   scores: Record<Mode, number | null>,
   week: Record<Mode, readonly (number | null)[]> | null,
+  /** The player's nickname, on their own row (empty: YOU). */
+  nickname = "",
 ): LeaderboardBoard[] {
   const text = strings.home.leaderboard;
   return MODES.map((mode) => {
@@ -383,13 +408,13 @@ function leaderboards(
       played: text.played(board.total),
       rows: top.map((row) => ({
         rank: row.rank,
-        name: row.name,
+        name: row.you ? nickname : row.name,
         points: row.total,
         you: row.you,
       })),
       you:
         mine && !top.includes(mine)
-          ? { rank: mine.rank, name: "", points: mine.total, you: true }
+          ? { rank: mine.rank, name: nickname, points: mine.total, you: true }
           : null,
       youSpoken:
         board.yourRank === null
@@ -470,6 +495,17 @@ export default function Home() {
   const remindButton = useRef<HTMLButtonElement | null>(null);
   const [support, setSupport] = useState(false);
   const supportButton = useRef<HTMLButtonElement | null>(null);
+  /**
+   * The player's nickname (soccerfan and a number on the first visit: ./nickname.ts), and
+   * its pop-up, up from the leaderboard's CHANGE, with where the focus goes back to.
+   */
+  const nickname = useSyncExternalStore(
+    nicknameStore.subscribe,
+    nicknameStore.read,
+    nicknameStore.server,
+  );
+  const [renaming, setRenaming] = useState(false);
+  const renameButton = useRef<HTMLElement | null>(null);
   /**
    * A mode played today, again (its card's REVIEW or its patch on the ball open it), with
    * what it says (read from storage on opening), and its REVIEW button to give the focus
@@ -663,9 +699,22 @@ export default function Home() {
   const week = matchday?.week ?? null;
   const boards = useMemo(
     () =>
-      day === null || scores === null ? null : leaderboards(day, scores, week),
-    [day, scores, week],
+      day === null || scores === null
+        ? null
+        : leaderboards(day, scores, week, nickname ?? ""),
+    [day, scores, week, nickname],
   );
+  /** The nickname on its line under the leaderboard's table, and CHANGE. */
+  const me: LeaderboardMe | undefined = nickname
+    ? {
+        name: nickname,
+        changeSpoken: text.leaderboard.changeSpoken(nickname),
+        onChange: (from) => {
+          renameButton.current = from;
+          setRenaming(true);
+        },
+      }
+    : undefined;
   // The tab shown first: the mode played today, if only one was (the player wants to see
   // where they came), else HOME.
   const played = scores ? MODES.filter((mode) => scores[mode] !== null) : [];
@@ -781,6 +830,7 @@ export default function Home() {
             initialMode={firstTab}
             stowed={stowed}
             onStats={openStats}
+            me={me}
           />
         )}
         {/* With no script there is no picture and no game: the page says what it is. */}
@@ -835,9 +885,25 @@ export default function Home() {
           onClose={() => setSupport(false)}
           returnFocus={supportButton}
         />
+        <Nickname
+          labels={strings.nickname}
+          open={renaming && nickname !== null}
+          name={nickname ?? ""}
+          maxLength={NICKNAME_MAX}
+          problem={nicknameProblem}
+          onSave={(name) => void nicknameStore.save(name)}
+          onClose={() => setRenaming(false)}
+          returnFocus={renameButton}
+        />
       </GameLayout>
     </main>
   );
+}
+
+/** Why a nickname as typed cannot be used, in words, or null if it can. */
+function nicknameProblem(text: string): string | null {
+  const checked = checkNickname(text);
+  return checked.ok ? null : strings.nickname.problems[checked.problem];
 }
 
 /** SHARE worked: the share sheet took it, or the picture was saved or the text copied. */
