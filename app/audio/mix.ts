@@ -727,6 +727,11 @@ export const HOME_PAGE = {
   awayWindEnd: 0.25,
   /** The picture's match far off: its goal's cheer, size 0 to 1, higher is louder. */
   pictureCheer: 0.1,
+  /**
+   * The same match's away goal: only their end's cheer, size 0 to 1, higher is louder (0 is
+   * the cheer's smallest, SOUNDS.cheer.smallest).
+   */
+  pictureAwayCheer: 0,
   /** The mascot's touches on his ball (his tricks), level 0 to 1: higher is louder. */
   mascotTouch: 1,
   /** The mascot's flick of the ball up to his head, power 0 to 1: higher is louder. */

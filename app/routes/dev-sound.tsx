@@ -633,6 +633,20 @@ const SECTIONS: Section[] = [
         knobs: ["HOME_PAGE.pictureCheer"],
       },
       {
+        id: "home-match-away",
+        name: "the match far off: an away goal (their end only, no rockets)",
+        plays: [
+          moment("PLAY", [
+            [
+              0,
+              () => ({ kind: "cheer", size: HOME_PAGE.pictureAwayCheer }),
+              "town",
+            ],
+          ]),
+        ],
+        knobs: ["HOME_PAGE.pictureAwayCheer"],
+      },
+      {
         id: "home-mascot",
         name: "the mascot's tricks: a touch, the flick, the swing and his bump",
         plays: [

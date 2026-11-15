@@ -31,12 +31,11 @@ import { drawGull } from "~/art/sky";
 
 import type { Zone } from "~/art/layout";
 import {
-  GOAL_AT,
-  MATCH_PERIOD,
   PLAYERS,
   REFEREE,
   makeMatchState,
   matchAt,
+  matchGoalNear,
 } from "~/art/stadium-match";
 import { GATE, KERB_V } from "~/art/stadium-parking";
 import { CYCLE, roadCars, type RoadCar } from "~/art/stadium-road";
@@ -312,10 +311,11 @@ function launchOf(i: number): number {
 
 /**
  * How many of the goal's rockets are in the air at time `t` (climbing or bursting): none
- * except in the FIREWORKS seconds after the match's goal. `night`: the longer bursts.
+ * except in the FIREWORKS seconds after a home goal (stadium-match.ts, in `matchSeed`'s
+ * order; an away goal sends none up). `night`: the longer bursts.
  */
-export function fireworksAt(t: number, night = false): number {
-  const since = mod(t, MATCH_PERIOD) - GOAL_AT;
+export function fireworksAt(t: number, night = false, matchSeed = 0): number {
+  const since = homeGoalSince(t, matchSeed);
   if (!(since >= 0 && since < FIREWORKS)) return 0;
   const burst = night ? BURST_NIGHT : BURST_DAY;
   let n = 0;
@@ -326,6 +326,12 @@ export function fireworksAt(t: number, night = false): number {
   return n;
 }
 
+/** Seconds since the home side's goal in the play under way at `t`, or -1. */
+function homeGoalSince(t: number, matchSeed: number): number {
+  const goal = matchGoalNear(matchSeed, t);
+  return goal.by === 0 && t >= goal.at ? t - goal.at : -1;
+}
+
 /** How fast the side roads' traffic (and the coach in it) goes, units a second. */
 const COACH_SPEED = 6;
 
@@ -334,7 +340,8 @@ const PLANS = new Map<string, Stop[][]>();
 
 /**
  * What moves, for this view, light and seed over the painted town. `clear`: places on
- * screen the goal's fireworks keep out of (the airship).
+ * screen the goal's fireworks keep out of (the airship). `matchSeed`: the order the
+ * match's plays come in (stadium-match.ts).
  */
 export function makeLife(
   view: View,
@@ -342,6 +349,7 @@ export function makeLife(
   seed: number,
   town: Town,
   clear: readonly Zone[] = [],
+  matchSeed = seed,
 ): Life {
   const { w, h, hy, k } = view;
   const night = light.lightsOn;
@@ -1522,7 +1530,7 @@ export function makeLife(
   const drawMatch = (s: Surface, t: number, roar: number): number => {
     if (k1 < 0.3) return 0;
     // every frame: they move a whole pixel at a time, as smoothly as they run
-    matchAt(game, t);
+    matchAt(game, t, matchSeed);
     ink.V = -400;
     const tall = k1 >= 0.8;
     drawPlayers(tall);
@@ -1605,21 +1613,26 @@ export function makeLife(
     }
     ink.rect(x, by, 2, 2, kit.ball);
   };
-  /** The crowd: a murmur, a gasp, and for a goal arms up all round with a wave through it. */
+  /**
+   * The crowd: a murmur, a gasp, and for a home goal arms up all round with a wave through
+   * it; for an away goal only the away end's arms go up.
+   */
   const crowdMurmur = (s: Surface, t: number, roar: number): number => {
     if (roar > 0 || game.cheer <= 0) return game.cheer;
     const data = s.data;
     const beat = Math.floor(t * 8);
     const n = bowl.crowdAt.length;
     const base = game.cheer * 0.34;
-    const wave = game.sinceGoal >= 0.4;
+    const away = game.goalBy === 1;
+    const wave = game.sinceGoal >= 0.4 && !away;
     const span = Math.max(1, bowl.layer.w);
     const front = bowl.x + ((game.sinceGoal * 0.42) % 1) * span;
     const band = Math.max(6, span * 0.07);
-    // it is the home side's goal: the away end keeps its arms down and its cameras away
+    // the home side's goal: the away end keeps its arms down and its cameras away; the
+    // away side's: only the away end has anything to cheer
     const goal = game.sinceGoal >= 0;
     for (let i = 0; i < n; i++) {
-      if (goal && bowl.crowdAway[i] === 1) continue;
+      if (goal && (bowl.crowdAway[i] === 1) !== away) continue;
       const at = bowl.crowdAt[i];
       let chance = base;
       if (wave) {
@@ -1628,7 +1641,7 @@ export function makeLife(
       }
       if (h2(i, beat) < chance) data[at] = bowl.crowdUp[i];
     }
-    if (game.cheer > 0.5 && n > 0) {
+    if (game.cheer > 0.5 && n > 0 && !away) {
       for (let i = 0; i < 5; i++) {
         const who = Math.floor(h2(i, beat + 50) * n);
         if (bowl.crowdAway[who] !== 1) data[bowl.crowdAt[who]] = P.white;
@@ -1920,7 +1933,7 @@ export function makeLife(
   ];
   const drawFireworks = (s: Surface, t: number, roar: number): void => {
     if (roar > 0.45) return; // the roar sends up its own
-    const since = mod(t, MATCH_PERIOD) - GOAL_AT;
+    const since = homeGoalSince(t, matchSeed);
     if (!(since >= 0 && since < FIREWORKS)) return;
     const beat = Math.floor(t * 12);
     s.pushClip(0, view.logoH, w, h);

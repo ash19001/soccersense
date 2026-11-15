@@ -397,9 +397,10 @@ little more). Phones have no lawn: no mascot. The state is the trick history (`M
 **Sound** (`cuesBetween`, `SoundCue` from `app/scenes/scene.ts`): the airship's landing
 (`thud`, or `splash` in the pond, `FALL` after the pop), the mascot's `touch`es, `kick`s and
 the `thud` of his tumble, and the match far off, as faint background: `{ kind: "cheer", size:
-0.1 }` as the home side scores (`GOAL_AT` into each `MATCH_PERIOD`) and `{ kind: "firework",
-distant: true }` as each of the goal's rockets goes up (`life.launches`; none on a phone, none
-while the roar is over 0.45). Never a horn. Pure; spans that meet never repeat a cue; only the last
+0.1 }` as the home side scores (each play's own goal time, `matchGoalNear`) and `{ kind:
+"firework", distant: true }` as each of the goal's rockets goes up (`life.launches`; none on a
+phone, none while the roar is over 0.45); as the away side scores only a smaller cheer
+(`HOME_PAGE.pictureAwayCheer`), no rockets. Never a horn. Pure; spans that meet never repeat a cue; only the last
 second of a longer span is heard. The pop and the pokes of the airship are the scene's to play
 (it knows from `pokeAirship`'s answer).
 
@@ -517,18 +518,31 @@ and an airship never poked draws exactly as before. The crash site is chosen onc
 
 **What moves** (`stadium-life.ts`; all a pure function of the time and the seed):
 
-- **The match** (`stadium-match.ts`): a scripted passage of play 40 seconds long that loops
-  exactly. Kick-off, an interception, a build-up to the left wing, a cross, a header saved (the
-  crowd gasps), a break by the away side, a long ball, a goal (arms up all round and a wave
-  through the stands), the celebration, the walk back. `matchAt(state, t)` gives 22 players, the
+- **The match** (`stadium-match.ts`): scripted plays 40 seconds long, each from a kick-off to
+  a goal and the walk back (the product owner, 2026-11-15: "at least 2 more variations with 1
+  of them being the away team scoring ... randomly played"). THE LONG BALL (a header saved,
+  then a long ball and a home goal), THE BREAK (the home side's shot saved, the keeper's long
+  kick flicked on, an away goal at the west end) and THE HEADER (a tackle, a long switch, an
+  overlap and a cross headed in), each kicked off by the away side, and their mirror images
+  (`mirror`: each side plays the other's part from the other end, jogging and making room as
+  that player does) for the home side's kick-off. After a goal the side that let it in kicks
+  off; `playOf(seed, k)` picks the `k`th play at random from those it has, never the one just
+  played (as written or mirrored), so every seed has its own order. Every play starts and ends
+  lined up for a kick-off, so each runs on into any other. A home goal: arms up all round and a
+  wave through the stands, rockets, the cheer; an away goal: only the away end's arms go up, a
+  smaller cheer, no rockets (`state.goalBy`). `matchAt(state, t, seed)` gives 22 players, the
   referee and the ball in map units, and each player's `stride` (-1 standing, else which foot
-  leads). The script says where each means to be; the players run there as people do (no faster
+  leads); `matchPlay(seed, k)` and `matchGoalNear(seed, t)` say which play and whose goal when;
+  `playAt` and `playsFor` play one on its own (the tests and shots). `MenuBackdrop` takes a
+  `matchSeed` (the day's seed if none) and hands it to `makeLife`. The script says where each means to be; the players run there as people do (no faster
   than a sprint, picking up and losing pace over a few strides, never on one spot), worked out
-  once at first use (about 50 ms) into a table read between rows, so everybody moves smoothly,
-  at most a pixel a frame, the loop's seam included. The match is sampled every frame (moves are
+  once per play at first use (about 50 ms each) into a table read between rows, from the
+  line-up at rest to the next line-up, so everybody moves smoothly, at most a pixel a frame,
+  from one play into the next included. The match is sampled every frame (moves are
   whole pixels); a player stands (both feet down) when he is still and only strides when he
   moves, a foot a stride's length of ground. The ball is at the feet of whoever has it, where he
-  has really run to. Shot: `match/strip` (consecutive frames at the busy moments and the seam).
+  has really run to. Shots: `match/long-ball` (also `match/strip`), `match/break`,
+  `match/header` and their `-mirrored` (consecutive frames at the busy moments and the seam).
 - **The car park** (`stadium-parking.ts`) is parked full for the day and painted with the
   town: no car drives in or out (the product owner found the parking animation odd). Its bays
   run north on the map, so on screen they lean towards the vanishing point; every parked car
@@ -596,12 +610,12 @@ and an airship never poked draws exactly as before. The crash site is chosen onc
   58 cars to 38), a car missing for a whole lap of its road or a whole pass on Stadium Road.
   The queues, the stewards, the groups on the plaza, the away fans and the crowd stay. By day
   nothing changes. It is still a pure function of the time and the light.
-- **Fireworks for the goal**: when the home side scores (`GOAL_AT`, 26 s into the match's
-  loop) five small rockets go up from the roof over the far stands, 0.2 to 2.2 s after the
+- **Fireworks for the goal**: when the home side scores (24 to 26 s into its play,
+  `matchGoalNear`; none for an away goal) five small rockets go up from the roof over the far stands, 0.2 to 2.2 s after the
   ball goes in, climb for 0.4 s and burst in streaks of the club's red-orange and gold for
   1.1 s by day (a radius of 7 to 9 px at 480 x 270, the strong tones against a pale sky) or 1.5 s
   by night (9 to 12 px, the light tones with a glow); all over 4.2 s after the goal
-  (`FIREWORKS`, `fireworksAt(t, night)` counts the rockets up). Each goes up where its burst
+  (`FIREWORKS`, `fireworksAt(t, night, matchSeed)` counts the rockets up). Each goes up where its burst
   stays clear of the logo's sky and of the airship (`makeLife(..., clear)` gets the airship's
   box from `MenuBackdrop`); on a phone the airship covers the sky over the far stands, so there
   are none. Under reduced motion the scene's slower clock slows them too. With `setRoar` above

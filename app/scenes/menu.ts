@@ -205,6 +205,11 @@ export interface MenuSceneOptions {
   labels: MenuLabels;
   /** Play the entrance. Default true. */
   intro?: boolean;
+  /**
+   * The order the plays of the match on the stadium's pitch come in (stadium-match.ts):
+   * the home page gives each visit its own. Default: the day's `seed`.
+   */
+  matchSeed?: number;
 }
 
 export type MenuPhase = "intro" | "idle" | "kickoff" | "done";
@@ -1488,6 +1493,7 @@ export class MenuScene implements Scene {
     this.backdrop = new MenuBackdrop({
       seed: opts.seed,
       sign: { header: this.header, text: this.fact },
+      ...(opts.matchSeed !== undefined && { matchSeed: opts.matchSeed }),
     });
     // A plane tows the fact across the sky, and the sign shows the messages.
     this.backdrop.setBanner(bannerWords(this.header, this.fact));

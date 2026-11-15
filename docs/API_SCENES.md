@@ -419,9 +419,11 @@ Neither `land` nor `sparkle` is sent with reduced motion (there is no flight). T
 (the powers and the wind's speeds) are `HOME_PAGE` in `app/audio/mix.ts`.
 
 The scene itself sends no `cheer`, `firework` or `vuvuzela`. The picture's match is heard only
-far off, as background: at its goal (26 s into each 40 s loop of the picture's clock) a
-`cheer` of size 0.1 (`HOME_PAGE.pictureCheer`), and a `firework` with `distant: true` as each of the goal's rockets goes up
-(none on a phone, where they have no room). Never a `vuvuzela` (a test plays a few minutes of
+far off, as background: at a home goal (24 to 26 s into each 40 s play of the picture's
+clock) a `cheer` of size 0.1 (`HOME_PAGE.pictureCheer`), and a `firework` with `distant: true` as each of the goal's rockets goes up
+(none on a phone, where they have no room); at an away goal only a smaller `cheer`
+(`HOME_PAGE.pictureAwayCheer`). `MenuSceneOptions.matchSeed` orders the plays (the home page
+gives each visit its own). Never a `vuvuzela` (a test plays a few minutes of
 it to be sure).
 
 Wind is also drawn: while the hand's turn moves the ball, pixel streaks of air (white heads,

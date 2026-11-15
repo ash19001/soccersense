@@ -1587,8 +1587,10 @@ the storage while rendering: what depends on the day arrives after mounting, thr
 **The home page** makes one `MenuScene` per day after mounting and listens to it (what a page
 must and must not do with a scene is in `docs/API_SCENES.md`). Beyond that:
 
-- Debug queries: `?day=<n>`, `?stadium=<id>`, `?time=HH:MM` and `?speed=<0 to 16>` (the scene's
-  time: `0.1` is slow motion). The query is carried to the mode pages, and they carry it back.
+- Debug queries: `?day=<n>`, `?stadium=<id>`, `?time=HH:MM`, `?speed=<0 to 16>` (the scene's
+  time: `0.1` is slow motion) and `?match=<n>` (the stadium match's plays in seed `n`'s order
+  rather than a fresh one each visit: `1` opens with THE HEADER, `3` with THE BREAK, the away
+  goal, `8` with THE LONG BALL). The query is carried to the mode pages, and they carry it back.
 - The "?" button opens the rules over the menu (`HowToPlay`, a modal dialog); the address does
   not change, and closing them puts the focus back on the "?".
 - The mode's page is fetched ahead of the kick-off (`PrefetchPageLinks`), from the moment a mode

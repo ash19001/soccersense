@@ -65,7 +65,7 @@ import {
   type ClubScheme,
 } from "~/art/stadium-club";
 import { FIREWORKS, makeLife, type Life } from "~/art/stadium-life";
-import { GOAL_AT, MATCH_PERIOD } from "~/art/stadium-match";
+import { MATCH_PERIOD, matchGoalNear } from "~/art/stadium-match";
 import {
   MascotPokes,
   drawMascot,
@@ -86,8 +86,15 @@ import { paintTown, type Town } from "~/art/stadium-town";
 import { makeView, project, type View } from "~/art/stadium-view";
 
 /** What the airship's sign says: a short header over the fact of the day. */
-/** What is heard of the match on the pitch, far off: the goal's cheer and its rockets. */
+/**
+ * What is heard of the match on the pitch, far off: a home goal's cheer and its rockets,
+ * an away goal's thinner cheer (their end's), no rockets.
+ */
 const GOAL_CHEER: SoundCue = { kind: "cheer", size: HOME_PAGE.pictureCheer };
+const AWAY_CHEER: SoundCue = {
+  kind: "cheer",
+  size: HOME_PAGE.pictureAwayCheer,
+};
 const FAR_FIREWORK: SoundCue = { kind: "firework", distant: true };
 /** Over this much roar the goal's rockets are not drawn (stadium-life.ts), nor heard. */
 const ROCKETS_ROAR = 0.45;
@@ -128,6 +135,8 @@ function trodden(view: View, life: Life): { x: number; y: number }[] {
 
 export class MenuBackdrop {
   private readonly seed: number;
+  /** The order the match's plays come in (stadium-match.ts). */
+  private readonly matchSeed: number;
   private sign: SignText;
   /** The sign cycles through these (the player's day) instead of the fact. */
   private messages: SignText[] = [];
@@ -176,8 +185,15 @@ export class MenuBackdrop {
     y: 0,
   };
 
-  constructor(opts: { seed: number; sign: MenuSign }) {
+  /**
+   * `matchSeed`: the order of the plays of the match on the pitch (the day's `seed` if
+   * none; the home page gives each visit its own, so the plays come in a fresh order).
+   */
+  constructor(opts: { seed: number; sign: MenuSign; matchSeed?: number }) {
     this.seed = Math.round(Number.isFinite(opts.seed) ? opts.seed : 0) | 0;
+    const m = opts.matchSeed;
+    this.matchSeed =
+      m !== undefined && Number.isFinite(m) ? Math.round(m) | 0 : this.seed;
     this.sign = signText(opts.sign);
   }
 
@@ -321,7 +337,8 @@ export class MenuBackdrop {
    * What is heard of the picture in the span (t0, t1] of scene time: the airship's landing
    * (a thud, or a splash in the pond), the mascot's touches and kicks, and the match far
    * off: as the home side scores, a very small cheer (`size` 0.1) and, as each of the goal's
-   * rockets goes up, a distant firework (none while the roar sends up its own). Never a
+   * rockets goes up, a distant firework (none while the roar sends up its own); as the
+   * away side scores, a smaller cheer still and no rockets. Never a
    * horn: it is background. Pure: the same span gives the same cues, and spans that meet
    * never repeat one.
    * Only the last second of a longer span is heard (a tab coming back does not get a minute
@@ -342,12 +359,13 @@ export class MenuBackdrop {
     // the match far off: the goal, and its rockets (they go up for FIREWORKS seconds)
     if (this.w > 0 && this.h > 0) {
       const launches = this.paint().life.launches;
-      const first = Math.floor((from - FIREWORKS - GOAL_AT) / MATCH_PERIOD);
-      const last = Math.ceil((t1 - GOAL_AT) / MATCH_PERIOD);
+      const first = Math.max(0, Math.floor((from - FIREWORKS) / MATCH_PERIOD));
+      const last = Math.max(0, Math.floor(t1 / MATCH_PERIOD));
       for (let k = first; k <= last; k++) {
-        const goal = GOAL_AT + k * MATCH_PERIOD;
-        if (at(goal)) out.push(GOAL_CHEER);
-        if (this.roar > ROCKETS_ROAR) continue;
+        const g = matchGoalNear(this.matchSeed, k * MATCH_PERIOD);
+        const goal = g.at;
+        if (at(goal)) out.push(g.by === 0 ? GOAL_CHEER : AWAY_CHEER);
+        if (g.by !== 0 || this.roar > ROCKETS_ROAR) continue;
         for (const launch of launches) {
           if (at(goal + launch)) out.push(FAR_FIREWORK);
         }
@@ -410,14 +428,21 @@ export class MenuBackdrop {
       this.ship = paintAirship(signPlace(this.view), light);
       // the goal's fireworks keep clear of the airship (it drifts and lurches a little)
       const ship = this.ship;
-      this.life = makeLife(this.view, light, this.seed, this.town, [
-        {
-          x: ship.x - 8,
-          y: ship.y - 8,
-          w: ship.layer.w + 16,
-          h: ship.layer.h + 16,
-        },
-      ]);
+      this.life = makeLife(
+        this.view,
+        light,
+        this.seed,
+        this.town,
+        [
+          {
+            x: ship.x - 8,
+            y: ship.y - 8,
+            w: ship.layer.w + 16,
+            h: ship.layer.h + 16,
+          },
+        ],
+        this.matchSeed,
+      );
       this.work = new Surface(this.ship.layer.w, this.ship.layer.h);
       this.kit = buildFallKit(this.ship);
       // chosen once per size, so a change of light never moves a wreck or the mascot

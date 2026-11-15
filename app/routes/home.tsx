@@ -140,6 +140,16 @@ interface Matchday {
   speed: number;
 }
 
+/**
+ * The order of the plays of the match on the stadium's pitch: a fresh one each visit, or
+ * `?match=7` to see a seed's own again (the plays are in stadium-match.ts).
+ */
+function matchSeedFrom(search: string): number {
+  const text = new URLSearchParams(search).get("match");
+  const n = text === null || text.trim() === "" ? Number.NaN : Number(text);
+  return Number.isInteger(n) ? n : Math.floor(Math.random() * 2 ** 31);
+}
+
 /** `?speed=0.1`: anything that is not a number from 0 to 16 is 1. */
 function speedFrom(search: string): number {
   const text = new URLSearchParams(search).get("speed");
@@ -226,6 +236,7 @@ function createMatchdayStore(): MatchdayStore {
         labels: strings.home.canvas,
         // Back from a game through the fade (its MENU), the ball arrives as it fades in.
         intro: !entranceShown || arrivingThroughFade(),
+        matchSeed: matchSeedFrom(search),
       });
       entranceShown = true;
       scene.onHover = (mode) => listener?.onHover(mode);
