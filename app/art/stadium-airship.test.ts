@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Surface } from "~/pixel";
+import { Surface, TRANSPARENT } from "~/pixel";
 import { menuLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
 import { MenuBackdrop } from "~/art/stadium";
@@ -12,8 +12,19 @@ import {
   type Airship,
 } from "~/art/stadium-airship";
 import { pilotAt, type CrashSite } from "~/art/stadium-airship-fall";
-import { ARRIVE, RETURN } from "~/art/stadium-airship-poke";
-import { mascotZone } from "~/art/stadium-mascot";
+import { ARRIVE, FALL, RETURN } from "~/art/stadium-airship-poke";
+import {
+  MascotPokes,
+  drawMascot,
+  mascotFrame,
+  mascotZone,
+} from "~/art/stadium-mascot";
+import { PLANE_FIRST, PLANE_SPEED } from "~/art/stadium-plane";
+import {
+  planeBallSpot,
+  planePilotAt,
+  type PlaneCrash,
+} from "~/art/stadium-plane-fall";
 import { makeView } from "~/art/stadium-view";
 
 // The airship (the product owner: "keep the high resolution but fix its proportions",
@@ -303,5 +314,178 @@ describe("the sign's messages and the plane", { timeout: 60_000 }, () => {
         }
       }
     }
+  });
+
+  /** What the backdrop keeps to itself: the two crash sites, and the plane's crash. */
+  function inside(b: MenuBackdrop): {
+    paint(): { site: CrashSite; planeSite: CrashSite };
+    crash: PlaneCrash | null;
+  } {
+    return b as unknown as {
+      paint(): { site: CrashSite; planeSite: CrashSite };
+      crash: PlaneCrash | null;
+    };
+  }
+  /** When AWAY's ball meets the plane: its nose is an eighth of the way in from the right. */
+  const metAt = (w: number): number => PLANE_FIRST + (w * 0.125) / PLANE_SPEED;
+  /**
+   * Canvases a monitor gives: 1920 x 1080 full screen and in an ordinary window (shorter),
+   * 1366 x 768, and two between.
+   */
+  const WINDOWS = [
+    [960, 540],
+    [960, 457],
+    [683, 384],
+    [854, 480],
+    [720, 450],
+  ] as const;
+
+  // The product owner, 2026-11-16: of the plane, "it should fall where the blimp currently
+  // falls" (the lawn at the right, where the airship came down in most windows); then of
+  // the airship, "make the blimp land on the left behind the mascot instead. so that area
+  // is only for the plane".
+  it("comes down on the lawn just behind the mascot, and the plane on ground of its own at the right", () => {
+    for (const [w, h] of WINDOWS) {
+      for (const seed of [1, 3]) {
+        const at = `${w}x${h} seed ${seed}`;
+        const b = new MenuBackdrop({
+          seed,
+          sign: { header: "A", text: "B" },
+        });
+        b.resize(w, h);
+        b.setLighting(day);
+        b.setBanner("A B");
+        const spot = b.mascotSpot();
+        expect(spot, at).not.toBeNull();
+        if (!spot) continue;
+        const { site, planeSite } = inside(b).paint();
+        // the airship's wreck: on grass at the left, its foot further off than the
+        // mascot's feet (so he stands in front of it) and close behind him
+        expect(site.water, at).toBe(false);
+        expect(site.x, at).toBeLessThan(w / 2);
+        expect(site.y, at).toBeLessThanOrEqual(spot.y - 12);
+        expect(site.y, at).toBeGreaterThanOrEqual(spot.y - 40);
+        expect(Math.abs(site.x - spot.x), at).toBeLessThanOrEqual(44);
+        // its pilot lands beside it, on the canvas and clear of the mascot
+        const z = mascotZone(spot);
+        expect(Math.abs(site.pilotX - site.x), at).toBeGreaterThanOrEqual(16);
+        expect(Math.abs(site.pilotX - site.x), at).toBeLessThanOrEqual(60);
+        expect(site.pilotX, at).toBeGreaterThanOrEqual(8);
+        expect(
+          site.pilotX - 8 < z.x + z.w &&
+            z.x < site.pilotX + 9 &&
+            site.pilotY - 18 < z.y + z.h &&
+            z.y < site.pilotY + 1,
+          at,
+        ).toBe(false);
+        // the plane's: at the right, under where it is hit, a long way from the airship's
+        expect(planeSite.x, at).toBeGreaterThan(w / 2);
+        expect(planeSite.x - site.x, at).toBeGreaterThan(w / 3);
+        // and that is where the plane comes down, the ball beside it
+        expect(b.crashPlane(metAt(w)), at).toEqual(planeBallSpot(planeSite, w));
+        const crash = inside(b).crash;
+        expect(crash?.site, at).toBe(planeSite);
+        if (!crash) continue;
+        // its pilot never drifts across the mascot: out of the plane, under his canopy
+        // and down
+        let over = 0;
+        for (let c = 0; c < 5; c += 0.05) {
+          const p = planePilotAt(crash, c);
+          if (!p) continue;
+          if (
+            p.x - 8 < z.x + z.w &&
+            z.x < p.x + 9 &&
+            p.y - 18 < z.y + z.h &&
+            z.y < p.y + 1
+          ) {
+            over++;
+          }
+        }
+        expect(over, at).toBe(0);
+      }
+    }
+  });
+
+  it("never covers the mascot with the wreck or its dust: it lies right behind his head", () => {
+    for (const [w, h, seed] of [
+      [960, 457, 3],
+      [683, 384, 1],
+    ] as const) {
+      const make = (): MenuBackdrop => {
+        const b = new MenuBackdrop({
+          seed,
+          sign: { header: "A", text: "B" },
+        });
+        b.resize(w, h);
+        b.setLighting(day);
+        return b;
+      };
+      const up = make();
+      const down = make();
+      let popped = 1;
+      for (let k = 0; k < 40 && down.pokeAirship(popped) !== "pop"; k++) {
+        popped += 0.1;
+      }
+      const spot = up.mascotSpot();
+      expect(spot).not.toBeNull();
+      if (!spot) continue;
+      // as it lands, a little after, and with its dust well up
+      for (const since of [FALL - 0.05, FALL + 0.2, FALL + 0.6, FALL + 1.2]) {
+        const at = `${w}x${h} seed ${seed} at ${since.toFixed(2)}`;
+        const t = popped + since;
+        const a = new Surface(w, h);
+        const d = new Surface(w, h);
+        up.draw(a, t);
+        down.draw(d, t);
+        // the mascot's own pixels (he is idle in both): the same with the wreck there
+        const mask = new Surface(w, h);
+        drawMascot(
+          mask,
+          spot.x,
+          spot.y,
+          mascotFrame(new MascotPokes(), t),
+          day,
+        );
+        let his = 0;
+        let covered = 0;
+        for (let i = 0; i < mask.data.length; i++) {
+          if (mask.data[i] === TRANSPARENT) continue;
+          his++;
+          if (a.data[i] !== d.data[i]) covered++;
+        }
+        expect(his, at).toBeGreaterThan(150);
+        expect(covered, at).toBe(0);
+        if (since < FALL) continue;
+        // while the wreck is there, round and over his head
+        let behind = 0;
+        for (let y = spot.y - 48; y < spot.y - 10; y++) {
+          for (let x = spot.x - 36; x < spot.x + 22; x++) {
+            if (mask.get(x, y) !== TRANSPARENT) continue;
+            if (a.get(x, y) !== d.get(x, y)) behind++;
+          }
+        }
+        expect(behind, at).toBeGreaterThan(80);
+      }
+    }
+  });
+
+  it("brings the plane down on its own ground whatever the airship is doing, once, until it is mended", () => {
+    const [w, h] = [960, 457];
+    const b = backdrop(w, h);
+    b.setBanner("Did you know? Goal nets arrived in 1889.");
+    const { planeSite } = inside(b).paint();
+    const at = metAt(w);
+    expect(b.planeBox(at)).not.toBeNull();
+    // the airship popped a moment before: it is on its way down to its own place
+    let t = at - 1;
+    for (let k = 0; k < 40 && b.pokeAirship(t) !== "pop"; k++) t += 0.02;
+    expect(t).toBeLessThan(at);
+    expect(b.crashPlane(at)).toEqual(planeBallSpot(planeSite, w));
+    expect(inside(b).crash?.site).toBe(planeSite);
+    // down, there is no plane to hit, until it is mended
+    expect(b.planeBox(at + 0.5)).toBeNull();
+    expect(b.crashPlane(at + 0.5)).toBeNull();
+    b.mendPlane();
+    expect(b.planeBox(at + 0.5)).not.toBeNull();
   });
 });

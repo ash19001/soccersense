@@ -215,6 +215,7 @@ class MenuScene implements Scene {
   onReview: ((mode: Mode) => void) | null; // a played mode's patch (one with a score): no kick-off
   onSound: ((cue: SoundCue) => void) | null; // the Scene contract: what is to be heard
   onGolden: (() => void) | null; // the ball was just spun to gold (the easter egg); never for setGolden
+  wouldHitPlane(t: number): boolean; // would AWAY, chosen when the scene's clock says t, bring the plane down? Asks only (the snap tool, the tests)
   readonly isGolden: boolean; // the ball is gold
   readonly spinCharge: number; // 0 to 1: how far the hand's spinning has got towards the gold
   ambience(): Ambience; // { venue: "town", crowd: 0.3, night: the light's phase is "night" }
@@ -234,7 +235,7 @@ class MenuScene implements Scene {
 ```
 
 It takes nothing from `~/art` but the backdrop contract (`MenuBackdrop`: `resize`, `setLighting`,
-`setSign`, `setMessages`, `setBanner`, `setMoonPhase`, `target`, `setRoar`, `draw`, `airshipAt`, `pokeAirship`, `mascotAt`,
+`setSign`, `setMessages`, `setBanner`, `setMoonPhase`, `target`, `setRoar`, `draw`, `planeBox`, `crashPlane`, `mendPlane`, `airshipAt`, `pokeAirship`, `mascotAt`,
 `pokeMascot`, `cuesBetween`), `menuLayout`'s `cx`,
 `ballR`, `ballCy` and `logo`, the ball, the logo and the palette. A test holds it to that.
 
@@ -422,6 +423,26 @@ Through the Scene contract's `onSound` (above); nothing is sent while it is null
 
 Neither `land` nor `sparkle` is sent with reduced motion (there is no flight). The numbers
 (the powers and the wind's speeds) are `HOME_PAGE` in `app/audio/mix.ts`.
+
+**AWAY and the plane** (an easter egg, 2026-11-16; the rules are in docs/GAME_DESIGN.md, the
+home screen). During AWAY's flight `update` looks, every 1/240 s of it, for the ball's middle
+coming up to the plane's row within 6 px of the plane's own box (`MenuBackdrop.planeBox`: the
+plane without its banner, null between passes, on a phone and once it is down). The ball's way
+and the plane's are both functions of the clock, so `wouldHitPlane(t)` can say beforehand
+whether a kick-off at `t` meets it, without changing anything. When they meet,
+`MenuBackdrop.crashPlane(t)` brings the plane down as the airship comes down, on ground of
+its own under where it is hit (`~/art/stadium-plane-fall`, docs/API_ART.md), and
+gives where the ball comes to rest: on the ground of the town beside the wreck, and whether
+that is water. The ball hangs for 0.1 s under a star, then falls there in 2 s (knocked up a
+little first, moving across as it goes, and down to the size HOME's ball has on the pitch),
+0.3 s ahead of the plane; on grass it bounces once, on water it goes in with rings and bobs.
+There is no twinkle and no more wind; and the iris, its ink and the end of the kick-off all
+come later by `late` (the iris starts 3.5 s after the knock: the plane has been down for 1.1 s
+and its pilot for 0.3 s), closing on the ball where it lies. `onChoose("away")` follows as ever, once. Sounds: a `kick` of
+`HOME_PAGE.planeHit` as they meet, a `land` of `HOME_PAGE.planeBallLand` as the ball comes
+down, and as the plane does a `thud` (grass) or a `splash` (water). `reset()` mends the plane
+(`mendPlane`). Never with reduced motion (the kick-off is a cut) or where the picture is a
+phone's (no plane, and the ball goes round the sign). Shot: `menu/away-plane`.
 
 **The golden ball** (the easter egg, 2026-11-16; the rules are in docs/GAME_DESIGN.md, the
 home screen). `GOLD_SPIN` (30, exported) seconds of the hand keeping the ball turning faster

@@ -5,9 +5,12 @@
  * bounce and a puff of dust. The pilot jumps at the pop, floats down under a parachute and
  * waves: nobody is hurt. The wreck is cleared away before the new airship comes in.
  *
- * Where it lands (`findCrashSite`) is chosen once per size from the painted town: open
- * grass or water that nothing stands on, clear of the menu ball and the captions, as near
- * as there is to straight below the airship (water preferred: a splash is funnier).
+ * Where it lands (`findCrashSite`) is chosen once per size from the painted town: the lawn
+ * just behind the mascot, at the left under where it hangs (the product owner, 2026-11-16:
+ * "make the blimp land on the left behind the mascot"). Where there is no mascot (a
+ * phone), or no room behind him: open grass or water that nothing stands on, clear of the
+ * menu ball and the captions, as near as there is to straight below the airship (water
+ * preferred: a splash is funnier).
  *
  * Everything is a function of the seconds since the pop (stadium-airship-poke.ts).
  */
@@ -70,10 +73,37 @@ const GRASS = new Set<number>([
 const WET = new Set<number>([WATER, WATER_HI, WATER_LO]);
 
 /**
- * Where the falling airship lands for this view: open grass or water that nothing stands
- * on, clear of the ball and the captions. `land` is the painted town (its first row is
- * screen row `landTop`) and `depth` its depth mask. `avoid`: places on screen the wreck
- * and the pilot keep well clear of (the mascot).
+ * Behind the mascot (`findCrashSite`'s `behind`): the wreck's foot is between BEHIND.near
+ * and BEHIND.far rows above his feet (further off than he is, so he stands in front of
+ * it), no more than BEHIND.left to his left or BEHIND.right to his right, as near as there
+ * is to BEHIND.dx, BEHIND.dy from him (a little to his left, its foot about level with his
+ * head, so that most of it shows round him). The lawn there is small: it needs only the
+ * wreck's own room of open grass, BEHIND.half units of ground either side and BEHIND.tall
+ * above (the wreck is 15 units long: at least BEHIND.least pixels each).
+ */
+const BEHIND = {
+  near: 12,
+  far: 40,
+  left: 44,
+  right: 30,
+  dx: -8,
+  dy: -22,
+  half: 4.5,
+  tall: 5,
+  least: 8,
+} as const;
+
+/**
+ * Where something falling lands for this view: open grass or water that nothing stands
+ * on, clear of the ball and the captions, as near as there is to straight below `shipX`.
+ * `land` is the painted town (its first row is screen row `landTop`) and `depth` its depth
+ * mask. `avoid`: places on screen the wreck and the pilot keep well clear of (the mascot).
+ *
+ * `behind` (the airship's: the mascot's place, the point between his feet): it comes down
+ * on his lawn just behind him instead (the product owner, 2026-11-16: "make the blimp land
+ * on the left behind the mascot"), where BEHIND says, the wreck free to stand behind him
+ * (whoever draws it draws him over it); the pilot still keeps clear of `avoid`. With no
+ * room there, it lands as if `behind` were not given.
  */
 export function findCrashSite(
   view: View,
@@ -83,6 +113,7 @@ export function findCrashSite(
   seed: number,
   shipX: number,
   avoid: readonly Zone[] = [],
+  behind?: { x: number; y: number },
 ): CrashSite {
   const { w, h, hy } = view;
   const m = menuLayout(w, h);
@@ -158,7 +189,43 @@ export function findCrashSite(
   const cost = (p: Spot): number =>
     Math.abs(p.x - shipX) + Math.abs(p.y - yIdeal) * 0.5 - (p.water ? 120 : 0);
   let best: Spot | null = null;
-  for (const p of spots) if (!best || cost(p) < cost(best)) best = p;
+  /** It lands behind the mascot. */
+  let tucked = false;
+  if (behind) {
+    // the lawn just behind the mascot: grass with nothing standing on it, room enough for
+    // the wreck (it need not keep clear of him: he stands in front of it)
+    let least = Infinity;
+    for (let y = behind.y - BEHIND.far; y <= behind.y - BEHIND.near; y += 2) {
+      if (y < hy + 12 || y >= h - 8) continue;
+      const s = scaleAt(view, rowV[y]);
+      const half = Math.max(BEHIND.least, Math.ceil(BEHIND.half * s));
+      const tall = Math.max(BEHIND.least, Math.ceil(BEHIND.tall * s));
+      for (
+        let x = behind.x - BEHIND.left;
+        x <= behind.x + BEHIND.right;
+        x += 2
+      ) {
+        if (!allOpen(x - half, y - tall, x + half, y + 3)) continue;
+        let grass = true;
+        for (let j = -tall; j <= 3 && grass; j += 3) {
+          for (let i = -half; i <= half && grass; i += 5) {
+            if (kind(x + i, y + j) !== 1) grass = false;
+          }
+        }
+        if (!grass) continue;
+        const c =
+          Math.abs(x - (behind.x + BEHIND.dx)) +
+          Math.abs(y - (behind.y + BEHIND.dy)) * 1.5;
+        if (c >= least) continue;
+        least = c;
+        best = { x, y, V: rowV[y], s, water: false };
+        tucked = true;
+      }
+    }
+  }
+  if (!best) {
+    for (const p of spots) if (!best || cost(p) < cost(best)) best = p;
+  }
   if (!best) {
     // No open grass in sight (a phone: the stadium fills it). It comes down behind the
     // stadium, on the allotments past North Road: the roof hides the landing and the dust
@@ -179,6 +246,39 @@ export function findCrashSite(
       pilotY: r.y,
     };
   }
+  const pilotNear = (x: number, y: number): boolean =>
+    near(x - 12, y - 28, x + 14, y + 6);
+  if (tucked) {
+    // the pilot of a wreck behind the mascot: on the same small lawn, on open grass a
+    // little way to one side of it, and clear of him
+    let least = Infinity;
+    let at: { x: number; y: number } | null = null;
+    for (let y = best.y - 8; y <= best.y + 26; y += 2) {
+      for (let x = best.x - 60; x <= best.x + 60; x += 2) {
+        const dx = Math.abs(x - best.x);
+        if (dx < 20 || pilotNear(x, y)) continue;
+        if (!allOpen(x - 8, y - 12, x + 9, y + 2)) continue;
+        if (kind(x - 6, y) !== 1 || kind(x, y) !== 1 || kind(x + 6, y) !== 1) {
+          continue;
+        }
+        const c = Math.abs(dx - 26) + Math.abs(y - (best.y + 6)) * 1.5;
+        if (c >= least) continue;
+        least = c;
+        at = { x, y };
+      }
+    }
+    if (at) {
+      return {
+        x: best.x,
+        y: best.y,
+        V: best.V,
+        scale: best.s,
+        water: false,
+        pilotX: at.x,
+        pilotY: at.y,
+      };
+    }
+  }
   // the pilot: grass beside it, a little way off
   let pilot: Spot | null = null;
   let pilotCost = Infinity;
@@ -193,8 +293,6 @@ export function findCrashSite(
     }
   }
   let side = best.x < w / 2 ? 1 : -1;
-  const pilotNear = (x: number, y: number): boolean =>
-    near(x - 12, y - 28, x + 14, y + 6);
   if (pilotNear(best.x + side * 24, best.y + 4)) side = -side;
   return {
     x: best.x,
@@ -558,6 +656,33 @@ export function drawDown(
 
   // ---- the crash ------------------------------------------------------------
   const g = since - FALL;
+  drawLandingDust(s, site, g, light, depth);
+  drawLandingSplash(s, site, g, light, t);
+
+  // ---- the pilot, under a parachute ---------------------------------------------
+  if (since >= 0.1 && clearing < CLEAR_FOR * 0.5) {
+    const { x, y, side, open } = pilotAt(ship, site, popT, since);
+
+    const state = open ? "chute" : since >= PILOT_LANDS ? "landed" : "tumble";
+    const wave = Math.floor(t * 4) % 2 === 0;
+    drawPilot(s, x, y, state, side, roomy ? 3 : 2, light, wave);
+    return;
+  }
+}
+
+/**
+ * Something heavy has come down on the grass at `site`, `g` seconds ago: puffs of dust
+ * spreading from it for 1.6 s, behind whatever stands nearer than where it landed (`depth`
+ * is the town's depth mask). Nothing on water, or before it lands. (The airship's wreck,
+ * and the plane's: stadium-plane-fall.ts.)
+ */
+export function drawLandingDust(
+  s: Surface,
+  site: CrashSite,
+  g: number,
+  light: Lighting,
+  depth: Float32Array,
+): void {
   const always = (X: number, Y: number): boolean =>
     depth[Y * s.w + X] >= site.V - 0.5;
   // the ground's scale, clamped, in pixels
@@ -580,6 +705,22 @@ export function drawDown(
       );
     }
   }
+}
+
+/**
+ * Something heavy has come down in the water at `site`, `g` seconds ago: a column of
+ * water, drops thrown up, rings going out and, once it has sunk, bubbles (4 s of it).
+ * Nothing on grass, or before it lands.
+ */
+export function drawLandingSplash(
+  s: Surface,
+  site: CrashSite,
+  g: number,
+  light: Lighting,
+  t: number,
+): void {
+  // the ground's scale, clamped, in pixels
+  const sk = Math.max(1, Math.min(3.2, site.scale));
   if (g >= 0 && site.water && g < 4) {
     const white = light.env(P.white);
     const spray = light.env(P.mist);
@@ -623,16 +764,6 @@ export function drawDown(
         s.px(bx, by + 1, spray);
       }
     }
-  }
-
-  // ---- the pilot, under a parachute ---------------------------------------------
-  if (since >= 0.1 && clearing < CLEAR_FOR * 0.5) {
-    const { x, y, side, open } = pilotAt(ship, site, popT, since);
-
-    const state = open ? "chute" : since >= PILOT_LANDS ? "landed" : "tumble";
-    const wave = Math.floor(t * 4) % 2 === 0;
-    drawPilot(s, x, y, state, side, roomy ? 3 : 2, light, wave);
-    return;
   }
 }
 

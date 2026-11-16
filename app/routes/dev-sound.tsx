@@ -695,6 +695,31 @@ const SECTIONS: Section[] = [
         ],
       },
       {
+        id: "home-plane",
+        name: "AWAY's ball brings the plane down: the knock, the ball dropping, the plane coming down",
+        plays: [
+          moment("ON GRASS", [
+            [0, () => ({ kind: "kick", power: HOME_PAGE.planeHit }), "town"],
+            [
+              2.1,
+              () => ({ kind: "land", power: HOME_PAGE.planeBallLand }),
+              "town",
+            ],
+            [2.4, () => ({ kind: "thud" }), "town"],
+          ]),
+          moment("IN THE POND", [
+            [0, () => ({ kind: "kick", power: HOME_PAGE.planeHit }), "town"],
+            [
+              2.1,
+              () => ({ kind: "land", power: HOME_PAGE.planeBallLand }),
+              "town",
+            ],
+            [2.4, () => ({ kind: "splash" }), "town"],
+          ]),
+        ],
+        knobs: ["HOME_PAGE.planeHit", "HOME_PAGE.planeBallLand"],
+      },
+      {
         id: "home-golden",
         name: "the golden ball (the ball spun for 30 seconds): its own chime, the cheer and the rockets",
         files: ["sparkle-gold"],

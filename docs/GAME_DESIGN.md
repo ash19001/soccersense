@@ -326,6 +326,31 @@ crowd colours and kit differ.
   ("no") and puts up a notice naming the mode ("RETRO kicks off soon.", or for the two future
   modes a line on what they will be) for 2.5 seconds, which screen readers hear too. HOME and
   AWAY can be chosen from any pose in which they are in view.
+- **AWAY and the plane**, an easter egg (the product owner, 2026-11-16: "when you press away,
+  you know how the ball flies off into the sky, if the plane is passing through and the ball
+  contacts the plane then instead of going into the sky the plane crashes and ball falls to the
+  ground, then the transition happens for the match"). Nothing on the page says so. AWAY's ball
+  crosses the row the plane flies along near the end of its flight, far out to the right, about
+  0.8 seconds after AWAY is chosen; the plane comes in from the right once every 70 seconds. If
+  the plane is there as the ball arrives, they meet: that is AWAY chosen about a second after
+  the plane's nose shows at the edge of the picture, give or take 0.4 seconds. Then the ball
+  knocks the plane out of the sky with a star, and the plane comes down the way the airship
+  does when it is popped (the product owner, of a first version: "the ball doesn't fall in the
+  right place considering where the plane was flying and the plane crash animation isn't
+  proper. look at how the blimp crash animation is"). Its engine stops and it spins down,
+  trailing smoke and shrinking as it falls away, into the town under it: the lawn at the right
+  of the picture, which is the plane's alone (the product owner: "it should fall where the
+  blimp currently falls", which was that lawn in most windows, and then "make the blimp land
+  on the left behind the mascot instead. so that area is only for the plane"). It lands on
+  open grass (a bounce, dust, the wreck left nose down) or in the pond (a splash, and it
+  sinks), behind whatever stands nearer. Its banner, let go, drifts down like a ribbon; and the pilot
+  jumps on the way down, floats under a parachute to the grass beside the wreck and waves, so
+  nobody is hurt. The ball falls with the plane to the ground beside the wreck, bounces once
+  (or bobs, on water) and lies still, and the iris closes on it there, about three seconds
+  later than it would have. AWAY is then
+  played exactly as ever: it scores nothing and changes nothing in the game. The plane is back
+  the next time the home screen is opened. Only where a plane flies (a monitor: not on a
+  phone), and never with reduced motion (there is no flight).
 - **The golden ball**, an easter egg (the product owner, 2026-11-16: "if people are spinning
   the ball in home screen constantly for a long time (30 seconds or 1 minute), then something
   cool happens"). Kept spinning by hand for **30 seconds**, the ball turns to **gold**. Nothing
@@ -382,9 +407,12 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   `docs/data-notes/facts.md`. The fact starts at its beginning and rests a moment, then
   scrolls at a steady reading pace (a whole fact passes in 17 to 28 seconds) and comes round
   again. Screen readers hear "Fact of the day: ...". The airship can be clicked: it wobbles,
-  five or six quick clicks pop it, it crashes into the town (its pilot parachutes down beside
-  the wreck, never over the mascot), and a new one drifts in with the same messages, from the
-  first.
+  five or six quick clicks pop it, it crashes on to the lawn at the left, just behind the
+  mascot, who stands in front of the wreck (the product owner, 2026-11-16: "make the blimp
+  land on the left behind the mascot instead. so that area is only for the plane": before, in
+  most windows, it fell right across the picture to the lawn at the right, where the plane now
+  comes down). Its pilot parachutes down beside the wreck, never over the mascot, and a new
+  one drifts in with the same messages, from the first.
 - **The daily streak** (the product owner, 2026-11-12: "there should be a daily streak showing
   if the user comes on everyday to play then it should keep going up"): a small pixel flame and
   the days in a row with a finished game (`streakFor`, section 6.6) in the day plate under the

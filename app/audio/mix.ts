@@ -751,6 +751,13 @@ export const HOME_PAGE = {
   /** The mascot's big swing before his tumble, power 0 to 1: higher is louder. */
   mascotSwing: 0.9,
   /**
+   * AWAY's ball meeting the plane (an easter egg): the knock as it hits, a kick's power, 0
+   * to 1, higher is louder. The plane coming down is a thud (SOUNDS.thud).
+   */
+  planeHit: 0.55,
+  /** ...and the ball dropping to the ground after it, a landing's power, 0 to 1. */
+  planeBallLand: 0.4,
+  /**
    * The golden ball (the easter egg: the ball spun by hand for 30 seconds): the ground's
    * cheer as the ball turns to gold, size 0 to 1, higher is louder. Its rockets are the far
    * fireworks (SOUNDS.firework).

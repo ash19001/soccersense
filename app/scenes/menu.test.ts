@@ -8,6 +8,7 @@ import { P } from "~/art/palette";
 import { MenuBackdrop } from "~/art/stadium";
 import type { Mode } from "~/game";
 import { GOLD_SHOW_LAUNCHES, GOLD_SHOW_LEN } from "~/art/gold-show";
+import { PLANE_EVERY, PLANE_FIRST, PLANE_SPEED } from "~/art/stadium-plane";
 import { HOME_PAGE } from "~/audio/mix";
 import {
   GOLD_SPIN,
@@ -531,6 +532,294 @@ describe("the menu", () => {
       h: 48,
       stacked: false,
     });
+  });
+});
+
+describe("AWAY and the plane", () => {
+  const [W, H] = SIZES[0];
+  /** Where the backdrop says the ball comes down: grass beside the wreck, in the town. */
+  const SPOT = { x: 836, y: 344, water: false };
+
+  /** The ball's way late in its flight, from the layout: it ends here, in the sky. */
+  function end(): { x: number; y: number } {
+    const m = menuLayout(W, H);
+    return { x: Math.round(W * 0.875), y: m.logo.h + 22 };
+  }
+
+  /** A plane that hangs across the end of the ball's way, whatever the time. */
+  function hangingPlane() {
+    const e = end();
+    return vi
+      .spyOn(MenuBackdrop.prototype, "planeBox")
+      .mockReturnValue({ x: e.x - 40, y: e.y + 6, w: 100, h: 16 });
+  }
+
+  /**
+   * A plane that flies as the real one does (in from the right on its first pass, a pixel
+   * a frame), along a row the ball's way crosses.
+   */
+  function flyingPlane() {
+    const row = end().y + 26;
+    return vi
+      .spyOn(MenuBackdrop.prototype, "planeBox")
+      .mockImplementation((t: number) =>
+        t < PLANE_FIRST || t > PLANE_FIRST + 20
+          ? null
+          : {
+              x: Math.round(W + 4 - (t - PLANE_FIRST) * PLANE_SPEED),
+              y: row - 8,
+              w: 36,
+              h: 16,
+            },
+      );
+  }
+
+  /** Choose AWAY and run the kick-off to its end: what was heard, and how long it took. */
+  function kickAway(scene: MenuScene) {
+    const cues: SoundCue[] = [];
+    scene.onSound = (cue) => {
+      if (cue.kind !== "wind") cues.push(cue);
+    };
+    const chosen: Mode[] = [];
+    scene.onChoose = (mode) => chosen.push(mode);
+    expect(scene.choose("away")).toBe(true);
+    let seconds = 0;
+    while (scene.phase !== "done" && seconds < 10) {
+      scene.update(STEP);
+      seconds += STEP;
+    }
+    return { cues, chosen, seconds };
+  }
+
+  beforeEach(() => {
+    vi.spyOn(MenuBackdrop.prototype, "cuesBetween").mockReturnValue([]);
+  });
+
+  it("a ball that meets the plane brings it down, drops to the ground, and the game starts a little later", () => {
+    // an ordinary AWAY first, for its length and its sounds
+    vi.spyOn(MenuBackdrop.prototype, "planeBox").mockReturnValue(null);
+    const down = vi
+      .spyOn(MenuBackdrop.prototype, "crashPlane")
+      .mockReturnValue(SPOT);
+    const plain = kickAway(make(W, H));
+    expect(down).not.toHaveBeenCalled();
+    expect(plain.chosen).toEqual(["away"]);
+    expect(plain.cues).toContainEqual({ kind: "sparkle" });
+
+    hangingPlane();
+    const scene = make(W, H);
+    const met = kickAway(scene);
+    // the plane is brought down once, during the flight
+    expect(down).toHaveBeenCalledTimes(1);
+    const at = down.mock.calls[0][0];
+    expect(at).toBeGreaterThan(0.29);
+    expect(at).toBeLessThan(0.29 + 0.68);
+    // the knock, the ball dropping, the plane coming down a moment after it; and no
+    // twinkle in the sky
+    const kinds = met.cues.map((cue) => cue.kind);
+    expect(kinds).toEqual(["kick", "kick", "land", "thud", "transition"]);
+    expect(met.cues[1]).toEqual({ kind: "kick", power: HOME_PAGE.planeHit });
+    expect(met.cues[2]).toEqual({
+      kind: "land",
+      power: HOME_PAGE.planeBallLand,
+    });
+    // AWAY is played all the same, once, about three seconds later than it would have been
+    expect(met.chosen).toEqual(["away"]);
+    expect(met.seconds - plain.seconds).toBeGreaterThan(2.7);
+    expect(met.seconds - plain.seconds).toBeLessThan(3.8);
+
+    // into the pond, the plane lands with a splash
+    down.mockReturnValue({ ...SPOT, water: true });
+    const wet = kickAway(make(W, H));
+    expect(wet.cues.map((cue) => cue.kind)).toEqual([
+      "kick",
+      "kick",
+      "land",
+      "splash",
+      "transition",
+    ]);
+  });
+
+  it("the ball falls to the ground beside the wreck, lies there, and the iris closes on it", () => {
+    hangingPlane();
+    vi.spyOn(MenuBackdrop.prototype, "crashPlane").mockReturnValue(SPOT);
+    const scene = make(W, H);
+    scene.onChoose = () => {};
+    scene.choose("away");
+    /** The ball: the only thing in the right half under the logo (the backdrop is flat). */
+    const ball = () => {
+      const s = draw(scene, W, H);
+      const m = menuLayout(W, H);
+      let n = 0;
+      let sumX = 0;
+      let top = H;
+      let bottom = -1;
+      for (let y = m.logo.h; y < H; y++) {
+        for (let x = W >> 1; x < W; x++) {
+          const c = s.get(x, y);
+          if (c === FLAT || c === P.ink) continue;
+          n++;
+          sumX += x;
+          top = Math.min(top, y);
+          bottom = y;
+        }
+      }
+      return { n, x: n > 0 ? sumX / n : -1, top, bottom };
+    };
+    // half a second after the knock (0.97 s in at the latest): on its way down, between
+    // where they met and the ground
+    let t = 0;
+    for (; t < 1.6; t += STEP) scene.update(STEP);
+    const falling = ball();
+    expect(falling.n).toBeGreaterThan(20);
+    expect(falling.bottom).toBeLessThan(SPOT.y - 20);
+    // down (the fall and the bounce are over 3.3 s in, and the iris does not start before
+    // 3.79): a small ball sitting on the ground's row at the place the backdrop gave, and
+    // nowhere else
+    for (; t < 3.6; t += STEP) scene.update(STEP);
+    const lying = ball();
+    expect(lying.n).toBeGreaterThan(40);
+    expect(lying.n).toBeLessThan(260);
+    expect(Math.abs(lying.x - SPOT.x)).toBeLessThan(2);
+    expect(lying.bottom).toBeGreaterThanOrEqual(SPOT.y - 2);
+    expect(lying.bottom).toBeLessThanOrEqual(SPOT.y + 1);
+    expect(lying.bottom - lying.top).toBeLessThan(20);
+    // the iris closes on it: the last thing in sight, as it shuts, is where the ball lies
+    let last: Surface | null = null;
+    while (scene.phase !== "done" && t < 10) {
+      scene.update(STEP);
+      t += STEP;
+      const s = draw(scene, W, H);
+      if (s.data.some((c) => c !== P.ink)) last = s;
+    }
+    expect(last).not.toBeNull();
+    let open = 0;
+    let far = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (last?.get(x, y) === P.ink) continue;
+        open++;
+        far = Math.max(far, Math.hypot(x - SPOT.x, y - (SPOT.y - 6)));
+      }
+    }
+    expect(open).toBeGreaterThan(0);
+    expect(far).toBeLessThan(40);
+  });
+
+  it("only at the right moment: a second or so as the plane comes in, and the scene can say when", () => {
+    flyingPlane();
+    const down = vi
+      .spyOn(MenuBackdrop.prototype, "crashPlane")
+      .mockReturnValue(SPOT);
+    const probe = make(W, H);
+    const before = draw(probe, W, H).data.slice();
+    const hits: number[] = [];
+    for (let t = PLANE_FIRST - 2; t < PLANE_FIRST + 8; t += STEP) {
+      if (probe.wouldHitPlane(t)) hits.push(t);
+    }
+    // asking changes nothing
+    expect(draw(probe, W, H).data).toEqual(before);
+    expect(down).not.toHaveBeenCalled();
+    // one stretch of moments, about as long as the plane takes to pass a point
+    expect(hits.length).toBeGreaterThan(0.4 / STEP);
+    expect(hits.length).toBeLessThan(1.3 / STEP);
+    const from = hits[0];
+    const to = hits[hits.length - 1];
+    expect(to - from).toBeCloseTo((hits.length - 1) * STEP, 5);
+    // a second or so after its nose shows at the edge of the picture
+    expect(from).toBeGreaterThan(PLANE_FIRST);
+    expect(to).toBeLessThan(PLANE_FIRST + 3);
+
+    // chosen then, it happens; chosen half a second too soon or too late, it does not
+    for (const [when, meets] of [
+      [(from + to) / 2, true],
+      [from - 0.5, false],
+      [to + 0.5, false],
+    ] as const) {
+      down.mockClear();
+      const scene = make(W, H);
+      for (let t = 0; t < when - STEP / 2; t += STEP) scene.update(STEP);
+      expect(scene.wouldHitPlane(when), `${when}`).toBe(meets);
+      const run = kickAway(scene);
+      expect(down.mock.calls.length, `${when}`).toBe(meets ? 1 : 0);
+      expect(run.cues.some((cue) => cue.kind === "sparkle")).toBe(!meets);
+      expect(run.chosen).toEqual(["away"]);
+    }
+  });
+
+  it("never with reduced motion, never on a phone, and never for HOME", () => {
+    hangingPlane();
+    const down = vi
+      .spyOn(MenuBackdrop.prototype, "crashPlane")
+      .mockReturnValue(SPOT);
+    const reduced = make(W, H);
+    reduced.setReducedMotion(true);
+    expect(reduced.wouldHitPlane(1)).toBe(false);
+    expect(kickAway(reduced).chosen).toEqual(["away"]);
+    // a phone: the ball goes round the sign, and no plane flies there
+    const [w, h] = SIZES[2];
+    const phone = make(w, h);
+    expect(phone.wouldHitPlane(1)).toBe(false);
+    expect(kickAway(phone).chosen).toEqual(["away"]);
+    const home = make(W, H);
+    home.onChoose = () => {};
+    home.choose("home");
+    for (let t = 0; t < 3; t += STEP) home.update(STEP);
+    expect(down).not.toHaveBeenCalled();
+  });
+
+  it("the real plane on the real picture can be met, and flies again when the page is shown again", () => {
+    const down = vi.spyOn(MenuBackdrop.prototype, "crashPlane");
+    const mend = vi.spyOn(MenuBackdrop.prototype, "mendPlane");
+    const scene = make(W, H);
+    const hits: number[] = [];
+    for (let t = PLANE_FIRST; t < PLANE_FIRST + 4; t += 1 / 30) {
+      if (scene.wouldHitPlane(t)) hits.push(t);
+    }
+    expect(hits.length).toBeGreaterThan(10);
+    const when = hits[hits.length >> 1];
+    for (let t = 0; t < when - STEP / 2; t += STEP) scene.update(STEP);
+    const run = kickAway(scene);
+    expect(down).toHaveBeenCalledTimes(1);
+    const spot = down.mock.results[0].value as {
+      x: number;
+      y: number;
+      water: boolean;
+    } | null;
+    expect(spot).not.toBeNull();
+    if (!spot) return;
+    // the ball comes down on the ground of the town: under the horizon, well below the row
+    // the plane flew along, on the canvas, on the plane's side of the picture, and beside
+    // the plane's own place (the airship's is at the other side, behind the mascot)
+    const m = menuLayout(W, H);
+    expect(spot.y).toBeGreaterThan(m.logo.h + 48 + 40);
+    expect(spot.y).toBeLessThan(H - 8);
+    expect(spot.x).toBeGreaterThan(W / 2);
+    expect(spot.x).toBeLessThan(W - 6);
+    const { site, planeSite } = (
+      scene as unknown as {
+        backdrop: {
+          paint(): {
+            site: { x: number; y: number };
+            planeSite: { x: number; y: number };
+          };
+        };
+      }
+    ).backdrop.paint();
+    expect(Math.abs(spot.x - planeSite.x)).toBeLessThanOrEqual(20);
+    expect(Math.abs(spot.y - planeSite.y)).toBeLessThanOrEqual(4);
+    expect(site.x).toBeLessThan(W / 2);
+    expect(run.chosen).toEqual(["away"]);
+    expect(run.cues.some((cue) => cue.kind === "sparkle")).toBe(false);
+    // the plane lands with what is under it: a thud on grass, a splash in water
+    expect(run.cues.some((cue) => cue.kind === "splash")).toBe(spot.water);
+    expect(run.cues.some((cue) => cue.kind === "thud")).toBe(!spot.water);
+    // down, there is no plane to meet...
+    expect(scene.wouldHitPlane(when + PLANE_EVERY)).toBe(false);
+    // ...until the page is shown again
+    scene.reset();
+    expect(mend).toHaveBeenCalled();
+    expect(scene.wouldHitPlane(when + PLANE_EVERY)).toBe(true);
   });
 });
 

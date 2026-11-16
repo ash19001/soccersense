@@ -212,7 +212,10 @@ describe("the mascot", { timeout: 60_000 }, () => {
     }
   });
 
-  it("keeps the airship's crash and its pilot clear of him", () => {
+  // Until 2026-11-16 the airship's wreck kept clear of him too, which sent it across the
+  // picture where his lawn is small. The product owner: "make the blimp land on the left
+  // behind the mascot instead. so that area is only for the plane".
+  it("has the airship's wreck just behind him, and keeps its pilot and the plane's crash clear of him", () => {
     for (const [w, h] of [
       [800, 500],
       [960, 540],
@@ -226,13 +229,17 @@ describe("the mascot", { timeout: 60_000 }, () => {
         const spot = b.mascotSpot();
         if (!spot) continue;
         const z = mascotZone(spot);
-        const site = (b as unknown as { site: CrashSite }).site;
+        const { site, planeSite } = b as unknown as {
+          site: CrashSite;
+          planeSite: CrashSite;
+        };
         const meets = (x0: number, y0: number, x1: number, y1: number) =>
           x0 < z.x + z.w && z.x < x1 && y0 < z.y + z.h && z.y < y1;
-        expect(
-          meets(site.x - 24, site.y - 28, site.x + 26, site.y + 6),
-          `${w}x${h}`,
-        ).toBe(false);
+        // the airship's wreck: its foot further off than his feet (he is drawn in front
+        // of it), and close to him
+        expect(site.y, `${w}x${h}`).toBeLessThanOrEqual(spot.y - 12);
+        expect(site.y, `${w}x${h}`).toBeGreaterThanOrEqual(spot.y - 40);
+        expect(Math.abs(site.x - spot.x), `${w}x${h}`).toBeLessThanOrEqual(44);
         expect(
           meets(
             site.pilotX - 8,
@@ -241,6 +248,25 @@ describe("the mascot", { timeout: 60_000 }, () => {
             site.pilotY + 4,
           ),
           `${w}x${h} pilot`,
+        ).toBe(false);
+        // the plane's wreck and its pilot: on ground of their own, clear of him
+        expect(
+          meets(
+            planeSite.x - 24,
+            planeSite.y - 28,
+            planeSite.x + 26,
+            planeSite.y + 6,
+          ),
+          `${w}x${h} plane`,
+        ).toBe(false);
+        expect(
+          meets(
+            planeSite.pilotX - 8,
+            planeSite.pilotY - 20,
+            planeSite.pilotX + 10,
+            planeSite.pilotY + 4,
+          ),
+          `${w}x${h} plane's pilot`,
         ).toBe(false);
       }
     }

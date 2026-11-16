@@ -67,6 +67,22 @@
  * pointer, and a mode chosen from the captions brings it round quickly before the strike.
  * The constants under "Spinning the ball by hand" give the feel.
  *
+ * AWAY and the plane, an easter egg (the product owner, 2026-11-16: "when you press away,
+ * you know how the ball flies off into the sky, if the plane is passing through and the ball
+ * contacts the plane then instead of going into the sky the plane crashes and ball falls to
+ * the ground, then the transition happens for the match"). AWAY's ball crosses the row the
+ * plane flies along near the end of its flight, far out to the right; if the plane is there
+ * at that moment (it has just come in: AWAY chosen about a second after its nose shows), the
+ * ball knocks it out of the sky. The plane comes down as the airship does when it is
+ * popped: spinning, into the town under it at the right of the picture (ground that is the
+ * plane's alone: the airship lands behind the mascot), on to the grass or into the pond, its
+ * pilot under a parachute (the backdrop's `crashPlane`, art/stadium-plane-fall.ts). The ball
+ * falls with it to the ground beside the wreck, bounces once (or bobs, on the water) and
+ * lies there, and the iris closes on it PLANE_IRIS seconds after the knock, that much later
+ * than it would have: AWAY is then played as ever. The
+ * constants under "AWAY and the plane" give the feel. Never on a phone (no plane flies
+ * there) or with reduced motion (no flight).
+ *
  * The golden ball, an easter egg (the product owner, 2026-11-16: "if people are spinning the
  * ball in home screen constantly for a long time (30 seconds or 1 minute), then something
  * cool happens"). Kept spinning by hand for GOLD_SPIN seconds with no real pause, the ball
@@ -123,6 +139,7 @@ import { MODE_COLORS, P } from "~/art/palette";
 import { drawScanGlitch, neonTone } from "~/art/neon-world";
 import { MenuBackdrop, type MenuSign } from "~/art/stadium";
 import { bannerWords } from "~/art/stadium-plane";
+import { PLANE_FALL } from "~/art/stadium-plane-fall";
 import { schemeForDay } from "~/art/stadium-club";
 import { BEDS, HOME_PAGE } from "~/audio/mix";
 import type { Mode } from "~/game";
@@ -450,6 +467,17 @@ const CLOSING: SoundCue = { kind: "transition", opening: false };
 const SQUEAK: SoundCue = { kind: "squeak" };
 const POP: SoundCue = { kind: "pop" };
 /**
+ * AWAY's ball and the plane: the knock as they meet, the plane coming down far off, and
+ * the ball dropping to the ground.
+ */
+const PLANE_HIT: SoundCue = { kind: "kick", power: HOME_PAGE.planeHit };
+const PLANE_DOWN: SoundCue = { kind: "thud" };
+const PLANE_SPLASH: SoundCue = { kind: "splash" };
+const PLANE_BALL_DOWN: SoundCue = {
+  kind: "land",
+  power: HOME_PAGE.planeBallLand,
+};
+/**
  * The golden ball: its own chime as the ball turns to gold, the ground's cheer with it, and
  * its rockets, far off. (Its shimmer is sent every frame it is heard: `shimmerLevel`.)
  */
@@ -501,6 +529,43 @@ const RUSH_BACK = 0.08;
 const RUSH_MAX = 1.6;
 /** Only while the ball is at least this share of its size: near, and fast. */
 const RUSH_FROM = 0.35;
+
+// ---------------------------------------------------------------------------
+// AWAY and the plane
+// ---------------------------------------------------------------------------
+
+/**
+ * AWAY's ball meets the plane when its middle has come up to the plane's (the row the plane
+ * flies along: the ball is about a third of the plane's length across by then) and is no
+ * more than PLANE_REACH pixels off either end of it, or over it (a near thing counts). It
+ * is looked for every PLANE_STEP seconds of the flight, so that a slow frame cannot step
+ * over it.
+ */
+const PLANE_REACH = 6;
+const PLANE_STEP = 1 / 240;
+/**
+ * The ball then: it hangs where they met for BALL_BONK seconds (the knock's star is PLANE_STAR
+ * of the ball's radius, at least PLANE_STAR_MIN pixels), then falls for BALL_DROP seconds to
+ * the ground beside where the plane comes down (the backdrop says where), knocked up
+ * BALL_POP of the way first, and down to the size HOME's ball has on the pitch by the time
+ * it lands (the ground is a long way under the plane). On grass it bounces once (BALL_HOP
+ * pixels, for BALL_HOP_LEN) and lies still; on water it goes in with BALL_RINGS (their
+ * widths, frame by frame at RIPPLE_FPS) and bobs BALL_BOB times a second. The iris starts
+ * to close on it PLANE_IRIS seconds after the knock: by then the plane is down
+ * (art/stadium-plane-fall.ts, PLANE_FALL), its dust or its splash is up, and its pilot has
+ * landed beside it and is waving. (The ball takes BALL_DROP to come down, so as to land
+ * just ahead of the plane.)
+ */
+const BALL_BONK = 0.1;
+const BALL_DROP = 2;
+const BALL_POP = 0.12;
+const BALL_HOP = 5;
+const BALL_HOP_LEN = 0.22;
+const BALL_RINGS: readonly number[] = [3, 5, 7, 9, 11];
+const BALL_BOB = 1.2;
+const PLANE_STAR = 1.6;
+const PLANE_STAR_MIN = 8;
+const PLANE_IRIS = 3.5;
 
 // ---------------------------------------------------------------------------
 // The golden ball
@@ -1601,6 +1666,19 @@ export class MenuScene implements Scene {
   /** Seconds the ball has been at rest showing a locked patch. */
   private restT = 0;
 
+  // AWAY and the plane. `crashAt` is the kick-off's time when AWAY's ball met the plane
+  // (-1: it has not), `crashX`, `crashY` and `crashR` the ball as it was then, `restX`
+  // and `restY` the ground it comes down on beside the wreck (`restWet`: water), and
+  // `late` how much later the iris closes for it (0 for every other kick-off).
+  private crashAt = -1;
+  private crashX = 0;
+  private crashY = 0;
+  private crashR = 2;
+  private restX = 0;
+  private restY = 0;
+  private restWet = false;
+  private late = 0;
+
   // The golden ball. `charge` is the seconds the hand has kept the ball spinning (a pause
   // runs it down), `chargeIdle` how long it has not been; at GOLD_SPIN the ball is `golden`
   // and `goldT` counts the seconds since (-1: nothing is being celebrated).
@@ -1744,8 +1822,9 @@ export class MenuScene implements Scene {
     } else if (this.state === "kickoff") {
       const before = this.phaseT;
       this.phaseT += d;
+      this.meetPlane(before, this.phaseT);
       this.kickSounds(before, this.phaseT);
-      if (this.phaseT >= (this.reduced ? K_REDUCED : K_END)) {
+      if (this.phaseT >= (this.reduced ? K_REDUCED : K_END + this.late)) {
         this.state = "done";
         const mode = this.mode;
         if (this.onChoose) this.onChoose(mode);
@@ -1775,7 +1854,11 @@ export class MenuScene implements Scene {
     this.backdrop.setFloating(false);
     const kick = this.state === "kickoff";
     const kt = kick && !this.reduced ? this.phaseT : -1;
-    if (this.state === "done" || kt >= K_INK) {
+    // the iris's own time: later, for a ball that met the plane
+    const it = kt - this.late;
+    // AWAY's ball has met the plane: it flies no further
+    const crashed = this.crashAt >= 0 && kt >= this.crashAt;
+    if (this.state === "done" || it >= K_INK) {
       s.clear(P.ink);
       return;
     }
@@ -1815,11 +1898,29 @@ export class MenuScene implements Scene {
     this.compose();
 
     const era = isEra(mode);
-    if (!era && kt >= K_FLY && kt < land && this.ballOn) {
+    if (!era && kt >= K_FLY && kt < land && this.ballOn && !crashed) {
       if (this.ball.r < TRAIL_BELOW_R) {
         this.drawTrail(s, kt, accent.light, accent.base);
       } else if (this.ball.r >= this.R * RUSH_FROM) {
         this.drawRush(s, kt);
+      }
+    }
+    // AWAY's ball that met the plane, down in the water: rings going out from it
+    if (crashed && this.restWet) {
+      const ring = Math.floor(
+        (kt - this.crashAt - BALL_BONK - BALL_DROP) * RIPPLE_FPS,
+      );
+      if (ring >= 0 && ring < BALL_RINGS.length) {
+        const rx = BALL_RINGS[ring];
+        drawRipple(
+          s,
+          this.restX,
+          this.restY,
+          rx,
+          rx * RIPPLE_FLAT,
+          ring,
+          ring < 2 ? P.white : P.mist,
+        );
       }
     }
     // HOME: the mark of the landing, under the ball
@@ -1893,7 +1994,7 @@ export class MenuScene implements Scene {
         accent.light,
         accent.base,
       );
-      if (mode === "away" && kt >= land) {
+      if (mode === "away" && kt >= land && this.crashAt < 0) {
         const x = this.ax;
         const y = this.ay;
         // the last of it: a twinkle, which goes on winking in the closing iris
@@ -1934,7 +2035,20 @@ export class MenuScene implements Scene {
     if (mode === "retro" && kt >= K_HIT) this.drawOldTimes(s, kt - K_HIT);
     if (mode === "nextgen" && kt >= K_HIT) this.drawNewTimes(s, kt - K_HIT);
 
-    if (kt >= K_IRIS) {
+    // AWAY's ball and the plane: the star of the knock, over the ball
+    if (crashed) {
+      drawBurst(
+        s,
+        Math.round(this.crashX),
+        Math.round(this.crashY),
+        Math.floor((kt - this.crashAt) * 15),
+        Math.max(PLANE_STAR_MIN, this.crashR * PLANE_STAR),
+        P.white,
+        P.goldLight,
+      );
+    }
+
+    if (it >= K_IRIS) {
       const fx = this.irisX();
       const fy = this.irisY();
       const hold = home
@@ -1947,22 +2061,26 @@ export class MenuScene implements Scene {
           Math.hypot(Math.max(fx, this.w - fx), Math.max(fy, this.h - fy)),
         ) + 1;
       // whole pixels only now; under one pixel it is shut
-      const r = Math.round(irisRadius(kt, far, hold));
+      const r = Math.round(irisRadius(it, far, hold));
       iris(s, fx, fy, r >= 1 ? r : -1, P.ink);
     }
   }
 
   /**
    * Where the iris closes: where the ball came down, or went (NEXT-GEN's and RETRO's, where
-   * it is).
+   * it is; an AWAY ball that met the plane, where it lies).
    */
   private irisX(): number {
     const m = this.mode;
+    if (m === "away" && this.crashAt >= 0) return this.restX;
     return m === "home" ? this.tx : m === "away" ? this.ax : this.ball.cx;
   }
 
   private irisY(): number {
     const m = this.mode;
+    if (m === "away" && this.crashAt >= 0) {
+      return Math.round(this.restY - this.downR());
+    }
     return m === "home" ? this.ty : m === "away" ? this.ay : this.ball.cy;
   }
 
@@ -2327,6 +2445,10 @@ export class MenuScene implements Scene {
     this.settle();
     this.roar = 0;
     this.backdrop.setRoar(0);
+    // a plane brought down flies again
+    this.crashAt = -1;
+    this.late = 0;
+    this.backdrop.mendPlane();
     this.dropPointer();
   }
 
@@ -2414,6 +2536,8 @@ export class MenuScene implements Scene {
     this.state = "kickoff";
     this.phaseT = 0;
     this.closing = false;
+    this.crashAt = -1;
+    this.late = 0;
     this.kickClock = this.clock;
     this.mode = mode;
     this.noT = -1;
@@ -2509,7 +2633,7 @@ export class MenuScene implements Scene {
       }
       return;
     }
-    if (at(K_IRIS)) this.closeSound();
+    if (at(K_IRIS + this.late)) this.closeSound();
     if (isEra(mode)) {
       if (at(K_HIT)) this.sound(TIME_TURN);
       if (at(K_HIT + ERA_SPIN)) this.sound(SPARKLE);
@@ -2529,6 +2653,17 @@ export class MenuScene implements Scene {
     if (mode === "home") {
       if (at(land)) this.sound(LAND);
       if (at(land + HOME_HOP_AT + HOME_HOP_LEN)) this.sound(LAND_HOP);
+    } else if (this.crashAt >= 0) {
+      // it met the plane (the knock is `meetPlane`'s): no twinkle, and no more wind; the
+      // ball drops to the ground, and the plane comes down beside it (into the pond, if
+      // that is what is under them)
+      if (at(this.crashAt + PLANE_FALL)) {
+        this.sound(this.restWet ? PLANE_SPLASH : PLANE_DOWN);
+      }
+      if (at(this.crashAt + BALL_BONK + BALL_DROP)) {
+        this.sound(PLANE_BALL_DOWN);
+      }
+      if (after >= this.crashAt) return;
     } else if (at(land + TWINKLE_FLARE - SPARKLE_RISE)) {
       this.sound(SPARKLE);
     }
@@ -2549,6 +2684,122 @@ export class MenuScene implements Scene {
     if (this.closing) return;
     this.closing = true;
     this.sound(CLOSING);
+  }
+
+  // -------------------------------------------------------------------------
+  // AWAY and the plane
+  // -------------------------------------------------------------------------
+
+  /**
+   * When AWAY's ball, struck when the scene's clock said `kicked`, first comes within
+   * PLANE_REACH of the plane, looking at the kick-off's seconds from `from` to `to`: that
+   * time, with the ball left in `fx`, `fy` and `fr` as it is then; or -1. The ball's way
+   * and the plane's are both functions of the clock, so this asks, and changes nothing else.
+   */
+  private planeHit(kicked: number, from: number, to: number): number {
+    const len = FLIGHT.away;
+    const a = Math.max(from, K_FLY);
+    const b = Math.min(to, K_FLY + len);
+    if (!(b >= a)) return -1;
+    // where the struck ball hangs: the hover as the kick-off found it
+    this.hoverAt(kicked);
+    const y0 = this.cy0 - Math.round(this.lift);
+    const steps = Math.ceil((b - a) / PLANE_STEP);
+    for (let i = 0; i <= steps; i++) {
+      const kt = Math.min(b, a + i * PLANE_STEP);
+      const box = this.backdrop.planeBox(kicked + kt);
+      // between passes (or no plane at all): nothing to meet in this span
+      if (!box) continue;
+      this.awayAt((kt - K_FLY) / len, y0);
+      // its middle has come up to the plane's, between the plane's ends (and a little)
+      if (
+        this.fx >= box.x - PLANE_REACH &&
+        this.fx <= box.x + box.w + PLANE_REACH &&
+        this.fy <= box.y + box.h / 2 &&
+        this.fy >= box.y - PLANE_REACH
+      ) {
+        return kt;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Would AWAY's ball bring the plane down if AWAY were chosen when the scene's clock says
+   * `t` seconds (with the ball at rest)? For the snap tool and the tests, which look for
+   * the moment: it asks, and changes nothing. Never on a phone (no plane flies there), with
+   * reduced motion (no flight) or once a plane is down.
+   */
+  wouldHitPlane(t: number): boolean {
+    if (!this.open || this.reduced || !Number.isFinite(t)) return false;
+    return this.planeHit(t, K_FLY, K_FLY + FLIGHT.away) >= 0;
+  }
+
+  /**
+   * The kick-off has moved from `before` to `after` seconds: if AWAY's ball met the plane
+   * on the way, the plane comes down (the backdrop's), the ball goes no further
+   * (`fallFromPlane`), and the iris waits for them (`late`). Once a kick-off at most.
+   */
+  private meetPlane(before: number, after: number): void {
+    if (this.mode !== "away" || this.crashAt >= 0) return;
+    if (this.reduced || !this.open) return;
+    const kt = this.planeHit(this.kickClock, before, after);
+    if (kt < 0) return;
+    const down = this.backdrop.crashPlane(this.kickClock + kt);
+    if (!down) return;
+    this.crashAt = kt;
+    this.crashX = this.fx;
+    this.crashY = this.fy;
+    this.crashR = this.fr;
+    this.restX = Math.round(down.x);
+    // the ground is under them, never above where they met
+    this.restY = Math.round(Math.max(down.y, this.fy + this.fr + 4));
+    this.restWet = down.water;
+    this.late = Math.max(0, kt + PLANE_IRIS - K_IRIS);
+    this.sound(PLANE_HIT);
+  }
+
+  /**
+   * The ball `c` seconds after it met the plane (in `fx`, `fy` and `fr`): it hangs for
+   * BALL_BONK, then falls to the ground beside where the plane comes down, knocked up a
+   * little first and smaller all the way (the ground is far under them); there it bounces
+   * once on grass, or bobs on water, and lies still.
+   */
+  private fallFromPlane(c: number): void {
+    const small = this.downR();
+    const rest = this.restY - small;
+    this.fr = this.crashR;
+    if (c < BALL_BONK) {
+      this.fx = this.crashX;
+      this.fy = this.crashY;
+      return;
+    }
+    const u = (c - BALL_BONK) / BALL_DROP;
+    if (u < 1) {
+      // off the plane and away to where it lands, falling faster and faster
+      const across = u * u * (3 - 2 * u);
+      const pop =
+        BALL_POP * (rest - this.crashY) * Math.sin(Math.PI * u) * (1 - u);
+      this.fx = lerp(this.crashX, this.restX, across);
+      this.fy = lerp(this.crashY, rest, u * u) - pop;
+      this.fr = lerp(this.crashR, small, Math.pow(u, 1.2));
+      return;
+    }
+    const after = c - BALL_BONK - BALL_DROP;
+    this.fx = this.restX;
+    this.fr = small;
+    if (this.restWet) {
+      // it floats: under for a moment as it goes in, then bobbing
+      this.fy = rest + Math.round(Math.sin(after * Math.PI * 2 * BALL_BOB));
+      return;
+    }
+    const hop = clamp(after / BALL_HOP_LEN);
+    this.fy = rest - Math.round(BALL_HOP * Math.sin(Math.PI * hop));
+  }
+
+  /** How big the ball that met the plane is once it is down: HOME's ball on the pitch. */
+  private downR(): number {
+    return Math.min(this.crashR, this.endR);
   }
 
   // -------------------------------------------------------------------------
@@ -3365,7 +3616,12 @@ export class MenuScene implements Scene {
           const len = FLIGHT[mode];
           const after = kt - K_FLY - len;
           this.flightAt(clamp((kt - K_FLY) / len));
-          if (after >= 0) {
+          // AWAY's ball that met the plane goes no further: it drops where they met
+          const met =
+            mode === "away" && this.crashAt >= 0 && kt >= this.crashAt;
+          if (met) {
+            this.fallFromPlane(kt - this.crashAt);
+          } else if (after >= 0) {
             if (mode === "home") {
               // down: the picture jumps, and the ball bounces once and lies still
               const f = Math.floor(after * 30);
@@ -3377,8 +3633,16 @@ export class MenuScene implements Scene {
               this.ballOn = false;
             }
           }
-          // spin in steps
-          const air = mode === "home" ? Math.min(kt - K_FLY, len) : kt - K_FLY;
+          // spin in steps (a ball that has come down has stopped)
+          const air =
+            mode === "home"
+              ? Math.min(kt - K_FLY, len)
+              : this.crashAt >= 0
+                ? Math.min(
+                    kt - K_FLY,
+                    this.crashAt - K_FLY + BALL_BONK + BALL_DROP,
+                  )
+                : kt - K_FLY;
           const turn = Math.floor(air * 30) / 30;
           this.spinFrame = Math.floor(air * 14);
           b.r = Math.round(this.fr * 2) / 2;
@@ -3530,29 +3794,37 @@ export class MenuScene implements Scene {
         this.fx = tx;
       }
     } else {
-      const ax = this.ax;
-      const ay = this.ay;
-      // the corner of the curl
-      let kx: number;
-      let ky: number;
-      if (this.open) {
-        kx = ax + R * AWAY_LOW_OUT;
-        ky = lerp(y0, ay, AWAY_LOW_UP);
-      } else {
-        kx = this.w + R * AWAY_SWING;
-        ky = lerp(y0, ay, AWAY_SWING_Y);
-      }
-      const near = this.open
-        ? nearAt(u, AWAY_FAR)
-        : (1 - u) * (1 - u) * (1 - u);
-      const e = 1 - near;
-      const a = near * near;
-      const c = 2 * e * near;
-      const d = e * e;
-      this.fr = lerp(2, R, near);
-      this.fx = a * cx + c * kx + d * ax;
-      this.fy = a * y0 + c * ky + d * ay;
+      this.awayAt(u, y0);
     }
+  }
+
+  /**
+   * AWAY's flight, `u` from 0 (struck, hanging on row `y0`) to 1 (gone): leaves the ball
+   * in `fx`, `fy` and `fr`.
+   */
+  private awayAt(u: number, y0: number): void {
+    const cx = this.cx;
+    const R = this.R;
+    const ax = this.ax;
+    const ay = this.ay;
+    // the corner of the curl
+    let kx: number;
+    let ky: number;
+    if (this.open) {
+      kx = ax + R * AWAY_LOW_OUT;
+      ky = lerp(y0, ay, AWAY_LOW_UP);
+    } else {
+      kx = this.w + R * AWAY_SWING;
+      ky = lerp(y0, ay, AWAY_SWING_Y);
+    }
+    const near = this.open ? nearAt(u, AWAY_FAR) : (1 - u) * (1 - u) * (1 - u);
+    const e = 1 - near;
+    const a = near * near;
+    const c = 2 * e * near;
+    const d = e * e;
+    this.fr = lerp(2, R, near);
+    this.fx = a * cx + c * kx + d * ax;
+    this.fy = a * y0 + c * ky + d * ay;
   }
 
   /**

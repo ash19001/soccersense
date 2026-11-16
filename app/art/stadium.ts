@@ -27,6 +27,7 @@
  */
 
 import { Surface, clamp } from "~/pixel";
+import type { Zone } from "~/art/layout";
 import { lightingFor, type Lighting } from "~/art/lighting";
 import { drawSky } from "~/art/sky";
 import {
@@ -79,9 +80,16 @@ import type { FloatingSprite, SoundCue } from "~/scenes/scene";
 import {
   drawFlyby,
   paintBanner,
+  planeBox,
   planeRoute,
+  trainLength,
   type Banner,
 } from "~/art/stadium-plane";
+import {
+  drawPlaneCrash,
+  planeBallSpot,
+  type PlaneCrash,
+} from "~/art/stadium-plane-fall";
 import { paintTown, type Town } from "~/art/stadium-town";
 import { makeView, project, type View } from "~/art/stadium-view";
 
@@ -133,6 +141,18 @@ function trodden(view: View, life: Life): { x: number; y: number }[] {
   return out;
 }
 
+/** Where each of the two that can be brought down lands (`MenuBackdrop.landings`). */
+interface Landings {
+  ship: CrashSite;
+  plane: CrashSite;
+}
+
+/**
+ * AWAY's ball meets the plane about this far across the canvas (scenes/menu.ts: near the
+ * end of its flight, far out to the right).
+ */
+const PLANE_MEETS = 0.875;
+
 export class MenuBackdrop {
   private readonly seed: number;
   /** The order the match's plays come in (stadium-match.ts). */
@@ -143,6 +163,8 @@ export class MenuBackdrop {
   /** The plane tows this across the sky (empty: no plane). */
   private bannerText = "";
   private banner: Banner | null = null;
+  /** The plane has been brought down (`crashPlane`): when and where. Null: it flies. */
+  private crash: PlaneCrash | null = null;
   private light: Lighting = lightingFor({ elevation: 45, morning: false });
   private scheme: ClubScheme = DEFAULT_SCHEME;
   private moonPhase: number | undefined = undefined;
@@ -158,8 +180,10 @@ export class MenuBackdrop {
   private ship: Airship | null = null;
   private work: Surface | null = null;
   private kit: FallKit | null = null;
+  /** Where the airship comes down, and where the plane does (`landings`). */
   private site: CrashSite | null = null;
-  private readonly sites = new Map<string, CrashSite>();
+  private planeSite: CrashSite | null = null;
+  private readonly sites = new Map<string, Landings>();
   private readonly pokes = new AirshipPokes();
   /** Where the mascot stands, per size (null: no lawn, no mascot). */
   private spot: { x: number; y: number } | null = null;
@@ -258,6 +282,64 @@ export class MenuBackdrop {
     if (words === this.bannerText) return;
     this.bannerText = words;
     this.banner = null;
+  }
+
+  /** The banner the plane tows, painted for this light (painted afresh when either changes). */
+  private towed(light: Lighting): Banner {
+    if (this.banner?.light !== light || this.banner.text !== this.bannerText) {
+      this.banner = paintBanner(this.bannerText, light);
+    }
+    return this.banner;
+  }
+
+  /** The row the plane flies along, clear of the airship at rest (`planeRoute`). */
+  private planeRow(ship: Airship): number {
+    // the airship down to its gondola's keel
+    return planeRoute(this.view, {
+      x: ship.x,
+      y: ship.y,
+      w: ship.layer.w,
+      h: ship.gondola.y + ship.gondola.h,
+    });
+  }
+
+  /**
+   * Where the plane is at scene time `t` (its own box, without its banner): for whatever
+   * might meet it (AWAY's ball, scenes/menu.ts). Null between passes, with no plane (no
+   * banner: a phone) and once it has been brought down.
+   */
+  planeBox(t: number): { x: number; y: number; w: number; h: number } | null {
+    if (this.bannerText === "" || this.crash !== null) return null;
+    if (this.w === 0 || this.h === 0 || !Number.isFinite(t)) return null;
+    const { ship } = this.paint();
+    const length = trainLength(this.towed(this.clubbed()));
+    return planeBox(t, this.w, length, this.planeRow(ship));
+  }
+
+  /**
+   * The plane is hit at scene time `t`: from then on it is drawn coming down
+   * (`drawPlaneCrash`, stadium-plane-fall.ts), and no plane flies until `mendPlane`. It
+   * lands on its own ground (`landings`): the open grass or water under where it is hit,
+   * at the right of the picture, which is the plane's alone. Gives where the ball that hit
+   * it comes to rest (on the ground beside the wreck, and whether that is water), or null
+   * if no plane is there to hit.
+   */
+  crashPlane(t: number): { x: number; y: number; water: boolean } | null {
+    const box = this.planeBox(t);
+    if (!box) return null;
+    const site = this.paint().planeSite;
+    this.crash = {
+      t0: t,
+      x: box.x,
+      y: box.y + Math.floor(box.h / 2),
+      site,
+    };
+    return planeBallSpot(site, this.w);
+  }
+
+  /** A plane flies again, as if none had come down. */
+  mendPlane(): void {
+    this.crash = null;
   }
 
   /** What the sign shows. */
@@ -405,6 +487,7 @@ export class MenuBackdrop {
     work: Surface;
     kit: FallKit;
     site: CrashSite;
+    planeSite: CrashSite;
   } {
     const held =
       this.relit > 0 &&
@@ -461,21 +544,14 @@ export class MenuBackdrop {
         );
       }
       this.spot = this.spots.get(key) ?? null;
-      let site = this.sites.get(key);
-      if (!site) {
-        site = findCrashSite(
-          this.view,
-          this.town.land,
-          this.town.top,
-          this.town.depth,
-          this.seed,
-          this.ship.x + this.ship.centre.x,
-          this.spot ? [mascotZone(this.spot)] : [],
-        );
+      let sites = this.sites.get(key);
+      if (!sites) {
+        sites = this.landings(this.town, this.ship);
         if (this.sites.size > 8) this.sites.clear();
-        this.sites.set(key, site);
+        this.sites.set(key, sites);
       }
-      this.site = site;
+      this.site = sites.ship;
+      this.planeSite = sites.plane;
       this.dirty = false;
     }
     return {
@@ -485,6 +561,60 @@ export class MenuBackdrop {
       work: this.work,
       kit: this.kit,
       site: this.site,
+      planeSite: this.planeSite ?? this.site,
+    };
+  }
+
+  /**
+   * Where the airship comes down when it is popped, and where the plane does when AWAY's
+   * ball brings it down: two places, never one (the product owner, 2026-11-16, of the
+   * plane: "it should fall where the blimp currently falls", and then of the airship:
+   * "make the blimp land on the left behind the mascot instead. so that area is only for
+   * the plane").
+   *
+   * - The plane's: the open grass or water as near as there is to straight below where the
+   *   ball meets it (PLANE_MEETS of the way across): the lawn at the right of the picture,
+   *   where the airship used to come down in most windows. Chosen first, so that ground is
+   *   the plane's alone.
+   * - The airship's: the lawn just behind the mascot, at the left under where it hangs
+   *   (`findCrashSite`'s `behind`); with no room there, the open ground nearest to
+   *   straight below it that is clear of the mascot and of the plane's.
+   *
+   * With no mascot (a phone: no lawn, and no plane either) the airship's is found as it
+   * always was, and the plane's clear of it.
+   */
+  private landings(town: Town, ship: Airship): Landings {
+    const find = (
+      x: number,
+      avoid: readonly Zone[],
+      behind?: { x: number; y: number },
+    ): CrashSite =>
+      findCrashSite(
+        this.view,
+        town.land,
+        town.top,
+        town.depth,
+        this.seed,
+        x,
+        avoid,
+        behind,
+      );
+    /** A wreck, its dust and its pilot: what another wreck keeps clear of. */
+    const taken = (site: CrashSite): Zone[] => [
+      { x: site.x - 40, y: site.y - 44, w: 84, h: 60 },
+      { x: site.pilotX - 14, y: site.pilotY - 30, w: 30, h: 38 },
+    ];
+    const shipX = ship.x + ship.centre.x;
+    const planeX = Math.round(this.w * PLANE_MEETS);
+    if (!this.spot) {
+      const ships = find(shipX, []);
+      return { ship: ships, plane: find(planeX, taken(ships)) };
+    }
+    const mascot = mascotZone(this.spot);
+    const plane = find(planeX, [mascot]);
+    return {
+      ship: find(shipX, [mascot, ...taken(plane)], this.spot),
+      plane,
     };
   }
 
@@ -527,34 +657,24 @@ export class MenuBackdrop {
     s.copy(town.land, 0, town.top);
     life.draw(s, time, this.roar);
     const light = this.clubbed();
-    if (this.spot) {
-      drawMascot(
-        s,
-        this.spot.x,
-        this.spot.y,
-        mascotFrame(this.mascot, time),
-        light,
-      );
-    }
+    const spot = this.spot;
+    const mascot = (): void => {
+      if (!spot) return;
+      drawMascot(s, spot.x, spot.y, mascotFrame(this.mascot, time), light);
+    };
+    const phase = this.pokes.phase(time);
+    // (the burst airship comes down behind him: he is drawn after it, below)
+    if (phase.kind !== "down") mascot();
     // the plane and its banner, far off: behind the airship
     if (this.bannerText !== "") {
-      if (
-        this.banner?.light !== light ||
-        this.banner.text !== this.bannerText
-      ) {
-        this.banner = paintBanner(this.bannerText, light);
+      const banner = this.towed(light);
+      if (this.crash) {
+        drawPlaneCrash(s, banner, this.crash, light, time, town.depth);
+      } else {
+        drawFlyby(s, banner, this.planeRow(ship), light, time);
       }
-      // the airship down to its gondola's keel
-      const box = {
-        x: ship.x,
-        y: ship.y,
-        w: ship.layer.w,
-        h: ship.gondola.y + ship.gondola.h,
-      };
-      drawFlyby(s, this.banner, planeRoute(v, box), light, time);
     }
     const text = this.shown();
-    const phase = this.pokes.phase(time);
     if (phase.kind === "down") {
       // the wreck's sign keeps the message it showed when it burst
       const pop = time - phase.since;
@@ -562,6 +682,8 @@ export class MenuBackdrop {
       const last =
         text[signAt(text, z.w, z.h, this.signTime(pop)).index] ?? text[0];
       drawDown(s, ship, kit, site, last, light, time, phase.since, town.depth);
+      // the wreck and its dust are on the lawn behind the mascot: he stands in front
+      mascot();
       return;
     }
     const pose = this.poseOf(ship, time);

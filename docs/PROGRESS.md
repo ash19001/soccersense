@@ -409,6 +409,27 @@ quieter, twice, and it was halved each time (the kept shimmer is now about 12 dB
 town's own bed). To see it quickly, `?speed=8` on the home page runs the scene eight
 times as fast.
 
+## AWAY and the plane (2026-11-16)
+
+A second easter egg on the home screen (the product owner: "if the plane is passing through
+and the ball contacts the plane then instead of going into the sky the plane crashes and ball
+falls to the ground, then the transition happens for the match"). AWAY chosen about a second
+after the plane's nose shows sends the ball into it: the plane comes down as the airship does
+(spinning into the town under it, with the airship's dust or splash, its pilot under a
+parachute), the ball falls to the ground beside the wreck, and AWAY starts about three seconds
+later than usual. The two wrecks have a place each: the plane's is the lawn at the right
+(where the airship used to fall in most windows: "it should fall where the blimp currently
+falls"), and the airship now lands at the left, just behind the mascot ("make the blimp land
+on the left behind the mascot instead. so that area is only for the plane"). Rules:
+docs/GAME_DESIGN.md (the home screen);
+the scene: docs/API_SCENES.md; the art: `planeBox` in `~/art/stadium-plane` and the fall in
+`~/art/stadium-plane-fall` (docs/API_ART.md); its sounds' levels: `HOME_PAGE.planeHit` and
+`planeBallLand`, with a row on `/dev/sound`. To see it:
+`pnpm snap menu/away-plane --size 960x457 --t 0.9 --strip 8 --dt 0.45 --scale 1 --crop 720,60,240,300`
+(the plane), and `pnpm snap stadium/airship --size 960x457 --scale 1` (the airship: eight
+frames, the last four its fall, its wreck behind the mascot and the new one coming in).
+Monitors only: no plane flies on a phone.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

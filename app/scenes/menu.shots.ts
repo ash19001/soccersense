@@ -34,6 +34,8 @@
  *   ./node_modules/.bin/tsx tools/snap.ts menu/gold-turn --strip 8 --dt 0.07 --scale 1    (it turns to gold)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/gold-turn --t 1 --strip 6 --dt 1 --scale 1 --time night    (the ground erupts)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/golden --time all --scale 1    (the golden ball, kept)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/away-plane --size 960x457 --t 0.9 --strip 8 --dt 0.45 --crop 720,60,240,300 --scale 1    (AWAY's ball brings the plane down, on to the lawn at the right)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/away-plane --size 960x457 --t 4.3 --strip 6 --dt 0.12 --scale 1    (and the iris closes on the ball)
  */
 
 import { Surface, type ShotContext, type ShotMap } from "~/pixel";
@@ -41,6 +43,7 @@ import { ballShowPose, ballSlotCenter, type BallSlot } from "~/art/ball";
 import { menuLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
 import { P } from "~/art/palette";
+import { PLANE_FIRST } from "~/art/stadium-plane";
 import { GOLD_SPIN, MenuScene, type MenuLabels } from "./menu";
 
 const LABELS: MenuLabels = {
@@ -430,6 +433,25 @@ export const shots: ShotMap = {
   "menu/golden": (ctx) => {
     const scene = make(ctx);
     scene.setGolden(true);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+
+  // AWAY and the plane (an easter egg): AWAY chosen at t = 0, at the moment that sends its
+  // ball into the plane as it comes in (the middle of the moments that do, found by asking
+  // the scene). The knock is about 0.8 s in; the plane spins down into the town under it
+  // and is down 2.4 s later, the ball beside it, and the iris closes on the ball where it
+  // lies. Only where a plane flies (a monitor): elsewhere it is
+  // an ordinary AWAY kick-off.
+  "menu/away-plane": (ctx) => {
+    const scene = make(ctx);
+    const hits: number[] = [];
+    for (let t = PLANE_FIRST; t < PLANE_FIRST + 6; t += STEP) {
+      if (scene.wouldHitPlane(t)) hits.push(t);
+    }
+    const when = hits.length > 0 ? hits[hits.length >> 1] : PLANE_FIRST;
+    advance(scene, when);
+    scene.choose("away");
     advance(scene, ctx.t);
     return frame(ctx, scene);
   },

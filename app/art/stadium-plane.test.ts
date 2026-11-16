@@ -10,11 +10,14 @@ import {
   PLANE_EVERY,
   PLANE_FIRST,
   PLANE_SIZE,
+  PLANE_SPEED,
   bannerWords,
   drawFlyby,
   paintBanner,
   planeAt,
+  planeBox,
   planeRoute,
+  planeStill,
   trainLength,
 } from "~/art/stadium-plane";
 import { makeView } from "~/art/stadium-view";
@@ -159,5 +162,52 @@ describe("the plane's passes", () => {
     const later = new Surface(960, 120);
     drawFlyby(later, b, 60, DAY, PLANE_FIRST + 8.5);
     expect(later.data).not.toEqual(a.data);
+  });
+});
+
+describe("the plane's own box (for what might meet it)", () => {
+  const W = 960;
+  const H = 300;
+  const ROW = 120;
+  const b = banner();
+  const length = trainLength(b);
+
+  it("is where the plane is drawn, and nothing between passes", () => {
+    expect(planeBox(PLANE_FIRST - 1, W, length, ROW)).toBeNull();
+    const pass = (W + length + 8) / PLANE_SPEED;
+    expect(planeBox(PLANE_FIRST + pass + 1, W, length, ROW)).toBeNull();
+    for (const dt of [0.5, 2, 9]) {
+      const box = planeBox(PLANE_FIRST + dt, W, length, ROW);
+      expect(box).not.toBeNull();
+      if (!box) continue;
+      // the plane's own size, its nose where the pass has it, on its row (a pixel of bob)
+      expect(box.w).toBe(PLANE_SIZE.w);
+      expect(box.h).toBe(PLANE_SIZE.h);
+      expect(box.x).toBe(planeAt(PLANE_FIRST + dt, W, length));
+      expect(Math.abs(box.y + box.h / 2 - ROW)).toBeLessThanOrEqual(1);
+      // and that is where it is drawn
+      const s = new Surface(W, H);
+      drawFlyby(s, b, ROW, DAY, PLANE_FIRST + dt);
+      let inside = 0;
+      for (let y = box.y; y < box.y + box.h; y++) {
+        for (let x = Math.max(0, box.x); x < Math.min(W, box.x + box.w); x++) {
+          if (s.data[y * W + x] !== TRANSPARENT) inside++;
+        }
+      }
+      expect(inside, `${dt}`).toBeGreaterThan(150);
+    }
+  });
+
+  it("has a still plane for the fall: the plane with its propeller stopped, once for each light", () => {
+    const still = planeStill(DAY);
+    expect(still.w).toBe(PLANE_SIZE.w + 2);
+    expect(still.h).toBe(PLANE_SIZE.h);
+    expect(planeStill(DAY)).toBe(still);
+    expect(planeStill(NIGHT)).not.toBe(still);
+    let n = 0;
+    for (let i = 0; i < still.data.length; i++) {
+      if (still.data[i] !== TRANSPARENT) n++;
+    }
+    expect(n).toBeGreaterThan(250);
   });
 });

@@ -20,6 +20,10 @@
  * - **Night**: the plane has navigation lamps (red on the near wing tip, white on the tail,
  *   a blinking red beacon) and the banner carries a row of little lamps along its top edge
  *   that light it, so its cloth and letters keep their floodlit colours.
+ * - **Brought down** (an easter egg of the home screen, 2026-11-16: AWAY's ball, struck at
+ *   the right moment, meets the plane on its way to the sky): `planeBox` is where the plane
+ *   is, for the ball, and stadium-plane-fall.ts is the plane from the moment it is hit,
+ *   coming down into the town as the airship does.
  *
  * Pure: the clock and the text come in; no randomness.
  */
@@ -222,6 +226,32 @@ export function planeAt(t: number, w: number, length: number): number | null {
   return x + length < -4 ? null : x;
 }
 
+/** The plane's gentle bob at `u`, in whole pixels; the banner rides a moment behind. */
+function bob(u: number): number {
+  return Math.round(Math.sin((2 * Math.PI * u) / 3.1));
+}
+
+/**
+ * Where the plane itself is at `t` (its sprite's box, bob and all), flying along row `y`
+ * on a canvas `w` wide with a train `length` long: for whatever might meet it. Null
+ * between passes.
+ */
+export function planeBox(
+  t: number,
+  w: number,
+  length: number,
+  y: number,
+): Zone | null {
+  const x = planeAt(t, w, length);
+  if (x === null) return null;
+  return {
+    x,
+    y: y - Math.floor(PLANE_H / 2) + bob(t),
+    w: PLANE_W,
+    h: PLANE_H,
+  };
+}
+
 /**
  * The plane and its banner at `t`, the plane's middle on row `y`. Nothing between passes.
  */
@@ -234,11 +264,8 @@ export function drawFlyby(
 ): void {
   const x = planeAt(t, s.w, trainLength(banner));
   if (x === null) return;
-  // a gentle bob, in whole pixels; the banner rides a moment behind
-  const bob = (u: number): number =>
-    Math.round(Math.sin((2 * Math.PI * u) / 3.1));
   const py = y - Math.floor(PLANE_H / 2) + bob(t);
-  drawTowed(s, banner, x, y, light, t, bob);
+  drawTowed(s, banner, x, y, light, t);
   drawPlaneAt(s, x, py, light, t);
 }
 
@@ -250,7 +277,6 @@ function drawTowed(
   y: number,
   light: Lighting,
   t: number,
-  bob: (u: number) => number,
 ): void {
   const lag = 0.4;
   const hx = x + HOOK.x;
@@ -272,6 +298,22 @@ function drawTowed(
   // the bridle: from the ring to the pole's ends
   s.line(ringX, ringY, bx - 1, by - 1, rope);
   s.line(ringX, ringY + 1, bx - 1, by + bh, rope);
+  drawBanner(s, banner, bx, by, light, t);
+}
+
+/**
+ * The banner alone, its pole's top at (bx, by): the rippling cloth, the pole at its leading
+ * edge and, at night, its lamps.
+ */
+export function drawBanner(
+  s: Surface,
+  banner: Banner,
+  bx: number,
+  by: number,
+  light: Lighting,
+  t: number,
+): void {
+  const bh = banner.flat.h;
   // the banner, a column at a time, rippling: a wave runs back along it
   const W = banner.flat.w;
   const x0 = Math.max(0, -bx);
@@ -306,13 +348,12 @@ function drawTowed(
   }
 }
 
-/** The plane with its top left at (x, y), and its propeller turning. */
-function drawPlaneAt(
+/** The plane's body with its top left at (x, y): no propeller, no lamps. */
+function drawPlaneBody(
   s: Surface,
   x: number,
   y: number,
   light: Lighting,
-  t: number,
 ): void {
   const g = light.env;
   const night = light.lightsOn;
@@ -332,6 +373,19 @@ function drawPlaneAt(
     g(P.steel),
     g(P.night),
   ]);
+}
+
+/** The plane with its top left at (x, y), and its propeller turning. */
+function drawPlaneAt(
+  s: Surface,
+  x: number,
+  y: number,
+  light: Lighting,
+  t: number,
+): void {
+  const g = light.env;
+  const night = light.lightsOn;
+  drawPlaneBody(s, x, y, light);
   // the propeller: a blade with a lit face and a shaded one, full length or edge on
   const lit = g(P.steelHi);
   const dim = g(P.mist);
@@ -367,3 +421,32 @@ export function drawPlane(
 
 /** The plane's size. */
 export const PLANE_SIZE = { w: PLANE_W, h: PLANE_H } as const;
+
+// ---------------------------------------------------------------------------
+// For the plane brought down (stadium-plane-fall.ts)
+// ---------------------------------------------------------------------------
+
+/** How far behind the plane's nose its banner's pole is: the hook, the rope, the bridle. */
+export const BANNER_BEHIND = HOOK.x + ROPE + BRIDLE;
+
+/** The plane on a surface of its own for each light, its engine stopped: to be turned. */
+const stills = new WeakMap<Lighting, Surface>();
+
+/**
+ * The plane standing still, on a surface of its own (two pixels wider than the plane: its
+ * stopped propeller is ahead of the nose, the nose at column 2), painted once for each
+ * light. For a plane that falls: turned, shrunk and spun as a whole.
+ */
+export function planeStill(light: Lighting): Surface {
+  let art = stills.get(light);
+  if (!art) {
+    art = new Surface(PLANE_W + 2, PLANE_H);
+    drawPlaneBody(art, 2, 0, light);
+    // the propeller, stopped: a blade edge on, and its hub
+    const g = light.env;
+    art.rect(0, PROP_Y - 4, 1, 9, g(P.mist));
+    art.rect(1, PROP_Y - 1, 2, 3, g(P.concrete));
+    stills.set(light, art);
+  }
+  return art;
+}

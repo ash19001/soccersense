@@ -414,8 +414,9 @@ deepest open grass left of the ball: every pixel's distance to anything that is 
 (a path, the road, a tree, a building, the frame, and the ways people walk, traced from
 `life.people` over three minutes, when the lawn has room to keep off them) is measured and
 the farthest wins, up to 16 px, then nearest the middle of the lawn; at least 7 px all round
-or no mascot (480 x 270: (50, 192); 640 x 360: (66, 255)). It is chosen once per size, like the crash site, and the
-crash site and the pilot keep clear of him (`findCrashSite(..., avoid)`). `MASCOT_BOX`, his
+or no mascot (480 x 270: (50, 192); 640 x 360: (66, 255)). It is chosen once per size, like the crash sites. The
+airship's wreck lies on the lawn just behind him and he is drawn in front of it; its pilot,
+and the plane's wreck and pilot, keep clear of him (`findCrashSite(..., avoid, behind)`). `MASCOT_BOX`, his
 click box, is 12 x 14 px round the point between his boots (him, his ball at rest and a
 little more). Phones have no lawn: no mascot. The state is the trick history (`MascotPokes`);
 `draw` is a pure function of it and `t`. Shot: `stadium/mascot`.
@@ -499,6 +500,53 @@ drawn after the mascot and before the airship; clicking it does nothing. `planeA
 length)` is the nose's x (null between passes). Sheets: `plane/close`, `plane/home`,
 `plane/phone`.
 
+The plane can be brought down (an easter egg, 2026-11-16: AWAY's ball meets it,
+docs/API_SCENES.md). `planeBox(t, w, length, y)` is the plane's own box at `t` (36 x 16, bob
+and all, without its banner; null between passes), and the backdrop's `planeBox(t)` the same
+for its own plane (null too with no banner, a phone, and once it is down).
+`crashPlane(t)` on the backdrop marks it hit, sends it to its own ground and
+gives where the ball that hit it comes to rest (`{ x, y, water }`: `planeBallSpot`, on the
+ground 15 px to the side of the wreck away from the pilot); from then `draw` paints
+`drawPlaneCrash` in the plane's place, and `mendPlane()` puts a plane back in the sky.
+
+The fall is `~/art/stadium-plane-fall`, modelled on the airship's (the product owner,
+2026-11-16, of a first version that only dipped behind the horizon: "the plane crash animation
+isn't proper. look at how the blimp crash animation is") and sharing its landing:
+
+- **Where**: a place of its own (`MenuBackdrop.landings`, chosen once per size with the
+  airship's): the open grass or water that nothing stands on, as near as there is to straight
+  below where the ball meets it (0.875 of the way across), clear of the mascot. That is the
+  lawn at the right of the picture. In most windows the airship used to come down there, and
+  the plane was sent to the airship's site for that (the product owner, of a second version
+  that kept clear of the airship's site: "it should fall where the blimp currently falls");
+  then the airship was moved behind the mascot ("so that area is only for the plane"). The
+  two are never one place: the plane's is chosen first and the airship keeps off it.
+- **The fall** (`PLANE_FALL`, 2.4 s; `drawPlaneCrash(s, banner, crash, light, t, depth)` with
+  `PlaneCrash`: `t0`, the nose's `x`, the row `y`, the `site`): the still plane
+  (`planeStill(light)`, its propeller stopped) drawn with `warpBlit`, as the falling sign is.
+  It is carried on along its way at first and then across and down to the site, falling
+  faster and faster; it shrinks to the ground's scale there (20 units of ground long, 0.36 to
+  0.75 of its size: the plane in the sky is nearer to us than the ground under it); it spins
+  right round twice, faster and faster, nose down 0.85 radians and swaying; and it trails a
+  puff of smoke every 0.0125 s (an unbroken trail) that grows, rises and thins over 0.9 s.
+  `depth` is the town's depth mask: whatever stands nearer than where it lands hides it.
+- **The landing**: the airship's own, now `drawLandingDust` and `drawLandingSplash` in
+  `~/art/stadium-airship-fall` (taken out of `drawDown`, which draws exactly what it did). On
+  grass a bounce, the dust, and the wreck left nose in the ground; in water the column, the
+  drops and the rings, and the wreck bobs and sinks, the water closing over it.
+- **The banner**, let go, loses its way in 1.8 s and sinks 20 px a second, swaying and still
+  rippling, a stub of rope at its pole (`drawBanner`, the cloth alone; `BANNER_BEHIND` is how
+  far behind the nose its pole is).
+- **The pilot** is the airship's (`drawPilot`, a size smaller), and `planePilotAt(crash, c)`
+  says where he is `c` seconds after the hit (null while he is in the plane). He jumps 1.5 s
+  after it, when the plane is well on its way down: thrown on along its way at half its
+  speed and up a little, tumbling for 0.4 s, then under his canopy, which slows him (fast
+  across as it opens, straight down by the end), to the site's `pilotX`, `pilotY`. He is
+  down 3.2 s after the hit, 0.8 s after the plane, with his canopy beside him, and waving. A
+  test keeps his way down clear of the mascot at the reference sizes.
+
+Pure: a function of the seconds since the hit and the light. Shot: `menu/away-plane`.
+
 **The sign** is a dot-matrix panel (`~/art/led`) on the flank of an airship, which drifts 2 px
 either way at the upper left of a monitor (under the wordmark on a phone). Its panel at rest is
 `menuLayout().scoreboard` (92 x 35 on a monitor, 90 x 33 on a 130 px phone). It carries the
@@ -530,9 +578,22 @@ are stitched in red and straining, past 0.4 a hard poke puffs gas from the tail,
 the pilot waves from the gondola, past 0.7 it trembles and swells. The pop: a white flash,
 rays, "POP!", shreds of envelope flung out; then the sign and gondola fall for 2.8 s
 (`FALL`), spinning two turns and swinging, shrinking into the distance, the empty envelope
-fluttering above on two tethers, and land in the town where `findCrashSite` chose: open grass
+fluttering above on two tethers, and land in the town where `findCrashSite` chose. Since
+2026-11-16 (the product owner: "make the blimp land on the left behind the mascot instead.
+so that area is only for the plane") that is the lawn just behind the mascot, at the left
+under where it hangs (`findCrashSite`'s `behind`, his place): the wreck's foot 12 to 40 rows
+above his feet and no more than 44 px to his left or 30 to his right, as near as there is to
+8 px left of him and 22 above (its foot about level with his head, so most of it shows
+round him), on grass with the wreck's own room open (4.5 units of ground either side, 5
+above). He is drawn after the burst airship, so he stands in front of the wreck and its
+dust; the pilot lands on open grass about 26 px to one side of the wreck, clear of him.
+Before, the wreck had to keep clear of the mascot, and in most windows (anything shorter
+than about 960 x 470) the small lawn under the airship had no room for that, so it fell
+right across the picture to the lawn at the right: that ground is now the plane's
+(`MenuBackdrop.landings` chooses the plane's first and keeps the airship off it). Where
+there is no mascot, or no room behind him: open grass
 (or the pond, preferred if it is near) clear of the ball and captions, as near as possible to
-straight below (480 x 270: the lawn by West Road, left of the stadium). On grass it bounces
+straight below. On grass it bounces
 and raises dust; in water it splashes, rings spread and it sinks with bubbles. The pilot jumps
 at the pop, floats down under a parachute, lands beside it and waves. On phones there is no
 open grass: it comes down on the allotments behind the stadium and the pilot lands on the
