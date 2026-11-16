@@ -595,6 +595,13 @@ the menu works without the canvas (keyboard, screen readers). `score` adds an am
 | `noticeKey` | Change it to have the same words announced again (the text gets a fresh node).                                                                                                                                                                      |
 | `stowed`    | The kick-off is on: the captions slide down off the screen (`useStowSlide`), are `inert`, and let go of any hover (`onHover(null)`). Coming back is instant.                                                                                        |
 
+A card that is hovered or `lit` is ringed in its mode's light colour: two logical pixels, the
+same on every side (one inside the card's edge, where its stripe is at rest, and one outside
+it), and it stands over its neighbours (`z-index: 1`) so that the next card does not hide a
+side of the ring. (2026-11-16, the product owner: "the borders when i hover on the cards is
+hidden behind other cards", then "make the hover borders the same weight on all sides". Before,
+the stripe widened to two inside a ring of one: three on that side to one on the others.)
+
 There are two layouts, from the same markup (ui.css section 15):
 
 - **On a phone** (and anywhere that is not wide): two cards side by side in the column, the badge

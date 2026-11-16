@@ -2044,13 +2044,21 @@ button.ss-menu__card {
 }
 
 /*
- * Lit: the mouse is over the card, or over its patch on the ball. The stripe widens and
- * brightens and the card is ringed in the mode's light colour, like the patch above it.
+ * Lit: the mouse is over the card, or over its patch on the ball. The card is ringed in the
+ * mode's light colour, like the patch above it: two logical pixels all the way round, one
+ * inside the card's edge (where its stripe is at rest, so the stripe brightens into the
+ * ring) and one outside it. The same weight on every side (the product owner, 2026-11-16:
+ * "make the hover borders the same weight on all sides"): the stripe used to widen to two
+ * inside a ring of one, three on that side to one on the others.
+ * The outer half is drawn where the next card's own ink edge is: a lit card stands over its
+ * neighbours (z-index), or the card after it, beside or below, hides that side of the ring
+ * (the product owner, the same day: "the borders when i hover on the cards is hidden behind
+ * other cards"). Under the keyboard's ring, which is 2 (section 4).
  */
 .ss-menu__card.is-lit {
+  z-index: 1;
   box-shadow:
-    inset var(--stripe-lit, var(--u2)) 0 0 0 var(--mode-light, var(--c-mist)),
-    inset 0 var(--u) 0 0 var(--c-steel),
+    inset 0 0 0 var(--u) var(--mode-light, var(--c-mist)),
     0 0 0 var(--u) var(--mode-light, var(--c-mist)),
     var(--u) var(--u) 0 var(--u) var(--c-ink),
     var(--halo);
@@ -2058,9 +2066,9 @@ button.ss-menu__card {
 
 @media (hover: hover) {
   button.ss-menu__card:hover {
+    z-index: 1;
     box-shadow:
-      inset var(--stripe-lit, var(--u2)) 0 0 0 var(--mode-light, var(--c-mist)),
-      inset 0 var(--u) 0 0 var(--c-steel),
+      inset 0 0 0 var(--u) var(--mode-light, var(--c-mist)),
       0 0 0 var(--u) var(--mode-light, var(--c-mist)),
       var(--u) var(--u) 0 var(--u) var(--c-ink),
       var(--halo);
@@ -2272,7 +2280,6 @@ button.ss-menu__card:active {
 /* AWAY is its mirror image: the stripe is on the outer edge, the score comes first. */
 .ss-game[data-wide] .ss-menu__card:last-child {
   --stripe: calc(var(--u) * -1);
-  --stripe-lit: calc(var(--u2) * -1);
 
   padding-inline: var(--u2) var(--u3);
 }
@@ -4827,7 +4834,6 @@ html:has(.ss-help-dialog[open]) {
 
 .ss-game[data-wide] .ss-menu__card:nth-child(even) {
   --stripe: calc(var(--u) * -1);
-  --stripe-lit: calc(var(--u2) * -1);
 
   justify-content: flex-start;
   padding-inline: var(--u2) var(--u3);
