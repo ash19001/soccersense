@@ -330,6 +330,56 @@ The scoreboard: badge, total (LED), seven lamps, career bar, the question screen
 clock. `compact` (from the moment an answer is in) shrinks the question to a recap, keeps the
 instruction line, and removes the measure line and the clock.
 
+**The question is dribbled on** (2026-11-16): when the board first shows, and whenever
+`questionNumber` or `question` changes (not when it goes compact, and not at all on a board
+that starts compact: a game carried on at its reveal). A small football runs along the line
+and the letters appear behind it, in reading order at one even speed, along the first line and
+then the next. Each word lands gold and cools to chalk; after the last letter the ball hops,
+lands and goes out in a glint.
+
+- `typedQuestion(question)` cuts it into `parts`: its words (`{ text, letters, before }`) and,
+  as plain strings, the spaces between them; joined they are the question again, character
+  for character. `charMs` is one character's time: `TYPE_CHAR_MS` (16), or less so that the
+  whole of it (`totalMs`) is there within `TYPE_MAX_MS` (700). The game's 28 questions are 31
+  to 70 characters: 0.5 to 0.7 s, never under 10 ms a character. The end takes
+  `TYPE_SETTLE_MS` (400) more, with the question already whole.
+- The `h2` holds a `span.ss-board__typed` (it sets `--ss-type`, and its `key` is the question
+  and its number, so a new question is a new element and the animations start again). In it
+  a `span.ss-board__word` for each word (`--n` its letters, `--m` one more, `--d` the
+  characters before it), the spaces as text between them. A word holds a
+  `span.ss-board__ink` (its letters) and, the last word only, an empty
+  `i.ss-board__end` (`aria-hidden`).
+- ui.css (section 10), all of it stepped:
+  - **The typing.** A word is an `inline-block`; its ink is uncovered from the left by a
+    `clip-path` in `--n` steps of `--ss-type` each, after a delay of `--d` of them, filling
+    `backwards` only. Open above and below, so an accent is not cut while its word types.
+  - **The ball.** Each word's own (`::after`): 13 font pixels across, its foot on the
+    baseline, hidden except while its word types. It moves along the word in `--m` steps (the
+    last of them in the space after), so the next word's ball takes over without a gap and
+    the ball crosses the line ends by itself: no place is ever measured. It turns a quarter
+    every two characters.
+  - **The shine.** The ink is `--c-gold` while its word types, `--c-gold-light` for a moment
+    after, then the chalk it stays: a warm wake a word or two long.
+  - **The end.** `.ss-board__end` stands where the last ball stopped. Its `::before` is the
+    ball: one hop of 6 font pixels, a landing, a small second bounce. Its `::after` is the
+    glint: a diamond, the four-point star, the diamond again (the star cut down by 3 pixels
+    all round).
+  - The ball and the glint are white boxes cut to shape by masks (`--ss-q-ball`,
+    `--ss-q-glint`: 13 x 13 bitmaps as SVG data, drawn in the comment above the rules). The
+    football's patches are holes, so the board's own dark shows through: no colour outside
+    the palette. Nothing fills after it has ended and nothing loops.
+- The words are in their final places from the first moment (only hidden), so the board has
+  its full height at once and nothing wraps again. The heading's text and its accessible name
+  are the whole question throughout: a screen reader hears it once, as before. Because the
+  words are elements, find the question with `getByRole("heading", { name })`, not
+  `getByText`.
+- Reduced motion: none of it, the question is there.
+- The clock is not held for it: the question can be read as it arrives, faster than anyone
+  reads.
+- For a still of the board, wait 1.2 s after it shows. To look at a moment of it: start every
+  animation again (a style of `animation: none !important` on everything, added and taken
+  away), then `pause()` each of `document.getAnimations()` and set its `currentTime`.
+
 ### `AnswerBar`
 
 `value`, `onChange(value)`, `onSubmit(value)`, `mode`, `labels: { input, shoot, pass }`,

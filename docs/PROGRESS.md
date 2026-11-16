@@ -469,6 +469,22 @@ opens and question 1 is asked.
 - Looked at in Chrome from the home page through to question 1, on a monitor and a phone;
   stills in `.snaps/intro/`.
 
+**Each question is dribbled on** (the same day; the product owner: "for each question can you
+add a transition for the question text appearing", then "make it feel more polished by adding
+a shine to it as it appears maybe or a football specific type animation"). On the board a
+small pixel football runs along the line and the question appears behind it, in reading order
+at one even speed (16 ms a character, never more than 0.7 s in all); each word lands gold and
+cools to chalk; after the last letter the ball hops, lands and goes out in a four-point glint
+(0.4 s more). `typedQuestion` and `TypedQuestion` in `app/ui/Board.tsx`, ui.css section 10,
+docs/API_UI.md under `Board`. It is all CSS: every word has its own ball, shown only while
+that word types, so nothing is measured and nothing moves. The whole question is in the page
+from the start, so a screen reader hears it once. The clock is not held for it. Seen in
+Chrome on questions 1 and 2 of a real game, on a phone and a monitor.
+
+Not done, and worth asking about: a sound of its own for the card (the ground's bed is heard
+under it, and the iris's whoosh and the whistle follow it as before); whether a player who has
+seen it many times should get a shorter one; and a sound for the question's ball (a soft roll, a tap as it lands).
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

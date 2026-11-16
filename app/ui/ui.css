@@ -893,6 +893,263 @@
   text-wrap: balance;
 }
 
+/*
+ * A new question is dribbled on (Board's TypedQuestion, 2026-11-16: "for each question can
+ * you add a transition for the question text appearing", then "make it feel more polished
+ * by adding a shine to it as it appears maybe or a football specific type animation").
+ *
+ * The typing. Every word is a box of its own, and its ink is uncovered from the left in as
+ * many steps as it has letters (--n), each step one character's time (--ss-type, set by
+ * the board: 16ms, less for a long question so that it is all there within 0.7s), starting
+ * when the characters before it are done (--d). So the text arrives in reading order at
+ * one even speed, along the first line and then the next.
+ *
+ * The ball. A football thirteen font pixels across (two short of a capital) runs at the head of the typing, the letters
+ * appearing from behind it. It is each word's own (::after), shown only while that word
+ * types and one step more (--m, in the space after it), so the next word's takes over
+ * without a gap and the ball hops the line ends by itself. It turns a quarter every two
+ * characters. It is a white box cut to a football by a mask (the patches are holes: the
+ * board's own dark shows through), so it has no colour that is not the palette's.
+ *
+ *     . . . . o o o o o . . . .      . . . . . . o . . . . . .
+ *     . . o o o o . o o o o . .      . . . . . . o . . . . . .
+ *     . o o o o o . o o o o o .      . . . . . . o . . . . . .
+ *     . o o o o o o o o o o o .      . . . . . . o . . . . . .
+ *     o . . o o o . o o o . . o      . . . . . o o o . . . . .
+ *     o . o o o . . . o o o . o      . . . . o o o o o . . . .
+ *     o o o o o . . . o o o o o      o o o o o o o o o o o o o
+ *     o o o o o o . o o o o o o      . . . . o o o o o . . . .
+ *     o o o o o o o o o o o o o      . . . . . o o o . . . . .
+ *     . o . . o o o o o . . o .      . . . . . . o . . . . . .
+ *     . o o . o o o o o . o o .      . . . . . . o . . . . . .
+ *     . . o o o o o o o o o . .      . . . . . . o . . . . . .
+ *     . . . . o o o o o . . . .      . . . . . . o . . . . . .
+ *              the ball                         the glint
+ *
+ * The shine. A word is gold while it types and a moment after, then pale gold, then the
+ * chalk it stays: the ball leaves a short warm wake, a word or two long.
+ *
+ * The end (.ss-board__end, in the last word's box, where the last ball stopped). The ball
+ * hops once, lands, and goes out in a glint: a small diamond, the four-point star, the
+ * diamond again (the star cut down by three pixels all round). 0.4s: TYPE_SETTLE_MS.
+ *
+ * Nothing fills after it has ended: the words' natural state is the question as it stands,
+ * and the balls and the glint are hidden but for their animations. With reduced motion
+ * the question is simply there, and so it is on a board that starts compact.
+ *
+ * The words are in their final places from the first moment (the box only hides them), so
+ * nothing moves or wraps again as it types. A word wider than the screen still breaks
+ * inside its box. The clip is open above and below: an accent or a tail that reaches out
+ * of the line is not cut while its word types.
+ */
+.ss-board__typed {
+  --ss-q-ball: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13' shape-rendering='crispEdges'%3E%3Cpath d='M4 0h5v1h-5zM2 1h4v1h-4zM7 1h4v1h-4zM1 2h5v1h-5zM7 2h5v1h-5zM1 3h11v1h-11zM0 4h1v1h-1zM3 4h3v1h-3zM7 4h3v1h-3zM12 4h1v1h-1zM0 5h1v1h-1zM2 5h3v1h-3zM8 5h3v1h-3zM12 5h1v1h-1zM0 6h5v1h-5zM8 6h5v1h-5zM0 7h6v1h-6zM7 7h6v1h-6zM0 8h13v1h-13zM1 9h1v1h-1zM4 9h5v1h-5zM11 9h1v1h-1zM1 10h2v1h-2zM4 10h5v1h-5zM10 10h2v1h-2zM2 11h9v1h-9zM4 12h5v1h-5z'/%3E%3C/svg%3E");
+  --ss-q-glint: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13' shape-rendering='crispEdges'%3E%3Cpath d='M6 0h1v1h-1zM6 1h1v1h-1zM6 2h1v1h-1zM6 3h1v1h-1zM5 4h3v1h-3zM4 5h5v1h-5zM0 6h13v1h-13zM4 7h5v1h-5zM5 8h3v1h-3zM6 9h1v1h-1zM6 10h1v1h-1zM6 11h1v1h-1zM6 12h1v1h-1z'/%3E%3C/svg%3E");
+  /* The ball's size, and how far its foot is above the foot of the line: on the baseline. */
+  --ss-q-ball-w: calc(var(--fp) * 13);
+  --ss-q-ball-up: calc(var(--fp) * 5);
+}
+
+.ss-board__word {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.ss-board__ink {
+  display: block;
+  animation:
+    ss-board-type calc(var(--ss-type, 16ms) * var(--n, 1))
+      steps(var(--n, 1), end) calc(var(--ss-type, 16ms) * var(--d, 0)) backwards,
+    ss-board-hot calc(var(--ss-type, 16ms) * var(--n, 1) + 110ms) step-end
+      calc(var(--ss-type, 16ms) * var(--d, 0));
+}
+
+@keyframes ss-board-type {
+  from {
+    clip-path: inset(-50% 100% -50% 0);
+  }
+
+  to {
+    clip-path: inset(-50% 0 -50% 0);
+  }
+}
+
+/* (step-end: each colour holds until the next is due) */
+@keyframes ss-board-hot {
+  from {
+    color: var(--c-gold);
+  }
+
+  55% {
+    color: var(--c-gold-light);
+  }
+
+  to {
+    color: var(--c-gold-light);
+  }
+}
+
+.ss-board__word::after,
+.ss-board__end,
+.ss-board__end::before,
+.ss-board__end::after {
+  position: absolute;
+  bottom: var(--ss-q-ball-up);
+  width: var(--ss-q-ball-w);
+  height: var(--ss-q-ball-w);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.ss-board__word::after,
+.ss-board__end::before,
+.ss-board__end::after {
+  content: "";
+  background: var(--c-white);
+  -webkit-mask: var(--ss-q-ball) center / 100% 100% no-repeat;
+  mask: var(--ss-q-ball) center / 100% 100% no-repeat;
+}
+
+/* The ball at the head of the typing: along its word in the word's steps, turning. */
+.ss-board__word::after {
+  left: 0;
+  animation-name: ss-board-dribble, ss-board-roll;
+  animation-duration:
+    calc(var(--ss-type, 16ms) * var(--m, 2)), calc(var(--ss-type, 16ms) * 8);
+  animation-timing-function: steps(var(--m, 2), end), steps(4, end);
+  animation-delay:
+    calc(var(--ss-type, 16ms) * var(--d, 0)),
+    calc(var(--ss-type, 16ms) * var(--d, 0));
+  animation-iteration-count: 1, calc(var(--m, 2) / 8);
+}
+
+@keyframes ss-board-dribble {
+  from {
+    left: 0;
+    visibility: visible;
+  }
+
+  to {
+    left: calc(100% * var(--m, 2) / var(--n, 1));
+    visibility: visible;
+  }
+}
+
+@keyframes ss-board-roll {
+  from {
+    rotate: 0deg;
+  }
+
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* Where the last ball stopped: just past the last letter. */
+.ss-board__end {
+  left: 100%;
+  visibility: visible;
+}
+
+.ss-board__end::before,
+.ss-board__end::after {
+  bottom: 0;
+  left: 0;
+  animation: 400ms step-end
+    calc(var(--ss-type, 16ms) * (var(--d, 0) + var(--m, 2)));
+}
+
+.ss-board__end::before {
+  animation-name: ss-board-settle;
+}
+
+.ss-board__end::after {
+  -webkit-mask-image: var(--ss-q-glint);
+  mask-image: var(--ss-q-glint);
+  animation-name: ss-board-glint;
+}
+
+/* A hop and a landing, then gone as the glint comes. */
+@keyframes ss-board-settle {
+  from {
+    translate: 0 0;
+    visibility: visible;
+  }
+
+  8% {
+    translate: 0 calc(var(--fp) * -3);
+    visibility: visible;
+  }
+
+  18% {
+    translate: 0 calc(var(--fp) * -6);
+    visibility: visible;
+  }
+
+  28% {
+    translate: 0 calc(var(--fp) * -3);
+    visibility: visible;
+  }
+
+  38% {
+    translate: 0 0;
+    visibility: visible;
+  }
+
+  46% {
+    translate: 0 calc(var(--fp) * -1);
+    visibility: visible;
+  }
+
+  52% {
+    translate: 0 0;
+    visibility: visible;
+  }
+
+  64% {
+    visibility: hidden;
+  }
+
+  to {
+    visibility: hidden;
+  }
+}
+
+@keyframes ss-board-glint {
+  from {
+    visibility: hidden;
+  }
+
+  64% {
+    clip-path: inset(calc(var(--fp) * 3));
+    visibility: visible;
+  }
+
+  74% {
+    clip-path: inset(0);
+    visibility: visible;
+  }
+
+  90% {
+    clip-path: inset(calc(var(--fp) * 3));
+    visibility: visible;
+  }
+
+  to {
+    clip-path: inset(calc(var(--fp) * 3));
+    visibility: visible;
+  }
+}
+
+/* A board that starts compact (a game carried on at its reveal) types nothing. */
+.ss-board--compact .ss-board__ink,
+.ss-board--compact .ss-board__word::after,
+.ss-board--compact .ss-board__end::before,
+.ss-board--compact .ss-board__end::after {
+  animation: none;
+}
+
 .ss-board__instruction,
 .ss-board__measure {
   margin: 0;

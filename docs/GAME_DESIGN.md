@@ -66,7 +66,13 @@ Before question 1 of a new game, the **mode card** (6.2): the mode's name and th
 to do in it, for about two and a half seconds. No clock runs while it is up.
 
 1. The board shows `Question 3 of 7`, the mode's badge, the question and two short lines (not
-   the day's stadium: the question has the room; changed 2026-11-11):
+   the day's stadium: the question has the room; changed 2026-11-11). The question is
+   dribbled on (2026-11-16; the product owner: "for each question can you add a transition
+   for the question text appearing", then "make it feel more polished by adding a shine to it
+   as it appears maybe or a football specific type animation"): a small football runs along
+   the board's screen and the letters appear behind it, in reading order, each word landing
+   gold and cooling to chalk; after the last letter the ball hops, lands and goes out in a
+   glint. The question is whole within 0.7 s; the clock runs meanwhile. The two lines:
    - HOME: `The most common answer wins.` plus `Scored by how many players give the same answer.`
    - AWAY: `The most uncommon answer wins.` plus `Scored by how few players give the same answer.`
    - RETRO: `The oldest answer wins.` plus `Scored by how far back it first happened.`

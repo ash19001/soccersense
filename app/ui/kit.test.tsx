@@ -102,7 +102,9 @@ describe("Board", () => {
     render(<Board {...base} compact />);
     const board = screen.getByRole("region", { name: "Scoreboard" });
     expect(board).toHaveClass("ss-board--compact");
-    expect(screen.getByText(base.question)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: base.question }),
+    ).toBeInTheDocument();
     // What wins is still worth knowing while the table is on screen.
     expect(screen.getByText(base.instruction)).toBeInTheDocument();
     expect(screen.queryByText(base.measureLine)).not.toBeInTheDocument();
@@ -114,6 +116,91 @@ describe("Board", () => {
   test("the total is a three-digit display named by its points", () => {
     render(<Board {...base} total={7} />);
     expect(screen.getByRole("img", { name: "7 PTS" })).toBeInTheDocument();
+  });
+
+  test("the question types on: a box a word, each told its letters and the characters before it", () => {
+    render(<Board {...base} />);
+    const heading = screen.getByRole("heading", { name: base.question });
+    // The whole question is in the page from the start, character for character: only
+    // the boxes hide it (a screen reader hears it at once, and nothing wraps again).
+    expect(heading.textContent).toBe(base.question);
+    expect(heading).toHaveAttribute("aria-live", "polite");
+    const words = [...heading.querySelectorAll<HTMLElement>(".ss-board__word")];
+    expect(words.map((word) => word.textContent)).toEqual(
+      base.question.split(" "),
+    );
+    // "Name a club that ...": 4 letters from 0, 1 from 5, 4 from 7, 4 from 12.
+    expect(
+      words
+        .slice(0, 4)
+        .map((word) => [
+          word.style.getPropertyValue("--n"),
+          word.style.getPropertyValue("--d"),
+        ]),
+    ).toEqual([
+      ["4", "0"],
+      ["1", "5"],
+      ["4", "7"],
+      ["4", "12"],
+    ]);
+    // The ball takes one step more than the word has letters (into the space after it).
+    expect(
+      words.slice(0, 4).map((word) => word.style.getPropertyValue("--m")),
+    ).toEqual(["5", "2", "5", "5"]);
+    // Each word's letters are its ink, the part that is uncovered.
+    for (const word of words) {
+      expect(word.querySelector(".ss-board__ink")?.textContent).toBe(
+        word.textContent,
+      );
+    }
+    // 41 characters at 16 ms each: no need to hurry it.
+    const typed = heading.querySelector<HTMLElement>(".ss-board__typed");
+    expect(typed?.style.getPropertyValue("--ss-type")).toBe("16ms");
+  });
+
+  test("the last word holds the mark the ball settles on: one, empty, and not read out", () => {
+    render(<Board {...base} />);
+    const heading = screen.getByRole("heading", { name: base.question });
+    const ends = heading.querySelectorAll(".ss-board__end");
+    expect(ends).toHaveLength(1);
+    const end = ends[0];
+    expect(end).toHaveAttribute("aria-hidden", "true");
+    expect(end.textContent).toBe("");
+    const words = heading.querySelectorAll(".ss-board__word");
+    expect(end.parentElement).toBe(words[words.length - 1]);
+    // A question that ends in a space still has it in its last word.
+    cleanup();
+    render(<Board {...base} question="Name a club " />);
+    const last = [...document.querySelectorAll(".ss-board__word")].at(-1);
+    expect(last?.textContent).toBe("club");
+    expect(last?.querySelector(".ss-board__end")).not.toBeNull();
+    expect(document.querySelectorAll(".ss-board__end")).toHaveLength(1);
+  });
+
+  test("a new question types on afresh; the same one going compact does not", () => {
+    const { rerender } = render(<Board {...base} />);
+    const typed = (): Element | null =>
+      document.querySelector(".ss-board__typed");
+    const first = typed();
+    // The answer is in: the same words, smaller, not typed again.
+    rerender(<Board {...base} compact />);
+    expect(typed()).toBe(first);
+    rerender(<Board {...base} compact secondsLeft={3} total={252} />);
+    expect(typed()).toBe(first);
+    // The next question: new boxes, so their animations start again.
+    rerender(
+      <Board {...base} questionNumber={4} question="Name an English club" />,
+    );
+    expect(typed()).not.toBe(first);
+    expect(
+      screen.getByRole("heading", { name: "Name an English club" }),
+    ).toBeInTheDocument();
+    // The same words asked again as another question still type on.
+    const fourth = typed();
+    rerender(
+      <Board {...base} questionNumber={5} question="Name an English club" />,
+    );
+    expect(typed()).not.toBe(fourth);
   });
 });
 

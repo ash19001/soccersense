@@ -3,8 +3,14 @@
 
 export { AnswerBar } from "./AnswerBar";
 export type { AnswerBarLabels, AnswerBarProps } from "./AnswerBar";
-export { Board } from "./Board";
-export type { BoardLabels, BoardProps } from "./Board";
+export {
+  Board,
+  TYPE_CHAR_MS,
+  TYPE_MAX_MS,
+  TYPE_SETTLE_MS,
+  typedQuestion,
+} from "./Board";
+export type { BoardLabels, BoardProps, TypedWord } from "./Board";
 export { Button, IconButton } from "./Button";
 export { BURST_FRAMES, ClickBurst, MAX_BURSTS } from "./ClickBurst";
 export type {
