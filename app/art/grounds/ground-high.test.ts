@@ -177,22 +177,28 @@ describe("the goal", () => {
 });
 
 describe("the stadium", () => {
-  it("covers the canvas at every stadium tier, mode and light, monitor and phone", () => {
-    for (const [w, h] of [
-      [W, H],
-      [683, 384],
-      [260, 562],
-      [234, 507],
-    ] as const) {
-      for (const tier of [4, 5, 6, 7] as const) {
-        for (const mode of ["home", "away"] as const) {
-          for (const light of [DAY, NIGHT]) {
-            expect(holes(render(tier, { w, h, mode, light }).s)).toBe(0);
+  // (A heavy one: a few seconds alone, and over the usual five when the whole suite runs on
+  // a busy machine, so it has longer.)
+  it(
+    "covers the canvas at every stadium tier, mode and light, monitor and phone",
+    { timeout: 20_000 },
+    () => {
+      for (const [w, h] of [
+        [W, H],
+        [683, 384],
+        [260, 562],
+        [234, 507],
+      ] as const) {
+        for (const tier of [4, 5, 6, 7] as const) {
+          for (const mode of ["home", "away"] as const) {
+            for (const light of [DAY, NIGHT]) {
+              expect(holes(render(tier, { w, h, mode, light }).s)).toBe(0);
+            }
           }
         }
       }
-    }
-  });
+    },
+  );
 
   it("is night at tiers 6 and 7, and the same pixels for the same inputs", () => {
     for (const tier of [4, 5, 6, 7] as const) {

@@ -242,47 +242,53 @@ describe("the real career scene", () => {
     }
   });
 
-  test("a whole shot, at odd sizes and steps, always covers every pixel and never throws", () => {
-    const sizes: [number, number][] = [
-      [130, 281],
-      [120, 222],
-      [160, 300],
-      [480, 270],
-      [688, 288],
-      [1, 1],
-      [9, 400],
-      [700, 40],
-    ];
-    for (const [w, h] of sizes) {
-      for (const grade of GRADES) {
-        const scene = new CareerScene({ seed: 5, mode: "away", total: 0 });
+  // (A heavy one: a few seconds alone, and over the usual five when the whole suite runs on
+  // a busy machine, so it has longer.)
+  test(
+    "a whole shot, at odd sizes and steps, always covers every pixel and never throws",
+    { timeout: 20_000 },
+    () => {
+      const sizes: [number, number][] = [
+        [130, 281],
+        [120, 222],
+        [160, 300],
+        [480, 270],
+        [688, 288],
+        [1, 1],
+        [9, 400],
+        [700, 40],
+      ];
+      for (const [w, h] of sizes) {
+        for (const grade of GRADES) {
+          const scene = new CareerScene({ seed: 5, mode: "away", total: 0 });
+          scene.resize(w, h);
+          scene.setLighting(lightingFor({ elevation: -10, morning: true }));
+          scene.update(0);
+          scene.playShot(grade);
+          const s = new Surface(w, h);
+          for (let t = 0; t < 6; t += 0.37) {
+            scene.update(0.37);
+            scene.draw(s);
+            expect(s.data.includes(TRANSPARENT)).toBe(false);
+          }
+        }
+        const scene = new CareerScene({ seed: 5, mode: "home", total: 500 });
         scene.resize(w, h);
-        scene.setLighting(lightingFor({ elevation: -10, morning: true }));
         scene.update(0);
-        scene.playShot(grade);
+        scene.promote(600);
         const s = new Surface(w, h);
-        for (let t = 0; t < 6; t += 0.37) {
-          scene.update(0.37);
+        for (let t = 0; t < 2; t += 0.19) {
+          scene.update(0.19);
           scene.draw(s);
           expect(s.data.includes(TRANSPARENT)).toBe(false);
         }
-      }
-      const scene = new CareerScene({ seed: 5, mode: "home", total: 500 });
-      scene.resize(w, h);
-      scene.update(0);
-      scene.promote(600);
-      const s = new Surface(w, h);
-      for (let t = 0; t < 2; t += 0.19) {
-        scene.update(0.19);
+        scene.showFullTime(700);
+        scene.update(1);
         scene.draw(s);
         expect(s.data.includes(TRANSPARENT)).toBe(false);
       }
-      scene.showFullTime(700);
-      scene.update(1);
-      scene.draw(s);
-      expect(s.data.includes(TRANSPARENT)).toBe(false);
-    }
-  });
+    },
+  );
 
   test("the same calls give the same pixels all through a shot, a promotion and full time", () => {
     const play = (): Uint32Array[] => {
