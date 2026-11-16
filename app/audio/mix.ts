@@ -232,8 +232,20 @@ export const SOUNDS = {
     level: 0.47,
     /** Peak of the recording, dBFS: nearer 0 is louder. */
     peakDb: -19,
-    file: "sparkle.mp3",
+    file: "sparkle.mp3 (the twinkle), sparkle-gold.mp3 (the golden ball turning)",
     synth: "two bell-like chimes and a few high twinkles",
+  },
+  shimmer: {
+    /**
+     * Gain at its fullest, 0 to 1: higher is louder. The golden ball's shimmer, a bed of
+     * glitter on the home page (HOME_PAGE.goldenShimmer and goldenShimmerBuild: how much of
+     * this is heard, and when). Low: it is under everything. (0.08 at first; halved twice
+     * on 2026-11-16: the product owner, on hearing it, "can the shimmer be more quiet", then
+     * "even more quiet".)
+     */
+    level: 0.02,
+    file: "shimmer.mp3",
+    synth: "a high hiss that swells and falls every three seconds",
   },
   land: {
     /** Gain, 0 to 1: higher is louder. HOME's ball landing on the centre spot. */
@@ -738,6 +750,28 @@ export const HOME_PAGE = {
   mascotFlick: 0.25,
   /** The mascot's big swing before his tumble, power 0 to 1: higher is louder. */
   mascotSwing: 0.9,
+  /**
+   * The golden ball (the easter egg: the ball spun by hand for 30 seconds): the ground's
+   * cheer as the ball turns to gold, size 0 to 1, higher is louder. Its rockets are the far
+   * fireworks (SOUNDS.firework).
+   */
+  goldenCheer: 0.45,
+  /**
+   * The golden ball's own chime as it turns (sparkle-gold.mp3), against the sparkle's peak
+   * (SOUNDS.sparkle.peakDb), dB: higher is louder.
+   */
+  goldenSparkleDb: 4,
+  /**
+   * The golden ball's shimmer while the ball is gold: a quiet bed, a share of
+   * SOUNDS.shimmer.level, 0 to 1. Higher is louder; 0 is none at all.
+   */
+  goldenShimmer: 0.3,
+  /**
+   * The same shimmer on the way to the gold: it comes in with the glow round the ball and
+   * is this share of SOUNDS.shimmer.level as the ball turns (it then falls back to
+   * goldenShimmer over the celebration), 0 to 1. Higher is louder; 0 is none on the way.
+   */
+  goldenShimmerBuild: 0.8,
 };
 
 // ---------------------------------------------------------------------------------------------

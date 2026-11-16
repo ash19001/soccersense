@@ -647,6 +647,46 @@ describe("home page: the captions and the ball", () => {
       expect(strings.home.soon[mode]).toContain(strings.home.canvas[mode]);
     }
   });
+
+  test("the golden ball: only the airship says so, the ball is gold for the rest of the day, and white again the next", () => {
+    const first = mount();
+    const scene = theScene();
+    expect(scene.isGolden).toBe(false);
+    const sign = strings.home.canvas.golden;
+    const said = `${sign.header} ${sign.text}`;
+    expect(screen.queryByText(said)).toBeNull();
+    // the scene says the ball was spun to gold (scenes/menu.test.ts: how it is earned)
+    act(() => scene.onGolden?.());
+    // no plate, no message on the page: the sign is the only thing that says so
+    expect(screen.getByRole("status")).toHaveTextContent("");
+    // (it is only pixels: its words are read out, and not shown)
+    const spoken = screen.getByText(said);
+    expect(spoken).toHaveClass("ss-sr");
+    expect(spoken).toHaveAttribute("aria-live", "polite");
+    expect(window.localStorage.getItem("soccersense:golden-day")).toBe(
+      dayKeyFor(1),
+    );
+    first.unmount();
+
+    // another visit the same day: gold from the start, with nothing said
+    const second = mount();
+    expect(theScene()).not.toBe(scene);
+    expect(theScene().isGolden).toBe(true);
+    expect(screen.getByRole("status")).toHaveTextContent("");
+    expect(screen.queryByText(said)).toBeNull();
+    second.unmount();
+
+    // the next day: an ordinary ball
+    setSearch("?day=2");
+    mount();
+    expect(theScene().isGolden).toBe(false);
+  });
+
+  test("the airship's sign has its words for the golden ball, short enough for the sign", () => {
+    const { header, text } = strings.home.canvas.golden;
+    expect(header.length).toBeLessThanOrEqual(12);
+    expect(text.length).toBeLessThanOrEqual(12);
+  });
 });
 
 describe("home page: choosing a mode", () => {

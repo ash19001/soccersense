@@ -30,6 +30,10 @@
  *   ./node_modules/.bin/tsx tools/snap.ts menu/rest--size 480x270 --t 1 --scale 2    (the locked patches, shown)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/half-turn --size 480x270 --t 1 --scale 2    (CLOSEST and FURTHEST)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/half-turn --size 480x270 --strip 8 --dt 0.75 --scale 1    (the rest, and home)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/gold-charge --t 6 --strip 5 --dt 6 --scale 1    (the golden ball on its way: 6 to 30 seconds of spinning)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/gold-turn --strip 8 --dt 0.07 --scale 1    (it turns to gold)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/gold-turn --t 1 --strip 6 --dt 1 --scale 1 --time night    (the ground erupts)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/golden --time all --scale 1    (the golden ball, kept)
  */
 
 import { Surface, type ShotContext, type ShotMap } from "~/pixel";
@@ -37,7 +41,7 @@ import { ballShowPose, ballSlotCenter, type BallSlot } from "~/art/ball";
 import { menuLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
 import { P } from "~/art/palette";
-import { MenuScene, type MenuLabels } from "./menu";
+import { GOLD_SPIN, MenuScene, type MenuLabels } from "./menu";
 
 const LABELS: MenuLabels = {
   home: "HOME",
@@ -50,6 +54,7 @@ const LABELS: MenuLabels = {
   shootout: "SHOOTOUT",
   header: "DID YOU KNOW?",
   tagline: "DAILY FOOTBALL TRIVIA",
+  golden: { header: "GOLDEN BALL!", text: "YOU FOUND IT" },
 };
 
 /** Day 1's fact: the penalty kick. */
@@ -185,6 +190,35 @@ function shown(
     advance(scene, Math.max(0, after - 0.8));
   } else {
     advance(scene, after);
+  }
+  return scene;
+}
+
+/**
+ * Keep the ball spinning by hand for `t` seconds: a drag back and forth across it, about
+ * three radians a second, the pointer still down at the end. With `toGold` it is spun
+ * until it turns to gold (GOLD_SPIN seconds, and `t` is not looked at), and let go.
+ */
+function spun(ctx: ShotContext, t: number, toGold = false): MenuScene {
+  const scene = make(ctx);
+  advance(scene, 1);
+  const m = menuLayout(ctx.w, ctx.h);
+  const reach = m.ballR * 0.8;
+  const step = m.ballR / 20;
+  const y = m.ballCy + 6;
+  const n = Math.round((toGold ? GOLD_SPIN + 5 : Math.max(STEP, t)) / STEP);
+  let x = m.cx - reach;
+  scene.pointer({ type: "down", x, y });
+  for (let i = 1; i <= n && !(toGold && scene.isGolden); i++) {
+    // a triangle wave across the ball
+    const u = ((i * step) / (4 * reach)) % 1;
+    x = m.cx + reach * (u < 0.5 ? 4 * u - 1 : 3 - 4 * u);
+    scene.pointer({ type: "move", x, y });
+    scene.update(STEP);
+  }
+  if (toGold) {
+    scene.pointer({ type: "up", x, y });
+    scene.pointer({ type: "leave", x: 0, y: 0 });
   }
   return scene;
 }
@@ -374,6 +408,31 @@ export const shots: ShotMap = {
   // The wind of a slow drag, held: --t is how long it has been dragged.
   "menu/wind-drag": (ctx) =>
     closeUp(ctx, dragged(ctx, Math.max(STEP, ctx.t), 3, -1), 22),
+
+  // The golden ball (the easter egg). On its way: `t` seconds of spinning by hand, close up
+  // with room for the wind and the sparks (--t 6 --strip 5 --dt 6: 6 to 30 seconds).
+  "menu/gold-charge": (ctx) =>
+    closeUp(
+      ctx,
+      spun(ctx, Math.min(Math.max(STEP, ctx.t), GOLD_SPIN - STEP)),
+      60,
+    ),
+
+  // It turns to gold at t = 0 (the hand lets go as it does): the ring and the shine
+  // (--strip 8 --dt 0.07), then the ground erupting (--t 1 --strip 6 --dt 1).
+  "menu/gold-turn": (ctx) => {
+    const scene = spun(ctx, 0, true);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
+
+  // The golden ball as the page keeps it for the day.
+  "menu/golden": (ctx) => {
+    const scene = make(ctx);
+    scene.setGolden(true);
+    advance(scene, ctx.t);
+    return frame(ctx, scene);
+  },
 
   // The HOME kick-off with reduced motion: a lit patch, then ink. --strip 4 --dt 0.06.
   "menu/reduced": (ctx) => {

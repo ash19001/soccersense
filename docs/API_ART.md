@@ -132,7 +132,11 @@ type BallIcon = "home" | "away" | "nextgen" | "retro" | "pin" | "globe" | "shirt
               | "lock" | "none";
 interface BallPatch { label: string; icon: BallIcon;
                       accent?: { dark; base; light }; locked?: boolean; badge?: string }
-interface BallState { cx; cy; r; yaw; pitch; roll?; hovered; pressed; chosen; t }
+interface BallState { cx; cy; r; yaw; pitch; roll?; hovered; pressed; chosen; t; gold? }
+// gold: the golden ball (the menu's easter egg, 2026-11-16). Its leather is a ramp of gold
+// (white glint, goldLight, gold, a step to goldDark, goldDark), seams and stitches darker
+// golds; the black panels, their frames, words and pictures are as ever, so it is still the
+// menu. Same silhouette, same hit test.
 type BallPatches = Partial<Record<BallSlot, BallPatch>>;
 
 drawBall(s, state, patches, light)         // the ball
@@ -274,6 +278,28 @@ drawFilmDamage(s, frame, seed?); // a frame's scratches and dust
 - Shots: `ball/leather` (rest at 89 and 120, straight on, turned, 60, 30, 16),
   `ball/leather-turn` (the menu ball turning into it: the cover at 2, 6, 10, 14 and 16
   sixteenths).
+
+## The golden ball's fireworks (`~/art/gold-show`)
+
+The show over the town as the menu's ball turns to gold (the easter egg, 2026-11-16; the scene:
+docs/API_SCENES.md).
+
+```ts
+GOLD_SHOW_LAUNCHES: readonly number[]; // when each of the eleven rockets goes up, seconds after the ball turns (0.1 to 5.0)
+GOLD_SHOW_LEN: number; // when the last spark is out (6.7)
+drawGoldShow(s, t, { top, floor, seed, night }); // the show t seconds after the ball turned
+```
+
+- Each rocket climbs for 0.4 s (a spark on a thin trail, slowing) and opens into a burst that
+  lasts 1.3 s: 28 streaks and 14 more half way out, opening fast, hanging, drooping and
+  twinkling out. A burst is 11% of the canvas's shorter side in radius (14 to 64 px), times
+  0.75 to 1.25. Gold ones, and one in HOME's, AWAY's and NEXT-GEN's colour between them.
+- They go up across the width in strides (two in a row are never side by side), 8% clear at
+  each side, their middles between `top` (the bottom of the logo's sky: nothing is drawn
+  above it) and `floor` (about the far side of the stadium).
+- By night (`night`: the floodlights are on) a burst has a dithered glow and its light tones;
+  by day, against a pale sky, its strong ones.
+- Pure: the same call gives the same pixels. Raw colours, as every light in the sky.
 
 ## The ball of the future and the neon world (`~/art/future-ball`, `~/art/neon-world`)
 

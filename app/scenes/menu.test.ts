@@ -7,7 +7,16 @@ import { logoSize } from "~/art/logo";
 import { P } from "~/art/palette";
 import { MenuBackdrop } from "~/art/stadium";
 import type { Mode } from "~/game";
-import { LOCKED_MODES, MODE_SLOTS, MenuScene, type MenuLabels } from "./menu";
+import { GOLD_SHOW_LAUNCHES, GOLD_SHOW_LEN } from "~/art/gold-show";
+import { HOME_PAGE } from "~/audio/mix";
+import {
+  GOLD_SPIN,
+  LOCKED_MODES,
+  MODE_SLOTS,
+  MenuScene,
+  type MenuLabels,
+} from "./menu";
+import type { SoundCue } from "./scene";
 
 // The menu scene: only whether pixels are covered and where the scene says things are (the
 // backdrop is swapped for one flat colour), the press's feel, and the wordmark's sizes.
@@ -522,6 +531,295 @@ describe("the menu", () => {
       h: 48,
       stacked: false,
     });
+  });
+});
+
+describe("the golden ball", () => {
+  const GOLDEN = { header: "GOLDEN BALL!", text: "YOU FOUND IT" };
+  const [W, H] = SIZES[0];
+
+  beforeEach(() => {
+    // only the ball's own sounds, and no town to paint for the mascot
+    vi.spyOn(MenuBackdrop.prototype, "cuesBetween").mockReturnValue([]);
+    vi.spyOn(MenuBackdrop.prototype, "pokeMascot").mockReturnValue("trick");
+  });
+
+  /** A hand on the ball: it keeps it spinning (a drag back and forth), or holds it still. */
+  function hand(scene: MenuScene) {
+    const m = menuLayout(W, H);
+    const reach = m.ballR * 0.8;
+    const step = m.ballR / 20;
+    const y = m.ballCy + 6;
+    let i = 0;
+    scene.pointer({ type: "down", x: m.cx - reach, y });
+    return {
+      spin(seconds: number): void {
+        for (let n = Math.round(seconds / STEP); n > 0; n--) {
+          i++;
+          const u = ((i * step) / (4 * reach)) % 1;
+          const x = m.cx + reach * (u < 0.5 ? 4 * u - 1 : 3 - 4 * u);
+          scene.pointer({ type: "move", x, y });
+          scene.update(STEP);
+        }
+      },
+      hold(seconds: number): void {
+        for (let n = Math.round(seconds / STEP); n > 0; n--) scene.update(STEP);
+      },
+    };
+  }
+
+  /** Pixels of colour `c` in the ring just outside the ball's rim (its glow's place). */
+  function round(scene: MenuScene, c: number): number {
+    const m = menuLayout(W, H);
+    const s = draw(scene, W, H);
+    let n = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const d = Math.hypot(x - m.cx, y - m.ballCy);
+        if (d > m.ballR + 3 && d < m.ballR * 1.25 && s.get(x, y) === c) n++;
+      }
+    }
+    return n;
+  }
+
+  /** Pixels of gold leather on the ball (inside its rim: the glow round it is gold too). */
+  function leather(scene: MenuScene): number {
+    const m = menuLayout(W, H);
+    const s = draw(scene, W, H);
+    const gold = DAY.lit(P.gold);
+    let n = 0;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const d = Math.hypot(x - m.cx, y - m.ballCy);
+        if (d < m.ballR - 4 && s.get(x, y) === gold) n++;
+      }
+    }
+    return n;
+  }
+
+  it("turns to gold when the hand keeps it spinning for GOLD_SPIN seconds, and not before", () => {
+    const scene = make(W, H);
+    const cues: SoundCue[] = [];
+    scene.onSound = (cue) => {
+      // (the wind and the shimmer come every frame: the shimmer has its own test below)
+      if (cue.kind !== "wind" && cue.kind !== "shimmer") cues.push(cue);
+    };
+    let found = 0;
+    scene.onGolden = () => found++;
+    expect(leather(scene)).toBe(0);
+    const h = hand(scene);
+    h.spin(GOLD_SPIN - 2);
+    expect(scene.isGolden).toBe(false);
+    expect(scene.spinCharge).toBeGreaterThan(0.85);
+    expect(found).toBe(0);
+    expect(cues.some((cue) => cue.kind === "sparkle")).toBe(false);
+
+    h.spin(3);
+    expect(scene.isGolden).toBe(true);
+    expect(found).toBe(1);
+    // what was spun is spent: the next gold is another GOLD_SPIN away
+    expect(scene.spinCharge).toBeLessThan(0.1);
+    // its own chime, once, and never AWAY's twinkle
+    expect(cues.filter((cue) => cue.kind === "sparkle")).toEqual([
+      { kind: "sparkle", golden: true },
+    ]);
+    expect(cues).toContainEqual({ kind: "cheer", size: HOME_PAGE.goldenCheer });
+    expect(MenuBackdrop.prototype.pokeMascot).toHaveBeenCalledTimes(1);
+
+    // the show: every rocket is heard once, far off, and the ground roars meanwhile
+    const roar = vi.spyOn(MenuBackdrop.prototype, "setRoar");
+    h.hold(1);
+    draw(scene, W, H);
+    expect(roar).toHaveBeenLastCalledWith(1);
+    h.hold(GOLD_SHOW_LEN + 4);
+    draw(scene, W, H);
+    expect(roar).toHaveBeenLastCalledWith(0);
+    expect(cues.filter((cue) => cue.kind === "firework")).toEqual(
+      GOLD_SHOW_LAUNCHES.map(() => ({ kind: "firework", distant: true })),
+    );
+    // and it stays gold
+    expect(scene.isGolden).toBe(true);
+    expect(leather(scene)).toBeGreaterThan(1000);
+    expect(found).toBe(1);
+  });
+
+  it("counts a short pause between flicks, and runs down after a long one", () => {
+    const scene = make(W, H);
+    const h = hand(scene);
+    h.spin(10);
+    const spun = scene.spinCharge;
+    expect(spun).toBeGreaterThan(0.3);
+    expect(spun).toBeLessThan(0.34);
+    // held still for a second: nothing is lost, and nothing gained yet
+    h.hold(1);
+    expect(scene.spinCharge).toBeGreaterThanOrEqual(spun);
+    expect(scene.spinCharge).toBeLessThan(spun + 0.01);
+    // turning again: the pause was part of the spinning
+    h.spin(0.5);
+    expect(scene.spinCharge).toBeGreaterThan(spun + 1.3 / GOLD_SPIN);
+    // left alone: after the grace it runs down four times as fast as it built
+    h.hold(1.5 + 1);
+    expect(scene.spinCharge).toBeGreaterThan(0.15);
+    expect(scene.spinCharge).toBeLessThan(spun);
+    h.hold(3);
+    expect(scene.spinCharge).toBe(0);
+    expect(scene.isGolden).toBe(false);
+  });
+
+  it("shows how near it is: a glow of gold round the ball, then the ball flickering gold", () => {
+    const scene = make(W, H);
+    const h = hand(scene);
+    expect(round(scene, P.gold)).toBe(0);
+    h.spin(GOLD_SPIN * 0.2);
+    expect(round(scene, P.gold)).toBe(0);
+    h.spin(GOLD_SPIN * 0.2);
+    const thin = round(scene, P.gold);
+    expect(thin).toBeGreaterThan(100);
+    h.spin(GOLD_SPIN * 0.4);
+    expect(round(scene, P.gold)).toBeGreaterThan(thin * 1.25);
+    // the last of it: gold on some frames, white on others
+    h.spin(GOLD_SPIN * 0.1);
+    expect(scene.isGolden).toBe(false);
+    const frames = new Set<boolean>();
+    for (let i = 0; i < 12; i++) {
+      h.spin(STEP);
+      frames.add(leather(scene) > 1000);
+    }
+    expect(frames).toEqual(new Set([true, false]));
+    // every frame of it covers the canvas
+    expect(draw(scene, W, H).data.includes(TRANSPARENT)).toBe(false);
+  });
+
+  it("says so on the airship's sign for a while, then the page's messages again", () => {
+    const said = vi.spyOn(MenuBackdrop.prototype, "setMessages");
+    const scene = new MenuScene({
+      seed: 7,
+      fact: "A fact.",
+      labels: { ...LABELS, golden: GOLDEN },
+      intro: false,
+    });
+    scene.resize(W, H);
+    scene.setLighting(DAY);
+    const day = [{ header: "HOME TODAY", text: "360 PTS" }];
+    scene.setSignMessages(day);
+    expect(said).toHaveBeenLastCalledWith(day);
+    const h = hand(scene);
+    h.spin(GOLD_SPIN + 1);
+    expect(scene.isGolden).toBe(true);
+    expect(said).toHaveBeenLastCalledWith([GOLDEN]);
+    // the page's messages meanwhile wait their turn
+    const later = [{ header: "AWAY TODAY", text: "87 PTS" }];
+    scene.setSignMessages(later);
+    expect(said).toHaveBeenLastCalledWith([GOLDEN]);
+    h.hold(12);
+    expect(said).toHaveBeenLastCalledWith(later);
+  });
+
+  it("with reduced motion it turns to gold with its chime and cheer: no roar, no rockets", () => {
+    const roar = vi.spyOn(MenuBackdrop.prototype, "setRoar");
+    const scene = make(W, H);
+    scene.setReducedMotion(true);
+    const cues: SoundCue[] = [];
+    scene.onSound = (cue) => cues.push(cue);
+    const h = hand(scene);
+    h.spin(GOLD_SPIN + 1);
+    expect(scene.isGolden).toBe(true);
+    for (let i = 0; i < 8; i++) {
+      h.hold(1);
+      draw(scene, W, H);
+    }
+    expect(roar.mock.calls.every(([amount]) => amount === 0)).toBe(true);
+    expect(cues.some((cue) => cue.kind === "firework")).toBe(false);
+    expect(cues).toContainEqual({ kind: "sparkle", golden: true });
+    expect(cues).toContainEqual({ kind: "cheer", size: HOME_PAGE.goldenCheer });
+    expect(MenuBackdrop.prototype.pokeMascot).not.toHaveBeenCalled();
+    expect(leather(scene)).toBeGreaterThan(1000);
+  });
+
+  it("is gold at once when the page says so, with nothing said, and can be taken off", () => {
+    const scene = make(W, H);
+    const cues: SoundCue[] = [];
+    scene.onSound = (cue) => cues.push(cue);
+    let found = 0;
+    scene.onGolden = () => found++;
+    scene.setGolden(true);
+    scene.update(STEP);
+    expect(scene.isGolden).toBe(true);
+    expect(leather(scene)).toBeGreaterThan(1000);
+    expect(found).toBe(0);
+    // nothing but its quiet shimmer
+    expect(cues).toEqual([{ kind: "shimmer", level: HOME_PAGE.goldenShimmer }]);
+    // it kicks off as any ball does
+    const kicked: Mode[] = [];
+    scene.onKickoff = (mode) => kicked.push(mode);
+    expect(scene.choose("home")).toBe(true);
+    expect(kicked).toEqual(["home"]);
+    const plain = make(W, H);
+    plain.setGolden(true);
+    plain.setGolden(false);
+    expect(plain.isGolden).toBe(false);
+    expect(leather(plain)).toBe(0);
+  });
+
+  it("is heard: a shimmer that comes in with the glow, the ball's own chime, and a quiet shimmer kept", () => {
+    const scene = make(W, H);
+    // the shimmer's level in the last step (-1: none was sent), and every chime
+    const heard = { level: -1 };
+    const chimes: SoundCue[] = [];
+    scene.onSound = (cue) => {
+      if (cue.kind === "shimmer") heard.level = cue.level;
+      if (cue.kind === "sparkle") chimes.push(cue);
+    };
+    const after = (run: () => void): number => {
+      run();
+      heard.level = -1;
+      // one more step: what is sent now
+      scene.update(STEP);
+      return heard.level;
+    };
+    const h = hand(scene);
+    // nothing before the glow
+    expect(after(() => h.spin(GOLD_SPIN * 0.2))).toBe(-1);
+    // then it comes in with it, and grows
+    const early = after(() => h.spin(GOLD_SPIN * 0.2));
+    expect(early).toBeGreaterThan(0);
+    expect(early).toBeLessThan(HOME_PAGE.goldenShimmerBuild * 0.35);
+    const late = after(() => h.spin(GOLD_SPIN * 0.5));
+    expect(late).toBeGreaterThan(early * 2);
+    expect(late).toBeLessThan(HOME_PAGE.goldenShimmerBuild);
+    expect(chimes).toEqual([]);
+
+    // the ball turns: its chime, and the shimmer at its most
+    const turned = after(() => {
+      while (!scene.isGolden) h.spin(STEP);
+    });
+    expect(chimes).toEqual([{ kind: "sparkle", golden: true }]);
+    expect(turned).toBeGreaterThan(HOME_PAGE.goldenShimmerBuild * 0.95);
+    expect(turned).toBeLessThanOrEqual(HOME_PAGE.goldenShimmerBuild);
+
+    // the celebration over: the quiet shimmer a golden ball keeps, for good
+    expect(after(() => h.hold(10))).toBe(HOME_PAGE.goldenShimmer);
+    expect(after(() => h.hold(60))).toBe(HOME_PAGE.goldenShimmer);
+    expect(HOME_PAGE.goldenShimmer).toBeLessThan(
+      HOME_PAGE.goldenShimmerBuild / 2,
+    );
+
+    // a struck ball takes it with it
+    expect(scene.choose("home")).toBe(true);
+    expect(after(() => h.hold(0.6))).toBe(-1);
+    expect(scene.phase).toBe("kickoff");
+  });
+
+  it("does not charge while the ball is still, nor in a stalled tab's long step", () => {
+    const scene = make(W, H);
+    for (let i = 0; i < 600; i++) scene.update(STEP);
+    expect(scene.spinCharge).toBe(0);
+    const h = hand(scene);
+    h.spin(2);
+    const spun = scene.spinCharge;
+    scene.update(120);
+    expect(scene.spinCharge).toBeLessThanOrEqual(spun);
+    expect(scene.isGolden).toBe(false);
   });
 });
 

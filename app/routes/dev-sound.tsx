@@ -9,6 +9,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { PLACES, type Place, TIER_PLACES, soundEngine } from "~/audio";
+import { GOLD_SHOW_LAUNCHES } from "~/art/gold-show";
 import type { SoundEngine } from "~/audio/engine";
 import {
   type Knob,
@@ -182,6 +183,19 @@ const blow = (
   },
 });
 
+/**
+ * The golden ball's shimmer, as the scene sends it: every frame at `level`, for
+ * `seconds` (then it fades by itself).
+ */
+const glow = (label: string, level: () => number, seconds: number): Play => ({
+  label,
+  run: (engine) => {
+    for (let i = 0; i <= seconds * 60; i++) {
+      later(i / 60, () => engine.play({ kind: "shimmer", level: level() }));
+    }
+  },
+});
+
 /** Timers the board has started, so leaving the page stops them. */
 const timers = new Set<ReturnType<typeof setTimeout>>();
 
@@ -321,6 +335,15 @@ const SECTIONS: Section[] = [
           1.5,
         ),
       ]),
+      {
+        // Not a one-shot: it lasts while its cues come, as the wind does.
+        id: "shimmer",
+        name: "shimmer",
+        files: ["shimmer"],
+        note: SOUNDS.shimmer.synth,
+        plays: [glow("FULL", () => 1, 5)],
+        knobs: soundKnobs("shimmer"),
+      },
       oneShot("whistle", [
         cue("PLAY", () => ({ kind: "whistle" })),
         cue("FULL TIME", () => ({ kind: "whistle", long: true })),
@@ -670,6 +693,38 @@ const SECTIONS: Section[] = [
           "HOME_PAGE.mascotFlick",
           "HOME_PAGE.mascotSwing",
         ],
+      },
+      {
+        id: "home-golden",
+        name: "the golden ball (the ball spun for 30 seconds): its own chime, the cheer and the rockets",
+        files: ["sparkle-gold"],
+        note: "The first press may play the synthesised twinkle while the chime's file loads.",
+        plays: [
+          cue("CHIME", () => ({ kind: "sparkle", golden: true }), "town"),
+          moment("ALL OF IT", [
+            [0, () => ({ kind: "sparkle", golden: true }), "town"],
+            [0, () => ({ kind: "cheer", size: HOME_PAGE.goldenCheer }), "town"],
+            ...GOLD_SHOW_LAUNCHES.map(
+              (at): [number, () => SoundCue, "town"] => [
+                at,
+                () => ({ kind: "firework", distant: true }),
+                "town",
+              ],
+            ),
+          ]),
+        ],
+        knobs: ["HOME_PAGE.goldenSparkleDb", "HOME_PAGE.goldenCheer"],
+      },
+      {
+        id: "home-shimmer",
+        name: "the golden ball's shimmer: kept under a golden ball, and at its most as the ball turns",
+        files: ["shimmer"],
+        note: "Its pitch and pace are the file's (tools/sounds.mjs: pitch and tempo).",
+        plays: [
+          glow("KEPT", () => HOME_PAGE.goldenShimmer, 6),
+          glow("AT THE TURN", () => HOME_PAGE.goldenShimmerBuild, 6),
+        ],
+        knobs: ["HOME_PAGE.goldenShimmer", "HOME_PAGE.goldenShimmerBuild"],
       },
     ],
   },

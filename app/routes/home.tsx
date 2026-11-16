@@ -180,6 +180,8 @@ interface MenuEvents {
   onLocked(mode: LockedMode): void;
   /** The patch of a mode played today was pressed: it is played once a day. */
   onReview(mode: Mode): void;
+  /** The ball was spun to gold (the easter egg). */
+  onGolden(): void;
 }
 
 interface MatchdayStore {
@@ -261,6 +263,13 @@ function createMatchdayStore(): MatchdayStore {
       scene.onChoose = (mode) => listener?.onChoose(mode);
       scene.onLocked = (mode) => listener?.onLocked(mode);
       scene.onReview = (mode) => listener?.onReview(mode);
+      // The golden ball (the easter egg) is kept for the day it was spun on.
+      const dayKey = today.dayKey;
+      if (readGoldenDay() === dayKey) scene.setGolden(true);
+      scene.onGolden = () => {
+        writeGoldenDay(dayKey);
+        listener?.onGolden();
+      };
     } else {
       scene.setFact(fact.text);
     }
@@ -355,6 +364,28 @@ function writeStreakSeen(days: number): void {
     window.localStorage.setItem(STREAK_SEEN, String(days));
   } catch {
     // no storage: it hops again next time, which is no harm
+  }
+}
+
+/**
+ * Where this device remembers the day its ball was spun to gold (the easter egg: the menu
+ * ball kept spinning for GOLD_SPIN seconds). The ball is gold for the rest of that day.
+ */
+const GOLDEN_DAY = "soccersense:golden-day";
+
+function readGoldenDay(): string | null {
+  try {
+    return window.localStorage.getItem(GOLDEN_DAY);
+  } catch {
+    return null;
+  }
+}
+
+function writeGoldenDay(dayKey: string): void {
+  try {
+    window.localStorage.setItem(GOLDEN_DAY, dayKey);
+  } catch {
+    // no storage: the ball is white again on the next visit, which is no harm
   }
 }
 
@@ -475,6 +506,8 @@ export default function Home() {
     shown: boolean;
     text: string;
   }>({ count: 0, shown: false, text: "" });
+  /** The airship's sign as the ball turned to gold, for screen readers (empty until it does). */
+  const [goldenSaid, setGoldenSaid] = useState("");
   /**
    * The mode whose page is worth fetching already: the last one pointed at or chosen. Its
    * code is then there when the kick-off ends, and the ink it ends on is one frame long.
@@ -652,6 +685,12 @@ export default function Home() {
       onReview(mode) {
         openReviewRef.current(mode);
       },
+      onGolden() {
+        // The airship's sign says so, and nothing else on the page (the product owner,
+        // 2026-11-16). The sign is only pixels: its words are read out.
+        const sign = strings.home.canvas.golden;
+        setGoldenSaid(`${sign.header} ${sign.text}`);
+      },
     });
     return () => {
       window.clearTimeout(patience);
@@ -818,6 +857,10 @@ export default function Home() {
           {strings.siteName}
         </h1>
         {fact && <p className="ss-sr">{text.fact(fact.text)}</p>}
+        {/* The ball turned to gold: the airship's sign, read out. */}
+        <p className="ss-sr" aria-live="polite">
+          {goldenSaid}
+        </p>
         {/* How SHARE went on a card, read out (on screen, a tick). */}
         <p className="ss-sr" aria-live="polite">
           {review ? "" : shareStatus}

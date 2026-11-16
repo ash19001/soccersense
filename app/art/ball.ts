@@ -51,6 +51,7 @@ import {
   clamp,
   drawText,
   measureText,
+  mix,
   type Color,
   type Sprite,
   type TextOptions,
@@ -138,6 +139,11 @@ export interface BallState {
   pressed: BallSlot | null;
   chosen: BallSlot | null;
   t: number;
+  /**
+   * The golden ball (the menu's easter egg): its leather is gold, seams and all. The black
+   * panels, their frames and what they carry are as ever, so it is still the menu.
+   */
+  gold?: boolean;
 }
 
 export type BallPatches = Partial<Record<BallSlot, BallPatch>>;
@@ -330,8 +336,31 @@ interface Tones {
 }
 
 const toneCache = new WeakMap<Lighting, Tones>();
+const goldCache = new WeakMap<Lighting, Tones>();
 
-function tonesFor(light: Lighting): Tones {
+/** The ball's tones under `light`; `gold`, the golden ball's (its leather a ramp of gold). */
+function tonesFor(light: Lighting, gold = false): Tones {
+  if (gold) {
+    const kept = goldCache.get(light);
+    if (kept) return kept;
+    const base = tonesFor(light);
+    const c = light.lit;
+    const pale = c(P.goldLight);
+    const mid = c(P.gold);
+    const warm = c(mix(P.gold, P.goldDark, 0.5));
+    const dark = c(P.goldDark);
+    const deep = c(mix(P.goldDark, P.retroDark, 0.55));
+    const tones: Tones = {
+      ...base,
+      // the glint stays white: it is what makes it metal
+      leather: [base.leather[0], pale, mid, warm, dark],
+      seam: [mid, warm, dark, dark, deep],
+      stitch: [warm, dark, deep, deep, c(P.retroDark)],
+      rimLeather: pale,
+    };
+    goldCache.set(light, tones);
+    return tones;
+  }
   const hit = toneCache.get(light);
   if (hit) return hit;
   const c = light.lit;
@@ -1446,7 +1475,7 @@ export function drawBall(
   chooseLayout(patches, roomFor());
   orientTo(state);
   rasterise();
-  const tones = tonesFor(light);
+  const tones = tonesFor(light, state.gold === true);
   prepareSlots(state, patches, light, tones);
 
   const stride = d + 2;

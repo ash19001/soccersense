@@ -192,6 +192,7 @@ interface MenuLabels {
   shootout: string; // "SHOOTOUT"
   header: string; // "DID YOU KNOW?": the plane's banner, before the fact (and the sign's, with no messages)
   tagline?: string;
+  golden?: MenuSign; // the sign as the ball turns to gold: { header: "GOLDEN BALL!", text: "YOU FOUND IT" }
 }
 interface MenuSceneOptions {
   seed: number; // the day number: it seeds the town and its life, and picks the club colours (schemeForDay)
@@ -213,12 +214,16 @@ class MenuScene implements Scene {
   onLocked: ((mode: LockedMode) => void) | null; // a locked patch was pressed and released
   onReview: ((mode: Mode) => void) | null; // a played mode's patch (one with a score): no kick-off
   onSound: ((cue: SoundCue) => void) | null; // the Scene contract: what is to be heard
+  onGolden: (() => void) | null; // the ball was just spun to gold (the easter egg); never for setGolden
+  readonly isGolden: boolean; // the ball is gold
+  readonly spinCharge: number; // 0 to 1: how far the hand's spinning has got towards the gold
   ambience(): Ambience; // { venue: "town", crowd: 0.3, night: the light's phase is "night" }
 
   // what the page tells it
   setFact(text: string): void; // a new fact on the banner (and the sign, with no messages); the same again does nothing
   setPlane(on: boolean): void; // the plane and its banner fly (default) or not: the home page turns it off on a phone
   setSignMessages(messages: readonly MenuSign[]): void; // the sign's messages, one after another (none: the fact)
+  setGolden(on: boolean): void; // the ball is gold already (the page keeps the day's): no celebration; false takes it off
   setLabels(labels: MenuLabels): void; // a new header goes to the sign too
   setScores(scores: Partial<Record<Mode, number | null>>): void; // a badge on the patch; null takes it off
   setMoonPhase(phase: number): void; // 0 new, 0.5 full
@@ -418,7 +423,32 @@ Through the Scene contract's `onSound` (above); nothing is sent while it is null
 Neither `land` nor `sparkle` is sent with reduced motion (there is no flight). The numbers
 (the powers and the wind's speeds) are `HOME_PAGE` in `app/audio/mix.ts`.
 
-The scene itself sends no `cheer`, `firework` or `vuvuzela`. The picture's match is heard only
+**The golden ball** (the easter egg, 2026-11-16; the rules are in docs/GAME_DESIGN.md, the
+home screen). `GOLD_SPIN` (30, exported) seconds of the hand keeping the ball turning faster
+than its wind shows, a pause of up to 1.5 s counted in and a longer one running the charge down
+four times as fast; a step of more than half a second (a stalled tab) is a pause. What is
+seen on the way is by the share spun (`spinCharge`): from 0.25 a dithered glow of gold behind
+the ball (4% to 20% of the radius wide, there through a pause: it is the meter) and pale gold
+wind; from 0.4 sparks off the rim while it turns (8 to 36 of them); from 0.6 gold wind; from
+0.85 the ball flickers gold ten times a second. At 1 the ball is gold (`BallState.gold`,
+docs/API_ART.md) and `onGolden` is called: the new ball's ring of light in gold and a shine
+of eight rays, `drawGoldShow` over the town behind the ball (docs/API_ART.md), the backdrop's
+roar (`setRoar`: full in 0.3 s, held to 4 s, gone by 6.5 s), `pokeMascot`, and the sign
+showing `labels.golden` for 10 s (the page's messages wait: `setSignMessages` meanwhile is
+kept for afterwards). The sign is the only thing that says so: the page puts up nothing, and
+reads the sign's words out in a hidden live region. Sounds: `{ kind: "sparkle", golden: true
+}` (the ball's own chime, `sparkle-gold.mp3`) and a `cheer` of `HOME_PAGE.goldenCheer` as
+it turns, then a `firework` with `distant: true` as each rocket goes up
+(`GOLD_SHOW_LAUNCHES`); and `{ kind: "shimmer", level }` every `update` while any of it is
+heard and the ball hovers (never once it is struck): from `spinCharge` 0.25 it rises with the
+glow to `HOME_PAGE.goldenShimmerBuild` as the ball turns, falls over the 6.5 s of the roar to
+`HOME_PAGE.goldenShimmer`, and stays there under a golden ball (`setGolden(true)` too). The
+golden ball twinkles every 2.4 s while it hovers. With reduced motion: the gold, its sounds
+(no rockets) and the sign only. The home page keeps the day (`soccersense:golden-day` in
+local storage) and calls `setGolden(true)` on a later visit that day. Shots:
+`menu/gold-charge`, `menu/gold-turn`, `menu/golden`.
+
+Apart from the golden ball's, the scene itself sends no `cheer`, `firework` or `vuvuzela`. The picture's match is heard only
 far off, as background: at a home goal (24 to 26 s into each 40 s play of the picture's
 clock) a `cheer` of size 0.1 (`HOME_PAGE.pictureCheer`), and a `firework` with `distant: true` as each of the goal's rockets goes up
 (none on a phone, where they have no room); at an away goal only a smaller `cheer`

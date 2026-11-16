@@ -387,6 +387,28 @@ What is still weak:
 Six away backdrops and their weather, travel transitions, trophy lift, a dev art gallery page,
 answer-judge decoys for near-miss names, whole-game visual checks on phone and desktop sizes.
 
+## The golden ball (2026-11-16)
+
+An easter egg on the home screen (the product owner: "if people are spinning the ball in home
+screen constantly for a long time (30 seconds or 1 minute), then something cool happens"). The
+ball kept spinning by hand for 30 seconds turns to gold: a glow, gold wind and sparks on the
+way, then fireworks over the town, the stadium's roar, a cheer, the mascot's trick and the
+airship's sign (the only thing that says so). Gold for the rest of the day on that device.
+Its sounds are cut from the product owner's `shimmering.mp3` (`tools/sounds.mjs`): the
+ball's own sparkle as it turns (`sparkle-gold.mp3`) and a quiet looped shimmer
+(`shimmer.mp3`) that comes in with the glow and stays, quieter, under a golden ball. Rules:
+docs/GAME_DESIGN.md (the home screen); the scene: docs/API_SCENES.md; the art:
+`BallState.gold` and `~/art/gold-show` (docs/API_ART.md); the sounds: docs/AUDIO.md, their
+levels in `app/audio/mix.ts` (`SOUNDS.shimmer.level`, `HOME_PAGE.goldenShimmer`,
+`goldenShimmerBuild`, `goldenSparkleDb`, `goldenCheer`), with rows on `/dev/sound`. The
+shimmer's file is made at three quarters of the take's pitch and half its speed (the product
+owner found the take squeaky, and an octave lower too low): `pitch` and `tempo` in
+`tools/sounds.mjs`, then `node tools/sounds.mjs shimmer`. The
+levels were set by the numbers; the product owner then heard the shimmer and asked for it
+quieter, twice, and it was halved each time (the kept shimmer is now about 12 dB under the
+town's own bed). To see it quickly, `?speed=8` on the home page runs the scene eight
+times as fast.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

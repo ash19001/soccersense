@@ -53,7 +53,8 @@ export type SoundCue =
   | { kind: "splash" }
   | { kind: "firework"; distant?: boolean } // a rocket going up and bursting (distant: a faint pop far away)
   | { kind: "vuvuzela"; size?: number } // a blast of horns from the crowd, World Cup only (tiers 6 and 7; size 0 to 1, default 1: how big, by the goal)
-  | { kind: "sparkle" } // a star's twinkle: AWAY's ball vanishing into the sky
+  | { kind: "sparkle"; golden?: boolean } // a star's twinkle: AWAY's ball vanishing into the sky (golden: the menu ball turning to gold, a chime of its own)
+  | { kind: "shimmer"; level: number } // the golden ball's quiet glitter, 0 to 1: how much of it; send it every frame while it lasts
   | { kind: "land"; power?: number } // a ball dropping onto turf from height: HOME's landing (power 0 to 1, default 1; its small bounce is softer)
   | { kind: "sweep" } // the promotion's sweep of smoke
   | { kind: "click" } // a button pressed: crisp and short

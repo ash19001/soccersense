@@ -27,10 +27,10 @@ import {
   FakeShaper,
   FakeSource,
 } from "./testing";
-import { SCORE_SHOTS, playOneShot } from "./voices";
+import { type OneShotCue, SCORE_SHOTS, playOneShot } from "./voices";
 
-/** One of every one-shot cue (the wind is continuous and has its own tests). */
-const ONE_SHOTS: Exclude<SoundCue, { kind: "wind" }>[] = [
+/** One of every one-shot cue (the wind and the shimmer last, and have their own tests). */
+const ONE_SHOTS: OneShotCue[] = [
   { kind: "touch" },
   { kind: "kick", power: 0.6 },
   { kind: "net" },
@@ -96,7 +96,7 @@ async function settle(): Promise<void> {
 }
 
 /** Builds one cue's sound straight into a fake context, as `place` hears it. */
-function build(cue: Exclude<SoundCue, { kind: "wind" }>, place: Place = "top") {
+function build(cue: OneShotCue, place: Place = "top") {
   const ctx = new FakeAudioContext();
   const voice = new Voice(cue.kind, 0);
   playOneShot(
@@ -344,10 +344,18 @@ describe("sound engine: voices", () => {
   });
 
   test("every kind has a level and a measured peak", () => {
-    for (const cue of [...ONE_SHOTS, { kind: "wind" } as const]) {
+    for (const cue of [
+      ...ONE_SHOTS,
+      { kind: "wind" } as const,
+      { kind: "shimmer" } as const,
+    ]) {
       expect(LEVELS[cue.kind], cue.kind).toBeGreaterThan(0);
       expect(LEVELS[cue.kind], cue.kind).toBeLessThanOrEqual(1);
-      if (cue.kind !== "wind" && cue.kind !== "score") {
+      if (
+        cue.kind !== "wind" &&
+        cue.kind !== "shimmer" &&
+        cue.kind !== "score"
+      ) {
         expect(PEAK_DB[cue.kind], cue.kind).toBeLessThan(-6);
       }
     }
@@ -413,7 +421,7 @@ describe("sound engine: voices", () => {
 
   test("a touch's level scales how loud it is (the juggle while typing is very quiet)", () => {
     // The trim each voice goes through on its way into the effects bus.
-    const trimOf = (cue: Exclude<SoundCue, { kind: "wind" }>): number => {
+    const trimOf = (cue: OneShotCue): number => {
       const ctx = new FakeAudioContext();
       const graph = createGraph(ctx.asContext());
       buildCue(ctx.asContext(), graph, cue, 0, mulberry32(1));

@@ -14,3 +14,4 @@ recorded sounds, safely" in `docs/AUDIO.md`). The files here are cut from the or
 | `kick_ball.mp3`          | supplied by the product owner on 2026-11-12; original source and licence to be recorded | `kick.mp3`                                              |
 | `star_sparkle.mp3`       | supplied by the product owner on 2026-11-12; original source and licence to be recorded | `sparkle.mp3`                                           |
 | `vuvuzela.mp3`           | supplied by the product owner on 2026-11-12; original source and licence to be recorded | `vuvuzela.mp3`, `vuvuzela-crowd.mp3`                    |
+| `shimmering.mp3`         | supplied by the product owner on 2026-11-16; original source and licence to be recorded | `sparkle-gold.mp3`, `shimmer.mp3`                       |

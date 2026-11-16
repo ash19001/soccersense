@@ -18,7 +18,11 @@ import { Synth, ad, crackleBuffer, curve, glide, link } from "./dsp";
 import { CROWD, STINGS } from "./mix";
 import { type Crowd, DEFAULT_CROWD } from "./place";
 
-export type OneShotCue = Exclude<SoundCue, { kind: "wind" }>;
+/** Every cue but the two that last (the wind, the shimmer: voices of their own). */
+export type OneShotCue = Exclude<
+  SoundCue,
+  { kind: "wind" } | { kind: "shimmer" }
+>;
 export type OneShotKind = OneShotCue["kind"];
 
 function clamp01(value: number): number {

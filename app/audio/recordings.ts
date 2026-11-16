@@ -210,6 +210,11 @@ export class Recordings {
     return null;
   }
 
+  /** `name` has a file that is still loading (true only between its first `get` and its answer). */
+  pending(name: string): boolean {
+    return this.buffers.get(name) === "loading";
+  }
+
   /** Starts loading `name` now, so it is ready when first wanted. */
   warm(ctx: BaseAudioContext, name: string): void {
     this.get(ctx, name);

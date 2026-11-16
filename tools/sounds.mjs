@@ -18,7 +18,9 @@
 //
 // Two kinds of file are not one cut but are built from several, for sounds that last:
 // - a loop (`loop`): pieces of the source, filtered, joined end to start with short
-//   equal-power crossfades, the last into the first, so it goes round without a seam;
+//   equal-power crossfades, the last into the first, so it goes round without a seam. A loop
+//   can be made lower and slower, each by its own amount (`pitch` and `tempo`, shares of the
+//   source's: 0.75 is three quarters as high, 0.5 half as fast and so twice as long);
 // - a swarm (`swarm`): many copies of a few short pieces (the toots of one horn), each a
 //   little higher or lower, louder or softer, laid at seeded random places round a loop of
 //   `length` seconds (a copy that runs off the end carries on at the start, so this loops
@@ -224,6 +226,45 @@ const SOUNDS = [
     bitrate: "128k",
     peak: -1,
   },
+  {
+    // The golden ball turning to gold (the home page: the ball spun for 30 seconds). The
+    // take is five stretches of a high shimmer (6 to 9 kHz), each a steady glitter with a
+    // chime swelling out of it every second and a half. This is the brightest chime of the
+    // second stretch, from its first sample (9.872 s), and the glitter after it, fading: it
+    // rings on for a second. The take is very quiet (its peaks at -26 dBFS): it is levelled
+    // as every file here, and the engine sets its level in the game.
+    out: "sparkle-gold",
+    src: "shimmering.mp3",
+    start: 9.872,
+    end: 11.372,
+    fadeIn: 0.003,
+    filters: ["highpass=f=1500:p=2"],
+    fadeOut: [0.55, 0.95],
+    peak: -1,
+  },
+  {
+    // The golden ball's shimmer, a quiet bed while the ball is gold. Six seconds of the
+    // third stretch, the steadiest: four of its swells, a second and a half apart, cut where
+    // it is quietest (between two of them) and joined end to start, so it goes round with
+    // its swells evenly spaced and no seam.
+    //
+    // As recorded it is all between 6 and 9 kHz, and squeaky to have on for long (the
+    // product owner, 2026-11-16). An octave lower at half the speed was "too low": this is
+    // three quarters of the pitch (4.5 to 6.75 kHz) at half the speed, the pace kept ("keep
+    // the speed that it currently is but make octave 0.75"). So the loop is twelve seconds,
+    // its swells three seconds apart.
+    out: "shimmer",
+    src: "shimmering.mp3",
+    loop: {
+      pieces: [[21.25, 27.25]],
+      crossfade: 0.4,
+    },
+    pitch: 0.75,
+    tempo: 0.5,
+    filters: ["highpass=f=1500:p=2"],
+    bitrate: "96k",
+    peak: -1,
+  },
 ];
 
 function ffmpeg(args, input) {
@@ -238,15 +279,19 @@ function asFloats(bytes) {
   return new Float32Array(copy.buffer, 0, copy.length >> 2);
 }
 
-/** A piece of the source, `start` to `end` seconds, through `steps` (ffmpeg filters), mono. */
-function cut(src, start, end, steps) {
+/**
+ * A piece of the source, `start` to `end` seconds, through `steps` (ffmpeg filters), mono.
+ * `tempo`: the steps play it that many times as fast (`shift`), so it comes out that much
+ * shorter or longer.
+ */
+function cut(src, start, end, steps, tempo = 1) {
   const chain = [
     `aresample=${RATE}`,
     "aformat=sample_fmts=flt:channel_layouts=mono",
     `atrim=start=${start}:end=${end}`,
     "asetpts=PTS-STARTPTS",
     ...steps,
-    `atrim=end=${end - start}`,
+    `atrim=end=${(end - start) / tempo}`,
   ];
   return asFloats(
     ffmpeg(["-i", join(SRC, src), "-af", chain.join(","), "-f", "f32le", "-"]),
@@ -264,15 +309,40 @@ function render(sound) {
 }
 
 /**
+ * The filters that make a sound `pitch` times as high and `tempo` times as fast (both 1:
+ * none). Played at another sample rate it is lower and slower together, by `pitch`; the
+ * rest of the change of pace is made without touching the pitch (`atempo`, which takes 0.5
+ * to 100).
+ */
+function shift(pitch = 1, tempo = 1) {
+  if (pitch === 1 && tempo === 1) return [];
+  const pace = tempo / pitch;
+  if (!(pitch > 0) || !(pace >= 0.5 && pace <= 100)) {
+    throw new Error(
+      `pitch ${pitch} and tempo ${tempo}: tempo / pitch must be 0.5 to 100`,
+    );
+  }
+  return [
+    `asetrate=${RATE * pitch}`,
+    `aresample=${RATE}`,
+    ...(pace === 1 ? [] : [`atempo=${pace}`]),
+  ];
+}
+
+/**
  * A loop: each piece filtered (before the joins, so the filters leave no seam) and
  * `crossfade` seconds longer than its place in the loop; each piece's extra runs under the
  * start of the next one, the last's under the first's, out and in on an equal-power curve.
+ * With `pitch` or `tempo` each piece is made lower or slower first (`shift`); the crossfade
+ * is then in the loop's own seconds.
  */
 function renderLoop(sound) {
   const { pieces, crossfade } = sound.loop;
+  const tempo = sound.tempo ?? 1;
   const x = Math.round(crossfade * RATE);
+  const steps = [...sound.filters, ...shift(sound.pitch ?? 1, tempo)];
   const cuts = pieces.map(([a, b]) =>
-    cut(sound.src, a, b + crossfade, sound.filters),
+    cut(sound.src, a, b + crossfade * tempo, steps, tempo),
   );
   const total = cuts.reduce((sum, c) => sum + c.length - x, 0);
   const out = new Float32Array(total);

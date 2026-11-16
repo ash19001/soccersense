@@ -48,6 +48,12 @@ export const en = {
       /** On the plane's banner, before the fact of the day. */
       header: "DID YOU KNOW?",
       tagline: "DAILY FOOTBALL TRIVIA",
+      /**
+       * The airship's sign as the ball turns to gold (the easter egg: the ball kept spinning
+       * by hand). Short, as every message of the sign: 12 small letters a line at most. It
+       * is the only thing that says so (the page reads the same words out).
+       */
+      golden: { header: "GOLDEN BALL!", text: "YOU FOUND IT" },
     },
     /**
      * The airship's sign: short messages about the player's day, one after another

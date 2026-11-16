@@ -20,7 +20,7 @@ import {
   cueLevel,
   takeOf,
 } from "./engine";
-import { FIREWORKS } from "./mix";
+import { FIREWORKS, HOME_PAGE } from "./mix";
 import { PLACES, type Place, placeOf } from "./place";
 import {
   FakeAudioContext,
@@ -29,6 +29,7 @@ import {
   FakeGain,
   FakeOscillator,
 } from "./testing";
+import type { OneShotCue } from "./voices";
 
 let disposers: (() => void)[] = [];
 afterEach(() => {
@@ -326,12 +327,135 @@ describe("the twinkle, the landing and the horns", () => {
   });
 });
 
+describe("the golden ball's sounds (2026-11-16)", () => {
+  /** The targets set on a gain: [level, time, time constant] each. */
+  const targets = (gain: FakeGain) =>
+    gain.gain.events
+      .filter((event) => event[0] === "target")
+      .map((event) => event.slice(1) as number[]);
+
+  test("the shimmer waits for its recording, then loops it quietly for as long as its cues come", async () => {
+    const { engine, ctx, buffer } = withFiles({
+      shimmer: 600,
+      "sparkle-gold": 700,
+      sparkle: 300,
+    });
+    engine.setAmbience({ venue: "town", crowd: 0.3, night: false });
+    await settle();
+    // The home page does not load it for everybody: only once it is wanted.
+    expect(engine.debug().recordings.loaded).toBe(1);
+
+    // The first cue starts the file loading, and makes no sound (and no hiss) meanwhile.
+    const before = ctx().nodes.length;
+    engine.play({ kind: "shimmer", level: 0.5 });
+    expect(engine.debug().shimmer).toBe(false);
+    expect(ctx().nodes.length).toBe(before);
+    await settle();
+    // ...and the ball's own chime with it: it is wanted next.
+    expect(engine.debug().recordings.loaded).toBe(3);
+
+    engine.play({ kind: "shimmer", level: 0.5 });
+    expect(engine.debug().shimmer).toBe(true);
+    expect(engine.debug().log.at(-1)).toMatchObject({
+      kind: "shimmer",
+      result: "recording",
+      gain: LEVELS.shimmer,
+    });
+    const [source] = sourcesOf(ctx(), buffer("shimmer"), before);
+    expect(source.loop).toBe(true);
+    // Played as the file is: its pitch and its pace are made into it (tools/sounds.mjs).
+    expect(source.playbackRate.value).toBe(1);
+    // Levelled to the engine's noise (RMS 0.25), whatever level the file came at (0.5 here).
+    expect(gainOf(source)).toBeCloseTo(0.5, 5);
+    // It is quiet: well under the wind, which is under everything else.
+    expect(LEVELS.shimmer).toBeLessThan(LEVELS.wind / 2);
+    const level = [...source.outputs][0] as FakeGain;
+    const out = [...level.outputs][0] as FakeGain;
+    // Every cue sets its level, slowly, and its own fade for when the cues stop.
+    for (let i = 0; i < 120; i++) {
+      ctx().advance(1 / 60);
+      engine.play({ kind: "shimmer", level: i < 60 ? 0.5 : 0.2 });
+    }
+    const set = targets(out);
+    expect(set.at(-2)?.[0]).toBe(0.2);
+    expect(set.at(-2)?.[2]).toBeGreaterThanOrEqual(0.3);
+    expect(set.at(-1)?.[0]).toBe(0);
+    expect(engine.debug().played.shimmer).toBe(1);
+    expect(sourcesOf(ctx(), buffer("shimmer"), before)).toHaveLength(1);
+
+    // The cues stop (the ball is struck, the page is left): it fades and is let go.
+    wait(engine, ctx(), 6);
+    expect(engine.debug().shimmer).toBe(false);
+    expect(ctx().playing()).not.toContain(source);
+  });
+
+  test("the shimmer is a quiet hiss with no file, and nothing at all while muted or hidden", () => {
+    const { engine, ctx } = setup();
+    engine.unlock();
+    const before = ctx().nodes.length;
+    engine.play({ kind: "shimmer", level: 1 });
+    expect(engine.debug().shimmer).toBe(true);
+    expect(engine.debug().log.at(-1)).toMatchObject({
+      kind: "shimmer",
+      result: "synth",
+    });
+    expect(ctx().nodes.length).toBeGreaterThan(before);
+    engine.setMuted(true);
+    expect(engine.debug().shimmer).toBe(false);
+    engine.play({ kind: "shimmer", level: 1 });
+    expect(engine.debug().shimmer).toBe(false);
+    engine.setMuted(false);
+    engine.setHidden(true);
+    engine.play({ kind: "shimmer", level: 1 });
+    expect(engine.debug().shimmer).toBe(false);
+  });
+
+  test("the ball's own chime plays its recording, a little over the twinkle's level, and the twinkle keeps its own", async () => {
+    const { engine, ctx, buffer } = withFiles({
+      "sparkle-gold": 700,
+      sparkle: 300,
+    });
+    engine.setAmbience({ venue: "town", crowd: 0.3, night: false });
+    engine.play({ kind: "shimmer", level: 0.1 });
+    await settle();
+
+    let before = ctx().nodes.length;
+    engine.play({ kind: "sparkle", golden: true });
+    const [gold] = sourcesOf(ctx(), buffer("sparkle-gold"), before);
+    expect(gold).toBeDefined();
+    expect(gold.loop).toBe(false);
+    const goldGain = gainOf(gold);
+    expect(sourcesOf(ctx(), buffer("sparkle"), before)).toHaveLength(0);
+
+    wait(engine, ctx(), 4);
+    before = ctx().nodes.length;
+    engine.play({ kind: "sparkle" });
+    const [twinkle] = sourcesOf(ctx(), buffer("sparkle"), before);
+    expect(twinkle).toBeDefined();
+    expect(sourcesOf(ctx(), buffer("sparkle-gold"), before)).toHaveLength(0);
+    // The files are as loud as each other here, so the gains differ by the knob alone.
+    expect(20 * Math.log10(goldGain / gainOf(twinkle))).toBeCloseTo(
+      HOME_PAGE.goldenSparkleDb,
+      5,
+    );
+  });
+
+  test("with no chime of its own, the golden ball's is the twinkle", async () => {
+    const { engine, ctx, buffer } = withFiles({ sparkle: 300 });
+    engine.setAmbience({ venue: "town", crowd: 0.3, night: false });
+    await settle();
+    const before = ctx().nodes.length;
+    engine.play({ kind: "sparkle", golden: true });
+    expect(sourcesOf(ctx(), buffer("sparkle"), before)).toHaveLength(1);
+  });
+});
+
 describe("the levels", () => {
   test("the distant fireworks are 2 dB louder, synthesised or recorded", async () => {
     expect(FIREWORKS.farLiftDb).toBe(2);
     expect(FIREWORKS.farDb).toBe(-19.5);
     // The synthesised voice's trim: the first gain it makes, into the effects bus.
-    const trim = (cue: Exclude<SoundCue, { kind: "wind" }>, place: Place) => {
+    const trim = (cue: OneShotCue, place: Place) => {
       const ctx = new FakeAudioContext();
       const graph = createGraph(ctx.asContext());
       const from = ctx.nodes.length;

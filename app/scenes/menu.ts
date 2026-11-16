@@ -67,6 +67,19 @@
  * pointer, and a mode chosen from the captions brings it round quickly before the strike.
  * The constants under "Spinning the ball by hand" give the feel.
  *
+ * The golden ball, an easter egg (the product owner, 2026-11-16: "if people are spinning the
+ * ball in home screen constantly for a long time (30 seconds or 1 minute), then something
+ * cool happens"). Kept spinning by hand for GOLD_SPIN seconds with no real pause, the ball
+ * turns to gold. On the way a glow of gold grows round it, its wind warms and turns gold,
+ * sparks fly off its rim and at the last the ball itself flickers gold; then a ring of
+ * light and a shine go out from it, a show of fireworks goes up over the town
+ * (art/gold-show.ts), the ground erupts as for HOME's landing, the crowd cheers, the mascot
+ * does a trick and the airship's sign says so (nothing else does). It is heard too: a quiet
+ * shimmer comes in with the glow, the ball's own chime rings as it turns, and the shimmer
+ * stays, quieter, under a golden ball. The ball stays gold, twinkling now and then,
+ * and `onGolden` tells the page, which keeps it for the day (`setGolden`). The constants
+ * under "The golden ball" give the feel.
+ *
  * Sound. The scene says what is to be heard through `onSound` (see "Sound" below): a soft
  * kick on a press of the ball (a pointer passing over it is silent), wind while it spins,
  * the strike and the flight, HOME's landing and its small bounce, AWAY's twinkle in the
@@ -97,6 +110,11 @@ import {
   pixelate,
   type FutureBallState,
 } from "~/art/future-ball";
+import {
+  GOLD_SHOW_LAUNCHES,
+  GOLD_SHOW_LEN,
+  drawGoldShow,
+} from "~/art/gold-show";
 import { drawLeatherBall, type LeatherBallState } from "~/art/leather-ball";
 import { lightingFor, type Lighting } from "~/art/lighting";
 import { drawLogo, logoSize, type LogoOptions } from "~/art/logo";
@@ -190,6 +208,12 @@ export interface MenuLabels {
   header: string;
   /** Under the logo when there is room, for example "DAILY FOOTBALL TRIVIA". */
   tagline?: string;
+  /**
+   * What the airship's sign says as the ball turns to gold (the easter egg), for example
+   * "GOLDEN BALL!" over "YOU FOUND IT": short, as every message of the sign. None: the sign
+   * keeps its messages.
+   */
+  golden?: MenuSign;
 }
 
 export interface MenuSceneOptions {
@@ -425,6 +449,13 @@ const TWINKLE_FLARE = 0.1;
 const CLOSING: SoundCue = { kind: "transition", opening: false };
 const SQUEAK: SoundCue = { kind: "squeak" };
 const POP: SoundCue = { kind: "pop" };
+/**
+ * The golden ball: its own chime as the ball turns to gold, the ground's cheer with it, and
+ * its rockets, far off. (Its shimmer is sent every frame it is heard: `shimmerLevel`.)
+ */
+const GOLD_SPARKLE: SoundCue = { kind: "sparkle", golden: true };
+const GOLD_CHEER: SoundCue = { kind: "cheer", size: HOME_PAGE.goldenCheer };
+const GOLD_ROCKET: SoundCue = { kind: "firework", distant: true };
 
 /**
  * What the hand has done to the ball. "still": nothing, the ball is the menu. "rest": it
@@ -470,6 +501,80 @@ const RUSH_BACK = 0.08;
 const RUSH_MAX = 1.6;
 /** Only while the ball is at least this share of its size: near, and fast. */
 const RUSH_FROM = 0.35;
+
+// ---------------------------------------------------------------------------
+// The golden ball
+// ---------------------------------------------------------------------------
+
+/**
+ * Kept spinning by hand for this long (seconds), the ball turns to gold. It is spinning
+ * while it turns fast enough for its wind to show (WIND_SHOW). A pause of up to GOLD_GRACE
+ * seconds (the gap between two flicks, a change of hand) is part of the spinning, and counts
+ * once the ball turns again; a longer one does not, and from then on what has been spun runs
+ * down GOLD_DRAIN times as fast as it built. A step longer than GOLD_FRAME is
+ * a stalled tab, and counts as a pause.
+ */
+export const GOLD_SPIN = 30;
+const GOLD_GRACE = 1.5;
+const GOLD_DRAIN = 4;
+const GOLD_FRAME = 0.5;
+/**
+ * What is seen of it on the way, by the share of GOLD_SPIN spun.
+ *
+ * - From GOLD_WARM there is a light behind the ball, a glow of gold round its rim: AURA_THIN
+ *   of the radius wide at first and AURA_WIDE at the last, breathing AURA_BEAT pixels,
+ *   AURA_FPS times a second. It stays through a pause and shrinks as the charge runs down:
+ *   it is the meter. From GOLD_WARM too the wind round the ball is pale gold, and from
+ *   GOLD_HOT gold.
+ * - From GOLD_SPARKS sparks fly off the rim while it turns: SPARKS_FEW of them at first and
+ *   SPARKS_MANY at the last, thrown SPARK_NEAR to SPARK_FAR of the radius, each living
+ *   SPARK_LIFE seconds and moving on SPARK_FPS times a second.
+ * - From GOLD_GLOW the ball itself flickers gold, GOLD_BLINK times a second: it is about
+ *   to turn.
+ */
+const GOLD_WARM = 0.25;
+const GOLD_SPARKS = 0.4;
+const GOLD_HOT = 0.6;
+const GOLD_GLOW = 0.85;
+const AURA_THIN = 0.04;
+const AURA_WIDE = 0.2;
+const AURA_BEAT = 2;
+const AURA_FPS = 6;
+const SPARKS_FEW = 8;
+const SPARKS_MANY = 36;
+const SPARK_NEAR = 0.25;
+const SPARK_FAR = 0.8;
+const SPARK_LIFE = 0.45;
+const SPARK_FPS = 24;
+const GOLD_BLINK = 10;
+/**
+ * As it turns: the ring of light the new ball of an era has (ERA_GLOW), and a shine of
+ * eight rays round it, GOLD_RAY_FPS frames a second, each from and to these shares of the
+ * radius outside the rim.
+ */
+const GOLD_RAYS: readonly (readonly [number, number])[] = [
+  [0.06, 0.3],
+  [0.12, 0.55],
+  [0.28, 0.8],
+  [0.5, 0.95],
+  [0.78, 1.05],
+];
+const GOLD_RAY_FPS = 15;
+/**
+ * The ground erupts: the roar is full GOLD_ROAR_UP seconds after the ball turns, holds
+ * until GOLD_ROAR_HOLD and has died away by GOLD_ROAR_END. Over the town a show of big
+ * rockets goes up (art/gold-show.ts: GOLD_SHOW_LAUNCHES, each heard far off as it goes), its
+ * bursts no lower than GOLD_SHOW_FLOOR of the height above the centre spot, and the
+ * airship's sign says so for GOLD_SIGN seconds.
+ */
+const GOLD_ROAR_UP = 0.3;
+const GOLD_ROAR_HOLD = 4;
+const GOLD_ROAR_END = 6.5;
+const GOLD_SHOW_FLOOR = 0.04;
+const GOLD_SIGN = 10;
+/** The golden ball twinkles once every GOLD_WINK seconds (WINK_FPS frames a second). */
+const GOLD_WINK = 2.4;
+const WINK_FPS = 14;
 
 // ---------------------------------------------------------------------------
 // The kick-off: where things go
@@ -824,6 +929,33 @@ function drawRays(
       Math.round(y + RAY_Y[i] * r1),
       c,
     );
+  }
+}
+
+/**
+ * A shine: eight rays round (x, y), each from `r0` out to `r1` and three pixels thick,
+ * `core` down the middle and `edge` either side.
+ */
+function drawShine(
+  s: Surface,
+  x: number,
+  y: number,
+  r0: number,
+  r1: number,
+  core: Color,
+  edge: Color,
+): void {
+  for (let i = 0; i < 8; i++) {
+    // across the ray: a pixel to each side
+    const ox = Math.round(-RAY_Y[i]);
+    const oy = Math.round(RAY_X[i]);
+    const x0 = Math.round(x + RAY_X[i] * r0);
+    const y0 = Math.round(y + RAY_Y[i] * r0);
+    const x1 = Math.round(x + RAY_X[i] * r1);
+    const y1 = Math.round(y + RAY_Y[i] * r1);
+    s.line(x0 - ox, y0 - oy, x1 - ox, y1 - oy, edge);
+    s.line(x0 + ox, y0 + oy, x1 + ox, y1 + oy, edge);
+    s.line(x0, y0, x1, y1, core);
   }
 }
 
@@ -1284,6 +1416,11 @@ export class MenuScene implements Scene {
   onReview: ((mode: Mode) => void) | null = null;
   /** Something to be heard (the Scene contract): set by the host. */
   onSound: ((cue: SoundCue) => void) | null = null;
+  /**
+   * The ball has just turned to gold (the easter egg: GOLD_SPIN seconds of spinning it by
+   * hand). Once each time it is earned; never for `setGolden`.
+   */
+  onGolden: (() => void) | null = null;
 
   private readonly seed: number;
   private readonly backdrop: MenuBackdrop;
@@ -1464,6 +1601,18 @@ export class MenuScene implements Scene {
   /** Seconds the ball has been at rest showing a locked patch. */
   private restT = 0;
 
+  // The golden ball. `charge` is the seconds the hand has kept the ball spinning (a pause
+  // runs it down), `chargeIdle` how long it has not been; at GOLD_SPIN the ball is `golden`
+  // and `goldT` counts the seconds since (-1: nothing is being celebrated).
+  private golden = false;
+  private charge = 0;
+  private chargeIdle = 0;
+  private goldT = -1;
+  /** The sign's words for it (the labels'), and the page's messages it stands in for. */
+  private goldWords: MenuSign | null = null;
+  private signMessages: readonly MenuSign[] = [];
+  private goldSign = false;
+
   // What `compose` works out for the frame.
   private readonly ball: BallState = freshBall();
   private ballOn = true;
@@ -1608,6 +1757,10 @@ export class MenuScene implements Scene {
       const speed = this.spinSpeed();
       if (speed > WIND_MIN) this.sound({ kind: "wind", speed });
     }
+    this.stepGold(d);
+    // the golden ball's shimmer, for as long as any of it is heard
+    const shimmer = this.shimmerLevel();
+    if (shimmer > 0) this.sound({ kind: "shimmer", level: shimmer });
     // the ball moves under a pointer that is keeping still
     if (this.pointerIn) this.refreshHover();
   }
@@ -1642,13 +1795,23 @@ export class MenuScene implements Scene {
       const k = 1 - clamp(u);
       roar = 1 - k * k;
     }
-    this.setRoar(roar);
+    // the golden ball: the ground erupts for it too
+    this.setRoar(Math.max(roar, this.goldRoar()));
     // While the ball hovers nothing the scene draws goes over the airship: it may float.
     const hovering = this.state === "intro" || this.state === "idle";
     this.backdrop.setFloating(this.floatOn && hovering);
     this.backdrop.draw(s, this.clock);
     // the backdrop has now built whatever the last change made stale: ask again
     if (this.aimStale) this.aim();
+    // the golden ball's fireworks, over the town and behind everything of the ball's
+    if (this.goldT >= 0 && !this.reduced) {
+      drawGoldShow(s, this.goldT, {
+        top: this.logoH,
+        floor: this.ty - this.h * GOLD_SHOW_FLOOR,
+        seed: this.seed,
+        night: this.light.lightsOn,
+      });
+    }
     this.compose();
 
     const era = isEra(mode);
@@ -1693,8 +1856,10 @@ export class MenuScene implements Scene {
       }
     }
     // the air the turning ball drags round with it, just outside its rim
-    if (this.state === "idle") this.drawWind(s);
-    else if (era && kt >= K_HIT) this.drawEraWind(s);
+    if (this.state === "idle") {
+      this.drawWind(s);
+      this.drawCharge(s);
+    } else if (era && kt >= K_HIT) this.drawEraWind(s);
     if (this.ballOn) {
       if (this.floatOn && hovering) {
         this.drawFloating();
@@ -1702,6 +1867,7 @@ export class MenuScene implements Scene {
         this.drawBallNow(s);
       }
     }
+    this.drawGoldTurn(s);
     // NEXT-GEN: going digital, in big square pixels
     if (this.rezBlock > 0) {
       const b = this.ball;
@@ -2044,7 +2210,33 @@ export class MenuScene implements Scene {
    * None: the fact.
    */
   setSignMessages(messages: readonly MenuSign[]): void {
-    this.backdrop.setMessages(messages);
+    this.signMessages = messages;
+    // while the sign says GOLDEN BALL they wait their turn
+    if (!this.goldSign) this.backdrop.setMessages(messages);
+  }
+
+  /** The ball is gold: it was spun to gold, or `setGolden` said so. */
+  get isGolden(): boolean {
+    return this.golden;
+  }
+
+  /** How far the hand's spinning has got towards the golden ball: 0 to 1. */
+  get spinCharge(): number {
+    return clamp(this.charge / GOLD_SPIN);
+  }
+
+  /**
+   * The ball is gold already (the page remembers the day's golden ball): no celebration,
+   * and `onGolden` is not called. False takes the gold off again, with what has been spun
+   * and anything being celebrated.
+   */
+  setGolden(on: boolean): void {
+    this.golden = on === true;
+    if (this.golden) return;
+    this.charge = 0;
+    this.chargeIdle = 0;
+    this.goldT = -1;
+    this.endGoldSign();
   }
 
   setLabels(labels: MenuLabels): void {
@@ -2066,6 +2258,7 @@ export class MenuScene implements Scene {
     } else {
       this.logo.tagline = labels.tagline;
     }
+    this.goldWords = labels.golden ?? null;
     this.layoutLogo();
   }
 
@@ -2356,6 +2549,255 @@ export class MenuScene implements Scene {
     if (this.closing) return;
     this.closing = true;
     this.sound(CLOSING);
+  }
+
+  // -------------------------------------------------------------------------
+  // The golden ball
+  // -------------------------------------------------------------------------
+
+  /**
+   * Move the golden ball on by `d` seconds: what is being celebrated (its rockets, the
+   * sign going back to the page's messages), then the charge, up while the hand's turn
+   * moves the ball and down after a pause, and the turn to gold when it is full.
+   */
+  private stepGold(d: number): void {
+    if (!(d > 0)) return;
+    if (this.goldT >= 0) {
+      const before = this.goldT;
+      this.goldT += d;
+      const after = this.goldT;
+      // no rockets are seen with reduced motion, so none are heard
+      if (!this.reduced) {
+        for (const at of GOLD_SHOW_LAUNCHES) {
+          if (before < at && at <= after) this.sound(GOLD_ROCKET);
+        }
+      }
+      if (after >= GOLD_SIGN) this.endGoldSign();
+      if (after >= Math.max(GOLD_SIGN, GOLD_ROAR_END, GOLD_SHOW_LEN)) {
+        this.goldT = -1;
+      }
+    }
+    const spinning =
+      d <= GOLD_FRAME &&
+      this.state === "idle" &&
+      this.spin !== "still" &&
+      this.spinSpeed() > WIND_SHOW;
+    if (spinning) {
+      // a short pause between two flicks was part of the spinning: it counts
+      if (this.chargeIdle <= GOLD_GRACE) this.charge += this.chargeIdle;
+      this.chargeIdle = 0;
+      this.charge += d;
+    } else {
+      this.chargeIdle += d;
+      if (this.chargeIdle > GOLD_GRACE) {
+        this.charge = Math.max(0, this.charge - d * GOLD_DRAIN);
+      }
+    }
+    if (this.charge >= GOLD_SPIN) this.turnGold();
+  }
+
+  /** Spun for GOLD_SPIN seconds: the ball turns to gold, and everything says so. */
+  private turnGold(): void {
+    this.charge = 0;
+    this.chargeIdle = 0;
+    this.golden = true;
+    this.goldT = 0;
+    this.sound(GOLD_SPARKLE);
+    this.sound(GOLD_CHEER);
+    // the mascot joins in (his touches are the picture's own cues)
+    if (!this.reduced) this.backdrop.pokeMascot(this.clock);
+    if (this.goldWords) {
+      this.goldSign = true;
+      this.backdrop.setMessages([this.goldWords]);
+    }
+    if (this.onGolden) this.onGolden();
+  }
+
+  /** The sign has said GOLDEN BALL for long enough: the page's messages again. */
+  private endGoldSign(): void {
+    if (!this.goldSign) return;
+    this.goldSign = false;
+    this.backdrop.setMessages(this.signMessages);
+  }
+
+  /** How near the gold the hand's spinning is, 0 to 1: only while the ball is the menu's. */
+  private heat(): number {
+    return this.state === "idle" ? clamp(this.charge / GOLD_SPIN) : 0;
+  }
+
+  /**
+   * How much of the golden ball's shimmer is heard, 0 to 1 (the levels are mix.ts's,
+   * HOME_PAGE): it comes in with the glow as the hand's spinning nears the gold, is at its
+   * most as the ball turns, falls over the celebration to the quiet shimmer a golden ball
+   * keeps, and stays there. Only while the ball hovers: a struck ball takes it with it.
+   */
+  private shimmerLevel(): number {
+    if (this.state !== "idle" && this.state !== "intro") return 0;
+    const kept = this.golden ? HOME_PAGE.goldenShimmer : 0;
+    const most = Math.max(HOME_PAGE.goldenShimmerBuild, kept);
+    let level = kept;
+    const heat = this.heat();
+    if (heat > GOLD_WARM) {
+      const near = (heat - GOLD_WARM) / (1 - GOLD_WARM);
+      level = Math.max(level, HOME_PAGE.goldenShimmerBuild * near);
+    }
+    if (this.goldT >= 0 && this.goldT < GOLD_ROAR_END) {
+      level = Math.max(level, lerp(most, kept, this.goldT / GOLD_ROAR_END));
+    }
+    return level;
+  }
+
+  /** How loud the ground is for the golden ball, 0 to 1. Nothing with reduced motion. */
+  private goldRoar(): number {
+    const t = this.goldT;
+    if (t < 0 || this.reduced) return 0;
+    if (t < GOLD_ROAR_UP) {
+      const k = 1 - t / GOLD_ROAR_UP;
+      return 1 - k * k;
+    }
+    if (t < GOLD_ROAR_HOLD) return 1;
+    if (t < GOLD_ROAR_END) {
+      return 1 - (t - GOLD_ROAR_HOLD) / (GOLD_ROAR_END - GOLD_ROAR_HOLD);
+    }
+    return 0;
+  }
+
+  /**
+   * The charge of a long spin, seen behind the ball: from GOLD_WARM a glow of gold round its
+   * rim, wider the nearer the gold (and there through a pause, shrinking as the charge runs
+   * down), and from GOLD_SPARKS, while the ball turns, sparks flying off the rim, more of
+   * them and further the nearer the gold. Never in the logo's sky; none with reduced
+   * motion. (The wind's own colours warm with it, `drawStreaks`, and at the last the ball
+   * flickers gold, `flicker`.)
+   */
+  private drawCharge(s: Surface): void {
+    if (this.reduced || !this.ballOn) return;
+    const heat = this.heat();
+    if (heat < GOLD_WARM) return;
+    const b = this.ball;
+    const R = b.r;
+    s.pushClip(0, this.logoH, s.w, s.h - this.logoH);
+    // the glow: three steps of light out from the rim
+    const wide = (heat - GOLD_WARM) / (1 - GOLD_WARM);
+    const beat = Math.floor(this.realT * AURA_FPS) % 2 === 0 ? AURA_BEAT : 0;
+    const w = Math.max(3, Math.round(R * lerp(AURA_THIN, AURA_WIDE, wide)));
+    const rim = Math.round(R) + 1;
+    s.disc(b.cx, b.cy, rim + w + beat, P.gold, 0.25);
+    s.disc(b.cx, b.cy, rim + Math.ceil(w * 0.6) + beat, P.gold, 0.5);
+    s.disc(b.cx, b.cy, rim + Math.ceil(w * 0.25), P.goldLight, 0.85);
+    if (
+      heat >= GOLD_SPARKS &&
+      this.spin !== "still" &&
+      this.spinSpeed() > WIND_SHOW
+    ) {
+      const k = (heat - GOLD_SPARKS) / (1 - GOLD_SPARKS);
+      const t = Math.floor(this.realT * SPARK_FPS) / SPARK_FPS;
+      const count = Math.round(lerp(SPARKS_FEW, SPARKS_MANY, k));
+      const reach = R * lerp(SPARK_NEAR, SPARK_FAR, k);
+      for (let i = 0; i < count; i++) {
+        // each spark lives its lives out of step with the others
+        const life = t / SPARK_LIFE + ((i * 0.618) % 1);
+        const n = Math.floor(life);
+        const u = life - n;
+        const a = hash2(i, n, this.seed + 7) * TAU;
+        const far = reach * (0.4 + 0.6 * hash2(i, n, this.seed + 8));
+        // thrown off the rim fast, and slowing
+        const d = R + 4 + far * (1 - (1 - u) * (1 - u));
+        const x = Math.round(b.cx + Math.cos(a) * d);
+        const y = Math.round(b.cy + Math.sin(a) * d);
+        if (u < 0.3) {
+          // new: a glint with four points
+          s.rect(x - 1, y - 1, 3, 3, P.goldLight);
+          s.hline(x - 3, y, 7, P.goldLight);
+          s.vline(x, y - 3, 7, P.goldLight);
+          s.hline(x - 1, y, 3, P.white);
+          s.vline(x, y - 1, 3, P.white);
+        } else if (u < 0.65) {
+          s.rect(x - 1, y - 1, 3, 3, P.gold);
+          s.px(x, y, P.goldLight);
+        } else {
+          s.rect(x, y, 2, 2, P.goldDark);
+        }
+      }
+    }
+    s.popClip();
+  }
+
+  /**
+   * At the last of the charge (from GOLD_GLOW) the ball flickers gold, GOLD_BLINK times a
+   * second: this frame is one of the gold ones. Never with reduced motion.
+   */
+  private flicker(): boolean {
+    return (
+      !this.reduced &&
+      this.heat() >= GOLD_GLOW &&
+      Math.floor(this.realT * GOLD_BLINK) % 2 === 0
+    );
+  }
+
+  /**
+   * The ball turning to gold: the ring of light a new ball has, in gold, and a shine of
+   * eight rays opening round it and breaking up. Only on the menu's ball where it hangs.
+   */
+  private drawGoldTurn(s: Surface): void {
+    if (this.goldT < 0 || this.reduced || !this.ballOn) return;
+    if (this.state !== "idle") return;
+    const b = this.ball;
+    const r = Math.round(b.r);
+    drawGlowRing(
+      s,
+      b.cx,
+      b.cy,
+      r,
+      Math.floor(this.goldT * ERA_GLOW_FPS),
+      P.white,
+      P.goldLight,
+      P.gold,
+      P.goldDark,
+    );
+    const ray = Math.floor(this.goldT * GOLD_RAY_FPS);
+    if (ray < GOLD_RAYS.length) {
+      const [from, to] = GOLD_RAYS[ray];
+      const first = ray < 2;
+      s.pushClip(0, this.logoH, s.w, s.h - this.logoH);
+      drawShine(
+        s,
+        b.cx,
+        b.cy,
+        r + 2 + r * from,
+        r + 2 + r * to,
+        first ? P.white : P.goldLight,
+        first ? P.goldLight : P.gold,
+      );
+      s.popClip();
+    }
+  }
+
+  /**
+   * The golden ball's twinkle, on the ball itself: one every GOLD_WINK seconds, on a
+   * diagonal, where the hovering ball's leather is, clear of the four patches. Only while
+   * it hovers, and none with reduced motion.
+   */
+  private drawWink(s: Surface): void {
+    if (!this.golden || this.reduced || this.state !== "idle") return;
+    const b = this.ball;
+    const lap = this.clock / GOLD_WINK;
+    const n = Math.floor(lap);
+    const frame = Math.floor((lap - n) * GOLD_WINK * WINK_FPS);
+    if (frame >= TWINKLE.length) return;
+    const quarter = Math.floor(hash2(n, 3, this.seed) * 4);
+    const a =
+      (quarter + 0.5) * (Math.PI / 2) + (hash2(n, 5, this.seed) - 0.5) * 0.5;
+    const d = b.r * lerp(0.5, 0.72, hash2(n, 9, this.seed));
+    drawTwinkle(
+      s,
+      Math.round(b.cx + Math.cos(a) * d),
+      Math.round(b.cy + Math.sin(a) * d),
+      frame,
+      P.white,
+      P.goldLight,
+      null,
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -2835,6 +3277,7 @@ export class MenuScene implements Scene {
       this.pressed !== null && this.over === this.pressed ? this.pressed : null;
     b.chosen = null;
     b.t = this.reduced ? 0 : this.clock;
+    b.gold = this.golden || this.flicker();
     this.ballOn = true;
     this.squash = 0;
     this.shakeX = 0;
@@ -3206,9 +3649,13 @@ export class MenuScene implements Scene {
     const lag = WIND_LAG * (1 + gust * 0.6);
     const t = Math.floor(this.realT * WIND_FPS) / WIND_FPS;
     const day = !this.light.lightsOn;
-    const head = P.white;
-    const body = day ? P.skyMid : P.skyLow;
-    const tail = day ? P.skyLow : P.mist;
+    // a long spin by hand warms the air, then turns it gold (the golden ball)
+    const heat = this.heat();
+    const hot = heat >= GOLD_HOT;
+    const warm = heat >= GOLD_WARM;
+    const head = hot ? P.goldLight : P.white;
+    const body = hot ? P.gold : warm ? P.goldLight : day ? P.skyMid : P.skyLow;
+    const tail = hot ? P.goldDark : warm ? P.gold : day ? P.skyLow : P.mist;
     const spread = Math.max(4, Math.round(R * WIND_SPREAD));
     s.pushClip(0, this.logoH, s.w, s.h - this.logoH);
     for (let k = 0; k < WIND_SLOTS; k++) {
@@ -3329,8 +3776,8 @@ export class MenuScene implements Scene {
         b.r,
         this.spinFrame,
         lit(P.ink),
-        lit(P.white),
-        lit(P.mist),
+        lit(this.golden ? P.gold : P.white),
+        lit(this.golden ? P.goldDark : P.mist),
         lit(P.slate),
         MODE_COLORS[this.mode].base,
       );
@@ -3348,6 +3795,7 @@ export class MenuScene implements Scene {
     }
     if (this.squash <= 0) {
       drawBall(s, b, this.patches, light);
+      this.drawWink(s);
       // RETRO: becoming the old ball as it spins, its pixels coming in over the menu ball
       if (this.oldCover > 0) {
         drawLeatherBall(s, this.oldBall, light, this.oldCover);

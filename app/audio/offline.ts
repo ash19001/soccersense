@@ -23,6 +23,8 @@ import {
 } from "./engine";
 import { type Place, TIER_PLACES, placeOf } from "./place";
 import { builtRecordings } from "./recordings";
+import { Shimmer } from "./shimmer";
+import type { OneShotCue } from "./voices";
 import { Wind } from "./wind";
 
 export interface Measure {
@@ -159,6 +161,12 @@ export async function renderCue(
     trim.connect(graph.effects);
     const wind = new Wind(ctx, trim, mulberry32(seed));
     for (let t = 0; t < 2; t += 1 / 60) wind.push(cue.speed, t);
+  } else if (cue.kind === "shimmer") {
+    const trim = ctx.createGain();
+    trim.gain.value = LEVELS.shimmer;
+    trim.connect(graph.effects);
+    const shimmer = new Shimmer(ctx, trim, mulberry32(seed));
+    for (let t = 0; t < 4; t += 1 / 60) shimmer.push(cue.level, t);
   } else {
     buildCue(
       ctx,
@@ -180,7 +188,7 @@ export async function renderCue(
  * at a crowd of 1: the loudest moments of the game, to check that nothing clips.
  */
 export async function renderMoment(
-  cues: readonly (readonly [number, Exclude<SoundCue, { kind: "wind" }>])[],
+  cues: readonly (readonly [number, OneShotCue])[],
   place: Place = "final",
   seconds = 6,
   seed = 1,

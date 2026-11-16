@@ -324,6 +324,30 @@ crowd colours and kit differ.
   ("no") and puts up a notice naming the mode ("RETRO kicks off soon.", or for the two future
   modes a line on what they will be) for 2.5 seconds, which screen readers hear too. HOME and
   AWAY can be chosen from any pose in which they are in view.
+- **The golden ball**, an easter egg (the product owner, 2026-11-16: "if people are spinning
+  the ball in home screen constantly for a long time (30 seconds or 1 minute), then something
+  cool happens"). Kept spinning by hand for **30 seconds**, the ball turns to **gold**. Nothing
+  on the page says so beforehand. A pause of up to a second and a half (the gap between two
+  flicks) is part of the spinning; a longer one is not, and what has been spun then runs down
+  four times as fast as it built. On the way the ball says something is coming: from a
+  quarter of the way a glow of gold grows round it and its wind turns gold, then sparks fly
+  off its rim, and in the last few seconds the ball itself flickers gold. As it turns, a ring
+  of light and a shine go out from it, fireworks go up over the town (eleven big rockets in
+  five seconds, gold ones and one in each mode's colour between them), the stadium erupts,
+  the crowd cheers, the mascot does a trick and the airship's sign says **GOLDEN BALL! YOU
+  FOUND IT** for ten seconds. Nothing else on the page says so (the product owner,
+  2026-11-16: "the blimp saying golden ball you found it is enough, no other message
+  needed"); the sign's words are read out for screen readers, and not shown. It is heard
+  (the product owner the same day, with a recording of a shimmer: "a sparkle sound when it
+  turns to gold" and "a quiet background continuous shimmering sound (not too loud so it
+  isn't annoying)"): a quiet shimmer comes in with the glow and grows as the ball nears the
+  gold, the ball's own sparkle rings as it turns, and the shimmer then falls back to a very
+  quiet bed that stays for as long as a golden ball is on the screen. The ball stays gold,
+  with a twinkle now and then, for the rest of that day on that device (it is still the
+  menu: the patches are as ever), and is an ordinary ball again the next day. Spinning a
+  golden ball for another 30 seconds sets the fireworks off again. With reduced motion the
+  ball turns to gold with its sounds and the sign: no glow, no sparks, no fireworks. It
+  scores nothing and changes nothing in the game.
 - The ball is heard: a light touch when the pointer comes onto it or presses it, wind while it
   spins (louder the faster), and the strike when a mode is chosen, then wind as it flies; HOME's
   ball lands to a roar and a blast of horns, AWAY's whistles away into the distance.

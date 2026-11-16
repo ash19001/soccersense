@@ -21,8 +21,8 @@
  * - `setAmbience(a)` sets the bed: a new place or night crossfades, a new crowd value ramps.
  * - The mute (remembered, see mute.ts) fades everything out and suspends the context. A
  *   hidden tab suspends it too: nothing plays while nobody is looking.
- * - `tick()` runs four times a second: it frees finished voices, lets the wind go when its
- *   cues stop and schedules the ambience's next events.
+ * - `tick()` runs four times a second: it frees finished voices, lets the wind and the
+ *   shimmer go when their cues stop and schedules the ambience's next events.
  *
  * Browser only. Nothing runs at import; `soundEngine()` in index.ts makes the shared one.
  */
@@ -53,6 +53,7 @@ import {
   CLAPS,
   CROWD,
   FIREWORKS,
+  HOME_PAGE,
   LIMITS,
   NET,
   SOUNDS,
@@ -62,6 +63,7 @@ import {
 } from "./mix";
 import { PLACES, type Place, crowdAt, placeOf } from "./place";
 import { Recordings, levelTo, loudness } from "./recordings";
+import { Shimmer } from "./shimmer";
 import { type OneShotCue, playOneShot } from "./voices";
 import { Wind } from "./wind";
 
@@ -99,7 +101,7 @@ export const LEVELS: Readonly<Record<SoundKind, number>> = view(
   (kind) => SOUND[kind].level,
 );
 
-type PeakKind = Exclude<SoundKind, "wind" | "score">;
+type PeakKind = Exclude<SoundKind, "wind" | "shimmer" | "score">;
 
 /**
  * The peak of each synthesised one-shot at the speakers, in dBFS, at full power or size and
@@ -181,7 +183,8 @@ export const BED_RMS_DB: Readonly<Record<Place, number>> = view(
  * The names a recording for `cue` may have in public/sounds, most particular first: a
  * result sting by its shot (`score-worldie`), the iris by its way (`transition-open`, then
  * `transition`), a far firework (`firework-far`, then `firework`), a crowd voice by its
- * place (`cheer-park`, then `cheer`), anything else by its kind (`kick`).
+ * place (`cheer-park`, then `cheer`), the golden ball's chime (`sparkle-gold`, then
+ * `sparkle`), anything else by its kind (`kick`).
  */
 export function recordingNames(cue: SoundCue, place: Place): string[] {
   switch (cue.kind) {
@@ -197,6 +200,8 @@ export function recordingNames(cue: SoundCue, place: Place): string[] {
     case "groan":
     case "ooh":
       return [`${cue.kind}-${place}`, cue.kind];
+    case "sparkle":
+      return cue.golden === true ? ["sparkle-gold", "sparkle"] : ["sparkle"];
     default:
       return [cue.kind];
   }
@@ -216,6 +221,11 @@ function peakDbOf(cue: OneShotCue, place: Place): number {
     case "ooh":
       // Smaller with fewer people, and faint from across town.
       return PEAK_DB[cue.kind] + CROWD.places[place].recordingDb;
+    case "sparkle":
+      // The golden ball's chime has its own level against the twinkle's.
+      return (
+        PEAK_DB.sparkle + (cue.golden === true ? HOME_PAGE.goldenSparkleDb : 0)
+      );
     default:
       return PEAK_DB[cue.kind];
   }
@@ -505,6 +515,8 @@ export interface SoundDebug {
   made: number;
   freed: number;
   wind: boolean;
+  /** The golden ball's shimmer is playing (or fading out, not freed yet). */
+  shimmer: boolean;
   ambience: string | null;
   /** The ambience's events so far, by name. */
   ambienceEvents: Record<string, number>;
@@ -549,6 +561,7 @@ export class SoundEngine {
   private suspendTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly voices = new Set<Voice>();
   private wind: Wind | null = null;
+  private shimmer: Shimmer | null = null;
   private bed: AmbienceBed | null = null;
   private bedRecorded = false;
   private readonly fading: AmbienceBed[] = [];
@@ -811,6 +824,31 @@ export class SoundEngine {
       return false;
     }
 
+    if (cue.kind === "shimmer") {
+      if (!this.shimmer) {
+        // Its recording is waited for (the shimmer comes in slowly anyway, and a hiss that
+        // turned into the recording would be heard); only with no file is it synthesised.
+        const recorded = this.recordings.get(ctx, "shimmer");
+        // The ball's own chime is wanted next, as it turns to gold: have it ready.
+        this.recordings.warm(ctx, "sparkle-gold");
+        if (!recorded && this.recordings.pending("shimmer")) return false;
+        const trim = ctx.createGain();
+        trim.gain.value = LEVELS.shimmer;
+        trim.connect(graph.effects);
+        this.shimmer = new Shimmer(ctx, trim, this.rand, recorded);
+        this.shimmer.voice.nodes.push(trim);
+        count(this.stats.played, "shimmer");
+        this.stats.made++;
+        this.record(
+          "shimmer",
+          recorded ? "recording" : "synth",
+          trim.gain.value,
+        );
+      }
+      this.shimmer.push(cue.level, now);
+      return false;
+    }
+
     const gap = LIMITS.gap[kind] ?? 0;
     if (now - (this.lastAt.get(kind) ?? -Infinity) < gap) {
       return this.drop(kind, "busy");
@@ -981,6 +1019,11 @@ export class SoundEngine {
       this.wind = null;
       this.stats.freed++;
     }
+    if (this.shimmer?.idle(now)) {
+      this.shimmer.dispose();
+      this.shimmer = null;
+      this.stats.freed++;
+    }
     const bed = this.bed;
     if (bed) {
       // A recording that has finished loading takes over from the synthesised bed.
@@ -1034,12 +1077,17 @@ export class SoundEngine {
     voice.fadeOut(now, LIMITS.resultFade);
   }
 
-  /** Lets every voice, the wind and the beds go at once. */
+  /** Lets every voice, the wind, the shimmer and the beds go at once. */
   private silence(): void {
     for (const voice of [...this.voices]) this.free(voice);
     if (this.wind) {
       this.wind.dispose();
       this.wind = null;
+      this.stats.freed++;
+    }
+    if (this.shimmer) {
+      this.shimmer.dispose();
+      this.shimmer = null;
       this.stats.freed++;
     }
     if (this.bed) {
@@ -1057,8 +1105,13 @@ export class SoundEngine {
   /** Notes a cue dropped, and why. False: no voice was made. */
   private drop(kind: string, reason: DropReason): false {
     count(this.stats.dropped, reason);
-    // The wind comes every frame: one line per gust is enough.
-    if (kind === "wind" && this.stats.log.at(-1)?.kind === "wind") return false;
+    // The wind and the shimmer come every frame: one line per gust is enough.
+    if (
+      (kind === "wind" || kind === "shimmer") &&
+      this.stats.log.at(-1)?.kind === kind
+    ) {
+      return false;
+    }
     this.record(kind, `dropped:${reason}`);
     return false;
   }
@@ -1093,6 +1146,7 @@ export class SoundEngine {
       made: this.stats.made,
       freed: this.stats.freed,
       wind: this.wind !== null,
+      shimmer: this.shimmer !== null,
       ambience: this.bed?.key ?? null,
       ambienceEvents: { ...this.stats.ambienceEvents },
       beds: this.stats.beds,

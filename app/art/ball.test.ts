@@ -305,6 +305,51 @@ describe("drawBall", () => {
     expect(again.data).toEqual(small.data);
   });
 
+  it("the golden ball: the same ball, its leather a ramp of gold and its patches as ever", () => {
+    for (const r of [44, 88, 120]) {
+      const state = ball({ r, yaw: 0.05 });
+      const plain = render(state);
+      const gold = render({ ...state, gold: true });
+      const lit = DAY.lit;
+      const golds = new Set<Color>([
+        lit(P.goldLight),
+        lit(P.gold),
+        lit(P.goldDark),
+      ]);
+      const whites = new Set<Color>([lit(P.chalk), lit(P.steelHi)]);
+      // counted, and looked at once at the end: a ball is a lot of pixels
+      let leather = 0;
+      let left = 0;
+      let shape = 0;
+      let onPatch = 0;
+      let notGold = 0;
+      for (let y = 0; y < plain.h; y++) {
+        for (let x = 0; x < plain.w; x++) {
+          const a = plain.get(x, y);
+          const b = gold.get(x, y);
+          if ((a === 0) !== (b === 0)) shape++;
+          if (a === b) {
+            // white that stayed white: only the words and pictures on the patches
+            if (whites.has(a) && ballSlotAt(state, x, y) === null) left++;
+            continue;
+          }
+          if (ballSlotAt(state, x, y) !== null) onPatch++;
+          if (whites.has(a)) {
+            leather++;
+            if (!golds.has(b)) notGold++;
+          }
+        }
+      }
+      // the same silhouette, and never a pixel of a patch changed
+      expect(shape, `${r}`).toBe(0);
+      expect(onPatch, `${r}`).toBe(0);
+      // most of the ball is leather, and all of that is gold now
+      expect(leather, `${r}`).toBeGreaterThan(r * r);
+      expect(notGold, `${r}`).toBe(0);
+      expect(left, `${r}`).toBeLessThan(leather * 0.03);
+    }
+  });
+
   it("casts its shadow on the grass", () => {
     const s = new Surface(320, 320);
     drawBallShadow(s, ball(), 250, DAY);
