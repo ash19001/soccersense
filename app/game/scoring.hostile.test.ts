@@ -132,8 +132,11 @@ describe("rankAnswers on random tables", () => {
     },
   );
 
+  // (Every pair of rows in hundreds of random tables: a few seconds alone, and over the
+  // default five when the whole suite runs on a busy machine, so it has longer.)
   it.each(DISTANCE_RULES)(
     "never gives a better shot to a worse answer, and ties are equal (%s)",
+    { timeout: 20_000 },
     (mode) => {
       for (const s of SAMPLES) {
         const table = rankAnswers(s.question, s.stadium, mode);
