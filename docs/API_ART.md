@@ -140,7 +140,8 @@ interface BallState { cx; cy; r; yaw; pitch; roll?; hovered; pressed; chosen; t;
 type BallPatches = Partial<Record<BallSlot, BallPatch>>;
 
 drawBall(s, state, patches, light)         // the ball
-ballSlotAt(state, x, y): BallSlot | null   // hit test: exactly what the renderer drew
+ballSlotAt(state, x, y, patches?): BallSlot | null   // hit test: exactly what the renderer drew;
+                                           // with the patches, NEXT-GEN's and RETRO's name tags too
 ballSlotCenter(state, slot): { x, y, facing }   // facing 1 straight on, 0 on the rim, < 0 behind
 // app/art/ball-icons.ts: the open modes' pictures as rows of "w" and ".", trimmed top and
 // bottom, for the interface (the cards under the ball, 2026-11-13)
@@ -185,6 +186,23 @@ it, `goal` a goal with its net and a ball on the spot.
   far round (the top and bottom slots in the menu pose) it wears small five-row pictures beside
   the small padlock from r = 44, the small padlock alone below. Icon `lock` is the padlock
   alone; below r = 30 a locked patch shows only the padlock, below 26 nothing.
+- **Every word stands on a dark plate** (2026-11-16; the product owner, once NEXT-GEN and
+  RETRO had their name tags: "can home and away also have that black background as the name
+  tag since all other game modes have it"). The plate is the name tag's: ink, the word's
+  width and 4 px either side, two rows above and below, corners clipped (`wordPlate`).
+  - HOME's and AWAY's lies inside the patch, behind the word, clear of the frame
+    (`borderW + 1` px in), so the frame stays whole and nothing lands on the leather. At rest
+    only: under the pointer, pressed or chosen the patch is one colour all over and has no
+    plate, as a name tag takes its button's colour then. A score has none; a played button's
+    word keeps its own.
+  - A top or bottom button's word shown straight on, and a locked patch's word, when they
+    fit their patch (RETRO does), stand on the same plate inside it; wider words were on a
+    tag across the patch already.
+  - On a patch in shadow (AWAY's at night) the plate is close to the patch's own tone: it
+    is the same ink everywhere, the patch is what changes.
+  - Held by `ball.test.ts` ("the plate under a word"): nothing under or between HOME's and
+    AWAY's letters but the plate on every menu radius; the frame whole on the word's rows
+    and no plate off the patch; none while hovered, pressed or chosen; RETRO's when shown.
 - **The open top and bottom patches** (NEXT-GEN and RETRO: an `accent`, not `locked`) are
   buttons with HOME's and AWAY's frame and a locked patch's layout (`drawFront`).
   - **Their border** is the same frame as HOME's and AWAY's: a line in the mode's colour round
@@ -207,6 +225,34 @@ it, `goal` a goal with its net and a ball on the spot.
     pressed, the mode's dark tone when chosen. As on a locked patch, what they carry is decided
     by the radius alone, from room measured once per size, so nothing comes and goes as the
     ball breathes.
+  - **Their name tags** (2026-11-16; the product owner: "on ball can you show the label for
+    next gen and retro somehow. even if its not exactly on the patch"). Squashed, those two
+    patches have room for a small picture and no word, so nothing on the ball said which mode
+    each was. Each now wears its word on a dark tag (`tagPlace`, `drawTag`): the small face on
+    an ink plate with clipped corners, 14 px tall and the word's width and 8, hanging from
+    the patch's inner edge over the white panel between it, HOME and AWAY (`TAG_HEX`).
+    NEXT-GEN's hangs below its patch, RETRO's stands above its own.
+    - Placed from the sphere, so it rides the ball: its near side is on the middle of the edge
+      the patch and that panel share (half way between their centres), lapped `borderW` over
+      the patch's frame there. (The edge bows; a tag laid against it left a sliver of frame
+      showing at its middle.) Flat and upright, like every word on the ball.
+    - In its button's state: at rest the plate is ink and the word the mode's colour; hovered,
+      the plate is the mode's colour and the word chalk; pressed, the mode's dark tone; chosen,
+      it flashes with its patch (white or the light tone, the word dark).
+    - It is its button: `ballSlotAt(state, x, y, patches)` gives the slot for a pixel on the
+      tag, so the word can be hovered and pressed like the patch. Without `patches` the hit
+      test is the pentagons alone, as before.
+    - Shown only for an open button with a word, while its patch is squashed (`facing` under
+      0.62: straight on, the patch carries its word itself), its white panel faces the viewer
+      (0.8 or more; 0.93 at rest) and the patch lies above or below that panel on the screen
+      (a ball turned or thrown has none). And only where HOME and AWAY carry their words
+      (`labelOpts`: from r = 74), so the four buttons always say the same amount: a smaller
+      ball has icons alone, as before.
+    - A played mode's patch shows today's score, and its tag still says which mode it is.
+    - Held by `ball.test.ts`: each tag as wide as its word on every menu radius (74 to 118);
+      every pixel a tag paints is pressed as its slot and nothing else of the ball changes;
+      whole, and never on HOME's or AWAY's patch, at the corners of the rock (0.12 rad) and
+      the nod (0.065); its states; and where there is none. Sheet: `ball/era`.
 - **Nothing on a locked patch flickers.** What it carries (picture or not, word bare or on a
   tag) is decided by the radius alone, from room measured once per size at both ends of the
   rock and of a deep nod (0.065 rad): top, bottom and the two rim slots straight on (the rim

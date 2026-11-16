@@ -485,6 +485,36 @@ Not done, and worth asking about: a sound of its own for the card (the ground's 
 under it, and the iris's whoosh and the whistle follow it as before); whether a player who has
 seen it many times should get a shorter one; and a sound for the question's ball (a soft roll, a tap as it lands).
 
+## NEXT-GEN's and RETRO's names on the ball (2026-11-16)
+
+The product owner: "on ball can you show the label for next gen and retro somehow. even if its
+not exactly on the patch, i think it will look better like that". Their patches lie far round
+the ball, squashed, with room for a small picture only. Each now wears its word on a dark name
+tag hanging from the patch over the white panel beside it, the word in the mode's colour
+(`tagPlace` and `drawTag` in `app/art/ball.ts`; docs/API_ART.md, "Their name tags"). The tag
+rides the ball, takes its button's states, and is its button: the menu hit-tests with its
+patches, so the word is hovered and pressed like the patch. Shown only where HOME and AWAY
+carry their words (a radius of 74 or more), so the four always match.
+
+Two looks were tried: the word printed straight on the leather in the mode's dark tone, and
+the tag. The tag was kept: it is the patches' own dark plate, so the word reads the same
+whatever the light does to the leather (printed, RETRO's brown was the weaker of the two), and it
+can light up with its patch. Stills in `.snaps/labels/`. Seen in Chrome at rest, hovered, and
+on a phone.
+
+**The same plate under HOME and AWAY** (the same day; the product owner: "can home and away
+also have that black background as the name tag since all other game modes have it"). Their
+words now stand on the name tag's ink plate, inside the patch and clear of its frame
+(`wordPlate` in `app/art/ball.ts`), at rest; a lit, pressed or flashing patch has none. The
+few other words that were still bare (RETRO when the ball is turned to show it, open or
+locked) have it too, so every word on the ball is on a plate. Three fits were tried: inside
+the frame, over the frame, and spilling onto the leather like a tag; inside was kept, as the
+other two broke the coloured frame for a pixel or two of overhang. On a patch in shadow the
+plate is close to the patch's own tone (AWAY's at night).
+
+Not done: tags for HOME and AWAY on a ball too small for their words (they have icons alone
+there, as before).
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

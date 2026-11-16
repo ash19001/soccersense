@@ -314,6 +314,20 @@ crowd colours and kit differ.
 - The two big patches facing the player are **HOME** (left, a stadium with three pennants on
   its rim, warm red-orange: the most common answer wins; it was a house until the product
   owner asked for a stadium on 2026-11-13) and **AWAY** (right, the aeroplane, teal: the most uncommon answer wins).
+- **NEXT-GEN** (the patch above, a fast-forward: the future, electric magenta) and **RETRO**
+  (the patch below, a rewind: the past, old gold) are open too (since 2026-11-13; the bullet
+  below still lists them with the locked modes they were). They
+  lie far round the ball, too squashed to carry a word. Each wears its name on a small dark
+  tag hanging from its patch towards the middle of the ball, in the mode's colour
+  (2026-11-16; the product owner: "on ball can you show the label for next gen and retro
+  somehow. even if its not exactly on the patch"). The tag is part of its button: it lights
+  up with the patch under the mouse and a press on it starts the mode. Once the mode has
+  been played the patch shows today's score and the tag still says which mode it is. On a
+  ball too small for HOME and AWAY to carry their words (under 74 canvas pixels in radius: a
+  1366 x 768 laptop, a small phone) there are no tags either: the cards under the ball name
+  the modes. HOME's and AWAY's words stand on the same dark plate, inside their patches
+  (the same day: "can home and away also have that black background as the name tag since
+  all other game modes have it"), so every name on the ball is written the same way.
 - Six more patches are **locked modes**, each with its own picture and a small padlock, in
   quiet greys so that HOME and AWAY lead: **NEXT-GEN** on the patch above (a fast-forward:
   the future), **RETRO** on the patch below (a rewind: the past; football boots for a day, then

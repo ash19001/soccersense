@@ -326,7 +326,9 @@ the kick-off is a cut: the patch lights for 0.15 s, then ink and `onChoose`.
   and `onLocked(mode)`, and never chooses. A mode played today (its patch has a score,
   `setScores`) is played once a day: its patch answers `onReview(mode)` and never kicks off,
   and `choose(mode)` returns false for it (2026-11-13). The four open modes choose from any pose in which
-  they are in view (their pentagon is under the pointer); from a pose other than the menu pose
+  they are in view (their pentagon is under the pointer, or in the menu pose NEXT-GEN's or
+  RETRO's name tag: the scene hit-tests with its patches, `ballSlotAt(ball, x, y, patches)`,
+  so the word is hovered, pressed and chosen exactly as its patch is, 2026-11-16); from a pose other than the menu pose
   the ball is first brought round, as for `choose` mid-spin (below). (A spun ball that comes
   to rest with NEXT-GEN or RETRO facing the viewer goes home, as for HOME and AWAY.)
 - A locked patch under the mouse lifts a step (it never takes a colour); `onHover` is only

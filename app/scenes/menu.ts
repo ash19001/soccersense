@@ -2480,7 +2480,8 @@ export class MenuScene implements Scene {
       }
       // a turning ball is no menu: no patch hovers on it
       if (this.ballOn && this.isMenu()) {
-        slot = ballSlotAt(b, this.pointerX, this.pointerY);
+        // (with the patches: NEXT-GEN's and RETRO's name tags are their buttons too)
+        slot = ballSlotAt(b, this.pointerX, this.pointerY, this.patches);
         if (slot !== null) {
           this.anchorX = this.pointerX;
           this.anchorY = this.pointerY;

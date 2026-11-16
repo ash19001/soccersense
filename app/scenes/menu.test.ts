@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Surface, TRANSPARENT, mix, rgb } from "~/pixel";
-import { ballShowPose, ballSlotCenter, type BallSlot } from "~/art/ball";
+import {
+  ballShowPose,
+  ballSlotAt,
+  ballSlotCenter,
+  type BallSlot,
+} from "~/art/ball";
 import { menuLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
 import { logoSize } from "~/art/logo";
@@ -146,6 +151,57 @@ describe("the menu", () => {
       expect(chosen).toEqual([mode]);
       expect(locked).toEqual([]);
     }
+  });
+
+  it("NEXT-GEN's and RETRO's name tags are their buttons too: hovered, pressed and kicked off", () => {
+    // a monitor and a phone: the sizes whose ball carries words
+    for (const [W, H] of [SIZES[0], SIZES[3]]) {
+      const m = menuLayout(W, H);
+      for (const [slot, mode, side] of [
+        ["top", "nextgen", -1],
+        ["bottom", "retro", 1],
+      ] as const) {
+        const scene = make(W, H);
+        const hovers: (Mode | null)[] = [];
+        const kicked: Mode[] = [];
+        scene.onHover = (mo) => hovers.push(mo);
+        scene.onKickoff = (mo) => kicked.push(mo);
+        // the middle of the tag, on the white panel between the patch and the ball's
+        // middle (0.59 of the radius out): no pentagon is there
+        const x = m.cx;
+        const y = m.ballCy + side * Math.round(m.ballR * 0.59);
+        const rest = {
+          cx: m.cx,
+          cy: m.ballCy,
+          r: m.ballR,
+          yaw: 0,
+          pitch: 0,
+          hovered: null,
+          pressed: null,
+          chosen: null,
+          t: 0,
+        };
+        expect(ballSlotAt(rest, x, y), `${W}x${H} ${slot}`).toBeNull();
+        scene.pointer({ type: "move", x, y });
+        expect(hovers, `${W}x${H} ${slot}`).toEqual([mode]);
+        expect(scene.cursor()).toBe("pointer");
+        scene.pointer({ type: "down", x, y });
+        scene.pointer({ type: "up", x, y });
+        expect(kicked, `${W}x${H} ${slot}`).toEqual([mode]);
+      }
+    }
+    // 1366 x 768: too small a ball for words, so no tags, and that panel is only leather
+    const [W, H] = SIZES[1];
+    const m = menuLayout(W, H);
+    const scene = make(W, H);
+    const hovers: (Mode | null)[] = [];
+    scene.onHover = (mo) => hovers.push(mo);
+    scene.pointer({
+      type: "move",
+      x: m.cx,
+      y: m.ballCy - Math.round(m.ballR * 0.59),
+    });
+    expect(hovers).toEqual([]);
   });
 
   it("a mode played today is played once a day: its patch asks for the review, never a kick-off", () => {

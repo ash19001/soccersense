@@ -41,6 +41,15 @@
  * 2 px inside the pentagon; at 41 to 43 it moves out to the edge; at 37 to 40 it goes, to
  * leave "HOME" its 17 px; below 37 there are icons only and below 26 only the line. Both
  * buttons always make the same choice. The menu's ball is 36 to 60 px in radius.
+ *
+ * Plates. Every word on the ball stands on a dark plate: HOME's and AWAY's inside their
+ * patches (`wordPlate`), a word wider than its patch on a tag across it, and NEXT-GEN's
+ * and RETRO's on their name tags.
+ *
+ * Name tags. The top and bottom buttons (NEXT-GEN, RETRO) are squashed in the menu pose,
+ * with room for a small picture and no word: each wears its word on a dark tag hanging from
+ * its patch over the white panel beside it (`tagPlace`), which is part of the button, for
+ * the eye and for `ballSlotAt` when it is given the patches.
  */
 
 import {
@@ -311,6 +320,31 @@ const FRONT_SLOTS: readonly BallSlot[] = [
 ];
 const FRONT_FACE = new Uint8Array(FACES);
 for (const slot of FRONT_SLOTS) FRONT_FACE[SLOT_FACE[SLOT_INDEX[slot]]] = 1;
+
+/**
+ * The white panel a top or bottom button's name tag hangs over in the menu pose (see
+ * `tagPlace`): the hexagon between that button, HOME and AWAY, the one that faces the
+ * viewer most. -1 for every other slot.
+ */
+const TAG_HEX = new Int8Array(SLOT_COUNT).fill(-1);
+for (const slot of ["top", "bottom"] as const) {
+  const i = SLOT_INDEX[slot];
+  const touches = (h: number, g: number): boolean => {
+    for (let n = 0; n < NEIGHBOUR_COUNT[h]; n++) {
+      if (NEIGHBOUR[h * 6 + n] === g) return true;
+    }
+    return false;
+  };
+  for (let h = PENTAGONS; h < FACES; h++) {
+    if (
+      touches(h, SLOT_FACE[SLOT_INDEX.left]) &&
+      touches(h, SLOT_FACE[SLOT_INDEX.right]) &&
+      touches(h, SLOT_FACE[i])
+    ) {
+      TAG_HEX[i] = h;
+    }
+  }
+}
 
 interface Tones {
   ink: Color;
@@ -1698,6 +1732,10 @@ export function drawBall(
     const patch = patches[SLOTS[i]];
     if (patch) drawContent(s, i, patch, tones);
   }
+  for (let i = 0; i < SLOT_COUNT; i++) {
+    const patch = patches[SLOTS[i]];
+    if (patch && TAG_HEX[i] >= 0) drawTag(s, i, patch, tones);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1867,6 +1905,13 @@ function drawContent(
   const mid = left + (w >> 1);
   const figures = opts === F.BIG_DIGITS || opts === F.SMALL_DIGITS;
 
+  // The word stands on a dark plate inside the patch, clear of its frame, as NEXT-GEN's
+  // and RETRO's stand on their name tags (the product owner, 2026-11-16: "can home and away
+  // also have that black background as the name tag since all other game modes have it").
+  // At rest only: a patch under the pointer, pressed or flashing is one colour all over,
+  // as a name tag is then.
+  if (!figures && mode === NORMAL)
+    wordPlate(s, w, h, left, top, f, tones, borderW + 1);
   stamp.erase(0, 0, stamp.w, stamp.h);
   drawText(stamp, text, 0, 0, figures && mode === NORMAL ? iconInk : ink, opts);
   plotStamp(s, w, h, left, top, f);
@@ -1895,6 +1940,30 @@ function drawContent(
   stamp.erase(0, 0, stamp.w, stamp.h);
   drawText(stamp, patch.badge as string, 0, 0, iconInk, score);
   plotStamp(s, sw, sh, sLeft, sTop, f);
+}
+
+/**
+ * The dark plate under a word that is written on its patch: the name tag's plate (ink, the
+ * word's size and `TAG_PAD` either side, two rows above and below, clipped corners), only
+ * on panel `f` and at least `minEdge` pixels in from its edge. Draw it first, then the word
+ * (it uses the stamp). So every word on the ball stands on the same dark plate, whether it
+ * fits its patch or hangs beside it.
+ */
+function wordPlate(
+  s: Surface,
+  w: number,
+  h: number,
+  x: number,
+  y: number,
+  f: number,
+  tones: Tones,
+  minEdge: number,
+): void {
+  const pw = w + TAG_PAD * 2;
+  stamp.erase(0, 0, stamp.w, stamp.h);
+  plateShape(pw, h + 4, tones.ink);
+  plotStamp(s, pw, h + 4, x - TAG_PAD, y - 2, f, minEdge);
+  stamp.erase(0, 0, stamp.w, stamp.h);
 }
 
 /**
@@ -1982,6 +2051,8 @@ function drawLocked(
     if (tw <= room[front ? ROOM_WORD_FRONT : ROOM_WORD]) {
       const free = freeRun(f, cx, ty, rowsS, edge);
       const x = free >= tw ? runLo + ((free - tw) >> 1) : cx - (tw >> 1);
+      // on its plate, as a wider word is on its tag
+      wordPlate(s, tw, rowsS, x, ty, f, tones, 1);
       drawText(stamp, word, 0, 0, ink, F.SMALL);
       plotStamp(s, tw, rowsS, x, ty, f, edge);
       return;
@@ -2083,6 +2154,10 @@ function drawFront(
   if (tw <= room[ROOM_WORD_FRONT]) {
     const free = freeRun(f, cx, ty, rowsS, edge);
     const x = free >= tw ? runLo + ((free - tw) >> 1) : cx - (tw >> 1);
+    // a word (not a score) on its plate, at rest, as HOME's and AWAY's are
+    if (badge === "" && mode === NORMAL) {
+      wordPlate(s, tw, rowsS, x, ty, f, tones, borderW + 1);
+    }
     drawText(stamp, word, 0, 0, ink, opts);
     plotStamp(s, tw, rowsS, x, ty, f, edge);
     return;
@@ -2101,6 +2176,102 @@ function drawFront(
   plateShape(w, 14, tones.ink);
   drawText(stamp, word, 4, 2, ink, opts);
   plotStamp(s, w, 14, x, ty - 2, -1, 1);
+}
+
+// ---------------------------------------------------------------------------
+// The name tags of the top and bottom buttons
+// ---------------------------------------------------------------------------
+
+/** A name tag: the small face's ten rows with two above and below, four pixels either side. */
+const TAG_H = 14;
+const TAG_PAD = 4;
+/**
+ * A tag shows while its white panel faces the viewer this much (0.93 at rest in the menu
+ * pose, never under 0.9 as the ball rocks and nods) and its button lies above or below
+ * that panel on the screen, no more than this far to the side for every pixel up or down.
+ * A ball that is turned or thrown has none.
+ */
+const TAG_FACING = 0.8;
+const TAG_LEAN = 0.5;
+
+/** Scratch result of `tagPlace`: the tag's top left corner and its width. */
+let tagX = 0;
+let tagY = 0;
+let tagW = 0;
+
+/**
+ * Where slot `i`'s name tag is, for the disc and the orientation set last: true, and the
+ * place in `tagX`, `tagY` and `tagW`; or false when it has none.
+ *
+ * NEXT-GEN's and RETRO's patches lie far round the ball in the menu pose, squashed, with
+ * room for a small picture and no word, so nothing on the ball said which mode each was
+ * (the product owner, 2026-11-16: "on ball can you show the label for next gen and retro
+ * somehow. even if its not exactly on the patch"). Each wears its word on a dark tag that
+ * hangs from the patch's inner edge, over the white panel between it, HOME and AWAY: flat
+ * and upright like every word on the ball, its near side on the middle of the edge the
+ * patch and that panel share and lapped over the patch's frame there (the edge bows, and
+ * a tag laid against it would leave a sliver of the frame showing at its middle), so the
+ * two read as one button and ride the ball together.
+ *
+ * Only an open button's (one with an accent); only while its patch is squashed (shown
+ * straight on, the patch carries its word itself); and only where HOME and AWAY carry
+ * their words (`labelOpts`, set by `chooseLayout`: from a radius of 74), so that the four
+ * buttons always say the same amount.
+ */
+function tagPlace(i: number, patch: BallPatch): boolean {
+  const hex = TAG_HEX[i];
+  if (hex < 0 || patch.label === "" || !accentOf(patch)) return false;
+  if (labelOpts === null) return false;
+  const f = SLOT_FACE[i];
+  const hx = VIEW[hex * 3];
+  const hy = VIEW[hex * 3 + 1];
+  const hz = VIEW[hex * 3 + 2];
+  const fx = VIEW[f * 3];
+  const fy = VIEW[f * 3 + 1];
+  const fz = VIEW[f * 3 + 2];
+  if (fz >= FACING_LABEL || hz < TAG_FACING) return false;
+  const dy = fy - hy;
+  if (Math.abs(fx - hx) > Math.abs(dy) * TAG_LEAN) return false;
+  // The middle of the edge the two panels share: half way between their centres.
+  const n = disc.rad / Math.hypot(fx + hx, fy + hy, fz + hz);
+  const ex = Math.round(disc.tx + (fx + hx) * n);
+  const ey = Math.round(disc.ty + (fy + hy) * n);
+  const tw = Math.min(
+    stamp.w - TAG_PAD * 2,
+    measureText(patch.label, labelFonts().SMALL),
+  );
+  tagW = tw + TAG_PAD * 2;
+  tagX = ex - (tagW >> 1);
+  // hanging from the edge towards the middle of the ball, over the patch's frame
+  tagY = dy < 0 ? ey - borderW : ey - TAG_H + 1 + borderW;
+  return true;
+}
+
+/**
+ * Slot `i`'s name tag (see `tagPlace`), in its button's state: dark with the word in the
+ * mode's colour at rest, the mode's colour with a chalk word under the pointer, dark when
+ * pressed, and flashing with its patch when chosen. It lies over whatever is under it,
+ * inside the ball's outline.
+ */
+function drawTag(s: Surface, i: number, patch: BallPatch, tones: Tones): void {
+  if (!tagPlace(i, patch)) return;
+  const accent = accentOf(patch);
+  if (!accent) return;
+  const mode = slotMode[i];
+  const o = i * 5;
+  let plate: Color = tones.ink;
+  let ink: Color = tones.chalk;
+  if (mode === NORMAL) ink = slotColor[o + 1] as Color;
+  else if (mode === HOVER) plate = slotColor[o + 1] as Color;
+  else if (mode === PRESSED) plate = slotColor[o + 2] as Color;
+  else if (mode === CHOSEN) {
+    plate = slotColor[o] as Color;
+    ink = accent.dark;
+  }
+  stamp.erase(0, 0, stamp.w, stamp.h);
+  plateShape(tagW, TAG_H, plate);
+  drawText(stamp, patch.label, TAG_PAD, 2, ink, labelFonts().SMALL);
+  plotStamp(s, tagW, TAG_H, tagX, tagY, -1, 1);
 }
 
 /** A locked patch's picture with the small padlock at its foot, or the padlock alone. */
@@ -2177,19 +2348,42 @@ export function drawBallShadow(
 
 /**
  * Which slot's pentagon is under this pixel, or null. Uses the same panel lookup as the
- * renderer, so what lights up is exactly what was pointed at.
+ * renderer, so what lights up is exactly what was pointed at. Given the `patches` the ball
+ * is drawn with, a top or bottom button's name tag (`tagPlace`) is its button too: the
+ * word is as good a place to press as the patch it names.
  */
 export function ballSlotAt(
   state: BallState,
   x: number,
   y: number,
+  patches?: BallPatches,
 ): BallSlot | null {
   if (!measure(state)) return null;
   const dx = Math.round(x) - disc.tx;
   const dy = Math.round(y) - disc.ty;
   const rad = disc.rad;
   if (!(dx * dx + dy * dy <= rad * rad)) return null;
+  // (the layout first, as `drawBall` has it: measuring the room turns the ball about)
+  if (patches) chooseLayout(patches, roomFor());
   orientTo(state);
+  if (patches) {
+    const px = Math.round(x);
+    const py = Math.round(y);
+    for (let i = 0; i < SLOT_COUNT; i++) {
+      if (TAG_HEX[i] < 0) continue;
+      const patch = patches[SLOTS[i]];
+      if (
+        patch &&
+        tagPlace(i, patch) &&
+        px >= tagX &&
+        px < tagX + tagW &&
+        py >= tagY &&
+        py < tagY + TAG_H
+      ) {
+        return SLOTS[i];
+      }
+    }
+  }
   const nx = dx / rad;
   const ny = dy / rad;
   const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
