@@ -273,8 +273,8 @@ Nothing of this is built yet ("Don't build it yet, just tell me").
   raw games to R2 nightly after counting.
 - **Lean design:** one row per finished game (its seven answers inside it); ranks from a
   per-day, per-mode tally of the 71 possible totals (0 to 700 in tens); the top ten and today's
-  questions cached and refreshed every minute or so; answer popularity counted nightly. About 20
-  requests and 2 writes per daily player.
+  questions cached and refreshed every minute or so; answer popularity counted as the day goes
+  (below). About 20 requests and 2 writes per daily player.
 - **Accounts:** optional. Everyone plays at once as `soccerfanNNNN`; after a first game the page
   offers an account to keep the streak, stats and name on every device, and the games already
   on the device go with it. Sign-in by emailed link and Google (no passwords), with Better Auth
@@ -292,3 +292,57 @@ Nothing of this is built yet ("Don't build it yet, just tell me").
   application (its checks take days and it reviews the site), Resend, a Google OAuth client;
   privacy, terms and refund pages; the ICO data protection fee if it applies. Each day needs its
   own questions before the leaderboard means anything.
+
+### How HOME's and AWAY's shares will be worked out (decided 2026-11-16)
+
+Not built. The question put to the product owner: should an answer's share (how common it is,
+which is the whole score in HOME and AWAY) be counted from what players type that day, or be a
+fixed table of what fans say when they are not trying to be clever? Their answer: "a combo of
+both. perhaps what fans would naturally say have a strong foundation and the premise, then the
+answers given that day also add weight to the scores".
+
+- **The foundation: what fans would naturally say.** Every question has a table of natural
+  shares, written with it: at first our estimates, as the sample questions have now
+  (`docs/data-notes/popularity.md`). It is the premise of the game, and it never counts for
+  less than most of an answer's share.
+- **The day adds weight.** What players type that day, in that mode, is counted, and moves
+  the foundation's shares towards the day's. An answer's share is
+
+      share = (1 - t) x natural + t x the day's,    t = T x n / (n + K)
+
+  where `n` is how many players have answered the question so far. So the first players of a
+  day are scored on the foundation alone, the day's weight comes in as people play, and it
+  never passes `T`. Starting numbers, to be tuned with real players: `T` 0.35 (the day is at
+  most about a third of a share) and `K` 300 (half of that after 300 players).
+
+- **Why both** (the two failures the blend is there to stop):
+  - Counted from the day alone, AWAY turns inside out: everyone avoids the obvious answer, so
+    hardly anyone types Messi, and Messi would score as a rare answer. With the foundation at
+    two thirds, Messi (natural 32%, typed by 1%) is still 21%: common.
+  - On a fixed table alone, a list of the day's best AWAY answers posted anywhere gives every
+    reader the top score. With the day's weight, an answer of natural 0.1% that 30% of players
+    copy is 10.6%: no longer rare. A leak undoes itself.
+- **What is counted:** a player's first game of the day in that mode, and only answers the
+  judge accepted (its aliases and spellings counted as the one answer). Not replays, archive
+  games, wrong answers, passes or time-ups.
+- **A score is the player's as they answer:** the reveal shows the table as it stood then, and
+  nothing is re-scored afterwards (a result already shared, and a career already watched, stay
+  true). At midnight UTC the day's table is frozen: archive replays are scored against it.
+- **The foundation gets better.** A question that has been played gives real numbers for its
+  next outing. HOME's players are asked for the common answer, so HOME's final counts are the
+  nearest thing to "what fans naturally say" that the game collects by itself: they feed that
+  question's foundation (how much, and whether an unscored "first one that comes to mind"
+  question is worth adding for the same end, to be decided when there are players).
+- **Both modes use the one rule.** The product owner's answer was about AWAY, where it
+  matters most. HOME is given the same blend (an assumption, not yet put to them): there the
+  day's answers and the foundation mostly agree, and the day's weight corrects an estimate
+  that was wrong.
+- **Not in this:** RETRO, NEXT-GEN, CLOSEST and FURTHEST are scored on years and distances,
+  which are facts. Their tables never move.
+- **With it:** what players type that the judge does not know is logged (missing answers and
+  spellings show up in the first week), and starting a game needs a bot check (Cloudflare
+  Turnstile) and a limit per address, or made-up players could push an answer's share about.
+  The counts for a day and mode are kept in memory by one Durable Object and saved now and
+  then, not written to the database answer by answer.
+- **In the code today:** the game reads one number per answer (`Answer.popularity`, through
+  `rankAnswers`), so the blend is the server's: it sends the shares with each reveal.

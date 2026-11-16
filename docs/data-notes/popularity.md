@@ -7,7 +7,9 @@ HOME is scored by the most common answer and AWAY by the most niche one (`docs/G
 section 4). "How many players gave this answer" needs real players, and there is no backend
 yet. So every answer carries an **estimate**: the share of players, in percent, who would give
 that answer if the question were put to a crowd of football fans. **These are demo numbers, not
-measurements.** A backend will count the answers real players give and replace them; the game
+measurements.** With a backend they are not thrown away: they become the foundation of every
+share ("what fans would naturally say"), and the answers real players give that day add weight
+to them (decided 2026-11-16: docs/ARCHITECTURE.md section 8); the game
 reads only `popularity`, so nothing else changes when it does.
 
 ## The rules the numbers keep
