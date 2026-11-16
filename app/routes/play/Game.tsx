@@ -1,5 +1,6 @@
 // The game screen: the career scene on the canvas, the scoreboard at the top, and at the
-// bottom the answer bar, the reveal sheet or the full-time card. The rules and the timing
+// bottom the answer bar, the reveal sheet or the full-time card. Before a new game, the
+// mode card alone, on the ink the page arrives on. The rules and the timing
 // live in the controller (./controller.ts); this only draws what it says and passes the
 // player's moves back. Every word comes from `strings.play`.
 
@@ -41,6 +42,7 @@ import {
   type ClockStatus,
   GameLayout,
   type LeagueEntry,
+  ModeIntro,
   Panel,
   PixelStage,
   RevealSheet,
@@ -290,8 +292,22 @@ export function Game({ mode }: { mode: Mode }) {
 
   let top: ReactNode = null;
   let bottom: ReactNode = null;
+  let card: ReactNode = null;
 
-  if (game && view && session) {
+  if (game && view && session && view.intro) {
+    // A new game: the mode card first, on the ink, and nothing else. The scene waits behind
+    // it and no clock runs until it has gone (by itself, or on a press anywhere).
+    card = (
+      <ModeIntro
+        mode={mode}
+        name={strings.home.modes[mode].label}
+        line={text.intro.line[mode]}
+        emphasis={text.intro.key[mode]}
+        leaving={view.intro === "leaving"}
+        onSkip={game.skipIntro}
+      />
+    );
+  } else if (game && view && session) {
     const question = questionView(session);
     const clock = clockView(session, view.now);
     const progress = progressFor(session);
@@ -480,6 +496,7 @@ export function Game({ mode }: { mode: Mode }) {
         <p className="ss-sr" role="status" aria-live="polite">
           {view?.announcement ?? ""}
         </p>
+        {card}
       </GameLayout>
     </main>
   );

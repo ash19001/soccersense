@@ -590,6 +590,9 @@ scene.playShot(grade, onDone?);      // grade: ~/game Grade (the six shots, "tim
                                      // SHOT_SECONDS (2.4); 0.4 with reduced motion
 scene.promote(total, onDone?);       // PROMOTION_SECONDS (1.5); 0.25 reduced; at once if the tier is the same
 scene.showFullTime(total);           // the tableau; ends whatever plays
+scene.holdOpening();                 // wait on ink (the page's mode card is up); before the opening only
+scene.beginOpening();                // the card has gone: the iris opens with the next frame
+scene.waiting;                       // true between the two
 scene.busy;                          // a shot until its onDone, or a promotion
 scene.onSound; scene.ambience();     // sound (below)
 SHOT_SECONDS, PROMOTION_SECONDS, ARRIVAL_SECONDS (0.63), ARRIVAL_STEP (1/30), OPEN_HOLD (2)
@@ -634,6 +637,16 @@ pixels only when drawn, in the same clean pixel circle as the closing iris (`dra
   was 20 to 22 ms and two runs in four had a 33 ms interval at the iris's first frames.)
 - Heard: the `transition` (opening) as the iris starts, the referee's `whistle` as it is fully
   open (play starts). Reduced motion: no iris.
+- **Held for the mode card** (2026-11-16). Before a new game the page shows its mode card on
+  the ink (`ModeIntro`, docs/API_UI.md) and calls `holdOpening()` on the scene it has just
+  made. While it waits (`waiting`), `update` builds the picture as usual but moves no clock
+  and sends no sound (not the opening's whoosh, not a touch of the juggle), and `draw` is all
+  ink, with reduced motion too (which has no iris to wait behind). The `OPEN_HOLD` frames
+  pass under the card, so after `beginOpening()` the iris starts with the very next frame
+  that has time in it. `holdOpening()` does nothing once the opening has begun, and
+  `playShot`, `promote` and `showFullTime` end the wait: the scene can never be left on
+  ink by a page that forgot it. The bed of sound (`ambience()`) is not held: the ground is
+  heard under the card.
 
 **A shot**, in seconds from `playShot` (each shot's own beats are in the table below):
 
@@ -800,9 +813,14 @@ holds any scene behind that file to what the page relies on:
 - `showFullTime(total)` ends whatever plays; `busy` is false after it.
 - The scene starts on ink and an iris opens out of it (`ARRIVAL_SECONDS`, 0.63 s, after
   `OPEN_HOLD` frames of ink once the picture is built): the home screen's kick-off ends on ink.
+- `holdOpening()` keeps it on ink, still and silent, until `beginOpening()`; anything the page
+  plays ends the wait.
 
 What the page (`app/routes/play/controller.ts`) does with it: one scene per game, seeded with the
-day; `setTotal(total)` for a resumed game (the total **before** the turn on a resumed reveal,
+day; for a new game `holdOpening()` while the mode card is up (`view.intro`: `"showing"` for
+`INTRO_MS`, 2.4 s, or until a press, then `"leaving"` for `INTRO_LEAVE_MS`, 0.2 s), then
+`beginOpening()` as question 1's clock starts and the game is first kept in storage (a reload
+under the card starts the same new game again); `setTotal(total)` for a resumed game (the total **before** the turn on a resumed reveal,
 so the promotion it earned still plays on NEXT); `playShot(grade)` when an answer, a pass or
 the clock ends a turn, and the reveal when it calls back; `promote(total)` on NEXT when the turn
 crossed a tier line (not after question 7), then the next question with a fresh clock;

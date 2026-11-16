@@ -62,6 +62,9 @@ gold (a sepia-warmed brass), NEXT-GEN electric magenta.
 
 ## 3. One question, start to finish
 
+Before question 1 of a new game, the **mode card** (6.2): the mode's name and the one thing
+to do in it, for about two and a half seconds. No clock runs while it is up.
+
 1. The board shows `Question 3 of 7`, the mode's badge, the question and two short lines (not
    the day's stadium: the question has the room; changed 2026-11-11):
    - HOME: `The most common answer wins.` plus `Scored by how many players give the same answer.`
@@ -515,6 +518,27 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   in a number loses letters, never the number: "soccerf…4821".
 
 ### 6.2 Game screen
+
+- **The mode card** (2026-11-16; the product owner: "when going to each category rather than
+  just going straight into game, after transition it shows message of category like 'give the
+  most common answer' then transitions to game start"). The home screen's kick-off ends on
+  ink; on that ink, before a new game, the mode's name stands large in its colour between two
+  rules, and under it what to give:
+  - HOME: `GIVE THE MOST COMMON ANSWER`
+  - AWAY: `GIVE THE MOST UNCOMMON ANSWER`
+  - RETRO: `GIVE THE OLDEST ANSWER`
+  - NEXT-GEN: `GIVE THE MOST RECENT ANSWER`
+
+  The words that tell the modes apart (MOST COMMON, MOST UNCOMMON, OLDEST, MOST RECENT) are in
+  the mode's light colour. The rules open out from the middle and the words open between them
+  like shutters; it stays 2.4 s, shuts the same way in 0.2 s, and then the iris opens on the
+  ground and question 1 is asked. A press anywhere, or Enter, Space or Escape, sends it off at
+  once (it is seen four times a day). The first question's 30 seconds start when the card has
+  gone, not when the page arrives. It is for a new game only: a game carried on after a reload
+  goes straight back to where it was (its clock has been running), and a finished game shows
+  its full-time card. It also comes before the next mode started from a full-time card. With
+  reduced motion it is simply there, then gone. Screen readers hear its words read out; the
+  ground's sound is already heard under it.
 
 - The career scene fills the screen (canvas).
 - Top: the **board**, styled as a stadium scoreboard. Mode badge, seven result pips, total

@@ -6,6 +6,11 @@
 // Browser only: it is made after mounting, and it reads the clock and sets timers.
 //
 // The flow (docs/GAME_DESIGN.md sections 3 to 6):
+//   the card   before a new game only: the mode card is up on the ink the page arrives on
+//              (`view.intro`), the scene waits behind it (`scene.holdOpening()`) and no
+//              clock runs. It goes by itself after `INTRO_MS`, or at once on a press
+//              (`skipIntro`); then the scene opens and question 1's clock starts. A game
+//              carried on after a reload, or shown again at full time, has no card.
 //   asking     the clock runs. An answer the judge does not know shakes the bar (the
 //              clock runs on); one it knows, PASS, or the clock running out ends the turn.
 //              At the whistle, an answer typed but not sent counts as sent (`type`).
@@ -57,6 +62,10 @@ import {
   shareCardPicture,
 } from "./share-image";
 
+/** How long the mode card stays up before a new game, unless a press sends it off. */
+export const INTRO_MS = 2400;
+/** How long the card takes to go (ui.css, section 30); then the scene opens. */
+export const INTRO_LEAVE_MS = 200;
 /** How often the clock is looked at while a question is asked. */
 export const TICK_MS = 100;
 /** A shot that has not reported back after this long is taken as played. */
@@ -78,9 +87,17 @@ export const SHARE_IMAGE_DELAY_MS = 700;
 export type ShareState =
   "idle" | "making" | "shared" | "saved" | "downloaded" | "copied" | "failed";
 
+/**
+ * The mode card before a new game: `showing` while it is up, `leaving` while it goes (the
+ * scene still waits on ink), null once the game is on, and for a game that has no card.
+ */
+export type IntroState = "showing" | "leaving" | null;
+
 /** What the page draws from. A new object whenever anything on screen should change. */
 export interface GameView {
   session: Session;
+  /** The mode card (see `IntroState`). While it is not null there is no board and no bar. */
+  intro: IntroState;
   /** The time the clock was last read at (for the board's clock and PASS). */
   now: number;
   /** A promotion is playing: the sheet has gone and the next question waits. */
@@ -137,6 +154,9 @@ export class GameController {
   private readonly listeners = new Set<() => void>();
   private ticker: ReturnType<typeof setInterval> | null = null;
   private patience: ReturnType<typeof setTimeout> | null = null;
+  private introTimer: ReturnType<typeof setTimeout> | null = null;
+  /** What a new game is made from: the first question's clock starts after the card. */
+  private readonly context: LiveContext;
   private shareTimer: ReturnType<typeof setTimeout> | null = null;
   /** What is in the answer field, not sent yet, and for which question: the whistle's. */
   private draft: { index: number; text: string } = { index: -1, text: "" };
@@ -158,6 +178,7 @@ export class GameController {
       stadium: today.stadium,
       questions: questionsFor(mode),
     };
+    this.context = context;
     const now = this.clock();
 
     // A mode is played once a day: today's finished game is shown again, at full time.
@@ -165,6 +186,8 @@ export class GameController {
     const done = loadGame(today.dayKey, mode, this.storage);
     if (done) session = finishedSession(context, done.turns, now);
     session ??= loadLive(context, this.storage);
+    // A new game: the mode card first. Its clock is set again when the card goes.
+    const fresh = session === null;
     session ??= createSession({
       ...context,
       now,
@@ -184,9 +207,11 @@ export class GameController {
     } else {
       this.scene.setTotal(session.total);
     }
+    if (fresh) this.scene.holdOpening();
 
     this.view = {
       session,
+      intro: fresh ? "showing" : null,
       now,
       promoting: false,
       rejections: 0,
@@ -235,7 +260,13 @@ export class GameController {
   start(): void {
     if (this.started || this.disposed) return;
     this.started = true;
-    const { session } = this.view;
+    const { session, intro } = this.view;
+    if (intro) {
+      // Nothing is kept yet: a reload while the card is up starts the same new game.
+      this.set({ announcement: strings.play.intro.spoken[session.mode] });
+      this.introTimer = setTimeout(this.leaveIntro, INTRO_MS);
+      return;
+    }
     if (session.phase === "asking") {
       saveLive(session, this.storage);
       this.startClock();
@@ -251,6 +282,7 @@ export class GameController {
     this.waitToken++;
     this.stopClock();
     this.clearPatience();
+    this.clearIntroTimer();
     if (this.shareTimer !== null) clearTimeout(this.shareTimer);
     this.shareTimer = null;
     if (this.imageTimer !== null) clearTimeout(this.imageTimer);
@@ -259,6 +291,11 @@ export class GameController {
   }
 
   // --- the player's moves -------------------------------------------------------------
+
+  /** A press while the mode card is up: it has been read, and goes now. */
+  skipIntro = (): void => {
+    this.leaveIntro();
+  };
 
   /**
    * The answer field changed. Nothing happens now, but if the clock runs out before the
@@ -270,6 +307,7 @@ export class GameController {
 
   submit = (input: string): void => {
     const { session } = this.view;
+    if (this.view.intro) return;
     const next = reduce(session, { type: "submit", input, now: this.clock() });
     if (next === session) return;
     if (next.phase === "resolving") {
@@ -285,6 +323,7 @@ export class GameController {
 
   pass = (): void => {
     const { session } = this.view;
+    if (this.view.intro) return;
     const next = reduce(session, { type: "pass", now: this.clock() });
     if (next !== session && next.phase === "resolving") this.shoot(next);
   };
@@ -468,6 +507,36 @@ export class GameController {
 
   // --- the flow -----------------------------------------------------------------------
 
+  /** The mode card starts to go: the scene waits on ink a moment more. */
+  private leaveIntro = (): void => {
+    if (this.disposed || this.view.intro !== "showing") return;
+    this.clearIntroTimer();
+    this.set({ intro: "leaving" });
+    this.introTimer = setTimeout(this.kickOff, INTRO_LEAVE_MS);
+  };
+
+  /** The card has gone: the scene opens and question 1 is asked, its clock starting now. */
+  private kickOff = (): void => {
+    if (this.disposed || this.view.intro === null) return;
+    this.clearIntroTimer();
+    const now = this.clock();
+    const session = createSession({
+      ...this.context,
+      now,
+      noTimer: this.view.session.noTimer,
+    });
+    saveLive(session, this.storage);
+    this.scene.beginOpening();
+    this.set({ session, now, intro: null, announcement: "" });
+    this.startClock();
+    this.tick();
+  };
+
+  private clearIntroTimer(): void {
+    if (this.introTimer !== null) clearTimeout(this.introTimer);
+    this.introTimer = null;
+  }
+
   /** An answer, a pass or the clock has ended the turn: the shot plays. */
   private shoot(session: Session): void {
     this.stopClock();
@@ -505,7 +574,7 @@ export class GameController {
   }
 
   private tick = (): void => {
-    if (this.disposed) return;
+    if (this.disposed || this.view.intro) return;
     const now = this.clock();
     const { session } = this.view;
     const draft =

@@ -154,7 +154,8 @@ pass 0.15 and the ball knocked back 0.15), the wind while a hard shot is in the 
 1; the engine sizes it to the ground), a groan for a skied miss and an ooh for one dragged
 wide, the referee's whistle at time up, a faint far `firework` for each firework, one
 vuvuzela 0.35 s after a worldie at the stadium tiers and never otherwise. While the player
-types, the juggle is very quiet: every other touch, at level 0.15. As the page opens, the
+types, the juggle is very quiet: every other touch, at level 0.15. As the page opens (after the page's mode card, before a new game: the scene waits on ink,
+silent, until then), the
 `transition` (opening) as the iris starts and the referee's whistle as it is fully open; at
 full time the long whistle, then the crowd. The bed (`ambience()`) is the park at tiers 0 and
 1, a ground at 2 and 3, a stadium from 4, the crowd growing with the tier, night from the

@@ -26,6 +26,7 @@ import { strings } from "~/i18n";
 import { CareerScene } from "~/scenes/career";
 import { resetArrivalFocus } from "~/ui/useArrivalFocus";
 import Play, { meta } from "./play";
+import { INTRO_LEAVE_MS, INTRO_MS } from "./play/controller";
 
 const text = strings.play;
 const DAY_KEY = "2026-11-10";
@@ -42,7 +43,17 @@ function site(pathname: string, search = "?day=1") {
     { path: "/play/next-gen", Component: Play },
     { path: "/play/nextgen", Component: Play },
   ]);
-  return render(<Stub initialEntries={[{ pathname, search }]} />);
+  const page = render(<Stub initialEntries={[{ pathname, search }]} />);
+  // A new game starts with the mode card (play.test.tsx): these are about what follows.
+  if (document.querySelector(".ss-intro")) pastCard();
+  return page;
+}
+
+/** The mode card runs its course: nothing is pressed. */
+function pastCard(): void {
+  act(() => {
+    vi.advanceTimersByTime(INTRO_MS + INTRO_LEAVE_MS);
+  });
 }
 
 let shots: MockInstance<CareerScene["playShot"]>;
@@ -311,11 +322,43 @@ describe("the era pages", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: text.heading.nextgen }),
     ).toBeInTheDocument();
+    // Its mode card first: the name in NEXT-GEN's colour over what to give.
+    const card = document.querySelector(".ss-intro");
+    expect(card).toHaveAttribute("data-mode", "nextgen");
+    expect(card).toHaveTextContent(strings.home.modes.nextgen.label);
+    expect(card).toHaveTextContent(text.intro.line.nextgen);
+    expect(document.querySelector(".ss-board")).toBeNull();
+    pastCard();
     expect(screen.getByText(text.board.instruction.nextgen)).toBeVisible();
     expect(document.querySelector(".ss-board")).toHaveAttribute(
       "data-mode",
       "nextgen",
     );
+  });
+
+  test("each era's mode card says what to give, with the words that set it apart picked out", () => {
+    for (const [path, mode] of [
+      ["/play/retro", "retro"],
+      ["/play/next-gen", "nextgen"],
+    ] as const) {
+      window.history.replaceState(null, "", `${path}?day=1`);
+      const Stub = createRoutesStub([{ path, Component: Play }]);
+      render(<Stub initialEntries={[{ pathname: path, search: "?day=1" }]} />);
+      const card = document.querySelector(".ss-intro");
+      expect(card).toHaveAttribute("data-mode", mode);
+      expect(card?.querySelector(".ss-intro__name")).toHaveTextContent(
+        strings.home.modes[mode].label,
+      );
+      expect(card?.querySelector(".ss-intro__line")).toHaveTextContent(
+        text.intro.line[mode],
+      );
+      expect(card?.querySelector(".ss-intro__key")).toHaveTextContent(
+        text.intro.key[mode],
+      );
+      expect(screen.getByText(text.intro.spoken[mode])).toHaveClass("ss-sr");
+      cleanup();
+      window.localStorage.clear();
+    }
   });
 
   test("NEXT-GEN: the most recent answer wins, the column says when it last happened, and a time-up names the newest", () => {

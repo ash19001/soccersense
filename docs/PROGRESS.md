@@ -447,6 +447,28 @@ says when it has started (`onStarted`), through `app/audio/started.ts`. docs/AUD
 for the first press) and docs/API_UI.md (`SoundToggle`) have the detail. The page still cannot
 play anything before a press: no page can.
 
+## The mode card before a game (2026-11-16)
+
+The product owner: "when going to each category rather than just going straight into game,
+after transition it shows message of category like 'give the most common answer' then
+transitions to game start". Before a new game the game page now shows a mode card on the ink
+the kick-off ends on: the mode's name, large and in its colour, between two rules, over
+`GIVE THE MOST COMMON ANSWER` (AWAY: most uncommon; RETRO: oldest; NEXT-GEN: most recent),
+the words that tell the modes apart in the mode's light colour. It stays 2.4 s (a press
+anywhere, or Enter, Space or Escape, sends it off sooner), shuts in 0.2 s, and then the iris
+opens and question 1 is asked.
+
+- `app/ui/ModeIntro.tsx` and ui.css section 30 (the card; docs/API_UI.md, `ModeIntro`).
+- `app/routes/play/controller.ts`: `view.intro`, `INTRO_MS`, `INTRO_LEAVE_MS`, `skipIntro`.
+  **Question 1's clock now starts when the card has gone**; before, it started as the page
+  arrived, under the opening iris. Nothing is kept in storage until then, so a reload under the
+  card starts the same new game. A game carried on, or a finished one, has no card.
+- `app/scenes/career.ts`: `holdOpening()`, `beginOpening()`, `waiting` (docs/API_SCENES.md,
+  "Held for the mode card").
+- Words in `strings.play.intro`. Gallery: `/dev/ui?only=intro-home` and the other three.
+- Looked at in Chrome from the home page through to question 1, on a monitor and a phone;
+  stills in `.snaps/intro/`.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

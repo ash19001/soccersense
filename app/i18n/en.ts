@@ -256,6 +256,32 @@ export const en = {
       retro: "The RETRO match",
       nextgen: "The NEXT-GEN match",
     },
+    /**
+     * The mode card: on the ink the page arrives on, before a new game, the mode's name
+     * (`home.modes`) over what to give in it. `key` is the part of the line that tells the
+     * mode from the others, shown in its colour (it must be in the line, letter for letter).
+     * `spoken` is the name and the line read out together.
+     */
+    intro: {
+      line: {
+        home: "GIVE THE MOST COMMON ANSWER",
+        away: "GIVE THE MOST UNCOMMON ANSWER",
+        retro: "GIVE THE OLDEST ANSWER",
+        nextgen: "GIVE THE MOST RECENT ANSWER",
+      },
+      key: {
+        home: "MOST COMMON",
+        away: "MOST UNCOMMON",
+        retro: "OLDEST",
+        nextgen: "MOST RECENT",
+      },
+      spoken: {
+        home: "HOME. Give the most common answer.",
+        away: "AWAY. Give the most uncommon answer.",
+        retro: "RETRO. Give the oldest answer.",
+        nextgen: "NEXT-GEN. Give the most recent answer.",
+      },
+    },
     /** Read out under the heading once the day is known. */
     stadium: (name: string, city: string, country: string) =>
       `Today's stadium: ${name}, ${city}, ${country}.`,

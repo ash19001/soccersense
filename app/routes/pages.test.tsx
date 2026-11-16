@@ -56,7 +56,7 @@ afterEach(() => {
 });
 
 describe("the mode pages", () => {
-  test("each address is its own mode: the game, in the game's skin", () => {
+  test("each address is its own mode: its card, then the game, in the game's skin", async () => {
     site("/play/away?day=1");
     expect(
       screen.getByRole("heading", {
@@ -68,13 +68,23 @@ describe("the mode pages", () => {
       screen.getByText(strings.play.stadium("Anfield", "Liverpool", "England")),
     ).toBeInTheDocument();
     expect(document.querySelector(".ss-root.ss-game")).not.toBeNull();
+    // A new game: the mode card first, in the mode's colour, and no board yet.
+    expect(document.querySelector(".ss-intro")).toHaveAttribute(
+      "data-mode",
+      "away",
+    );
+    expect(screen.getByText(strings.play.intro.key.away)).toBeInTheDocument();
+    expect(document.querySelector(".ss-board")).toBeNull();
+    // A press sends it off, and the game is there.
+    fireEvent.pointerDown(document.body);
+    expect(
+      await screen.findByText(strings.play.board.instruction.away),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".ss-intro")).toBeNull();
     expect(document.querySelector(".ss-board")).toHaveAttribute(
       "data-mode",
       "away",
     );
-    expect(
-      screen.getByText(strings.play.board.instruction.away),
-    ).toBeInTheDocument();
   });
 
   test("render at build time with no browser to read, and have real titles", () => {
@@ -215,7 +225,7 @@ describe("focus, from page to page", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
-  test("the kick-off ends on the mode page: its heading, then the answer field", async () => {
+  test("the kick-off ends on the mode page: its heading, its card, then the answer field", async () => {
     const scenes = made();
     site("/?day=1");
     expect(document.activeElement).toBe(document.body);
@@ -231,11 +241,23 @@ describe("focus, from page to page", () => {
       name: strings.play.heading.away,
     });
     expect(heading).toHaveAttribute("tabindex", "-1");
-    // The heading took the focus on arrival; the game then puts it in the answer field,
-    // which is the next thing after the heading for a screen reader too.
-    expect(document.activeElement).toBe(
-      screen.getByRole("textbox", { name: strings.play.answer.input }),
+    // The heading took the focus on arrival, and keeps it while the mode card is up (the
+    // card is only looked at; its words are read out).
+    expect(document.activeElement).toBe(heading);
+    expect(document.querySelector(".ss-intro")).toHaveAttribute(
+      "data-mode",
+      "away",
     );
+    expect(
+      screen.getByText(strings.play.intro.spoken.away),
+    ).toBeInTheDocument();
+    // The card goes (here on a press); the game then puts the focus in the answer field,
+    // which is the next thing after the heading for a screen reader too.
+    fireEvent.pointerDown(document.body);
+    const field = await screen.findByRole("textbox", {
+      name: strings.play.answer.input,
+    });
+    expect(document.activeElement).toBe(field);
   });
 
   test("the rules pop up over the menu and close back to the ? button", () => {

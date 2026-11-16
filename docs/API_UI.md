@@ -425,6 +425,58 @@ first row stays pinned under the headings; the player's row is brought into view
 above it, until the player scrolls the table themselves. The place is one line (ellipsis),
 unless `inlinePlace`. A distance such as `"540 miles"` is split at its last space and stacked.
 
+### `ModeIntro` (new 2026-11-16)
+
+The mode card: what the mode is, on the ink a game page arrives on, before a new game.
+
+```tsx
+<GameLayout canvas={<PixelStage scene={scene} light={light} />}>
+  <ModeIntro
+    mode="home"
+    name="HOME"
+    line="GIVE THE MOST COMMON ANSWER"
+    emphasis="MOST COMMON"
+    leaving={false}
+    onSkip={game.skipIntro}
+  />
+</GameLayout>
+```
+
+`mode`, `name` (set large in the mode's colour, with a hard shadow in its dark one), `line`
+(under it, chalk), `emphasis?` (the words of `line` that tell the mode from the others, in the
+mode's light colour; left out or not in the line, the line is one colour), `leaving?`,
+`onSkip?`, `className?`.
+
+- It goes in `GameLayout`'s children with nothing in `top` or `bottom`: it fills the free
+  space and stands in the middle of the screen, a rule in the mode's colour above the words
+  and one below, as wide as the words and twelve font pixels more at each end.
+- Its font pixel (`--ifp`) is `--fp` on a phone and `--cp` on a monitor (`data-wide`). The
+  name is a heading face at twice its size, so each of its pixels is two whole font pixels:
+  Jersey 20 on a phone (NEXT-GEN in Jersey 25 is 330 font pixels, wider than a 320 px phone's
+  column) and Jersey 25 on a monitor. The line is Jersey 15. Where the line does not fit (a
+  320 px phone, AWAY's at 360) it wraps, balanced, and the emphasised words stay together.
+- Whole pixels: the card and its two lines are as wide as their words, so each is put half
+  way across and moved back by half of itself, both rounded down to `--snap`
+  (`translate` takes a percentage of the thing's own size). A flex box left them on half
+  pixels at a device pixel ratio of 1 and the type's upright edges smeared. Checked on whole
+  device pixels, centred and inside the screen in all four modes at 15 sizes from 320 x 568
+  to 1920 x 1080, ratios 1, 1.25, 2 and 3.
+- Motion, stepped: the rules open out from the middle (0.24 s, 8 steps), then the words open
+  between them like shutters (0.2 s, 5 steps, from 0.16 s). With `leaving` the words shut
+  (0.12 s) and the rules close (0.2 s): the page keeps it mounted for 0.2 s. Nothing fills
+  after its animation: on the way out the card is `visibility: hidden` except while the
+  animation shows it, so it stays gone if the page is late to remove it. Reduced motion: it
+  is there, then not.
+- It is only looked at: `aria-hidden` (the page reads the same words out through its live
+  region), nothing in it takes the focus, and presses go through it. `onSkip` listens to the
+  whole page instead: a `pointerdown` anywhere (the main button, for a mouse), or Enter,
+  Space or Escape. Not a letter (typing ahead), and not a key still held down from the
+  button that led here (`event.repeat`). Without `onSkip` it listens to nothing.
+
+Words: the name is `strings.home.modes[mode].label`; the line, its key words and what is read
+out are `strings.play.intro` (`line`, `key`, `spoken`). Gallery: `intro-home`, `intro-away`,
+`intro-retro`, `intro-nextgen`.
+
 ### `FullTimeCard`
 
 `mode`, `heading`, `total`, `maxTotal`, `totalSpoken?`, `careerTitle`, `earnedTitle?`,
@@ -1533,6 +1585,7 @@ then the loose parts. `?only=<name>` shows one composition exactly as the game w
 
 | names                                                                                                                  | what                                                     |
 | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `intro-home`, `intro-away`, `intro-retro`, `intro-nextgen`                                                             | the mode card, on ink                                    |
 | `ask-home`, `ask-away`                                                                                                 | asking                                                   |
 | `ask-reject`, `ask-pass`, `ask-reject-pass`                                                                            | a rejected answer, PASS available, both                  |
 | `ask-last5`                                                                                                            | the last five seconds                                    |
@@ -1682,6 +1735,10 @@ sentAt, receivedAt)`, the middle of that second, half the round trip ago. From t
   (`"checking"`, `"ready"`, `"failing"`: no answer yet and the last request failed or took over
   `CLOCK_TIMEOUT_MS`, 5 s; it asks again after `CLOCK_RETRY_MS`, 1 s up to 15 s), `subscribe`,
   `check()`. A server that answers with no `Date` leaves the device's clock.
+- Before a new game the game page shows the mode card (`ModeIntro`) alone: no board, no
+  answer bar, the scene held on ink and no clock running (`view.intro` in
+  `app/routes/play/controller.ts`). The heading keeps the focus meanwhile; the answer field
+  takes it when the card has gone.
 - The game page makes no game until `now()` is known; the game's day and every question's time
   are the clock's. While it is `"failing"`, a plain `Panel` says `strings.play.clock.failing`.
 - `serverClock(options)` is the clock itself, with its request, monotonic clock, device clock

@@ -1,5 +1,5 @@
-// The game page, /play/home and /play/away: a whole game with fake timers, coming back to a
-// game after a reload, and the page at build time.
+// The game page, /play/home and /play/away: the mode card before a new game, a whole game
+// with fake timers, coming back to a game after a reload, and the page at build time.
 
 import {
   act,
@@ -34,7 +34,12 @@ import { CareerScene } from "~/scenes/career";
 import { type ClockStatus, deviceClock, setGameClock } from "~/ui/game-clock";
 import { resetArrivalFocus } from "~/ui/useArrivalFocus";
 import Play, { meta } from "./play";
-import { PROMOTION_PATIENCE_MS, SHOT_PATIENCE_MS } from "./play/controller";
+import {
+  INTRO_LEAVE_MS,
+  INTRO_MS,
+  PROMOTION_PATIENCE_MS,
+  SHOT_PATIENCE_MS,
+} from "./play/controller";
 import { liveKey } from "./play/progress";
 
 const text = strings.play;
@@ -46,7 +51,14 @@ function Menu() {
 
 type Entry = string | { pathname: string; search?: string; state?: unknown };
 
-function site(at: Entry = { pathname: "/play/home", search: "?day=1" }) {
+/**
+ * The page at `at`. A new game starts with the mode card, and most of these tests are
+ * about what comes after it: the card is let run its course unless `card` says to keep it.
+ */
+function site(
+  at: Entry = { pathname: "/play/home", search: "?day=1" },
+  { card = false }: { card?: boolean } = {},
+) {
   const path = typeof at === "string" ? at : `${at.pathname}${at.search ?? ""}`;
   window.history.replaceState(null, "", path);
   const Stub = createRoutesStub([
@@ -54,11 +66,25 @@ function site(at: Entry = { pathname: "/play/home", search: "?day=1" }) {
     { path: "/play/home", Component: Play },
     { path: "/play/away", Component: Play },
   ]);
-  return render(<Stub initialEntries={[at]} />);
+  const page = render(<Stub initialEntries={[at]} />);
+  if (!card && modeCard()) pastCard();
+  return page;
+}
+
+/** The mode card, while it is up. */
+function modeCard(): HTMLElement | null {
+  return document.querySelector(".ss-intro");
+}
+
+/** The mode card runs its course: nothing is pressed. */
+function pastCard(): void {
+  wait(INTRO_MS + INTRO_LEAVE_MS);
 }
 
 let shots: MockInstance<CareerScene["playShot"]>;
 let promotions: MockInstance<CareerScene["promote"]>;
+let holds: MockInstance<CareerScene["holdOpening"]>;
+let opens: MockInstance<CareerScene["beginOpening"]>;
 
 /** The scene of the game on screen: the last one asked to play anything. */
 function scene(): CareerScene {
@@ -141,6 +167,8 @@ beforeEach(() => {
   vi.useFakeTimers({ now: new Date("2026-11-10T12:00:00Z") });
   shots = vi.spyOn(CareerScene.prototype, "playShot");
   promotions = vi.spyOn(CareerScene.prototype, "promote");
+  holds = vi.spyOn(CareerScene.prototype, "holdOpening");
+  opens = vi.spyOn(CareerScene.prototype, "beginOpening");
 });
 
 afterEach(() => {
@@ -515,9 +543,143 @@ describe("the game page", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: text.heading.away }),
     ).toBeInTheDocument();
+    // Its mode card first, then its first question.
+    expect(modeCard()).toHaveAttribute("data-mode", "away");
+    expect(modeCard()).toHaveTextContent(text.intro.line.away);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    pastCard();
+    expect(modeCard()).toBeNull();
     expect(questionLamps()).toBe("Question 1 of 7");
     expect(screen.getByText(text.board.instruction.away)).toBeVisible();
     expect(screen.getByText(text.board.measure.away)).toBeInTheDocument();
+  });
+
+  test("a new game starts with the mode card: no board, no clock, the scene waiting on ink; then question 1", () => {
+    site(undefined, { card: true });
+    const card = modeCard();
+    expect(card).toHaveAttribute("data-mode", "home");
+    expect(card).toHaveTextContent(strings.home.modes.home.label);
+    expect(card).toHaveTextContent(text.intro.line.home);
+    // The words that tell the mode from the others are picked out.
+    expect(card?.querySelector(".ss-intro__key")).toHaveTextContent(
+      text.intro.key.home,
+    );
+    // It is only looked at; the page reads its words out.
+    expect(card).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getByText(text.intro.spoken.home)).toHaveAttribute(
+      "role",
+      "status",
+    );
+    // Nothing of the game yet: no board, no field, nothing kept, the scene held on ink.
+    expect(document.querySelector(".ss-board")).toBeNull();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(window.localStorage.getItem(liveKey(DAY_KEY, "home"))).toBeNull();
+    expect(holds).toHaveBeenCalledTimes(1);
+    expect(opens).not.toHaveBeenCalled();
+
+    // It stays up for INTRO_MS, then takes INTRO_LEAVE_MS to go.
+    wait(INTRO_MS - 1);
+    expect(modeCard()).not.toHaveAttribute("data-leaving");
+    wait(1);
+    expect(modeCard()).toHaveAttribute("data-leaving");
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(opens).not.toHaveBeenCalled();
+    wait(INTRO_LEAVE_MS);
+
+    // Gone: the scene opens, and question 1 is asked with the whole of its clock.
+    expect(modeCard()).toBeNull();
+    expect(opens).toHaveBeenCalledTimes(1);
+    expect(questionLamps()).toBe("Question 1 of 7");
+    expect(screen.getByLabelText(text.board.timeLeft(30))).toBeInTheDocument();
+    expect(document.activeElement).toBe(field());
+    expect(screen.queryByText(text.intro.spoken.home)).toBeNull();
+    const live = window.localStorage.getItem(liveKey(DAY_KEY, "home"));
+    expect(JSON.parse(live ?? "{}")).toMatchObject({
+      phase: "asking",
+      index: 0,
+      startedAt: Date.now(),
+      deadline: Date.now() + 30_000,
+    });
+    wait(3000);
+    expect(screen.getByLabelText(text.board.timeLeft(27))).toBeInTheDocument();
+  });
+
+  test("a press anywhere sends the mode card off at once, and so do Enter, Space and Escape", () => {
+    site(undefined, { card: true });
+    wait(300);
+    fireEvent.pointerDown(document.body);
+    expect(modeCard()).toHaveAttribute("data-leaving");
+    // A second press changes nothing: it goes once.
+    fireEvent.pointerDown(document.body);
+    wait(INTRO_LEAVE_MS - 1);
+    expect(modeCard()).not.toBeNull();
+    wait(1);
+    expect(modeCard()).toBeNull();
+    expect(opens).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText(text.board.timeLeft(30))).toBeInTheDocument();
+    // The card's own time is not waited for as well: the clock is question 1's alone.
+    wait(INTRO_MS);
+    expect(opens).toHaveBeenCalledTimes(1);
+    expect(questionLamps()).toBe("Question 1 of 7");
+
+    for (const key of ["Enter", " ", "Escape"]) {
+      cleanup();
+      window.localStorage.clear();
+      site(undefined, { card: true });
+      fireEvent.keyDown(window, { key });
+      expect(modeCard()).toHaveAttribute("data-leaving");
+    }
+  });
+
+  test("the mode card stays for a letter typed ahead, a key still held down and a right click", () => {
+    site(undefined, { card: true });
+    fireEvent.keyDown(window, { key: "a" });
+    // Enter held down from PLAY AWAY on the card before: not a press on this page.
+    fireEvent.keyDown(window, { key: "Enter", repeat: true });
+    fireEvent.pointerDown(document.body, { pointerType: "mouse", button: 2 });
+    expect(modeCard()).not.toHaveAttribute("data-leaving");
+  });
+
+  test("the mode card is for a new game only: a reload under it starts again, a game carried on has none", () => {
+    site(undefined, { card: true });
+    wait(1000);
+    // Reloaded while the card is up: nothing was kept, so the same new game, card and all.
+    cleanup();
+    site(undefined, { card: true });
+    expect(modeCard()).not.toBeNull();
+    wait(INTRO_MS + INTRO_LEAVE_MS);
+    expect(questionLamps()).toBe("Question 1 of 7");
+
+    // Reloaded 5 seconds into question 1: straight back in, the clock not given back.
+    wait(5000);
+    cleanup();
+    holds.mockClear();
+    site(undefined, { card: true });
+    expect(modeCard()).toBeNull();
+    expect(holds).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(text.board.timeLeft(25))).toBeInTheDocument();
+
+    // And a finished game shows its full-time card, not the mode's.
+    cleanup();
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      `soccersense:v1:${DAY_KEY}:home`,
+      JSON.stringify(finished()),
+    );
+    site(undefined, { card: true });
+    expect(modeCard()).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: text.fullTime.heading }),
+    ).toBeInTheDocument();
+  });
+
+  test("leaving the page while the mode card is up starts nothing", () => {
+    site(undefined, { card: true });
+    cleanup();
+    wait(INTRO_MS + INTRO_LEAVE_MS + 60_000);
+    expect(opens).not.toHaveBeenCalled();
+    expect(shots).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem(liveKey(DAY_KEY, "home"))).toBeNull();
   });
 
   test("a whole AWAY game: the most uncommon answer wins, and every shot is played", () => {
@@ -825,6 +987,9 @@ describe("the game page", () => {
       now = Date.now();
       tell();
     });
+    // The day is known: a new game, so its mode card first.
+    expect(modeCard()).not.toBeNull();
+    pastCard();
     expect(questionLamps()).toBe("Question 1 of 7");
     expect(screen.queryByText(text.clock.failing)).toBeNull();
   });

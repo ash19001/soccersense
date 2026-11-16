@@ -5680,3 +5680,201 @@ html:has(.ss-help-dialog[open]) {
   transform-origin: 0 0;
   will-change: transform;
 }
+
+/* ---------- 30. The mode card (ModeIntro, 2026-11-16) ------------------------------------------- */
+
+/*
+ * What the mode is, on the ink a game page arrives on, before a new game starts: the mode's
+ * name, large and in its colour, between two rules, and under it the one thing to do. It
+ * fills GameLayout's free space (nothing is above or below it then), so it stands in the
+ * middle of the screen. It is only looked at: presses go through it to the page, which
+ * hears them itself (ModeIntro's onSkip).
+ *
+ * Its font pixel is --ifp: the font pixel on a phone, the caption pixel on a monitor, as
+ * the board's is (16b). The name is a heading face at twice its size (one of its pixels is
+ * two of these, still whole pixels), with a hard shadow one of its own pixels down and
+ * right: Jersey 20 on a phone, where NEXT-GEN in the larger face is wider than a narrow
+ * phone's column (330 font pixels in 308), and Jersey 25 on a monitor. The rules are as
+ * wide as the words and twelve more at each end, and never wider than the column: on a
+ * narrow phone the line wraps instead.
+ *
+ * Stepped, like everything else: the rules open out from the middle, then the words open
+ * between them like shutters; on the way out the same the other way, faster (the page
+ * waits 200ms for it: INTRO_LEAVE_MS in routes/play/controller.ts). No animation fills
+ * after it has ended: the way in ends on the card as it stands, and on the way out the
+ * card is hidden but for its animation, so it stays gone if the page is late to take it
+ * away. With reduced motion the card is simply there, and then is not.
+ */
+.ss-intro {
+  --ifp: var(--fp);
+
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ss-intro__card {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(var(--ifp) * 10);
+  max-width: 100%;
+}
+
+.ss-game[data-wide] .ss-intro {
+  --ifp: var(--cp);
+}
+
+.ss-intro__rule {
+  display: block;
+  flex: none;
+  height: calc(var(--ifp) * 2);
+  background: var(--mode, var(--c-mist));
+  animation: ss-intro-rule 240ms steps(8, end) backwards;
+}
+
+.ss-intro__words {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--ifp) * 4);
+  /* The rules overhang the words; and below, room for the name's shadow in the shutters. */
+  padding: 0 calc(var(--ifp) * 12) calc(var(--ifp) * 2);
+  animation: ss-intro-words 200ms steps(5, end) 160ms backwards;
+}
+
+.ss-intro__name {
+  margin: 0;
+  color: var(--mode, var(--c-chalk));
+  font-family: var(--font-20);
+  font-size: calc(var(--ifp) * 68);
+  line-height: calc(var(--ifp) * 60);
+  font-weight: 400;
+  white-space: nowrap;
+  text-shadow: calc(var(--ifp) * 2) calc(var(--ifp) * 2) 0
+    var(--mode-dark, var(--c-slate));
+}
+
+.ss-game[data-wide] .ss-intro__name {
+  font-family: var(--font-25);
+  font-size: calc(var(--ifp) * 82);
+  line-height: calc(var(--ifp) * 72);
+}
+
+.ss-intro__line {
+  margin: 0;
+  color: var(--c-chalk);
+  font-family: var(--font-15);
+  font-size: calc(var(--ifp) * 27);
+  line-height: calc(var(--ifp) * 24);
+  text-wrap: balance;
+}
+
+/*
+ * The words that tell the modes apart: MOST COMMON, MOST UNCOMMON, OLDEST, MOST RECENT.
+ * Where the line wraps (a narrow phone) they stay on one line together.
+ */
+.ss-intro__key {
+  color: var(--mode-light, var(--c-gold));
+  white-space: nowrap;
+}
+
+/*
+ * In the middle on whole pixels. The card and its two lines are as wide as their words, so
+ * no sum can say where their middles fall: each is put half way across and then moved back
+ * by half of itself, both rounded down to a whole pixel (a percentage in `translate` is of
+ * the thing's own size). Left to a flex box they land on half pixels at a device pixel
+ * ratio of one, and the type's upright edges smear (seen at 1920 x 930, 2026-11-16).
+ */
+@supports (translate: round(down, -50%, 1px)) {
+  .ss-intro {
+    display: block;
+  }
+
+  .ss-intro__card {
+    --ss-mid: round(down, calc(50% + var(--nudge)), var(--snap));
+    --ss-back: round(down, calc(-50% + var(--nudge)), var(--snap));
+
+    position: absolute;
+    top: var(--ss-mid);
+    left: var(--ss-mid);
+    width: max-content;
+    translate: var(--ss-back) var(--ss-back);
+  }
+
+  .ss-intro__words {
+    align-items: flex-start;
+  }
+
+  .ss-intro__name,
+  .ss-intro__line {
+    position: relative;
+    left: var(--ss-mid);
+    translate: var(--ss-back) 0;
+  }
+}
+
+/* On the way out: hidden, but for as long as its animation shows it. */
+.ss-intro[data-leaving] :is(.ss-intro__rule, .ss-intro__words) {
+  visibility: hidden;
+}
+
+.ss-intro[data-leaving] .ss-intro__rule {
+  animation: ss-intro-rule-out 200ms steps(8, end);
+}
+
+.ss-intro[data-leaving] .ss-intro__words {
+  animation: ss-intro-words-out 120ms steps(4, end);
+}
+
+@keyframes ss-intro-rule {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+@keyframes ss-intro-rule-out {
+  from {
+    transform: none;
+    visibility: visible;
+  }
+
+  to {
+    transform: scaleX(0);
+    visibility: visible;
+  }
+}
+
+@keyframes ss-intro-words {
+  from {
+    clip-path: inset(50% 0);
+  }
+
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@keyframes ss-intro-words-out {
+  from {
+    clip-path: inset(0);
+    visibility: visible;
+  }
+
+  to {
+    clip-path: inset(50% 0);
+    visibility: visible;
+  }
+}

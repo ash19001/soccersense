@@ -29,6 +29,8 @@
  *   and light, before any time passes, and stays on ink for `OPEN_HOLD` frames more (the
  *   browser shows the frame after a long one late); then the iris opens, its clock moving
  *   at most `ARRIVAL_STEP` in any one frame.
+ * - `holdOpening()` keeps it on ink, silent and still, while the page shows its mode card
+ *   before a new game; `beginOpening()` lets the iris open.
  *
  * Time only moves in `update`; `draw` paints from the clocks and allocates nothing once
  * warm. Nothing here reads a clock, the DOM or `Math.random`.
@@ -627,6 +629,8 @@ export class CareerScene implements Scene {
   private opened = false;
   /** Frames with time still to hold on ink after a build before the opening starts. */
   private hold = 0;
+  /** The page's mode card is up: it waits on ink, its clocks stopped (`holdOpening`). */
+  private held = false;
   private started = false;
   /** The picture needs preparing (its layers built) before the next frame. */
   private stale = true;
@@ -724,7 +728,28 @@ export class CareerScene implements Scene {
     this.fullT = -1;
   }
 
+  /**
+   * Wait on ink: the page's mode card is up over it. The picture is built behind the card as
+   * usual, but no time passes, nothing is heard and the opening does not start until
+   * `beginOpening()`. Only before the opening has begun; after that it does nothing. A
+   * shot, a promotion or full time asked for meanwhile ends the wait.
+   */
+  holdOpening(): void {
+    if (this.arrival === 0 && !this.opened) this.held = true;
+  }
+
+  /** The mode card has gone: the opening starts with the next frame that has time in it. */
+  beginOpening(): void {
+    this.held = false;
+  }
+
+  /** True while it waits on ink for `beginOpening()`. */
+  get waiting(): boolean {
+    return this.held;
+  }
+
   playShot(shot: Grade, onDone?: () => void): void {
+    this.held = false;
     const grade = gradeOf(shot);
     const p = PLANS[grade];
     // any sprite not built yet, now rather than in the middle of the shot
@@ -820,6 +845,7 @@ export class CareerScene implements Scene {
   }
 
   promote(total: number, onDone?: () => void): void {
+    this.held = false;
     this.finishShot();
     this.finishPromotion();
     const to = tierOf(total);
@@ -856,6 +882,7 @@ export class CareerScene implements Scene {
   }
 
   showFullTime(total: number): void {
+    this.held = false;
     this.finishShot();
     this.finishPromotion();
     this.capture();
@@ -920,6 +947,12 @@ export class CareerScene implements Scene {
     // page's first frames shows as a moment's wait, never as a jump. (The picture is
     // normally built already, by `setLighting`.)
     const built = this.stale && this.prepare();
+    if (this.held) {
+      // Under the mode card: the frames held on ink after the build pass here, so the
+      // opening starts with the first frame after the card.
+      if (!built && this.w > 0 && step > 0 && this.hold > 0) this.hold--;
+      return;
+    }
     this.t += step;
     if (!built && this.w > 0 && step > 0) {
       if (this.hold > 0 && this.arrival === 0) this.hold--;
@@ -997,6 +1030,11 @@ export class CareerScene implements Scene {
 
   draw(s: Surface): void {
     if (s.w !== this.w || s.h !== this.h) this.resize(s.w, s.h);
+    if (this.held) {
+      // the mode card is up: ink, with reduced motion too (which has no iris to wait in)
+      s.clear(P.ink);
+      return;
+    }
     const opening = !this.reduced && this.arrival < ARRIVAL_SECONDS;
     const r = opening ? Math.round(this.irisRadius()) : 0;
     if (opening && r < 1) {

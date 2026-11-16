@@ -31,6 +31,7 @@ import {
   LedNumber,
   MenuCaptions,
   ModeBadge,
+  ModeIntro,
   Panel,
   Pip,
   Pips,
@@ -772,6 +773,36 @@ function HelpScreen({ contained }: { contained: boolean }) {
   );
 }
 
+/** The mode card on the ink a game page arrives on, before a new game. */
+function IntroScreen({
+  mode,
+  contained,
+}: {
+  mode: UiMode;
+  contained: boolean;
+}) {
+  return (
+    <GameLayout contained={contained}>
+      <ModeIntro
+        mode={mode}
+        name={MODE_LABEL[mode]}
+        line={INTRO_LINE[mode][0]}
+        emphasis={INTRO_LINE[mode][1]}
+      />
+    </GameLayout>
+  );
+}
+
+const UI_MODES: readonly UiMode[] = ["home", "away", "retro", "nextgen"];
+
+/** Each mode card's line, and the words of it that are picked out. */
+const INTRO_LINE: Record<UiMode, readonly [string, string]> = {
+  home: ["GIVE THE MOST COMMON ANSWER", "MOST COMMON"],
+  away: ["GIVE THE MOST UNCOMMON ANSWER", "MOST UNCOMMON"],
+  retro: ["GIVE THE OLDEST ANSWER", "OLDEST"],
+  nextgen: ["GIVE THE MOST RECENT ANSWER", "MOST RECENT"],
+};
+
 interface Composition {
   name: string;
   title: string;
@@ -779,6 +810,11 @@ interface Composition {
 }
 
 const COMPOSITIONS: readonly Composition[] = [
+  ...UI_MODES.map((mode): Composition => ({
+    name: `intro-${mode}`,
+    title: `Mode card, ${MODE_LABEL[mode]}`,
+    render: (c) => <IntroScreen mode={mode} contained={c} />,
+  })),
   {
     name: "ask-home",
     title: "Asking, HOME",

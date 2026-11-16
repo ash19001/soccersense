@@ -53,6 +53,8 @@ export { MenuCaptions } from "./MenuCaptions";
 export type { MenuCaptionsProps, MenuModeCaption } from "./MenuCaptions";
 export { ModeBadge } from "./ModeBadge";
 export type { ModeBadgeProps } from "./ModeBadge";
+export { ModeIntro } from "./ModeIntro";
+export type { ModeIntroProps } from "./ModeIntro";
 export { Panel } from "./Panel";
 export type { PanelProps } from "./Panel";
 export { PixelGlyph, bitmapPath, bitmapSize } from "./PixelGlyph";

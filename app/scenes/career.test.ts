@@ -449,6 +449,88 @@ describe("the opening", () => {
       960 * 540 * 0.05,
     );
   });
+
+  test("held for the page's mode card it waits on ink, still and silent, then opens with the first frame", () => {
+    const draws = vi.spyOn(CareerGround.prototype, "drawBack");
+    try {
+      const scene = fresh();
+      const heard: SoundCue[] = [];
+      scene.onSound = (cue) => heard.push(cue);
+      scene.holdOpening();
+      expect(scene.waiting).toBe(true);
+      scene.update(0);
+      const s = new Surface(480, 270);
+      // the picture was built once, behind the card, and is not painted again while it waits
+      draws.mockClear();
+      for (let i = 0; i < 150; i++) {
+        scene.update(1 / 60);
+        if (i % 10 === 0) {
+          scene.draw(s);
+          expect(s.data.every((c) => c === P.ink)).toBe(true);
+        }
+      }
+      expect(draws).toHaveBeenCalledTimes(0);
+      // not the opening's whoosh, not a touch of the juggle
+      expect(heard).toEqual([]);
+
+      // the card goes: the frames held after the build passed under it, so it opens at once
+      scene.beginOpening();
+      expect(scene.waiting).toBe(false);
+      scene.update(1 / 60);
+      scene.draw(s);
+      expect(heard).toEqual([{ kind: "transition", opening: true }]);
+      scene.update(1 / 60);
+      scene.draw(s);
+      expect(s.data.every((c) => c === P.ink)).toBe(false);
+      // and the whistle starts play when it is fully open, as it always does
+      run(scene, ARRIVAL_SECONDS);
+      expect(heard.filter((cue) => cue.kind === "whistle")).toHaveLength(1);
+    } finally {
+      draws.mockRestore();
+    }
+  });
+
+  test("held with reduced motion it is ink too, and the picture is there the moment it is let go", () => {
+    const scene = fresh();
+    scene.setReducedMotion(true);
+    scene.holdOpening();
+    scene.update(0);
+    const s = new Surface(480, 270);
+    run(scene, 1);
+    scene.draw(s);
+    expect(s.data.every((c) => c === P.ink)).toBe(true);
+    scene.beginOpening();
+    scene.draw(s);
+    // no time passed while it waited: it is the picture a scene never held starts on
+    const plain = fresh();
+    plain.setReducedMotion(true);
+    plain.update(0);
+    const p = new Surface(480, 270);
+    plain.draw(p);
+    expect(s.data.every((c) => c === P.ink)).toBe(false);
+    expect(s.data).toEqual(p.data);
+  });
+
+  test("the wait can only be asked for before the opening, and anything the page plays ends it", () => {
+    // a shot, a promotion or full time: the game is on, whatever the card was doing
+    const plays: ((scene: CareerScene) => void)[] = [
+      (scene) => scene.playShot("tapin"),
+      (scene) => scene.promote(400),
+      (scene) => scene.showFullTime(300),
+    ];
+    for (const play of plays) {
+      const scene = fresh();
+      scene.holdOpening();
+      play(scene);
+      expect(scene.waiting).toBe(false);
+    }
+    // once the iris has begun to open it is not shut again
+    const scene = fresh();
+    scene.update(0);
+    for (let i = 0; i <= OPEN_HOLD; i++) scene.update(1 / 60);
+    scene.holdOpening();
+    expect(scene.waiting).toBe(false);
+  });
 });
 
 describe("the promotion's close-up", () => {
