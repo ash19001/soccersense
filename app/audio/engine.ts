@@ -537,6 +537,12 @@ export interface SoundEngineOptions {
   seed?: number;
   /** Run the housekeeping timer (default true). Tests call `tick` themselves. */
   timers?: boolean;
+  /**
+   * Called once, when the context is first running after a gesture: from now the page can
+   * be heard. (Until then the browser holds it silent, and the speaker shows it waiting:
+   * started.ts.)
+   */
+  onStarted?: () => void;
 }
 
 function count(table: Record<string, number>, key: string): void {
@@ -557,6 +563,8 @@ export class SoundEngine {
    * when it does), so the first press on the page is heard.
    */
   private resuming = false;
+  /** The context has run after a gesture, and `onStarted` has been told. */
+  private started = false;
   private timer: ReturnType<typeof setInterval> | null = null;
   private suspendTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly voices = new Set<Voice>();
@@ -681,15 +689,26 @@ export class SoundEngine {
       const ctx = this.ctx;
       ctx.resume().then(
         () => {
-          if (this.ctx === ctx) this.resuming = false;
+          if (this.ctx !== ctx) return;
+          this.resuming = false;
+          this.heard();
         },
         () => {
           // Not allowed yet: the next gesture tries again.
           if (this.ctx === ctx) this.resuming = false;
         },
       );
+    } else {
+      this.heard();
     }
     this.startTimer();
+  }
+
+  /** The context is running after a gesture: the page can be heard. Told once. */
+  private heard(): void {
+    if (this.started || this.ctx?.state !== "running") return;
+    this.started = true;
+    this.options.onStarted?.();
   }
 
   private startTimer(): void {

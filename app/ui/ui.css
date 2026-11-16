@@ -3433,6 +3433,41 @@ button.ss-menu__card:active {
   flex: none;
 }
 
+/*
+ * Waiting (`data-waiting`): the sound is on, but the browser holds a page silent until its
+ * first press, on every load and refresh. The speaker's waves blink once a second, on and
+ * off like a lamp (never a fade). With reduced motion nothing blinks: no waves, and two
+ * dots where they will be.
+ */
+.ss-sound__waves {
+  animation: ss-sound-wait 1s steps(1, end) infinite;
+}
+
+.ss-sound__dots {
+  visibility: hidden;
+}
+
+@keyframes ss-sound-wait {
+  0% {
+    visibility: visible;
+  }
+
+  50% {
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ss-sound__waves {
+    animation: none;
+    visibility: hidden;
+  }
+
+  .ss-sound__dots {
+    visibility: visible;
+  }
+}
+
 /* ---------- 21b. The sound board (/dev/sound, a development aid) ----------------------------------- */
 
 .dev-sound {

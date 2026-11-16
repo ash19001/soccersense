@@ -430,6 +430,18 @@ the scene: docs/API_SCENES.md; the art: `planeBox` in `~/art/stadium-plane` and 
 frames, the last four its fall, its wreck behind the mascot and the new one coming in).
 Monitors only: no plane flies on a phone.
 
+## The sound waiting for the first press (2026-11-16)
+
+Reported as a glitch: on a first load or a refresh the speaker showed the sound on, nothing was
+heard, and it took a mute and an unmute to hear anything. Nothing was broken in the engine: a
+browser holds every page silent until its first press (a refresh too), the speaker showed only
+the remembered choice, and a first press on the speaker started the sound and switched it off
+at once. Now the speaker shows the sound waiting until it has really started (blinking waves
+and a tooltip), and a press on it while it waits starts the sound and leaves it on. The engine
+says when it has started (`onStarted`), through `app/audio/started.ts`. docs/AUDIO.md (waiting
+for the first press) and docs/API_UI.md (`SoundToggle`) have the detail. The page still cannot
+play anything before a press: no page can.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

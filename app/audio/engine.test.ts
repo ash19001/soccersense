@@ -229,6 +229,63 @@ describe("sound engine: before a gesture", () => {
     expect(engine.debug().state).toBe("running");
   });
 
+  test("says once that the sound has started: when its context first runs after a gesture", async () => {
+    const started = vi.fn();
+    const { engine, ctx } = setup({ onStarted: started });
+    keep(engine);
+    // made ahead of the gesture and held silent: not started
+    while (engine.prepareStep());
+    expect(ctx().state).toBe("suspended");
+    expect(started).not.toHaveBeenCalled();
+    engine.unlock();
+    await settle();
+    expect(started).toHaveBeenCalledTimes(1);
+    // and never again, whatever follows
+    engine.setMuted(true);
+    engine.setMuted(false);
+    engine.unlock();
+    await settle();
+    expect(started).toHaveBeenCalledTimes(1);
+  });
+
+  test("it has not started while the browser still holds the context, or while it is muted", async () => {
+    // a gesture the browser does not start the context on (yet)
+    let start: () => void = () => {};
+    const held = vi.fn();
+    const slow = setup({
+      onStarted: held,
+      createContext: () => {
+        const fake = new FakeAudioContext();
+        fake.state = "suspended";
+        fake.resume = () =>
+          new Promise<void>((resolve) => {
+            start = () => {
+              fake.state = "running";
+              resolve();
+            };
+          });
+        return fake.asContext();
+      },
+    });
+    keep(slow.engine).unlock();
+    await settle();
+    expect(held).not.toHaveBeenCalled();
+    start();
+    await settle();
+    expect(held).toHaveBeenCalledTimes(1);
+
+    // muted: a gesture starts nothing, until the sound is switched on
+    const quiet = vi.fn();
+    const muted = setup({ onStarted: quiet });
+    keep(muted.engine).setMuted(true);
+    muted.engine.unlock();
+    await settle();
+    expect(quiet).not.toHaveBeenCalled();
+    muted.engine.setMuted(false);
+    await settle();
+    expect(quiet).toHaveBeenCalledTimes(1);
+  });
+
   test("after dispose, a gesture makes nothing and the context is closed", () => {
     const { engine, made } = setup();
     engine.attach(window, document);

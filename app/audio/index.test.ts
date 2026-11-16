@@ -10,11 +10,18 @@ import {
   soundEngine,
 } from "./index";
 import { resetSoundMutedForTests } from "./mute";
+import { isSoundWaiting, resetSoundStartedForTests } from "./started";
 import { FakeAudioContext } from "./testing";
+
+/** Lets what was put off until after the press (a timer of no length) happen. */
+function afterThePress(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 beforeEach(() => {
   localStorage.clear();
   resetSoundMutedForTests();
+  resetSoundStartedForTests();
   FakeAudioContext.made = [];
   vi.stubGlobal("AudioContext", FakeAudioContext);
 });
@@ -22,6 +29,7 @@ beforeEach(() => {
 afterEach(() => {
   resetSoundEngineForTests();
   resetSoundMutedForTests();
+  resetSoundStartedForTests();
   vi.unstubAllGlobals();
   localStorage.clear();
   document.body.innerHTML = "";
@@ -48,6 +56,39 @@ describe("playCue", () => {
     engine?.setMuted(true);
     playCue({ kind: "whistle" });
     expect(engine?.debug().dropped.muted).toBe(1);
+  });
+});
+
+describe("the sound waiting for the page's first press", () => {
+  test("it waits until a gesture has started the engine, and until that press has been handled", async () => {
+    soundEngine();
+    expect(isSoundWaiting()).toBe(true);
+    await afterThePress();
+    expect(isSoundWaiting()).toBe(true);
+    window.dispatchEvent(new Event("pointerdown"));
+    // whoever handles the same press next still finds it waiting
+    expect(isSoundWaiting()).toBe(true);
+    await afterThePress();
+    expect(isSoundWaiting()).toBe(false);
+  });
+
+  test("switched off, a gesture starts nothing: it waits until the sound is switched on", async () => {
+    localStorage.setItem(SOUND_KEY, "off");
+    const engine = soundEngine();
+    window.dispatchEvent(new Event("pointerdown"));
+    await afterThePress();
+    expect(isSoundWaiting()).toBe(true);
+    engine?.setMuted(false);
+    await afterThePress();
+    expect(isSoundWaiting()).toBe(false);
+  });
+
+  test("an engine that has been disposed of says nothing", async () => {
+    soundEngine();
+    window.dispatchEvent(new Event("pointerdown"));
+    resetSoundEngineForTests();
+    await afterThePress();
+    expect(isSoundWaiting()).toBe(true);
   });
 });
 

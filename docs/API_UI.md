@@ -1122,7 +1122,7 @@ one is open the layer is drawn inside the one on top (a portal) and the burst sh
 
 ### `SoundToggle`
 
-`labels: { label, on, off }` (`strings.sound`), `className?`
+`labels: { label, on, off, waiting }` (`strings.sound`), `className?`
 
 The sound switch: a square steel icon button with a 9 x 9 pixel speaker, two waves when the
 sound is on (`SPEAKER_ON`) and crossed out when it is off (`SPEAKER_OFF`). It is a real switch
@@ -1134,6 +1134,19 @@ The choice is remembered in `localStorage` (`soccersense:v1:sound`) through `~/a
 build-time HTML and the first render show it on; it follows the storage once the page runs, and
 another tab's change too. Turning the sound on is a user gesture, so the engine may start its
 audio there and then.
+
+**Waiting** (2026-11-16; docs/AUDIO.md has why). On a page just opened or refreshed the sound
+is on but the browser holds it until the first press. Until the engine says it has started
+(`isSoundWaiting` from `~/audio`; waiting at build time too), a switch that is on shows
+`SPEAKER_WAITING` and carries `data-waiting`: the speaker with its waves blinking on and off
+once a second (`.ss-sound__waves`; with reduced motion no waves and two still dots,
+`.ss-sound__dots`), and `labels.waiting` in its tooltip ("Sound on: it starts when you click
+or tap"). It is still `aria-checked="true"`: the choice is on. A press anywhere on the page
+starts the sound and the switch shows it on. A press on the switch itself while it waits
+starts the sound too and leaves it on (it does not switch it off); the switch notes at
+`pointerdown` or `keydown` whether it was waiting, because by its `click` the same press has
+started the sound. Only a press that begins once the sound has started switches it off. Off
+is off, never waiting; and where there is no Web Audio there is nothing to wait for.
 
 There is only ever one on a screen, beside the how-to-play "?" where there is one:
 

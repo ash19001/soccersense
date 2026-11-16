@@ -429,7 +429,12 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   button (section 6.6) and the day number. On a monitor the sound switch is under the bell at
   the left end and Support is a gold button with a heart and its name at the right end, after
   the `?` and the stats (the product owner, 2026-11-14: "put the sound icon/button where the
-  support us/heart button is ... make it somewhere else and more prominent"). A card not played today shows the mode's picture
+  support us/heart button is ... make it somewhere else and more prominent"). A browser lets a
+  page make no sound until it has been pressed once, on every visit and every refresh, so on a
+  page just opened the sound switch shows the sound waiting (its waves blink, and it says
+  "Sound on: it starts when you click or tap"); any press starts it, and a press on the switch
+  itself starts it and leaves it on (the product owner, 2026-11-16: "it appears the sound is
+  unmuted by the symbol but no sound appears until we mute and unmute"). A card not played today shows the mode's picture
   (the same as its patch on the ball: the stadium, the aeroplane, the arrows), its badge and
   what it is (`HOME` / `Most common wins`), and pressing it plays the mode. Once played it
   shows today's score, the badge and two square icon buttons (the product owner, 2026-11-13):

@@ -1039,7 +1039,12 @@ export default function DevSound() {
         <div className="dev-sound__title">
           <h1 className="ss-t20">Sound board</h1>
           <SoundToggle
-            labels={{ label: "Sound", on: "Sound on", off: "Sound off" }}
+            labels={{
+              label: "Sound",
+              on: "Sound on",
+              off: "Sound off",
+              waiting: "Sound on: it starts when you click",
+            }}
           />
         </div>
         <p>

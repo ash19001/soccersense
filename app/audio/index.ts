@@ -13,6 +13,7 @@ import type { SoundCue } from "~/scenes/scene";
 import { SoundEngine } from "./engine";
 import { isSoundMuted, loadSoundMuted, subscribeSoundMuted } from "./mute";
 import { builtRecordings } from "./recordings";
+import { markSoundStarted } from "./started";
 
 export {
   BED_RMS_DB,
@@ -35,6 +36,12 @@ export {
   setSoundMuted,
   subscribeSoundMuted,
 } from "./mute";
+export {
+  isSoundWaiting,
+  isSoundWaitingOnServer,
+  markSoundStarted,
+  subscribeSoundWaiting,
+} from "./started";
 export { PLACES, TIER_PLACES, type Place, placeOf } from "./place";
 export { recordingIndex } from "./recordings";
 
@@ -74,6 +81,14 @@ export function soundEngine(): SoundEngine | null {
   const engine = new SoundEngine({
     createContext: () => new Context({ latencyHint: "interactive" }),
     recordings: builtRecordings(),
+    // The speaker stops showing the sound waiting (started.ts), but only once the press
+    // that started it has been handled everywhere: a press on the speaker itself asks
+    // whether the sound was still waiting when it came (SoundToggle).
+    onStarted: () => {
+      window.setTimeout(() => {
+        if (shared === engine) markSoundStarted();
+      }, 0);
+    },
   });
   engine.attach(window, document);
   engine.setMuted(loadSoundMuted());

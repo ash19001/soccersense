@@ -93,7 +93,7 @@ scene ── onSound(cue) ──┐                 voices ─ trim (mix.ts) ─
 scene ── ambience() ────┤ PixelStage ──>  beds ─────────────── ambience ────┼─ master ─ safety
 playCue(cue) ───────────┤ (the host)      sends ────────────── room ────────┘
 button presses (click) ─┤
-SoundToggle ── mute ────┘
+SoundToggle ── mute ────┘   (and, the other way, engine ── started ── SoundToggle)
 ```
 
 - **Scenes** say what is to be heard and never touch audio: they call `this.onSound?.(cue)`
@@ -131,6 +131,21 @@ SoundToggle ── mute ────┘
   board's head in the game) is remembered in `localStorage` (`soccersense:v1:sound`, `"off"` or
   `"on"`). Muting fades out in a few hundredths of a second, frees everything and suspends the
   context. Reduced motion does not mute.
+- **Waiting for the first press.** A browser holds a page silent until its first gesture, on
+  every load and every refresh (checked in Chrome: a refresh does not carry the last page's
+  presses over), so a page just opened has its sound on and nothing to hear. The product owner,
+  2026-11-16: "it appears the sound is unmuted by the symbol but no sound appears until we mute
+  and unmute". The page cannot start the sound itself, so it says what is happening instead.
+  The engine calls `onStarted` once, when its context is first running after a gesture (not
+  while it is muted, and not while the browser has not yet let it start); `soundEngine()` passes
+  that on to a small store, `app/audio/started.ts` (`isSoundWaiting`, `subscribeSoundWaiting`,
+  `markSoundStarted`), a moment after the press that started it has been handled everywhere.
+  Until then the speaker shows the sound waiting (its waves blink, its tooltip says "Sound on:
+  it starts when you click or tap"), and a press on the speaker itself starts the sound and
+  leaves it on. Before, that press started the sound and switched it off in the same instant,
+  so it took a second press to hear anything: the "mute and unmute". The cost: someone who
+  wants the sound off before it has ever played presses the speaker twice (the first press
+  starts it).
 - **Where the sound is.** The engine knows the place of the bed it is playing (`place.ts`: the
   home page's town, then the eight career tiers) and the crowd voices follow it: a `cheer` is a
   few mates whooping and clapping in the park, a touchline of parents on a Sunday, a stand at a

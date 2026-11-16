@@ -25,6 +25,11 @@ export const en = {
     /** Its tooltip, by state. */
     on: "Sound on",
     off: "Sound off",
+    /**
+     * Its tooltip while the sound is on but the browser is still holding it: a page is
+     * silent until its first click, tap or key, on every load and refresh.
+     */
+    waiting: "Sound on: it starts when you click or tap",
   },
 
   home: {

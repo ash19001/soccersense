@@ -96,7 +96,12 @@ export type {
   StatsShot,
   StatsTally,
 } from "./Stats";
-export { SoundToggle, SPEAKER_OFF, SPEAKER_ON } from "./SoundToggle";
+export {
+  SoundToggle,
+  SPEAKER_OFF,
+  SPEAKER_ON,
+  SPEAKER_WAITING,
+} from "./SoundToggle";
 export { FLAME, SPARKS, Streak } from "./Streak";
 export type { StreakProps } from "./Streak";
 export type { SoundToggleLabels, SoundToggleProps } from "./SoundToggle";
