@@ -34,6 +34,7 @@
  *   ./node_modules/.bin/tsx tools/snap.ts menu/gold-turn --strip 8 --dt 0.07 --scale 1    (it turns to gold)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/gold-turn --t 1 --strip 6 --dt 1 --scale 1 --time night    (the ground erupts)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/golden --time all --scale 1    (the golden ball, kept)
+ *   ./node_modules/.bin/tsx tools/snap.ts menu/golden --size 960x457 --t 1 --strip 6 --dt 0.14 --crop 395,205,170,170 --scale 2    (its sparkle)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/away-plane --size 960x457 --t 0.9 --strip 8 --dt 0.45 --crop 720,60,240,300 --scale 1    (AWAY's ball brings the plane down, on to the lawn at the right)
  *   ./node_modules/.bin/tsx tools/snap.ts menu/away-plane --size 960x457 --t 4.3 --strip 6 --dt 0.12 --scale 1    (and the iris closes on the ball)
  */

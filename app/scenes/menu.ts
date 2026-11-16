@@ -92,7 +92,8 @@
  * (art/gold-show.ts), the ground erupts as for HOME's landing, the crowd cheers, the mascot
  * does a trick and the airship's sign says so (nothing else does). It is heard too: a quiet
  * shimmer comes in with the glow, the ball's own chime rings as it turns, and the shimmer
- * stays, quieter, under a golden ball. The ball stays gold, twinkling now and then,
+ * stays, quieter, under a golden ball. The ball stays gold, sparkling all the time (glints
+ * on its leather, art/gold-sparkle.ts: its shimmer seen as well as heard) and twinkling now and then,
  * and `onGolden` tells the page, which keeps it for the day (`setGolden`). The constants
  * under "The golden ball" give the feel.
  *
@@ -131,6 +132,7 @@ import {
   GOLD_SHOW_LEN,
   drawGoldShow,
 } from "~/art/gold-show";
+import { drawGoldSparkle } from "~/art/gold-sparkle";
 import { drawLeatherBall, type LeatherBallState } from "~/art/leather-ball";
 import { lightingFor, type Lighting } from "~/art/lighting";
 import { drawLogo, logoSize, type LogoOptions } from "~/art/logo";
@@ -637,7 +639,10 @@ const GOLD_ROAR_HOLD = 4;
 const GOLD_ROAR_END = 6.5;
 const GOLD_SHOW_FLOOR = 0.04;
 const GOLD_SIGN = 10;
-/** The golden ball twinkles once every GOLD_WINK seconds (WINK_FPS frames a second). */
+/**
+ * The golden ball twinkles once every GOLD_WINK seconds (WINK_FPS frames a second), and
+ * between those it sparkles all the time (art/gold-sparkle.ts).
+ */
 const GOLD_WINK = 2.4;
 const WINK_FPS = 14;
 
@@ -3025,6 +3030,27 @@ export class MenuScene implements Scene {
   }
 
   /**
+   * The golden ball's sparkle, on the ball itself (it has just been drawn on `s`): glints
+   * opening and closing here and there on its gold leather for as long as its shimmer is
+   * heard (`shimmerLevel`: while it hovers), so that the one goes with the other; more of
+   * them while it is being celebrated. With reduced motion a few stand still instead.
+   */
+  private drawSparkle(s: Surface): void {
+    if (!this.golden) return;
+    if (this.state !== "idle" && this.state !== "intro") return;
+    const b = this.ball;
+    drawGoldSparkle(s, {
+      cx: b.cx,
+      cy: b.cy,
+      r: b.r,
+      t: this.clock,
+      seed: this.seed,
+      lively: this.goldT >= 0,
+      still: this.reduced,
+    });
+  }
+
+  /**
    * The golden ball's twinkle, on the ball itself: one every GOLD_WINK seconds, on a
    * diagonal, where the hovering ball's leather is, clear of the four patches. Only while
    * it hovers, and none with reduced motion.
@@ -4067,6 +4093,7 @@ export class MenuScene implements Scene {
     }
     if (this.squash <= 0) {
       drawBall(s, b, this.patches, light);
+      this.drawSparkle(s);
       this.drawWink(s);
       // RETRO: becoming the old ball as it spins, its pixels coming in over the menu ball
       if (this.oldCover > 0) {

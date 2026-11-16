@@ -301,6 +301,37 @@ drawGoldShow(s, t, { top, floor, seed, night }); // the show t seconds after the
   by day, against a pale sky, its strong ones.
 - Pure: the same call gives the same pixels. Raw colours, as every light in the sky.
 
+## The golden ball's sparkle (`~/art/gold-sparkle`)
+
+Glints on the golden ball's leather for as long as it hovers, so that its shimmer is seen as
+well as heard (the product owner, 2026-11-16: "add some sparkle effect on ball when its golden
+so the shimmer sound makes sense"; the scene: docs/API_SCENES.md).
+
+```ts
+drawGoldSparkle(s, { cx, cy, r, t, seed, lively?, still? }): number; // over the ball already on s; how many glints it drew
+drawGlint(s, x, y, arm); // one glint, its arms `arm` px long (0: a point of light)
+isGoldLeather(c): boolean; // a tone of the ball's gold, in any light
+```
+
+- **A glint** is a four-point star: fine rays, white for most of their length and pale gold at
+  their ends, a heart three pixels across from arms of 3, sparkles on the diagonals from 5,
+  and gold drawn close round it so that it shows on the palest leather as on the darkest.
+- **How many**: 10 on a ball of 64 px radius or more, fewer on a smaller one (never under 5),
+  half as many again with `lively` (the ball has just turned to gold). Each has a beat of its
+  own, every 0.9 s give or take 30%, and in each beat opens and closes at a new place, 14
+  frames a second: small (arms up to 3, 0.57 s) or, one in three, large (arms up to 6, 0.71 s).
+  About three to five are in sight at a time.
+- **Where**: looked for on the picture, up to five places a beat between 0.1 and 0.9 of the
+  radius from the ball's middle: gold leather (`isGoldLeather`) under every pixel of the glint
+  at its biggest. So never on a panel, a panel's frame, its picture or lettering, the ball's
+  own white glint, or off the ball; and right however the ball has been turned, in any light.
+  No place found: no glint that beat.
+- `still` (reduced motion): four small glints that neither open nor close, whatever `t`. Each
+  stays where it is while the leather under it is clear (the menu's ball still rocks, very
+  slowly: a panel that comes under one moves it to its next place).
+- Pure: the same call on the same picture gives the same pixels. Raw colours, as every light.
+  Nothing on a ball that is not gold.
+
 ## The ball of the future and the neon world (`~/art/future-ball`, `~/art/neon-world`)
 
 NEXT-GEN's kick-off on the home screen (2026-11-14: "for next gen can we do it turns into a

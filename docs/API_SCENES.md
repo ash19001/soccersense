@@ -464,10 +464,15 @@ it turns, then a `firework` with `distant: true` as each rocket goes up
 heard and the ball hovers (never once it is struck): from `spinCharge` 0.25 it rises with the
 glow to `HOME_PAGE.goldenShimmerBuild` as the ball turns, falls over the 6.5 s of the roar to
 `HOME_PAGE.goldenShimmer`, and stays there under a golden ball (`setGolden(true)` too). The
-golden ball twinkles every 2.4 s while it hovers. With reduced motion: the gold, its sounds
-(no rockets) and the sign only. The home page keeps the day (`soccersense:golden-day` in
+shimmer is seen as well as heard: in the states it is heard in (`idle` and `intro`) a golden
+ball sparkles all the time, `drawGoldSparkle` (`~/art/gold-sparkle`, docs/API_ART.md) drawn
+over the ball it has just drawn (in the floating ball's own layer too), by the scene's clock
+and seed, `lively` while the turn is being celebrated; and it twinkles, bigger, every 2.4 s
+while it hovers. With reduced motion: the gold, its sounds
+(no rockets), the sign, and a few glints that stand still (`still`). The home page keeps the day (`soccersense:golden-day` in
 local storage) and calls `setGolden(true)` on a later visit that day. Shots:
-`menu/gold-charge`, `menu/gold-turn`, `menu/golden`.
+`menu/gold-charge`, `menu/gold-turn`, `menu/golden` (its sparkle:
+`pnpm snap menu/golden --size 960x457 --t 1 --strip 6 --dt 0.14 --crop 395,205,170,170`).
 
 Apart from the golden ball's, the scene itself sends no `cheer`, `firework` or `vuvuzela`. The picture's match is heard only
 far off, as background: at a home goal (24 to 26 s into each 40 s play of the picture's

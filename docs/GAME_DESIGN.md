@@ -369,11 +369,17 @@ crowd colours and kit differ.
   turns to gold" and "a quiet background continuous shimmering sound (not too loud so it
   isn't annoying)"): a quiet shimmer comes in with the glow and grows as the ball nears the
   gold, the ball's own sparkle rings as it turns, and the shimmer then falls back to a very
-  quiet bed that stays for as long as a golden ball is on the screen. The ball stays gold,
-  with a twinkle now and then, for the rest of that day on that device (it is still the
+  quiet bed that stays for as long as a golden ball is on the screen. And the shimmer is
+  seen (the product owner, 2026-11-16: "add some sparkle effect on ball when its golden so
+  the shimmer sound makes sense"): a golden ball sparkles all the time it hovers, small
+  four-point glints of white opening and closing here and there on its gold leather, a few at
+  a time (more while it is being celebrated), never on a patch or its lettering, with a
+  bigger twinkle now and then. The ball stays gold
+  for the rest of that day on that device (it is still the
   menu: the patches are as ever), and is an ordinary ball again the next day. Spinning a
   golden ball for another 30 seconds sets the fireworks off again. With reduced motion the
-  ball turns to gold with its sounds and the sign: no glow, no sparks, no fireworks. It
+  ball turns to gold with its sounds and the sign: no glow, no sparks, no fireworks, and a few
+  glints that stand still on its leather. It
   scores nothing and changes nothing in the game.
 - The ball is heard: a light touch when the pointer comes onto it or presses it, wind while it
   spins (louder the faster), and the strike when a mode is chosen, then wind as it flies; HOME's

@@ -886,6 +886,79 @@ describe("the golden ball", () => {
     return n;
   }
 
+  /**
+   * Pixels of the glints' own gold on the ball: each has the palette's gold drawn round
+   * it, as it is, which by night is no tone of the ball's leather (that is lit).
+   */
+  function glintGold(scene: MenuScene): number {
+    const m = menuLayout(W, H);
+    const s = draw(scene, W, H);
+    const r = m.ballR - 1;
+    let n = 0;
+    for (let y = Math.floor(m.ballCy - r); y <= m.ballCy + r; y++) {
+      for (let x = Math.floor(m.cx - r); x <= m.cx + r; x++) {
+        if (Math.hypot(x - m.cx, y - m.ballCy) >= r) continue;
+        if (s.get(x, y) === P.gold) n++;
+      }
+    }
+    return n;
+  }
+
+  // The product owner, 2026-11-16: "add some sparkle effect on ball when its golden so the
+  // shimmer sound makes sense".
+  it("sparkles all the time it hovers, as its shimmer is heard; a ball that is not gold never does", () => {
+    expect(NIGHT.lit(P.gold)).not.toBe(P.gold);
+    const scene = make(W, H);
+    scene.setLighting(NIGHT);
+    let shimmers = 0;
+    scene.onSound = (cue) => {
+      if (cue.kind === "shimmer") shimmers++;
+    };
+    let plain = 0;
+    for (let i = 0; i < 20; i++) {
+      scene.update(STEP * 3);
+      plain += glintGold(scene);
+    }
+    expect(plain).toBe(0);
+    expect(shimmers).toBe(0);
+
+    scene.setGolden(true);
+    let frames = 0;
+    let lit = 0;
+    const seen = new Set<number>();
+    for (let i = 0; i < 60; i++) {
+      scene.update(STEP * 3);
+      frames++;
+      const n = glintGold(scene);
+      if (n > 0) lit++;
+      seen.add(n);
+    }
+    // three seconds of it: glints in nearly every frame, coming and going
+    expect(lit / frames).toBeGreaterThan(0.9);
+    expect(seen.size).toBeGreaterThan(8);
+    expect(shimmers).toBeGreaterThan(frames - 1);
+
+    // the gold taken off, there is nothing to sparkle
+    scene.setGolden(false);
+    scene.update(STEP);
+    expect(glintGold(scene)).toBe(0);
+  });
+
+  it("with reduced motion a few glints stand on a golden ball, neither opening nor closing", () => {
+    const scene = make(W, H);
+    scene.setLighting(NIGHT);
+    scene.setReducedMotion(true);
+    scene.setGolden(true);
+    scene.update(STEP);
+    // four small ones: the same gold round them in every frame of a second
+    const gold = glintGold(scene);
+    expect(gold).toBeGreaterThan(20);
+    for (let i = 0; i < 20; i++) {
+      scene.update(STEP * 3);
+      expect(glintGold(scene)).toBe(gold);
+    }
+  });
+
   it("turns to gold when the hand keeps it spinning for GOLD_SPIN seconds, and not before", () => {
     const scene = make(W, H);
     const cues: SoundCue[] = [];

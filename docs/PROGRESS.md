@@ -409,6 +409,11 @@ quieter, twice, and it was halved each time (the kept shimmer is now about 12 dB
 town's own bed). To see it quickly, `?speed=8` on the home page runs the scene eight
 times as fast.
 
+The shimmer is seen too (the product owner, later the same day: "add some sparkle effect on
+ball when its golden so the shimmer sound makes sense"): a golden ball sparkles all the time
+it hovers, glints opening and closing on its gold leather (`~/art/gold-sparkle`,
+docs/API_ART.md). Before, it only twinkled once every 2.4 s.
+
 ## AWAY and the plane (2026-11-16)
 
 A second easter egg on the home screen (the product owner: "if the plane is passing through
