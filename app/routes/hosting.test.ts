@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import { NOT_FOUND, SHELL, writeNotFoundPage } from "../../tools/not-found";
 import { PAGES } from "./seo";
@@ -68,6 +68,36 @@ describe("hosting on Cloudflare", () => {
     expect(() => writeNotFoundPage(join(root, "no-such-build"))).toThrow(
       /run the build first/,
     );
+  });
+
+  test("the development pages are on the dev server and never in the built site", async () => {
+    // the product owner, 2026-11-17: "why can i access links like /dev/sound on prod. i
+    // thought that was for dev only"
+    const argv = process.argv;
+    // the command that is reading app/routes.ts: `react-router <command>`
+    const paths = async (command: string) => {
+      process.argv = ["node", "react-router", command];
+      vi.resetModules();
+      const routes = (await import("../routes")).default;
+      return routes.map((route) => (route.index ? "/" : `/${route.path}`));
+    };
+    try {
+      const built = await paths("build");
+      expect(built.filter((path) => path.startsWith("/dev"))).toEqual([]);
+      // every page players are sent to is still there
+      for (const page of PAGES) expect(built).toContain(page);
+      // the dev server has them, and so does typegen, which makes their types
+      for (const command of ["dev", "typegen"]) {
+        const all = await paths(command);
+        expect(all).toEqual(
+          expect.arrayContaining(["/dev/ui", "/dev/sound", "/dev/stage"]),
+        );
+        expect(all.filter((path) => !path.startsWith("/dev"))).toEqual(built);
+      }
+    } finally {
+      process.argv = argv;
+      vi.resetModules();
+    }
   });
 
   test("pnpm lets wrangler's runtime install: an unlisted build script stops a deploy", () => {

@@ -1,5 +1,29 @@
 import { type RouteConfig, index, route } from "@react-router/dev/routes";
 
+/**
+ * The development pages: aids for building the game, not pages for players. They exist on
+ * the dev server (`pnpm dev`) and in the tests, and are left out of the built site
+ * altogether, so the live site answers their addresses as it does any that is not a page
+ * (the product owner, 2026-11-17: "why can i access links like /dev/sound on prod. i
+ * thought that was for dev only"; until then they were built and deployed, asking only not
+ * to be indexed).
+ */
+const DEVELOPMENT_PAGES = [
+  // The interface gallery: every component in every state.
+  route("dev/ui", "routes/dev-ui.tsx"),
+  // The sound board (docs/AUDIO.md): every sound and its level.
+  route("dev/sound", "routes/dev-sound.tsx"),
+  // The canvas host's test card: PixelStage running a test scene.
+  route("dev/stage", "routes/dev-stage.tsx"),
+];
+
+/**
+ * The site is being built to be deployed: this file is being read by `react-router build`.
+ * By the command, not by NODE_ENV: `react-router typegen` (part of `pnpm check`) also runs
+ * as "production", and it has to see the development pages to make their types.
+ */
+const built = process.argv.includes("build");
+
 export default [
   index("routes/home.tsx"),
   // The four modes. Static paths, not a `:mode` parameter: the site is prerendered, so each
@@ -12,10 +36,5 @@ export default [
   // NEXT-GEN's id as an address too, so `/play/${mode}` reaches it as it does the others.
   route("play/nextgen", "routes/play.tsx", { id: "play-nextgen-id" }),
   route("how-to-play", "routes/how-to-play.tsx"),
-  // The interface gallery: every component in every state. A development aid, not a page
-  // players are sent to (it asks search engines not to index it).
-  route("dev/ui", "routes/dev-ui.tsx"),
-  route("dev/sound", "routes/dev-sound.tsx"), // the sound board (docs/AUDIO.md): every sound and its level
-  // The canvas host's test card: PixelStage running a test scene. Also a development aid.
-  route("dev/stage", "routes/dev-stage.tsx"),
+  ...(built ? [] : DEVELOPMENT_PAGES),
 ] satisfies RouteConfig;

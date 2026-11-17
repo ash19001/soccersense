@@ -53,7 +53,10 @@ keeps `mix.ts` pure.
 `pageMeta({ path, title, description })`: the title and description (from `app/i18n/en.ts`),
 leave to index the page, and the same words as Open Graph tags, which chats, feeds and X read
 for a link's preview. A new page does the same and is added to `PAGES`; a test compares
-`PAGES` with `app/routes.ts`. The development pages say `noindex` themselves, and the root's
+`PAGES` with `app/routes.ts`. The development pages (`/dev/ui`, `/dev/sound`, `/dev/stage`)
+are on the dev server only: `app/routes.ts` leaves them out of a production build, so the
+live site has no such addresses (since 2026-11-17; before that they were deployed, saying
+`noindex`). They still say `noindex` themselves, and the root's
 own `meta` (`fallbackMeta`) says it for an address that is not a page: the host serves the
 app's shell for those (`__spa-fallback.html`; on Cloudflare as `404.html` with a "404 Not
 Found", see "Hosting" below; many static hosts answer "200 OK", and the page would
