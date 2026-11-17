@@ -552,10 +552,10 @@ buttons onto two lines at 1920 x 1080, 2560 x 1440 and on 390 x 844 and smaller 
 
 #### Sharing: the picture (2026-11-12)
 
-SHARE shares a picture of the game with the text summary (docs/GAME_DESIGN.md 6.4). The parts:
+SHARE shares a picture of the game with two lines of text (docs/GAME_DESIGN.md 6.4). The parts:
 
 - `shareCardFor(session)` in `~/game` (`app/game/share.ts`): the game's side, one row per
-  question (`{ prompt, answer: name | null, grade, points }`), the day, mode, stadium, total.
+  question (`{ prompt, answer: name | null, grade, points }`), the day, mode, total.
 - `paintShareCard(picture)` in `~/art/share-card`: the painter, pure, into a 360 x 450
   `Surface` (`SHARE_CARD`, shared at `scale: 3`, 1080 x 1350); `scaleSurface(s, k)` blows it
   up in whole blocks. It draws the wordmark and letters in the faces `font6x10` and
@@ -570,6 +570,13 @@ SHARE shares a picture of the game with the text summary (docs/GAME_DESIGN.md 6.
   `strings` (`strings.play.fullTime.image`: the file name, the sheet's title, the cut-down
   question, "no answer"); `browserShareKit()` is the browser's part, behind the `ShareKit`
   interface (tests pass their own as `GameOptions.shareKit`).
+- The text (2026-11-17): `shareText(link)` in `app/routes/play/names.ts`, used by both
+  SHARE buttons (the full-time card's and the home screen's). Two lines from `strings`,
+  the same for every game: `strings.play.fullTime.message.intro` ("Check out what I got on
+  soccersense!") and `message.invite(link)` ("Test your football trivia on https://...").
+  Nothing of the result: that is the picture's. `shareLink()` in `share-image.ts` is the
+  link: `SITE_URL` once it is set, else the page's own address (`location.origin`), else
+  "" and the first line alone.
 - The controller (`app/routes/play/controller.ts`) makes the picture 0.7 s after full time
   (`SHARE_IMAGE_DELAY_MS`), off the main path: the paint and the enlargement each in an idle
   callback (a frame where there is none), the PNG encoded by `canvas.toBlob`. No long task

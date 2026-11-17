@@ -96,8 +96,12 @@ describe("createTodayShare", () => {
       expect.stringContaining("home"),
     );
     const text = vi.mocked(k.copy).mock.calls[0][0];
-    expect(text).toContain("HOME");
-    expect(text).toContain("100");
+    // the full-time card's words: the player's line and where to play, and nothing of
+    // the result (that is the picture's)
+    expect(text.split("\n")).toEqual([
+      "Check out what I got on soccersense!",
+      `Test your football trivia on ${window.location.origin}`,
+    ]);
   });
 
   it("opens the share sheet where the browser takes files, at once when the picture is ready", async () => {

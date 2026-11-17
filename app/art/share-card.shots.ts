@@ -52,7 +52,6 @@ function card(mode: Mode, grades: readonly Grade[], day = 12): ShareCard {
   return {
     dayNumber: day,
     mode,
-    stadiumName: "Estádio do Maracanã",
     total,
     maxTotal: 700,
     rows: rows.map((r) => ({ ...r })),

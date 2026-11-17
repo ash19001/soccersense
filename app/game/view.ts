@@ -22,7 +22,6 @@ import {
   tableFor,
 } from "./session";
 import type { Session, Turn } from "./session";
-import type { ShareInput } from "./share";
 import type {
   Answer,
   Grade,
@@ -47,7 +46,7 @@ export interface QuestionView {
   mode: Mode;
   /** How the answers are ranked: `ruleFor(mode)`. */
   rule: Rule;
-  /** Today's stadium: the day's venue, named on the board (and the pin of the distance rules). */
+  /** The day's pin, which the distance rules measure from. It has no name. */
   stadium: Stadium;
   /** What an answer's place is (the distance rules measure it; the judge reads it too). */
   measure: Measure;
@@ -222,28 +221,4 @@ export function results(session: Session): ResultLine[] {
         : (question.answers.find((a) => a.id === turn.answerId) ?? null);
     return { index, question, turn, answer };
   });
-}
-
-/**
- * The input for `buildShareText`, from a game. `tierName` is the career tier as shown on
- * screen ("TOP FLIGHT"), `title` the title the total earned ("SEASON TICKET HOLDER", the
- * words for `titleFor`) and `modeLabel` the mode's name ("NEXT-GEN"), all from the
- * interface text.
- */
-export function shareInputFor(
-  session: Session,
-  tierName: string,
-  title?: string,
-  modeLabel?: string,
-): ShareInput {
-  return {
-    dayNumber: session.dayNumber,
-    mode: session.mode,
-    ...(modeLabel ? { modeLabel } : {}),
-    stadiumName: session.stadium.name,
-    total: session.total,
-    tierName,
-    ...(title ? { title } : {}),
-    grades: session.turns.map((turn) => turn.grade),
-  };
 }

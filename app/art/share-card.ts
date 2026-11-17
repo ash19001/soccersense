@@ -6,8 +6,8 @@
  *   const card = paintShareCard(picture);         // 360 x 450, one canvas pixel each
  *   const png = scaleSurface(card, SHARE_CARD.scale); // 1080 x 1350, 3 x 3 device pixels each
  *
- * From the top: the wordmark on a night sky; the mode's badge in its colour, the day and
- * the day's stadium; the seven questions, one row each (the question shortened to fit,
+ * From the top: the wordmark on a night sky; the mode's badge in its colour and the day;
+ * the seven questions, one row each (the question shortened to fit,
  * the answer or "no answer", in RETRO and NEXT-GEN the answer's year in the mode's light
  * colour, the shot as its grade-coloured tag, the points); the total on
  * a dot-matrix display, the title it earned in the mode's light colour and the career
@@ -64,8 +64,6 @@ export interface ShareCardPicture {
   modeLabel: string;
   /** "DAY 12" */
   dayLabel: string;
-  /** "Anfield", on the right of the badge's line. Left out when it does not fit. */
-  stadium?: string;
   lines: readonly ShareCardLine[];
   /** In an answer's place after a pass or a time-up: "no answer". */
   noAnswer: string;
@@ -307,7 +305,7 @@ function paintLogo(s: Surface): void {
   drawLogo(s, Math.floor(s.w / 2), top, opts);
 }
 
-/** The mode's badge, the day beside it, the stadium on the right. */
+/** The mode's badge, and the day beside it. */
 function paintMeta(s: Surface, picture: ShareCardPicture): void {
   const ramp = MODE_COLORS[picture.mode];
   const label = small();
@@ -319,15 +317,7 @@ function paintMeta(s: Surface, picture: ShareCardPicture): void {
   s.rect(x, y, bw, BADGE_H, ramp.base);
   s.rect(x, y + BADGE_H - 2, bw, 2, ramp.dark);
   drawText(s, picture.modeLabel, x + 5, y + 2, P.ink, label);
-  const dayX = x + bw + 8;
-  const dayW = drawText(s, picture.dayLabel, dayX, y + 2, P.chalk, label);
-  if (picture.stadium) {
-    const room = s.w - PAD_X - (dayX + dayW + 12);
-    const name = fitText(picture.stadium, room, big());
-    if (name !== "" && !name.endsWith(ELLIPSIS)) {
-      drawText(s, name, s.w - PAD_X, y, P.mist, { ...big(), align: "right" });
-    }
-  }
+  drawText(s, picture.dayLabel, x + bw + 8, y + 2, P.chalk, label);
 }
 
 /** The seven questions. Returns the bottom of the last row. */

@@ -21,7 +21,7 @@ import {
   vi,
 } from "vitest";
 
-import { buildShareText, loadGame, playPath } from "~/game";
+import { loadGame, playPath } from "~/game";
 import { strings } from "~/i18n";
 import { CareerScene } from "~/scenes/career";
 import { resetArrivalFocus } from "~/ui/useArrivalFocus";
@@ -291,7 +291,7 @@ describe("the era pages", () => {
       "miss",
     ]);
 
-    // SHARE: the summary, under RETRO's own name.
+    // SHARE: the same two lines in every mode. The result is the picture's.
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
     await act(async () => {
@@ -301,16 +301,10 @@ describe("the era pages", () => {
       await Promise.resolve();
     });
     expect(writeText).toHaveBeenCalledWith(
-      buildShareText({
-        dayNumber: 1,
-        mode: "retro",
-        modeLabel: "RETRO",
-        stadiumName: "Anfield",
-        total: 280,
-        tierName: text.tiers.lower,
-        title: text.titles.retro.leather,
-        grades: saved?.turns.map((t) => t.grade) ?? [],
-      }),
+      [
+        "Check out what I got on soccersense!",
+        `Test your football trivia on ${window.location.origin}`,
+      ].join("\n"),
     );
 
     // The other mode of the pair is NEXT-GEN, at its own address.

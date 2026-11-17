@@ -2,6 +2,12 @@
 
 Checked on 2026-11-10 for `app/data/stadiums.ts`.
 
+**Since 2026-11-17 the data holds a pin's id and coordinates only.** The product owner: the
+stadium's name "shouldn't be mentioned anywhere", so `name`, `city` and `country` were taken
+out of the data and nothing in the game says which stadium a day's pin is. The names in this
+note say where each coordinate was measured, so it can be checked again; they are not in the
+game. What is said below about how names were chosen is kept as the record of that check.
+
 ## Method
 
 - Every coordinate is the centre of the `leisure=pitch` outline inside the stadium in

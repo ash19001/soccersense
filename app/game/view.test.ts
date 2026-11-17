@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { PASS_AFTER_MS, QUESTION_MS, createSession, reduce } from "./session";
 import type { Action, Session } from "./session";
-import { buildShareText } from "./share";
 import { ORIGIN, east, popular, question } from "./test-fixtures";
 import {
   clockView,
@@ -11,7 +10,6 @@ import {
   questionView,
   results,
   revealFor,
-  shareInputFor,
 } from "./view";
 
 const T0 = 50_000;
@@ -487,7 +485,7 @@ describe("progressFor", () => {
   });
 });
 
-describe("pips, results and the share text", () => {
+describe("pips and results", () => {
   const played = run(
     start(),
     { type: "submit", input: "answer 1", now: T0 + 1 },
@@ -512,32 +510,5 @@ describe("pips, results and the share text", () => {
     });
     expect(lines[1]).toMatchObject({ index: 1, question: SHORT, answer: null });
     expect(results(start())).toEqual([]);
-  });
-
-  it("shareInputFor feeds buildShareText", () => {
-    const input = shareInputFor(played, "SUNDAY LEAGUE");
-    expect(input).toEqual({
-      dayNumber: 12,
-      mode: "home",
-      stadiumName: "ORIGIN",
-      total: 80,
-      tierName: "SUNDAY LEAGUE",
-      grades: ["golazo", "skipped"],
-    });
-    expect(buildShareText(input).split("\n").slice(0, 2)).toEqual([
-      "soccersense #12 · HOME · ORIGIN",
-      "80/700 · SUNDAY LEAGUE",
-    ]);
-    const titled = shareInputFor(
-      played,
-      "SUNDAY LEAGUE",
-      "STILL FINDING A SEAT",
-    );
-    expect(titled.title).toBe("STILL FINDING A SEAT");
-    expect(buildShareText(titled).split("\n").slice(0, 3)).toEqual([
-      "soccersense #12 · HOME · ORIGIN",
-      "STILL FINDING A SEAT",
-      "80/700 · SUNDAY LEAGUE",
-    ]);
   });
 });

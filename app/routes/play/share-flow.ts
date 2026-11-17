@@ -15,7 +15,7 @@ import type { ShareKit } from "./share-image";
 export type ShareOutcome =
   "idle" | "shared" | "saved" | "downloaded" | "copied" | "failed";
 
-/** What is shared: the text summary, the PNG (null if there is none) and its names. */
+/** What is shared: the text, the PNG (null if there is none) and its names. */
 export interface ShareJob {
   text: string;
   blob: Blob | null;

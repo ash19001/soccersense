@@ -2,10 +2,6 @@
  * One test for each bug or gap found in review, outside the judge, scorer and reducer (those
  * have their own *.hostile.test.ts files).
  */
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vitest";
 
 import { careerFor, tierFor, tiersCrossed, TIERS } from "./career";
@@ -22,7 +18,6 @@ import { formatDistance, usesMiles } from "./geo";
 import { rankAnswers, tableExcerpt } from "./scoring";
 import { createSession, reduce } from "./session";
 import type { Action, Session, Turn } from "./session";
-import { GRADE_SYMBOLS } from "./share";
 import { SHOT_POINTS } from "./shots";
 import {
   loadDay,
@@ -277,29 +272,6 @@ describe("storage", () => {
         loadDay(value as string, value as never);
       }).not.toThrow();
     }
-  });
-});
-
-describe("share", () => {
-  it("every symbol is the agreed code points", () => {
-    const points = (text: string) =>
-      [...text].map((ch) => ch.codePointAt(0)?.toString(16));
-    expect(points(GRADE_SYMBOLS.worldie)).toEqual(["1f31f"]);
-    expect(points(GRADE_SYMBOLS.golazo)).toEqual(["1f3af"]);
-    expect(points(GRADE_SYMBOLS.trivela)).toEqual(["1f4a5"]);
-    expect(points(GRADE_SYMBOLS.toepoke)).toEqual(["1f308"]);
-    expect(points(GRADE_SYMBOLS.tapin)).toEqual(["26bd"]);
-    expect(points(GRADE_SYMBOLS.miss)).toEqual(["274c"]);
-    expect(points(GRADE_SYMBOLS.timeup)).toEqual(["23f1", "fe0f"]);
-    expect(points(GRADE_SYMBOLS.skipped)).toEqual(["2796"]);
-  });
-
-  it("share.ts spells its symbols as escapes, so no tool can mangle them", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const source = readFileSync(join(here, "share.ts"), "utf8");
-    // Nothing outside ASCII except the middle dot of the separator.
-    const odd = [...source].filter((ch) => ch > "\u007f" && ch !== "·");
-    expect(odd).toEqual([]);
   });
 });
 

@@ -123,11 +123,11 @@ describe("Review", () => {
       <Review
         {...bare}
         share={{ label: "Share your HOME game", onClick: onShare, done: true }}
-        status="Picture saved, result copied."
+        status="Picture saved, link copied."
       />,
     );
     expect(share).toHaveClass("is-done");
-    expect(status).toHaveTextContent("Picture saved, result copied.");
+    expect(status).toHaveTextContent("Picture saved, link copied.");
     expect(status).toHaveClass("ss-sr");
   });
 });

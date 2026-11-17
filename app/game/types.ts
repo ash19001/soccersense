@@ -28,16 +28,15 @@ export interface LatLng {
   lng: number;
 }
 
-/** A daily pin. */
+/**
+ * A daily pin: the place the distance rules (the locked modes CLOSEST and FURTHEST) measure
+ * from. It has no name: nothing shown, read out or shared says which stadium it is (the
+ * product owner, 2026-11-17: the name "shouldn't be mentioned anywhere"). The stadium in the
+ * picture is the art's own, coloured by the day's number.
+ */
 export interface Stadium extends LatLng {
-  /** kebab-case, unique: "anfield" */
+  /** kebab-case, unique. Never shown: it tells one pin from another in code and storage. */
   id: string;
-  /** Display name: "Anfield" */
-  name: string;
-  /** "Liverpool" */
-  city: string;
-  /** "England" */
-  country: string;
 }
 
 /** What an answer's place means for a question. */

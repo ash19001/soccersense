@@ -153,7 +153,8 @@ function TypedQuestion({ question }: { question: string }): ReactNode {
 
 /**
  * The stadium scoreboard at the top of the game screen. It does not name the day's stadium
- * (the product owner, 2026-11-11: "no need for that detail"): the question has the room.
+ * (the product owner, 2026-11-11: "no need for that detail"; nothing does, since 2026-11-17):
+ * the question has the room.
  * The game's sound switch sits in its head, after the mode badge.
  *
  * A new question is dribbled on (`TypedQuestion`): when the board first shows, and whenever

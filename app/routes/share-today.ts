@@ -11,19 +11,18 @@ import {
   type Mode,
   type StorageLike,
   type Today,
-  buildShareText,
   loadGame,
   shareCardFor,
-  shareInputFor,
 } from "~/game";
 import { strings } from "~/i18n";
-import { modeName, tierName, titleName } from "./play/names";
+import { modeName, shareText, tierName, titleName } from "./play/names";
 import { finishedSession } from "./play/progress";
 import { type ShareOutcome, deliverShare } from "./play/share-flow";
 import {
   type ShareKit,
   browserShareKit,
   shareCardPicture,
+  shareLink,
 } from "./play/share-image";
 
 /** One played game, ready to share: its text and names, and its picture once made. */
@@ -90,7 +89,7 @@ export function createTodayShare({
     const title = titleName(mode, session.total);
     const words = strings.play.fullTime.image;
     const game: Prepared = {
-      text: buildShareText(shareInputFor(session, tier, title, modeName(mode))),
+      text: shareText(shareLink()),
       fileName: words.fileName(session.dayNumber, mode),
       title: words.title(session.dayNumber, modeName(mode)),
       image: null,

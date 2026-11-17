@@ -159,10 +159,10 @@ export const en = {
        */
       making: "Making your picture...",
       shared: "Shared. Nice one!",
-      saved: "Picture saved, result copied.",
+      saved: "Picture saved, link copied.",
       downloaded: "Picture saved. The text could not be copied.",
-      copied: "Result copied. Paste it anywhere.",
-      failed: "Could not copy your result. Try again.",
+      copied: "Link copied. Paste it anywhere.",
+      failed: "Could not copy the link. Try again.",
     },
     day: (day: number) => `DAY ${day}`,
     /** In the day's place until the page knows what day it is. */
@@ -313,9 +313,6 @@ export const en = {
         nextgen: "NEXT-GEN. Give the most recent answer.",
       },
     },
-    /** Read out under the heading once the day is known. */
-    stadium: (name: string, city: string, country: string) =>
-      `Today's stadium: ${name}, ${city}, ${country}.`,
     /** The game waits for the site's server to say what day it is (`gameClock`). */
     clock: {
       failing: "Can't check today's date. Check your connection.",
@@ -488,38 +485,24 @@ export const en = {
       },
     },
 
-    /** Kept for the locked modes CLOSEST and FURTHEST, which score by distance. */
+    /**
+     * Kept for the locked modes CLOSEST and FURTHEST, which score by distance. The stadium is
+     * never named: it is "today's stadium" and no more.
+     */
     distanceSentence: {
-      birthplace: (
-        name: string,
-        place: string,
-        distance: string,
-        stadium: string,
-      ) => `${name} was born in ${place}: ${distance} from ${stadium}.`,
-      ground: (
-        name: string,
-        place: string,
-        distance: string,
-        stadium: string,
-      ) => `${name} play at ${place}: ${distance} from ${stadium}.`,
-      location: (
-        name: string,
-        place: string,
-        distance: string,
-        stadium: string,
-      ) => `${name} is in ${place}: ${distance} from ${stadium}.`,
-      capital: (
-        name: string,
-        place: string,
-        distance: string,
-        stadium: string,
-      ) =>
-        `${name} is measured at its capital, ${place}: ${distance} from ${stadium}.`,
+      birthplace: (name: string, place: string, distance: string) =>
+        `${name} was born in ${place}: ${distance} from today's stadium.`,
+      ground: (name: string, place: string, distance: string) =>
+        `${name} play at ${place}: ${distance} from today's stadium.`,
+      location: (name: string, place: string, distance: string) =>
+        `${name} is in ${place}: ${distance} from today's stadium.`,
+      capital: (name: string, place: string, distance: string) =>
+        `${name} is measured at its capital, ${place}: ${distance} from today's stadium.`,
       /** No answer was given: the sentence names the top of the table instead. */
-      skipped: (best: string, distance: string, stadium: string) =>
-        `Passed. Top of the table was ${best}, ${distance} from ${stadium}.`,
-      timeup: (best: string, distance: string, stadium: string) =>
-        `The whistle went. Top of the table was ${best}, ${distance} from ${stadium}.`,
+      skipped: (best: string, distance: string) =>
+        `Passed. Top of the table was ${best}, ${distance} from today's stadium.`,
+      timeup: (best: string, distance: string) =>
+        `The whistle went. Top of the table was ${best}, ${distance} from today's stadium.`,
     },
 
     /**
@@ -588,7 +571,7 @@ export const en = {
     /**
      * The title earned at full time, by the total (`titleFor` in ~/game: from 0, 10, 120, 220,
      * 300, 380, 460, 540 and 620, and 700 alone). HOME: the crowd's favourite. AWAY: the scout
-     * of the obscure. Shown big on the full-time card and put in the share text.
+     * of the obscure. Shown big on the full-time card and on the share picture.
      */
     titles: {
       home: {
@@ -660,9 +643,9 @@ export const en = {
       copied: "COPIED!",
       notCopied: "NOT COPIED",
       /** Read out after SHARE. */
-      copiedSpoken: "Your result is copied. Paste it wherever your mates are.",
+      copiedSpoken: "The link is copied. Paste it wherever your mates are.",
       notCopiedSpoken:
-        "The browser would not let us copy your result. Try SHARE again.",
+        "The browser would not let us copy the link. Try SHARE again.",
       /**
        * SHARE with a picture (docs/GAME_DESIGN.md 6.4): the share sheet where the browser
        * can share files (mostly phones), else the picture downloaded and the text copied.
@@ -681,9 +664,19 @@ export const en = {
       makingSpoken: "Making your picture.",
       sharedSpoken: "Shared. Nice one.",
       savedSpoken:
-        "Your picture is downloaded and your result is copied. Paste it wherever your mates are.",
+        "Your picture is downloaded and the link is copied. Send both wherever your mates are.",
       downloadedSpoken:
         "Your picture is downloaded. The browser would not let us copy the text.",
+      /**
+       * The text SHARE copies (and hands to the share sheet) with the picture: the player's
+       * own line, and where to play under it. Nothing of the result, which is the
+       * picture's. `link` is the site's address, "https://" and all, so that a chat makes
+       * a link of it.
+       */
+      message: {
+        intro: "Check out what I got on soccersense!",
+        invite: (link: string) => `Test your football trivia on ${link}`,
+      },
       /** The share image's own words (`paintShareCard` in ~/art/share-card). */
       image: {
         /** The file: "soccersense-day-12-home.png". */

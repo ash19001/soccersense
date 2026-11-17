@@ -44,7 +44,7 @@ export interface ReviewProps {
    */
   share?: { label: string; busy?: boolean; done?: boolean; onClick(): void };
   /**
-   * How SHARE went ("Picture saved, result copied."): only read out. On screen, SHARE's icon
+   * How SHARE went ("Picture saved, link copied."): only read out. On screen, SHARE's icon
    * is a tick for a moment once it has worked (`share.done`).
    */
   status?: string;

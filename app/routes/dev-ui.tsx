@@ -917,7 +917,7 @@ function Parts() {
         </p>
         <p className="ss-t10">
           Jersey 10: Hakan Çalhanoğlu was born in Mannheim, 540 miles from
-          Anfield.
+          today&apos;s stadium.
         </p>
       </Block>
 

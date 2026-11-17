@@ -6,8 +6,8 @@ Import everything from `~/game`. Never import `test-fixtures.ts`.
 **Changed on 2026-11-11.** HOME is scored by the most common answer and AWAY by the most
 uncommon (`ruleFor(mode)` gives `"common"` or `"niche"`: the rule keeps its id in code, while
 every word a player sees says "uncommon"), from each answer's `popularity`: an
-estimated share of players in percent (`docs/data-notes/popularity.md`). Today's stadium is
-still the day's venue but no longer scores them. Distance scoring is kept as the rules
+estimated share of players in percent (`docs/data-notes/popularity.md`). The day's pin (`Stadium`:
+an id and a place, with no name since 2026-11-17) no longer scores them. Distance scoring is kept as the rules
 `"closest"` and `"furthest"` for the locked modes CLOSEST and FURTHEST: to switch one on, add
 the mode and map it in `ruleFor`; nothing else in the rules changes. `rankAnswers` takes a
 `Rule` instead of a `Mode`; `Answer.popularity`, `RankedAnswer.share`, `Turn.share` and
@@ -27,8 +27,8 @@ the names; the points did not: `bicycle` is now `worldie`, `finesse` `golazo`, `
 `trivela`, `chip` `toepoke`. A finished game saved under the first names loads with the new
 ones (`loadGame`); a game in progress under them is not carried on. New: `titles.ts`
 (`titleFor`, `TITLES`, `TITLE_FROM`, `HomeTitleId`, `AwayTitleId`, `TitleId`), the title a
-total earns at full time; `ShareInput.title` and the third argument of `shareInputFor` put it
-in the share text.
+total earns at full time (it was also put in the share text, by `ShareInput.title` and the
+third argument of `shareInputFor`, until the text summary was taken out on 2026-11-17).
 
 **Changed on 2026-11-13: RETRO and NEXT-GEN.** Two more modes, played exactly like HOME and
 AWAY but ranked by an answer's **year**: `Mode` is now `"home" | "away" | "retro" |
@@ -42,8 +42,7 @@ same standing, the same shot, the same rank. Their questions are `RETRO_QUESTION
 filed with `closest` and `furthest` as stand-ins; they are the same under `oldest` and
 `newest` (a test keeps them so). New: `modes.ts` (`ERA_MODES`, `isEraMode`, `MODE_SLUGS`,
 `playPath`, `modeOfPath`, `nextMode`), `MODE_RULES`, `isYearRule`, `rankingYear`,
-`RankedAnswer.year`, `ShareCardRow.year`, `ShareInput.modeLabel` (and the fourth argument
-of `shareInputFor`), `RetroTitleId`, `NextgenTitleId`, `TITLES.retro`, `TITLES.nextgen`.
+`RankedAnswer.year`, `ShareCardRow.year`, `RetroTitleId`, `NextgenTitleId`, `TITLES.retro`, `TITLES.nextgen`.
 NEXT-GEN's address is `/play/next-gen` (`playPath`); `/play/nextgen` plays it too.
 
 ## How an interface uses it
@@ -64,7 +63,7 @@ Game
   Answer bar: s.rejected (new object per rejection, key the shake on it), clockView(s, now).canPass
   Shot (phase "resolving"): currentTurn(s).grade, progressFor(s).promotions; then dispatch { type: "resolved" }
   Reveal (phase "reveal"): revealFor(s): five rows, one per scoring shot, and playerInRows; formatShare(row.share) for "34%" (in RETRO and NEXT-GEN, isEraMode: row.year, "1889"); then { type: "next", now }
-  Full time (phase "done"): summary(s), results(s), careerFor(s.total), saveSession(s), buildShareText(shareInputFor(s, tierName))
+  Full time (phase "done"): summary(s), results(s), careerFor(s.total), saveSession(s), shareCardFor(s) for the share picture
 
 Use one clock for every `now` (Date.now() or performance.now(), never mixed). A game keeps the day and stadium it started with, so playing across midnight saves under the day it began.
 ```
@@ -97,7 +96,7 @@ types.ts
 - type EraMode = "retro" | "nextgen". New. The two ranked by an answer's year.
 - type Rule = "common" | "niche" | "oldest" | "newest" | "closest" | "furthest". How a question's answers are ranked; oldest and newest new 2026-11-13.
 - interface LatLng { lat: number; lng: number }
-- interface Stadium extends LatLng { id; name; city; country }
+- interface Stadium extends LatLng { id }. The day's pin for the distance rules. No name, city or country (2026-11-17): the stadium is never named, anywhere. The id is for code and storage.
 - type Measure = "birthplace" | "ground" | "location" | "capital". The judge uses it: people, clubs, stadiums, countries.
 - interface Answer extends LatLng { id; name; aliases: string[]; place; country; popularity: number; shot: Shot; years?: number[] }. popularity: the estimated share of players who give the answer, in percent, 0.1 to 100, one decimal at most; a question's shares add up to about 100. shot (new): the answer's shot in its question's own mode (docs/data-notes/shots.md). years: every year that makes it valid, whole and ascending; required in RETRO and NEXT-GEN questions, left out in HOME and AWAY.
 - interface EraAnswer extends Answer { years: number[] }. New 2026-11-13.
@@ -195,7 +194,6 @@ view.ts (new: selectors, pure, cheap to call on every render)
 - pips(session): (Grade | null)[]. One per question, null until decided.
 - interface ResultLine { index: number; question: Question; turn: Turn; answer: Answer | null }
 - results(session): ResultLine[]. Each decided question with the answer given, for full time.
-- shareInputFor(session, tierName: string, title?: string, modeLabel?: string): ShareInput. `title` is the earned title as shown ("SEASON TICKET HOLDER"); `modeLabel` the mode's name ("NEXT-GEN", new 2026-11-13).
 
 modes.ts (new 2026-11-13)
 - ERA_MODES: readonly EraMode[]. ["retro", "nextgen"]. isEraMode(mode): mode is EraMode.
@@ -249,9 +247,7 @@ stats.ts (pure; the stats pop-up's numbers)
 - apportion(counts: readonly number[], cells: number): number[]. Whole cells in proportion (largest remainders), every non-zero count at least one cell while there are cells to spare; adds up to cells, or all zeros.
 
 share.ts
-- GRADE_SYMBOLS: Record<Grade, string>. worldie a glowing star, golazo a bullseye, trivela a collision, toepoke a rainbow, tapin a football, miss a cross, timeup a stopwatch, skipped a minus (escapes in share.ts).
-- interface ShareInput { dayNumber: number; mode: Mode; modeLabel?: string; stadiumName: string; total: number; tierName: string; title?: string; grades: readonly Grade[] }. modeLabel (new 2026-11-13): the mode's name as shown, "NEXT-GEN"; without it, the id in capitals.
-- buildShareText(input: ShareInput): string. Lines joined with "\n": "soccersense #12 · HOME · Anfield", the title if given ("SEASON TICKET HOLDER"), "512/700 · TOP FLIGHT", one symbol per question. The same in every mode (no years: they would be spoilers).
+- The text summary is gone (2026-11-17): `GRADE_SYMBOLS`, `ShareInput`, `buildShareText` and view.ts's `shareInputFor` were taken out when the share text became two lines of the interface text that say nothing of the result (`shareText(link)` in `app/routes/play/names.ts`). The picture carries the result.
 - interface ShareCardRow { prompt; answer: string | null; year: number | null; grade; points }. year (new 2026-11-13): in RETRO and NEXT-GEN the answer's ranking year; null with no answer, and in HOME and AWAY.
-- shareCardFor(session): ShareCard. The share image's content: day, mode, stadium, total, one row per question decided.
+- shareCardFor(session): ShareCard. The share image's content: day, mode, total, one row per question decided.
 ```

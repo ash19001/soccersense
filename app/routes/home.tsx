@@ -10,8 +10,9 @@
 // The day is the site's server's, not the device's (`gameClock`): turning the phone's clock
 // on does not open tomorrow's game.
 //
-// Debug: ?day=<n> (the day's fact and the day's stadium) and ?stadium=<id> (see
-// app/data/stadiums.ts: it is the game's, not this page's), in development builds only
+// Debug: ?day=<n> (the day's fact and the day's picture) and ?stadium=<id> (the pin the
+// locked distance modes measure from, app/data/stadiums.ts: it changes nothing that is
+// seen here), in development builds only
 // (`gameSearch`); ?time=HH:MM, and ?speed=<n>, which multiplies the scene's time (0.1 is
 // slow motion, for looking at the kick-off).
 

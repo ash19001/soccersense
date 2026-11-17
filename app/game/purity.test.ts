@@ -201,7 +201,7 @@ describe("with every impure global booby-trapped", () => {
       s = game.reduce(s, { type: "tick", now: 4000 + game.QUESTION_MS });
       s = game.reduce(s, { type: "resolved" });
       s = game.reduce(s, { type: "next", now: 99_000 });
-      const text = game.buildShareText(game.shareInputFor(s, "SUNDAY LEAGUE"));
+      const card = game.shareCardFor(s);
       const distance = game.formatDistance(reveal?.turn.km ?? 0, "en-GB");
       return {
         phase: s.phase,
@@ -211,7 +211,7 @@ describe("with every impure global booby-trapped", () => {
         promotions: progress.promotions,
         pips: game.pips(s),
         results: game.results(s).length,
-        text,
+        cardRows: card.rows.length,
         distance,
         dayKey: today.dayKey,
         summary: game.summary(s),
@@ -228,7 +228,7 @@ describe("with every impure global booby-trapped", () => {
       distance: "208 miles",
       dayKey: "2026-11-10",
     });
-    expect(outcome.text.split("\n")[0]).toBe("soccersense #1 · AWAY · ORIGIN");
+    expect(outcome.cardRows).toBe(2);
   });
 
   it("the storage functions swallow a storage that throws on access", async () => {

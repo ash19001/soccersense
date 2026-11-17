@@ -14,6 +14,7 @@ import {
 } from "~/art/share-card";
 import { type Grade, type ShareCard, isPerfect, isShot } from "~/game";
 import { strings } from "~/i18n";
+import { SITE_URL } from "../seo";
 
 /** The tag's word for a row: the shot's name, or PASSED or TIME'S UP. */
 function tagFor(grade: Grade): string {
@@ -37,7 +38,6 @@ export function shareCardPicture(
     mode: card.mode,
     modeLabel: strings.home.modes[card.mode].label,
     dayLabel: strings.home.day(card.dayNumber),
-    stadium: card.stadiumName,
     lines: card.rows.map((row) => ({
       prompt: words.image.prompt(row.prompt),
       answer: row.answer,
@@ -74,7 +74,7 @@ export interface ShareKit {
   shareFiles(data: ShareData): Promise<void>;
   /** Saves the file as a download. False if the browser would not. */
   download(blob: Blob, name: string): boolean;
-  /** Copies the text summary. */
+  /** Copies the text. */
   copy(text: string): Promise<void>;
 }
 
@@ -90,6 +90,21 @@ function quietMoment(): Promise<void> {
       setTimeout(resolve, 16);
     }
   });
+}
+
+/**
+ * The address a shared result sends people to: the site's address of record (`SITE_URL`)
+ * once it is set, and until then the address this page is being served at, so the link
+ * works wherever the game is being played. "" where there is neither (the share text then
+ * leaves its last line out: a page opened from a file has no address worth sending). No
+ * closing slash.
+ */
+export function shareLink(
+  site: string = SITE_URL,
+  here: string = globalThis.location?.origin ?? "",
+): string {
+  if (site) return site;
+  return /^https?:\/\//.test(here) ? here : "";
 }
 
 export function copyToClipboard(text: string): Promise<void> {

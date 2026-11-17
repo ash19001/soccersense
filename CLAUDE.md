@@ -2,8 +2,9 @@
 
 A daily football trivia game. Seven typed questions, 100 points each, and the total drives a
 footballer's career from the park to the World Cup. HOME: give the most common answer (the one
-most players give). AWAY: give the most niche answer. Every day has one stadium, shown on the
-home screen; the locked modes CLOSEST and FURTHEST (an answer's place against today's stadium),
+most players give). AWAY: give the most niche answer. The stadium on the home screen changes
+its colours every day and has no name: nothing in the game says which stadium it is. The
+locked modes CLOSEST and FURTHEST (an answer's place against the day's pin on the map),
 NEXT-GEN and RETRO come later. Retro pixel art, drawn in code.
 
 (Changed on 2026-11-11: HOME and AWAY used to be closest to and furthest from today's stadium.

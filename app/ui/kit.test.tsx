@@ -433,7 +433,7 @@ describe("RevealSheet", () => {
         mode="home"
         gradeLabel="TRIVELA"
         pointsLabel="+60"
-        sentence="Hakan Çalhanoğlu was born in Mannheim: 540 miles from Anfield."
+        sentence="Hakan Çalhanoğlu was born in Mannheim: 540 miles from today's stadium."
         rows={[
           {
             rank: 1,

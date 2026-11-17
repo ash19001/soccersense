@@ -6,8 +6,8 @@ the game **looks and feels right**. Graphics come first.
 
 ## 1. The game in one paragraph
 
-A daily football trivia game. Every day has one stadium, "today's stadium": the day's venue,
-shown on the home screen and named on the scoreboard. The player picks a mode on the home screen
+A daily football trivia game. The stadium on the home screen changes its colours every day; it
+has no name, and nothing in the game says which stadium it is. The player picks a mode on the home screen
 and answers 7 typed questions against a 30 second clock. Every valid answer has a **popularity**:
 the share of players who give it. In **HOME** you want the _most common_ answer, the one most
 players give. In **AWAY** you want the _most uncommon_ one, the valid answer fewest players
@@ -43,11 +43,17 @@ gold (a sepia-warmed brass), NEXT-GEN electric magenta.
 - The day is the site's server's, not the device's (2026-11-15): turning the phone's clock on or
   back does not open another day's game. The page reads the time from the `Date` header of a
   request to its own address, and a game does not start until it has (`gameClock`, docs/API_UI.md).
-- One stadium per day, shared by every mode: the day's venue, drawn on the home screen and named
-  on the board. In the demo it rotates through `app/data/stadiums.ts`: index
-  `(dayNumber - 1) mod count`. Anfield is first. It does not score HOME or AWAY; it will be the
-  scoring pin of CLOSEST and FURTHEST when they are switched on (every answer keeps a place on
-  the map for them: where a player was born, a club's ground, a stadium, a country's capital).
+- **The stadium has no name** (the product owner, 2026-11-17: "the stadium can still change
+  colour daily but the name isn't mentioned anywhere and shouldn't be mentioned anywhere").
+  The stadium in the home screen's picture is the art's own, in club colours picked by the
+  day's number. No screen, share, picture or read-out says which stadium a day's is, and
+  nothing in the data or the interface text holds a stadium's name, city or country.
+- One pin per day, shared by every mode: a place on the map and an id, nothing more. In the
+  demo it rotates through `app/data/stadiums.ts`: index `(dayNumber - 1) mod count`. It does
+  not score HOME or AWAY; it will be the scoring pin of CLOSEST and FURTHEST when they are
+  switched on (every answer keeps a place on the map for them: where a player was born, a
+  club's ground, a stadium, a country's capital), and their words call it "today's stadium"
+  and no more.
 - Each mode has its **own** 7 questions, so the reveal in one mode never gives away the other.
   The demo ships one fixed set per mode.
 - Popularity is a share of players in percent, at most one decimal place, and the shares of a
@@ -431,7 +437,7 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   since it's too crowded - that can be large screen only"): it flies where the screen's shorter
   side is at least 500 px (`app/routes/home-plane.ts`), so a phone shows no fact. Before 2026-11-12 the fact scrolled on the airship's sign (the product
   owner, 2026-11-11: "The blimp should now say just a fun football daily fact instead"); it
-  showed today's stadium before that; the stadium now belongs to the game screens. Sixty fact-checked facts
+  showed today's stadium before that; the stadium has not been named anywhere since 2026-11-17. Sixty fact-checked facts
   in a fixed cycle, the first on day 1 (2026-11-10): `app/data/facts.ts`, notes in
   `docs/data-notes/facts.md`. The fact starts at its beginning and rests a moment, then
   scrolls at a steady reading pace (a whole fact passes in 17 to 28 seconds) and comes round
@@ -564,8 +570,8 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
 - Top: the **board**, styled as a stadium scoreboard. Mode badge, seven result pips, total
   points, career tier with a small progress bar, the question, the instruction line, the timer.
   It does not name the day's stadium (the product owner, 2026-11-11: "no need for that
-  detail"); the room goes to the question. The stadium is still read out under the page's
-  heading.
+  detail"); the room goes to the question. Nothing else names it either, to the eye or to a
+  screen reader (2026-11-17; a line under the page's heading read it out until then).
 - Bottom: the answer bar. Text input and the SHOOT button. PASS appears after 8 seconds.
 - While he waits the footballer does keepie-uppies. Team-mates and a keeper idle around him.
 - After a goal or a miss that earns no promotion, the same ball is fetched back to him before
@@ -602,11 +608,11 @@ to and the card has SHARE and MENU only.
 
 **SHARE** (the product owner, 2026-11-12: "pressing share should produce an image you can
 share which shows what you answered for each question and your points and final result")
-makes a picture of the game as well as the text summary:
+makes a picture of the game, and two lines of text go with it:
 
 - **The picture**: a pixel-art card, 1080 x 1350 PNG (portrait 4:5, 360 x 450 card pixels at
   3 x 3 each), drawn by the game's own engine. From the top: the wordmark on a night sky; the
-  mode's badge in its colour, `DAY 12` and the day's stadium; the seven questions, one row
+  mode's badge in its colour and `DAY 12`; the seven questions, one row
   each (its number, the question cut down to one line: no "Name a", nothing in brackets,
   "has won" as "won", then shortened at a word with "..."; the answer, or `no answer` after
   a pass or a time-up, in the big face, the small one if it is too wide, cut short only if
@@ -621,9 +627,22 @@ makes a picture of the game as well as the text summary:
   with the PNG), the system share sheet opens with the picture and the text together. On a
   PC (a mouse-first screen, even where the browser could share) the picture is downloaded,
   named `soccersense-day-12-home.png`, and the text copied, and the button says `SAVED!`
-  then `COPIED!`. Where no picture can be made, the text is copied as before.
-- The text summary is unchanged (four lines, no spoilers: `buildShareText`). The picture
-  names the answers: it is shared after full time, by choice.
+  then `COPIED!`. Where no picture can be made, the text alone is copied.
+- **The text** is two lines, the same for every game and mode (the product owner,
+  2026-11-17: it should say "check out what I got on soccersense! Test your football trivia
+  on (link)", and "it shouldn't say all that extra stuff because it's in the image. Only
+  first line and last line"):
+
+      Check out what I got on soccersense!
+      Test your football trivia on https://...
+
+  Nothing of the result is in it: the day, the mode, the title, the total, the tier and
+  the shots are all the picture's. (Until 2026-11-17 the text was a summary: the day and
+  the mode, the title, `512/700 · TOP FLIGHT` and a symbol per question. That is gone,
+  with the code that built it.) The link is the site's address (`SITE_URL` in
+  `app/routes/seo.ts`) once that is set, and until then the address the game is being
+  played at. What the game says after SHARE calls the text "the link" ("Picture saved, link
+  copied.").
 
 **The way home** (the product owner, 2026-11-12: "when clicking home after playing a match
 there should be a black fade out and fade in rather than teleport to home"). MENU fades the

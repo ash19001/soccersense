@@ -596,6 +596,69 @@ Not done: the preview has not been seen in a real chat or feed (it needs a publi
 each mode shares the one picture; no `apple-touch-icon` or web app manifest; whether the host
 adds a closing slash to addresses (see the architecture's note) is for when one is chosen.
 
+## The stadium has no name (2026-11-17)
+
+The product owner: "Can you remove the stadium name stuff. The stadium can still change
+colour daily but the name isn't mentioned anywhere and shouldn't be mentioned anywhere so
+remove code referencing that". It was still mentioned in four places a player could meet,
+and carried through the code to reach them:
+
+- **The share text's** first line ended with it (`soccersense #12 · HOME · Anfield`). The
+  name is gone from it (and the text was reworded the same day: the next section).
+- **The share picture** had it on the right of the badge's line. That line is the badge and
+  the day.
+- **The game screen** read it out to screen readers under the heading ("Today's stadium:
+  Anfield, Liverpool, England."). The line is gone, with its words (`play.stadium`).
+- **The sentences kept for CLOSEST and FURTHEST** took the name ("3 miles from Anfield").
+  They say "from today's stadium".
+
+So `Stadium` is an id and a place, nothing more: `name`, `city` and `country` are out of the
+type and out of the 21 entries of `app/data/stadiums.ts`, and `ShareCard` has no
+`stadiumName`. Tests hold it there: a pin has no other fields, the share picture's content
+has no stadium, and the game page never says "Anfield" or "today's stadium".
+
+The old reference picture of the stadium from inside (`app/art/stadium-inside.ts`, not used
+by the game) had a scoreboard reading TODAY'S STADIUM over the name and the city. It is kept,
+and its board shows the words it is given (`InsideBoardWords`).
+
+What is left, on purpose: the day still has a **pin** (an id and coordinates, rotating
+through the 21, and `?stadium=<id>` in development to choose one), because the locked modes
+CLOSEST and FURTHEST rank answers by distance from it and the rules for that are built. The
+ids are real stadiums' names in lower case; they are never shown. If CLOSEST and FURTHEST are
+dropped, the pins, the distance rules and every answer's place can go with them.
+
+The stadium in the home screen's picture was never the pin: its club colours come from the
+day's number, and still change every day.
+
+## The share text is two lines: "check out what I got" and where to play (2026-11-17)
+
+The product owner: "In the text that gets copied when you share it, it should also instead
+say 'check out what I got on soccersense! Test your football trivia on (link)'". It was
+first built with the old summary kept between the two halves, and turned down: "It shouldn't
+say all that extra stuff because it's in the image. Only first line and last line". So the
+text SHARE copies, and hands to a phone's share sheet with the picture, is:
+
+    Check out what I got on soccersense!
+    Test your football trivia on https://...
+
+- **Nothing of the result is in the text.** The day, the mode, the title, the total, the
+  tier and the shots are the picture's. The text is the same for every game and mode.
+- **The text summary is gone, with its code**: `buildShareText`, `ShareInput`,
+  `GRADE_SYMBOLS` (the symbol per question) and `shareInputFor` are out of `~/game`, with
+  their tests. The game's side of SHARE is `shareCardFor`, the picture's content.
+- **The link** is `shareLink()` (`app/routes/play/share-image.ts`): `SITE_URL` once the
+  site's address is set (`app/routes/seo.ts`), and until then the address the game is being
+  played at, so it works today wherever the site is served (on a development machine it
+  reads `http://localhost:5173`). It is written out in full, "https://" and all, so every
+  chat app makes a link of it.
+- The words are `strings.play.fullTime.message`; both SHARE buttons (the full-time card's
+  and the home screen's) get the text from `shareText(link)` in
+  `app/routes/play/names.ts`.
+- What the game says after SHARE no longer calls the text "your result": "Picture saved,
+  link copied.", "Link copied. Paste it anywhere." and the read-out lines to match.
+- Known and left: where no picture can be made at all (a browser with no canvas), the two
+  lines are copied on their own, and say nothing of the result.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

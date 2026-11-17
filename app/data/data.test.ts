@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { distanceKm } from "~/game/geo";
 import { judge, normalise } from "~/game/judge";
 import { SCORING_SHOTS, revealRows } from "~/game/reveal";
 import { ruleFor } from "~/game/scoring";
@@ -353,7 +354,7 @@ describe.each(ALL_QUESTIONS.map((q) => [q.id, q] as const))(
 describe("stadiums", () => {
   const label = (s: Stadium) => `stadium ${s.id}`;
 
-  it("there are 21, and the first is Anfield", () => {
+  it("there are 21, and day 1's comes first", () => {
     expect(STADIUMS).toHaveLength(21);
     expect(STADIUMS[0]?.id).toBe("anfield");
   });
@@ -364,18 +365,14 @@ describe("stadiums", () => {
     expect(ids.filter((id) => !KEBAB.test(id))).toEqual([]);
   });
 
-  it("names are unique", () => {
-    expect(duplicates(STADIUMS.map((s) => fold(s.name)))).toEqual([]);
-  });
-
-  it("every stadium has a name, a city and a country", () => {
+  it("each is an id and a place and nothing more: no name, no city, no country", () => {
+    // the product owner, 2026-11-17: the stadium's name "shouldn't be mentioned anywhere"
     expect(
-      STADIUMS.filter(
-        (s) =>
-          s.name.trim() === "" ||
-          s.city.trim() === "" ||
-          s.country.trim() === "",
-      ).map(label),
+      STADIUMS.flatMap((s) =>
+        Object.keys(s)
+          .filter((key) => !["id", "lat", "lng"].includes(key))
+          .map((key) => `${label(s)}: ${key}`),
+      ),
     ).toEqual([]);
   });
 
@@ -385,10 +382,11 @@ describe("stadiums", () => {
     ).toEqual([]);
   });
 
-  it("no two consecutive days are in the same country, including the wrap", () => {
-    const repeats = STADIUMS.filter(
-      (s, i) => STADIUMS[(i + 1) % STADIUMS.length]?.country === s.country,
-    ).map(label);
-    expect(repeats).toEqual([]);
+  it("one day's is far from the next: 3,000 km or more, including the wrap", () => {
+    const near = STADIUMS.filter((s, i) => {
+      const next = STADIUMS[(i + 1) % STADIUMS.length];
+      return distanceKm(s, next) < 3000;
+    }).map(label);
+    expect(near).toEqual([]);
   });
 });

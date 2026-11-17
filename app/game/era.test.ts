@@ -20,13 +20,13 @@ import {
 } from "./scoring";
 import { createSession, reduce, tableFor } from "./session";
 import type { Session } from "./session";
-import { buildShareText, shareCardFor } from "./share";
+import { shareCardFor } from "./share";
 import { SHOT_ORDER, SHOT_POINTS, shotsFor, standings } from "./shots";
 import { statsFor } from "./stats";
 import { MODES, type PlayedGame } from "./storage";
 import { answer, question } from "./test-fixtures";
 import type { EraQuestion, Grade, Mode, Question } from "./types";
-import { revealFor, shareInputFor } from "./view";
+import { revealFor } from "./view";
 
 const STADIUM = STADIUMS[0];
 const ERA: readonly EraQuestion[] = [...RETRO_QUESTIONS, ...NEXT_GEN_QUESTIONS];
@@ -413,23 +413,6 @@ describe("a whole RETRO game and a whole NEXT-GEN game", () => {
       expect(card.rows[0].year).toBe(revealFor(s, 0)?.row?.year);
     },
   );
-
-  it("shares under the mode's own name, with no years in the text", () => {
-    const s = playGame("nextgen", GRADES);
-    const text = buildShareText(
-      shareInputFor(s, "LOWER LEAGUES", "ON THE GROUP CHAT", "NEXT-GEN"),
-    );
-    expect(text.split("\n")[0]).toBe(
-      `soccersense #3 · NEXT-GEN · ${STADIUM.name}`,
-    );
-    expect(text).not.toMatch(/\b(18|19|20)\d\d\b/);
-    // Without a label the id in capitals, as it always was for HOME and AWAY.
-    expect(
-      buildShareText(shareInputFor(playGame("retro", GRADES), "X")).split(
-        "\n",
-      )[0],
-    ).toContain("· RETRO ·");
-  });
 });
 
 describe("the stats over all four modes", () => {

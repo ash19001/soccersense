@@ -65,14 +65,7 @@ export function question(
 }
 
 export function stadium(id: string, lat = 0, lng = 0): Stadium {
-  return {
-    id,
-    name: id.toUpperCase(),
-    city: "Testville",
-    country: "Testland",
-    lat,
-    lng,
-  };
+  return { id, lat, lng };
 }
 
 /** A pin on the equator at the prime meridian: one degree of longitude is 111 km. */

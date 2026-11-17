@@ -45,7 +45,6 @@ function picture(over: Partial<ShareCardPicture> = {}): ShareCardPicture {
     mode: "home",
     modeLabel: "HOME",
     dayLabel: "DAY 12",
-    stadium: "Anfield",
     lines: grades.map((grade, i) => ({
       prompt: strings.play.fullTime.image.prompt(HOME_QUESTIONS[i].prompt),
       answer:
@@ -157,7 +156,6 @@ describe("paintShareCard", () => {
     const long = "Supercalifragilistic ".repeat(8).trim();
     const card = paintShareCard(
       picture({
-        stadium: long,
         title: long,
         lines: picture().lines.map((l) => ({
           ...l,

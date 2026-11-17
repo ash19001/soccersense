@@ -60,7 +60,7 @@ describe("the barrel", () => {
       "loadDay",
       "clearGame",
       // share
-      "buildShareText",
+      "shareCardFor",
       // titles
       "titleFor",
       // view
@@ -70,7 +70,6 @@ describe("the barrel", () => {
       "progressFor",
       "pips",
       "results",
-      "shareInputFor",
     ] as const;
     for (const name of functions) {
       expect(typeof game[name], name).toBe("function");
@@ -91,7 +90,6 @@ describe("the barrel", () => {
     expect(game.EARTH_RADIUS_KM).toBe(6371.0088);
     expect(game.KM_PER_MILE).toBe(1.609344);
     expect(game.STORAGE_PREFIX).toBe("soccersense:v1");
-    expect(Object.keys(game.GRADE_SYMBOLS)).toHaveLength(8);
     expect(game.SHOT_ORDER).toEqual([
       "worldie",
       "golazo",
@@ -112,9 +110,6 @@ describe("the barrel", () => {
     const stadiums = [
       {
         id: "anfield",
-        name: "Anfield",
-        city: "Liverpool",
-        country: "England",
         lat: 53.4308,
         lng: -2.9608,
       },
@@ -220,17 +215,7 @@ describe("the barrel", () => {
     };
     game.saveGame(key, "home", session, storage);
     expect(game.loadGame(key, "home", storage)?.total).toBe(100);
-    expect(
-      game.buildShareText({
-        dayNumber: session.dayNumber,
-        mode: session.mode,
-        stadiumName: session.stadium.name,
-        total: result.total,
-        tierName: "SUNDAY LEAGUE",
-        grades: result.grades,
-      }),
-    ).toBe(
-      "soccersense #1 · HOME · Anfield\n100/700 · SUNDAY LEAGUE\n\u{1F31F}",
-    );
+    expect(result.total).toBe(100);
+    expect(game.shareCardFor(session).rows).toHaveLength(1);
   });
 });

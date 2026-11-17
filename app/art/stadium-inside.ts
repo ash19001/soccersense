@@ -14,7 +14,7 @@
  * bottom of the canvas with the menu ball's centre circle on it.
  *
  * `InsideBackdrop` paints everything on the home screen except the ball, the logo and the DOM
- * captions. Everything that does not move is painted once per size, lighting or stadium
+ * captions. Everything that does not move is painted once per size, lighting or board
  * into three cached layers (night glows, the structure above the sky's own horizon, and the
  * opaque stand and pitch below it). A frame is the sky, three copies, then the moving
  * parts: pennants, birds, crowd shimmer and camera flashes, big flags, the scoreboard's
@@ -56,10 +56,13 @@ import { drawSky, sunPosition } from "~/art/sky";
 /** This picture's own crowd: a fan 3 x 4 px, repeated every 4 px across and down. */
 const FAN = { w: 3, h: 4, pitch: 4 } as const;
 
-export interface InsideStadiumInfo {
-  name: string;
-  city: string;
-  country: string;
+/**
+ * The scoreboard's two lines under its header: a large one and a small one. They were the
+ * day's stadium and its city once; the stadium is no longer named anywhere (2026-11-17).
+ */
+export interface InsideBoardWords {
+  title: string;
+  line: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +102,7 @@ const TRUSS = 4;
 const DRESS_GAP = 21;
 
 const SMALL = { font: FONT_3x5 } as const;
-const HEADER = "TODAY'S STADIUM";
+const HEADER = "MATCHDAY";
 
 interface Tower {
   /** Centre column of the mast. */
@@ -1001,7 +1004,7 @@ interface Line {
 
 export class InsideBackdrop {
   private readonly seed: number;
-  private stadium: InsideStadiumInfo;
+  private words: InsideBoardWords;
   private light: Lighting = lightingFor({ elevation: 45, morning: false });
   private w = 0;
   private h = 0;
@@ -1029,12 +1032,12 @@ export class InsideBackdrop {
 
   constructor(opts: {
     seed: number;
-    stadium: InsideStadiumInfo;
-    /** The scoreboard's first line. Default "TODAY'S STADIUM". */
+    words: InsideBoardWords;
+    /** The scoreboard's first line. Default "MATCHDAY". */
     header?: string;
   }) {
     this.seed = opts.seed;
-    this.stadium = opts.stadium;
+    this.words = opts.words;
     if (opts.header !== undefined) this.header = opts.header.toUpperCase();
   }
 
@@ -1053,16 +1056,10 @@ export class InsideBackdrop {
     this.dirty = true;
   }
 
-  setStadium(stadium: InsideStadiumInfo): void {
-    const old = this.stadium;
-    if (
-      old.name === stadium.name &&
-      old.city === stadium.city &&
-      old.country === stadium.country
-    ) {
-      return;
-    }
-    this.stadium = stadium;
+  setWords(words: InsideBoardWords): void {
+    const old = this.words;
+    if (old.title === words.title && old.line === words.line) return;
+    this.words = words;
     this.dirty = true;
   }
 
@@ -1297,20 +1294,20 @@ export class InsideBackdrop {
 
   private layoutBoard(): void {
     const b = this.g.m.scoreboard;
-    const st = this.stadium;
+    const words = this.words;
     const free = b.h - 4 - 17;
     const gap = Math.max(1, Math.floor(free / 4));
     const top = b.y + 2 + gap + Math.floor(Math.max(0, free - gap * 4) / 2);
     this.lines = [
       { text: this.header, y: top, color: P.ledGreen, big: false },
       {
-        text: st.name.toUpperCase(),
+        text: words.title.toUpperCase(),
         y: top + 5 + gap,
         color: P.amber,
         big: true,
       },
       {
-        text: `${st.city}, ${st.country}`.toUpperCase(),
+        text: words.line.toUpperCase(),
         y: top + 12 + gap * 2,
         color: P.chalk,
         big: false,

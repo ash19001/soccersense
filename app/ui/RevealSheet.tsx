@@ -35,7 +35,7 @@ export interface RevealSheetProps {
   gradeLabel: string;
   /** "+87". Leave out for time's up and passes if there is nothing to show. */
   pointsLabel?: string;
-  /** "Trent Alexander-Arnold was born in West Derby, Liverpool: 3 miles from Anfield." */
+  /** "Blackburn Rovers: only 2% of players said the same." */
   sentence: string;
   rows: readonly LeagueEntry[];
   tableLabels: LeagueTableLabels;

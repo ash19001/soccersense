@@ -402,7 +402,7 @@ him does nothing else, and the scene sends no sound of its own for it: his touch
 the picture's cues (below). On a phone there is no lawn and `mascotAt` is always false.
 
 The sign carries the fact (`setSign({ header: labels.header, text: fact })`, sent when either
-changes). The scene knows nothing of the stadium: today's stadium is the game page's. The
+changes). The scene knows nothing of the day's pin, which is the game's (for the distance rules). The
 fact's marquee runs on the ambient clock, so under reduced motion it scrolls slower too.
 
 ### Sound

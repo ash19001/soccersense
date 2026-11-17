@@ -8,23 +8,20 @@ import {
   type Session,
   type StorageLike,
   type Today,
-  buildShareText,
   createSession,
   dayKeyFor,
   reduce,
   saveSession,
   shareCardFor,
-  shareInputFor,
 } from "~/game";
 import { strings } from "~/i18n";
 import {
   GameController,
   SHARE_IMAGE_DELAY_MS,
   SHARE_LABEL_MS,
-  tierName,
-  titleName,
 } from "./controller";
-import { type ShareKit, shareCardPicture } from "./share-image";
+import { shareText } from "./names";
+import { type ShareKit, shareCardPicture, shareLink } from "./share-image";
 
 const full = strings.play.fullTime;
 
@@ -130,15 +127,12 @@ function atFullTime(kit: ShareKit, session = played(GRADES)): GameController {
   return game;
 }
 
-function expectedText(session: Session): string {
-  return buildShareText(
-    shareInputFor(
-      session,
-      tierName(session.total),
-      titleName(session.mode, session.total),
-      strings.home.modes[session.mode].label,
-    ),
-  );
+/** The text that goes with the picture, here: the test page's own address is the link. */
+function expectedText(): string {
+  return [
+    "Check out what I got on soccersense!",
+    `Test your football trivia on ${window.location.origin}`,
+  ].join("\n");
 }
 
 beforeEach(() => {
@@ -160,7 +154,8 @@ describe("the share picture's words", () => {
     expect(picture.mode).toBe("home");
     expect(picture.modeLabel).toBe("HOME");
     expect(picture.dayLabel).toBe("DAY 1");
-    expect(picture.stadium).toBe(STADIUMS[0].name);
+    // the day's stadium is not named on the picture
+    expect(Object.keys(picture)).not.toContain("stadium");
     expect(picture.site).toBe(strings.siteName);
     expect(picture.lines).toHaveLength(7);
     expect(picture.lines[0].prompt).toBe("Club that won the Premier League");
@@ -237,8 +232,40 @@ describe("the share picture's words", () => {
   });
 });
 
+describe("the share text", () => {
+  // the product owner, 2026-11-17: 'check out what I got on soccersense! Test your
+  // football trivia on (link)', and then: "it shouldn't say all that extra stuff because
+  // it's in the image. Only first line and last line"
+  test("is the player's line and where to play, and nothing of the result", () => {
+    expect(shareText("https://quiz.example").split("\n")).toEqual([
+      "Check out what I got on soccersense!",
+      "Test your football trivia on https://quiz.example",
+    ]);
+    expect(full.message.intro).toBe("Check out what I got on soccersense!");
+  });
+
+  test("is the first line alone with no address to give", () => {
+    expect(shareText("")).toBe("Check out what I got on soccersense!");
+  });
+
+  test("the link is the site's address once it is set, and this page's until then", () => {
+    expect(shareLink("https://quiz.example", "http://localhost:5173")).toBe(
+      "https://quiz.example",
+    );
+    expect(shareLink("", "http://192.168.1.20:5174")).toBe(
+      "http://192.168.1.20:5174",
+    );
+    // a page opened from a file, or no page at all: nothing worth sending
+    expect(shareLink("", "null")).toBe("");
+    expect(shareLink("", "")).toBe("");
+    // here: the test page's own address
+    expect(shareLink("")).toBe(window.location.origin);
+    expect(window.location.origin).toMatch(/^https?:\/\//);
+  });
+});
+
 describe("SHARE", () => {
-  test("in NEXT-GEN: the mode's own name in the text, the file and the sheet", async () => {
+  test("in NEXT-GEN: the mode's own name on the file and the sheet, and the same two lines of text", async () => {
     const session = played(GRADES, "nextgen");
     const { kit, calls } = fakeKit({ canShareFiles: () => true });
     const game = atFullTime(kit, session);
@@ -247,8 +274,8 @@ describe("SHARE", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(calls.shared).toHaveLength(1);
     const data = calls.shared[0];
-    expect(data.text).toBe(expectedText(session));
-    expect(data.text?.split("\n")[0]).toContain("· NEXT-GEN ·");
+    expect(data.text).toBe(expectedText());
+    expect(data.text).not.toMatch(/NEXT-GEN/);
     expect(data.title).toBe(full.image.title(1, "NEXT-GEN"));
     expect(data.files?.[0].name).toBe("soccersense-day-1-nextgen.png");
     expect(calls.made[0].lines[0].year).toBe("2026");
@@ -277,7 +304,7 @@ describe("SHARE", () => {
     expect(calls.downloads).toEqual([
       { blob: PNG, name: "soccersense-day-1-home.png" },
     ]);
-    expect(calls.copied).toEqual([expectedText(game.read().session)]);
+    expect(calls.copied).toEqual([expectedText()]);
     expect(calls.shared).toHaveLength(0);
     expect(game.read().share).toBe("saved");
     expect(game.read().announcement).toBe(full.savedSpoken);
@@ -308,7 +335,7 @@ describe("SHARE", () => {
     const file = data.files?.[0];
     expect(file?.name).toBe("soccersense-day-1-home.png");
     expect(file?.type).toBe("image/png");
-    expect(data.text).toBe(expectedText(game.read().session));
+    expect(data.text).toBe(expectedText());
     expect(data.title).toBe("soccersense #1 HOME");
     expect(calls.downloads).toHaveLength(0);
     expect(calls.copied).toHaveLength(0);
@@ -393,7 +420,7 @@ describe("SHARE", () => {
     expect(calls.made).toHaveLength(0);
     game.share();
     await vi.advanceTimersByTimeAsync(0);
-    expect(calls.copied).toEqual([expectedText(game.read().session)]);
+    expect(calls.copied).toEqual([expectedText()]);
     expect(game.read().share).toBe("copied");
     expect(game.read().announcement).toBe(full.copiedSpoken);
     game.dispose();

@@ -68,7 +68,8 @@ export function insideLayout(w: number, h: number): InsideLayout {
   const logoH = Math.round(H * COVER.menuLogo);
   const boardTop = Math.round(H * 0.2);
   const boardBottom = Math.round(H * 0.33);
-  // Wide enough for "TODAY'S STADIUM" in the small font, never wider than a phone, and
+  // Wide enough for a header of fifteen letters in the small font, never wider than a
+  // phone, and
   // always with a strip of sky either side for the sun to climb.
   const boardW = Math.max(1, Math.min(96, W - 40));
   const boardX = cx - Math.floor(boardW / 2);

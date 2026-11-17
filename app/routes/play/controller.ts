@@ -28,7 +28,6 @@ import {
   type Session,
   type StorageLike,
   type Today,
-  buildShareText,
   clockView,
   createSession,
   dayKeyFor,
@@ -41,7 +40,6 @@ import {
   reduce,
   saveSession,
   shareCardFor,
-  shareInputFor,
   streakFor,
 } from "~/game";
 import { questionsFor } from "~/data";
@@ -54,12 +52,13 @@ import {
   loadLive,
   saveLive,
 } from "./progress";
-import { modeName, tierName, titleName } from "./names";
+import { modeName, shareText, tierName, titleName } from "./names";
 import { deliverShare } from "./share-flow";
 import {
   type ShareKit,
   browserShareKit,
   shareCardPicture,
+  shareLink,
 } from "./share-image";
 
 /** How long the mode card stays up before a new game, unless a press sends it off. */
@@ -372,24 +371,18 @@ export class GameController {
   };
 
   /**
-   * SHARE: the picture and the text summary. Where the browser can share files (mostly
-   * phones) the system share sheet opens with both; elsewhere the picture is downloaded and
-   * the text copied. Where no picture can be made at all, the text is copied as it always
-   * was. If the picture is still being made, the button is busy until it is.
+   * SHARE: the picture, and the two lines of text that go with it (`shareText`). Where the
+   * browser can share files (mostly phones) the system share sheet opens with both;
+   * elsewhere the picture is downloaded and the text copied. Where no picture can be made
+   * at all, the text alone is copied. If the picture is still being made, the button is
+   * busy until it is.
    */
   share = (): void => {
     const { session, share } = this.view;
     if (session.phase !== "done" || this.disposed || share === "making") {
       return;
     }
-    const text = buildShareText(
-      shareInputFor(
-        session,
-        tierName(session.total),
-        titleName(session.mode, session.total),
-        modeName(session.mode),
-      ),
-    );
+    const text = shareText(shareLink());
     if (!this.kit.canMakeImage()) {
       this.deliver(text, null);
       return;

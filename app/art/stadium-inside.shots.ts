@@ -2,7 +2,7 @@
  * Shots for the inside view of the stadium (reference art, see stadium-inside.ts).
  *
  *   inside/full       the whole view, with a stand-in for the menu ball
- *   inside/long-name  the same with a name too long for the board (it scrolls)
+ *   inside/long-line  the same with a line too long for the board (it scrolls)
  *   inside/board      a close crop of the scoreboard
  *   inside/composed   the view with the stand-in ball and the wordmark over it
  */
@@ -12,23 +12,21 @@ import { insideLayout as menuLayout } from "~/art/stadium-inside-layout";
 import { lightingFor } from "~/art/lighting";
 import { drawLogo, logoSize } from "~/art/logo";
 import { P } from "~/art/palette";
-import { InsideBackdrop, type InsideStadiumInfo } from "~/art/stadium-inside";
+import { InsideBackdrop, type InsideBoardWords } from "~/art/stadium-inside";
 
-const ANFIELD: InsideStadiumInfo = {
-  name: "Anfield",
-  city: "Liverpool",
-  country: "England",
+const WORDS: InsideBoardWords = {
+  title: "Kick-off",
+  line: "7 questions",
 };
 
-const BERNABEU: InsideStadiumInfo = {
-  name: "Estadio Santiago Bernabéu",
-  city: "Madrid",
-  country: "Spain",
+const LONG: InsideBoardWords = {
+  title: "A line too long for the board",
+  line: "It scrolls",
 };
 
-function backdrop(ctx: ShotContext, stadium: InsideStadiumInfo): Surface {
+function backdrop(ctx: ShotContext, words: InsideBoardWords): Surface {
   const s = new Surface(ctx.w, ctx.h);
-  const scene = new InsideBackdrop({ seed: ctx.seed, stadium });
+  const scene = new InsideBackdrop({ seed: ctx.seed, words });
   scene.resize(s.w, s.h);
   scene.setLighting(lightingFor(ctx.sun));
   scene.draw(s, ctx.t);
@@ -40,12 +38,12 @@ function backdrop(ctx: ShotContext, stadium: InsideStadiumInfo): Surface {
 }
 
 export const shots: ShotMap = {
-  "inside/full": (ctx) => backdrop(ctx, ANFIELD),
+  "inside/full": (ctx) => backdrop(ctx, WORDS),
 
-  "inside/long-name": (ctx) => backdrop(ctx, BERNABEU),
+  "inside/long-line": (ctx) => backdrop(ctx, LONG),
 
   "inside/board": (ctx) => {
-    const full = backdrop(ctx, ANFIELD);
+    const full = backdrop(ctx, WORDS);
     const b = menuLayout(full.w, full.h).scoreboard;
     const pad = 10;
     const out = new Surface(b.w + pad * 2, b.h + pad * 2);
@@ -54,7 +52,7 @@ export const shots: ShotMap = {
   },
 
   "inside/composed": (ctx) => {
-    const s = backdrop(ctx, ANFIELD);
+    const s = backdrop(ctx, WORDS);
     const m = menuLayout(s.w, s.h);
     const opts = {
       maxWidth: Math.min(s.w - 26, 132),

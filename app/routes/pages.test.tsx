@@ -64,9 +64,8 @@ describe("the mode pages", () => {
         name: strings.play.heading.away,
       }),
     ).toHaveClass("ss-sr");
-    expect(
-      screen.getByText(strings.play.stadium("Anfield", "Liverpool", "England")),
-    ).toBeInTheDocument();
+    // The day's stadium is never named, to the eye or to a screen reader.
+    expect(document.body.textContent).not.toMatch(/anfield|today's stadium/i);
     expect(document.querySelector(".ss-root.ss-game")).not.toBeNull();
     // A new game: the mode card first, in the mode's colour, and no board yet.
     expect(document.querySelector(".ss-intro")).toHaveAttribute(

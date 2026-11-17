@@ -471,8 +471,6 @@ export function Game({ mode }: { mode: Mode }) {
     );
   }
 
-  const stadium = session?.stadium ?? null;
-
   return (
     <main>
       <GameLayout
@@ -488,11 +486,6 @@ export function Game({ mode }: { mode: Mode }) {
         <h1 ref={heading} tabIndex={-1} className="ss-sr">
           {text.heading[mode]}
         </h1>
-        {stadium && (
-          <p className="ss-sr">
-            {text.stadium(stadium.name, stadium.city, stadium.country)}
-          </p>
-        )}
         <p className="ss-sr" role="status" aria-live="polite">
           {view?.announcement ?? ""}
         </p>

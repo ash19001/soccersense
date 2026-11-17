@@ -21,7 +21,6 @@ import {
 } from "vitest";
 
 import {
-  buildShareText,
   loadGame,
   saveGame,
   createSession,
@@ -212,9 +211,8 @@ describe("the game page", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: text.heading.home }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(text.stadium("Anfield", "Liverpool", "England")),
-    ).toBeInTheDocument();
+    // The day's stadium is never named, to the eye or to a screen reader.
+    expect(document.body.textContent).not.toMatch(/anfield|today's stadium/i);
 
     // Question 1. The field has the focus, the clock runs, no PASS yet.
     expect(
@@ -222,7 +220,7 @@ describe("the game page", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(text.board.instruction.home)).toBeVisible();
     expect(screen.getByText(text.board.measure.home)).toBeInTheDocument();
-    // The board does not name the day's stadium (it is only read out, above).
+    // Nor does the board name it.
     expect(screen.queryByText("ANFIELD")).toBeNull();
     expect(document.querySelector(".ss-board")).not.toHaveTextContent(
       /anfield/i,
@@ -505,7 +503,8 @@ describe("the game page", () => {
     ]);
     expect(window.localStorage.getItem(liveKey(DAY_KEY, "home"))).toBeNull();
 
-    // SHARE copies the summary and says so.
+    // SHARE copies the two lines that go with the picture (nothing of the result, which
+    // is the picture's) and says so.
     const writeText = vi.fn(() => Promise.resolve());
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
     await act(async () => {
@@ -515,15 +514,10 @@ describe("the game page", () => {
       await Promise.resolve();
     });
     expect(writeText).toHaveBeenCalledWith(
-      buildShareText({
-        dayNumber: 1,
-        mode: "home",
-        stadiumName: "Anfield",
-        total: 250,
-        tierName: text.tiers.nonleague,
-        title: text.titles.home.piequeue,
-        grades: saved?.turns.map((t) => t.grade) ?? [],
-      }),
+      [
+        "Check out what I got on soccersense!",
+        `Test your football trivia on ${window.location.origin}`,
+      ].join("\n"),
     );
     expect(
       screen.getByRole("button", { name: text.fullTime.copied }),
