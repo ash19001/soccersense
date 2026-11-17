@@ -23,10 +23,17 @@ done and what comes next.
 
 ## Current scope
 
-Frontend only. Don't add a backend, database, auth, analytics or payments until asked.
-Question data is a built-in sample in `app/data`. The site is hosted as static files on
-Cloudflare (`wrangler.jsonc`; `docs/ARCHITECTURE.md`, "Hosting"): don't add Worker code or
-bindings until asked.
+The game is a static site with a small backend being built behind it, step by step
+(`docs/ARCHITECTURE.md` section 8: the plan, and what is built so far). It is one Cloudflare
+Worker at https://soccersense.io (`wrangler.jsonc`): the built site as files, and `/api/*`
+answered by `worker/` with a D1 database. A push to `main` deploys it.
+
+- Build the backend in the agreed order, a step at a time; don't add auth, analytics or
+  payments ahead of it.
+- Question data is a built-in sample in `app/data`, and stays what the game plays until the
+  `QUESTIONS` flag (`wrangler.jsonc`) is switched: the game is still in testing.
+- Secrets (API keys, tokens) are put into Cloudflare by the product owner, never into the
+  repository or a chat.
 
 Borrow the daily-quiz _format_ only. Never copy the name, art, mascot, wording or question
 content of wonderhop.io or any other game. No real club crests, kits or sponsor logos.
@@ -45,6 +52,11 @@ content of wonderhop.io or any other game. No real club crests, kits or sponsor 
   canvas. The interface (board, answer bar, reveal sheet) is DOM laid over it.
 - `app/pixel`, `app/art`, `app/scenes`, `app/game`, `app/lib`, `app/data` are pure TypeScript:
   no DOM, no clock reads, no unseeded randomness.
+- `worker/` is the API: plain TypeScript on web standards (`Request`, `Response`), with
+  the time handed in. It may import the pure parts of `app/` (`~/game`, `~/data`), never
+  the other way round. Its tests run on Node against a real SQLite
+  (`worker/testing/d1.ts`). `pnpm api` runs it locally (port 8787); the dev server passes
+  `/api` to it.
 - Art is checked by rendering named shots to PNG without a browser:
   `pnpm snap --list`, `pnpm snap <shot> --time night --out .snaps/x.png`, then look at the file.
 

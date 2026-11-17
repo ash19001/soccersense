@@ -29,6 +29,7 @@ import {
 } from "~/game";
 import { HOME_QUESTIONS, STADIUMS } from "~/data";
 import { strings } from "~/i18n";
+import { SITE_URL } from "./seo";
 import { CareerScene } from "~/scenes/career";
 import { type ClockStatus, deviceClock, setGameClock } from "~/ui/game-clock";
 import { resetArrivalFocus } from "~/ui/useArrivalFocus";
@@ -516,7 +517,7 @@ describe("the game page", () => {
     expect(writeText).toHaveBeenCalledWith(
       [
         "Check out what I got on soccersense!",
-        `Test your football trivia on ${window.location.origin}`,
+        `Test your football trivia on ${SITE_URL}`,
       ].join("\n"),
     );
     expect(

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Written by `pnpm seo` (tools/seo.ts) from app/routes/seo.ts. Do not edit by hand. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://soccersense.io/</loc></url>
+  <url><loc>https://soccersense.io/play/home</loc></url>
+  <url><loc>https://soccersense.io/play/away</loc></url>
+  <url><loc>https://soccersense.io/play/retro</loc></url>
+  <url><loc>https://soccersense.io/play/next-gen</loc></url>
+  <url><loc>https://soccersense.io/how-to-play</loc></url>
+</urlset>

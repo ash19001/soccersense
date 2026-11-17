@@ -2,10 +2,12 @@
  * The game's clock: the time by the site's own server, not by the device, so turning the
  * phone's clock on (or back) does not open another day's game.
  *
- * Every HTTP response carries a `Date` header: the server's clock, to the second. One HEAD
- * request to the site's own address reads it (no backend: any static host sends it), and
- * from then on the time runs on `performance.now()`, which counts the same whatever the
- * device's clock is set to. It is read again whenever the tab comes back into view (a
+ * One HEAD request to the site's own API, `/api/today`, reads it: the Worker answers with
+ * its clock to the millisecond in an `x-server-time` header (worker/http.ts). Where there
+ * is no API to answer (the dev server alone, any static host), the answer still carries a
+ * `Date` header, as every HTTP response does: the server's clock to the second, and that is
+ * read instead. From then on the time runs on `performance.now()`, which counts the same
+ * whatever the device's clock is set to. It is read again whenever the tab comes back into view (a
  * sleeping device may pause `performance.now()`), and a reading within `CLOCK_SLACK_MS` of
  * the running time leaves it as it is, so it never jitters.
  *
@@ -53,29 +55,45 @@ export interface ServerClockOptions {
   clearTimer?: (timer: unknown) => void;
 }
 
+/** The API's header: the server's time in milliseconds since 1970 (worker/http.ts). */
+export const SERVER_TIME_HEADER = "x-server-time";
+
 /**
  * The server's time when its answer arrived at `receivedAt` (both ends on the monotonic
- * clock), or null if the answer has no readable `Date`. The header is the second the answer
- * was made, rounded down, somewhere between asking and hearing back: the middle of that
- * second, half the round trip ago. A cache that kept the answer adds its `Age`.
+ * clock), or null if the answer has no readable time.
+ *
+ * The API's `x-server-time` is the millisecond the answer was made, half the round trip
+ * ago. Without it, `Date` is the second the answer was made, rounded down, somewhere between
+ * asking and hearing back: the middle of that second, half the round trip ago; a cache that
+ * kept the answer adds its `Age`.
  */
 export function serverTimeOf(
   answer: Answer,
   sentAt: number,
   receivedAt: number,
 ): number | null {
+  const trip = Math.max(0, receivedAt - sentAt) / 2;
+  const exact = answer.headers.get(SERVER_TIME_HEADER);
+  // a time, not a stray word: thirteen digits is 2001 to 2286
+  if (exact !== null && /^\d{13}$/.test(exact.trim())) {
+    return Number(exact) + trip;
+  }
   const date = Date.parse(answer.headers.get("date") ?? "");
   if (!Number.isFinite(date)) return null;
   const age = Number(answer.headers.get("age") ?? 0);
   const kept = Number.isFinite(age) && age > 0 ? age * 1000 : 0;
-  return date + 500 + kept + Math.max(0, receivedAt - sentAt) / 2;
+  return date + 500 + kept + trip;
 }
 
-/** The site's own favicon, with a query no cache has seen: a tiny answer, never a stale one. */
+/**
+ * The API's day, with a query no cache has seen: a tiny answer, never a stale one. Where
+ * nothing answers at that address the host's own answer (a 404, the dev server's page)
+ * still has its `Date`.
+ */
 function freshUrl(): string {
   const base = import.meta.env.BASE_URL || "/";
   const tag = Math.random().toString(36).slice(2, 10);
-  return new URL(`${base}favicon.svg?clock=${tag}`, window.location.href).href;
+  return new URL(`${base}api/today?clock=${tag}`, window.location.href).href;
 }
 
 function headRequest(url: string, signal: AbortSignal): Promise<Answer> {

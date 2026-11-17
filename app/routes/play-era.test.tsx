@@ -23,6 +23,7 @@ import {
 
 import { loadGame, playPath } from "~/game";
 import { strings } from "~/i18n";
+import { SITE_URL } from "./seo";
 import { CareerScene } from "~/scenes/career";
 import { resetArrivalFocus } from "~/ui/useArrivalFocus";
 import Play, { meta } from "./play";
@@ -303,7 +304,7 @@ describe("the era pages", () => {
     expect(writeText).toHaveBeenCalledWith(
       [
         "Check out what I got on soccersense!",
-        `Test your football trivia on ${window.location.origin}`,
+        `Test your football trivia on ${SITE_URL}`,
       ].join("\n"),
     );
 

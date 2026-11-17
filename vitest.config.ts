@@ -8,6 +8,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
-    include: ["app/**/*.test.{ts,tsx}"],
+    // The Worker's tests ask for Node themselves (`// @vitest-environment node`).
+    include: ["app/**/*.test.{ts,tsx}", "worker/**/*.test.ts"],
   },
 });

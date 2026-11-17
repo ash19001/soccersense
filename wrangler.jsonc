@@ -1,6 +1,6 @@
-// Hosting: a Cloudflare Worker that serves the built site as static files (no Worker code
-// yet; docs/ARCHITECTURE.md, "Hosting"). The build is `pnpm build`, the deploy
-// `npx wrangler deploy`.
+// Hosting: one Cloudflare Worker (docs/ARCHITECTURE.md, "Hosting" and "The backend"). It
+// serves the built site as static files and answers /api/* itself (worker/). The build is
+// `pnpm build`, the deploy `npx wrangler deploy`.
 //
 // This file being here is what stops Cloudflare's automatic project setup, which runs when
 // a repository has no Wrangler configuration and, on 2026-11-17, failed the deploy by
@@ -9,9 +9,17 @@
   // Must be the Worker's name in the Cloudflare dashboard.
   "name": "soccersense",
   "compatibility_date": "2026-11-17",
+  // Wrangler sends Cloudflare nothing about how it is used here.
+  "send_metrics": false,
+  // The API. Everything it needs is bundled from here by wrangler.
+  "main": "worker/index.ts",
   "assets": {
     // What `pnpm build` writes: every page as a file, and 404.html (tools/not-found.ts).
     "directory": "./build/client",
+    "binding": "ASSETS",
+    // Only the API goes to the Worker: every other address is served straight from the
+    // files, without running (or paying for) any code.
+    "run_worker_first": ["/api/*"],
     // A page is served at its address as the game links to it, "/play/home", with no
     // closing slash ("/play/home/" is sent there). The sitemap and the canonical links
     // (app/routes/seo.ts) say the same.
@@ -19,5 +27,15 @@
     // An address that is not a page gets 404.html with a "404 Not Found": the app's shell,
     // which shows the Offside! page and asks not to be indexed.
     "not_found_handling": "404-page"
+  },
+  // The database (D1). It has no id here: Cloudflare makes it on the first deploy and keeps
+  // its id in the dashboard. The Worker creates and updates its own tables
+  // (worker/db/migrate.ts), so nothing is run by hand.
+  "d1_databases": [{ "binding": "DB", "database_name": "soccersense" }],
+  "vars": {
+    // Where each day's questions come from: "sample" (the questions built into the game)
+    // or "scheduled" (the ones approved and scheduled for the day). A feature flag: leave
+    // it at "sample" while the game is in testing.
+    "QUESTIONS": "sample"
   }
 }

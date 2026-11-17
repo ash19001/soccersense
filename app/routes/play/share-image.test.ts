@@ -21,6 +21,7 @@ import {
   SHARE_LABEL_MS,
 } from "./controller";
 import { shareText } from "./names";
+import { SITE_URL } from "../seo";
 import { type ShareKit, shareCardPicture, shareLink } from "./share-image";
 
 const full = strings.play.fullTime;
@@ -131,7 +132,7 @@ function atFullTime(kit: ShareKit, session = played(GRADES)): GameController {
 function expectedText(): string {
   return [
     "Check out what I got on soccersense!",
-    `Test your football trivia on ${window.location.origin}`,
+    `Test your football trivia on ${SITE_URL}`,
   ].join("\n");
 }
 

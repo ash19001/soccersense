@@ -32,7 +32,7 @@ import type { SocialCardWords } from "~/scenes/social-card";
  * The address the site is served at: "https://" and the host, with nothing after it (no
  * path, no closing slash). Empty until the site has one.
  */
-export const SITE_URL = "" as string;
+export const SITE_URL = "https://soccersense.io" as string;
 
 /** The link preview's picture: where it is served, and its size (scenes/social-card.ts). */
 export const SOCIAL_IMAGE = Object.freeze({

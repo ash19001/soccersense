@@ -10,6 +10,7 @@ import {
 } from "~/game";
 
 import type { ShareKit } from "./play/share-image";
+import { SITE_URL } from "./seo";
 import { createTodayShare } from "./share-today";
 
 const TODAY: Today = {
@@ -100,7 +101,7 @@ describe("createTodayShare", () => {
     // the result (that is the picture's)
     expect(text.split("\n")).toEqual([
       "Check out what I got on soccersense!",
-      `Test your football trivia on ${window.location.origin}`,
+      `Test your football trivia on ${SITE_URL}`,
     ]);
   });
 

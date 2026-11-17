@@ -20,20 +20,34 @@ function wrangler(): {
   name: string;
   main?: string;
   compatibility_date: string;
-  assets: Record<string, string>;
+  assets: Record<string, unknown>;
+  d1_databases?: Record<string, string>[];
+  vars?: Record<string, string>;
 } {
   return JSON.parse(text("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
 }
 
 describe("hosting on Cloudflare", () => {
-  test("the Worker is the built site as static files, and nothing else", () => {
+  test("the Worker is the built site as static files, and the API", () => {
     const config = wrangler();
     expect(config.name).toMatch(/^[a-z0-9-]+$/);
     expect(config.compatibility_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    // no Worker code: the site is frontend only
-    expect(config.main).toBeUndefined();
     // where `react-router build` puts the pages
     expect(config.assets.directory).toBe("./build/client");
+    // the API's code, which reaches the files through this binding (worker/env.ts)
+    expect(config.main).toBe("worker/index.ts");
+    expect(config.assets.binding).toBe("ASSETS");
+    // only the API runs code: every page is served straight from its file
+    expect(config.assets.run_worker_first).toEqual(["/api/*"]);
+  });
+
+  test("the database is bound as DB, and the questions are the sample until the flag is switched", () => {
+    const config = wrangler();
+    expect(config.d1_databases).toEqual([
+      { binding: "DB", database_name: "soccersense" },
+    ]);
+    // the game is in testing: real questions start only on this flag
+    expect(config.vars).toEqual({ QUESTIONS: "sample" });
   });
 
   test("a page is served at the address the game links to: no closing slash", () => {

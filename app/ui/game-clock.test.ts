@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
 
+import { SERVER_TIME_HEADER as WORKER_TIME_HEADER } from "../../worker/http";
 import {
   CLOCK_RETRY_MS,
   CLOCK_SLACK_MS,
   CLOCK_TIMEOUT_MS,
+  SERVER_TIME_HEADER,
   deviceClock,
   gameSearch,
   serverClock,
@@ -94,6 +96,37 @@ describe("serverTimeOf", () => {
   test("is null with no Date, or one that cannot be read", () => {
     expect(serverTimeOf(answer({}), 0, 0)).toBeNull();
     expect(serverTimeOf(answer({ date: "yesterday" }), 0, 0)).toBeNull();
+  });
+
+  test("takes the API's exact time over the Date header: the millisecond, half the round trip ago", () => {
+    // the Worker's answer (worker/http.ts): no half-second guess, and no Age
+    const exact = NOON + 437;
+    const time = serverTimeOf(
+      answer({
+        "x-server-time": String(exact),
+        date: HTTP_NOON,
+        age: "30",
+      }),
+      100,
+      300,
+    );
+    expect(time).toBe(exact + 100);
+  });
+
+  test("an x-server-time that is not a time is passed over for the Date", () => {
+    for (const odd of ["", "soon", "12", "1794913534933.5", "-1794913534933"]) {
+      const time = serverTimeOf(
+        answer({ "x-server-time": odd, date: HTTP_NOON }),
+        0,
+        0,
+      );
+      expect(time, odd).toBe(NOON + 500);
+    }
+    expect(serverTimeOf(answer({ "x-server-time": "later" }), 0, 0)).toBeNull();
+  });
+
+  test("the clock's header is the Worker's header", () => {
+    expect(SERVER_TIME_HEADER).toBe(WORKER_TIME_HEADER);
   });
 });
 

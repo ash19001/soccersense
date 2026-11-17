@@ -712,6 +712,35 @@ occurred while running deploy command".
   Worker's name must be `soccersense` (or `name` in `wrangler.jsonc` changed to match).
 - Once the site has its address, `SITE_URL` (`app/routes/seo.ts`) and `pnpm seo`.
 
+## The backend's first step: the API, its database, the site's address (2026-11-17)
+
+The product owner asked how to start the Cloudflare backend, then answered three questions:
+the day's questions will come from AI, drafted a week at a time, approved and scheduled, and
+only behind a feature flag while the game is in testing; disk space was freed; and the
+domain is soccersense.io. Built so far (`docs/ARCHITECTURE.md` section 8):
+
+- The Worker has code: `worker/` answers `/api/*`, and everything else is still served
+  straight from the build. `GET /api/today` is the day by the server; `GET /api/health`
+  says whether the database is up to date.
+- A D1 database, bound as `DB`, made by Cloudflare on the first deploy. The Worker applies
+  its own numbered migrations on the first request, so nothing is run by hand.
+- The game's clock reads `/api/today` (`x-server-time`, to the millisecond), and the
+  `Date` header where there is no API.
+- The flag `QUESTIONS` is `sample`. Nothing reads `scheduled` yet.
+- `SITE_URL` is https://soccersense.io and `pnpm seo` has been run: the canonical links,
+  `og:url`, the preview's picture, the structured data and `public/sitemap.xml` are on.
+  The share text's link is the site's address.
+- Wrangler is a development dependency; `pnpm api` runs the Worker locally.
+
+Checked: the Worker run locally under Cloudflare's own runtime (`wrangler dev`): the API's
+answers, a page, a page with a closing slash (sent to the one without), an address that is
+not a page (the Offside! page, 404). The live site was looked at before this was pushed: it
+serves at soccersense.io as configured. **Not yet seen on Cloudflare**: the Worker's code and
+the database's creation, which the next push will try (`/api/health` says how it went).
+
+Next, in order: the question pipeline (draft, approve, schedule), games run by the server,
+the leaderboard, accounts.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

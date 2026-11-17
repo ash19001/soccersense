@@ -61,10 +61,12 @@ otherwise be listed).
 
 ### Hosting
 
-The site is static files on **Cloudflare** (since 2026-11-17): a Worker with no code that
-serves `build/client` (`wrangler.jsonc`). In the Cloudflare dashboard the Worker builds
-from the repository: build command `pnpm build`, deploy command `npx wrangler deploy` (the
-default). Node comes from `.nvmrc` and pnpm from `packageManager` in `package.json`.
+The site is on **Cloudflare** (since 2026-11-17), at https://soccersense.io: one Worker
+that serves `build/client` as static files and answers `/api/*` itself (`wrangler.jsonc`;
+the API is section 8). In the Cloudflare dashboard the Worker builds from the repository:
+build command `pnpm build`, deploy command `npx wrangler deploy` (the default). Node comes
+from `.nvmrc` and pnpm from `packageManager` in `package.json`. Only `/api/*` runs code
+(`run_worker_first`): every page and file is served straight from the build.
 
 - **`wrangler.jsonc` has to be in the repository.** Without one, Cloudflare's deploy sets
   the project up by itself (it detects the framework, adds wrangler with the project's
@@ -83,8 +85,10 @@ default). Node comes from `.nvmrc` and pnpm from `packageManager` in `package.js
   rendered, not a shell.)
 - The game clock's HEAD request to `/favicon.svg` (the server's time) works as on any
   static host.
-- Wrangler is not a dependency of the project: the deploy fetches it with `npx`. Adding it
-  (to pin its version, or to run `wrangler dev`) costs a few hundred MB of downloads.
+- Wrangler is a development dependency (since the API, 2026-11-17): the deploy uses the
+  project's version, and `pnpm api` runs the Worker locally. `send_metrics` is off.
+- Checked on the live site (2026-11-17): `/play/home` is served, `/play/home/` is sent to
+  it, and an address that is not a page gets the Offside! page with a 404.
 - `app/routes/hosting.test.ts` holds the configuration to the build.
 
 - **`SITE_URL` is the one setting, and it is empty until the site has an address.** A
@@ -287,17 +291,55 @@ uses them). The summary below is the original outline.
     anywhere else, and never on another drive. Keep renders small and delete intermediates. If a
     write fails for lack of disk space, stop, check your files are whole, and report it.
 
-## 8. When the backend comes
+## 8. The backend
 
-There is no backend yet (the product owner, 2026-11-15: "I will add backend later on"). These
-parts stand in for one and change when it arrives:
+It is being built a step at a time (the product owner, 2026-11-17: "how can we go about
+starting to build the cloudflare backend for user auth, leaderboard, etc."), in this order:
+the API and its database; the day's questions, drafted, approved and scheduled; games run by
+the server; the leaderboard; accounts; then membership and the rest of the plan below.
 
-- **The day and the time.** `app/ui/game-clock.ts` takes the time from the `Date` header of a
-  HEAD request to the static host, so a changed phone clock cannot open another day's game.
-  With a backend, the backend says what day it is (say, `/api/today` with the day number and
-  the time) and the clock reads that instead. Only `serverClock`'s request and `serverTimeOf`
-  change; the game page already waits for the clock, and the home screen already takes its
-  correction. `gameSearch` keeps `?day=`, `?stadium=` and `?notimer=` to development builds.
+### What is built (2026-11-17)
+
+- **The Worker** (`worker/`, `main` in `wrangler.jsonc`). `index.ts` is Cloudflare's entry;
+  `app.ts` answers a request and is handed the time, so it is a pure function of the
+  request, the settings, the database and the time. It is written on web standards and
+  checked by the project's one TypeScript configuration: `env.ts` writes out the few
+  Cloudflare types it uses (the database, the files) rather than generating them. It
+  imports the game's pure rules (`~/game/day` for the day's number), the same code the
+  page runs.
+- **`GET /api/today`**: `{ now, day, dayKey, nextDayIn, questions }`, the day by the
+  server, never cached. Every answer of the API carries `x-server-time`, the server's
+  clock in milliseconds.
+- **The game's clock reads it.** `app/ui/game-clock.ts` asks `/api/today` (a HEAD
+  request) and takes `x-server-time`, to the millisecond. Where no API answers (the dev
+  server alone, a static host), the answer's `Date` header is read as before, so nothing
+  depends on the Worker being there.
+- **`GET /api/health`**: `{ ok, db, schema, questions }`, for a look after a deploy: `db`
+  is the database's migration number and `schema` the one the code expects; 503 if they
+  differ or there is no database.
+- **The database** is D1 (SQLite), bound as `DB`. It has no id in `wrangler.jsonc`:
+  Cloudflare makes it on the first deploy that has the binding. **The Worker keeps its own
+  tables** (`worker/db/migrate.ts`): migrations are numbered in the code, and the first
+  request of each instance applies the ones the database has not had, each as one
+  transaction with its record. Nothing is run by hand or added to the deploy. Never edit a
+  migration that has been deployed: add the next number.
+- **The flag** `QUESTIONS` (`vars` in `wrangler.jsonc`): `sample` (the questions built into
+  the game) or `scheduled`. The product owner, 2026-11-17: "for now sample should exist,
+  only start real ones on a feature flag because currently its still in testing". Nothing
+  reads `scheduled` yet.
+- **Locally**: `pnpm api` runs the Worker and the built site on port 8787 (`wrangler dev`,
+  with a database of its own under `.wrangler/`); `pnpm dev` passes `/api` to it
+  (`vite.config.ts`), and works without it.
+- **Tests** (`worker/**/*.test.ts`, run by `pnpm test` on Node): the requests and the
+  migrations against a real SQLite in memory, `worker/testing/d1.ts`, the part of D1 the
+  Worker uses over Node's own `node:sqlite`.
+
+### What still stands in for the backend
+
+These parts change as it arrives:
+
+- **The day and the time: done** (above). `gameSearch` keeps `?day=`, `?stadium=` and
+  `?notimer=` to development builds.
 - **Once a day.** Whether a mode was played today is the device's local storage
   (`soccersense:v1:<day>:<mode>`, `app/game/storage.ts`; the game in progress is
   `...:live`, `app/routes/play/progress.ts`). Clearing site data, a private window or another

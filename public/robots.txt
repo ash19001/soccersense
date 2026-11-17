@@ -1,3 +1,5 @@
 # Written by `pnpm seo` (tools/seo.ts) from app/routes/seo.ts. Do not edit by hand.
 User-agent: *
 Allow: /
+
+Sitemap: https://soccersense.io/sitemap.xml
