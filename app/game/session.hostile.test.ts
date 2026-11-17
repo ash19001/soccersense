@@ -287,6 +287,8 @@ describe("the deadline, to the millisecond", () => {
         share: null,
         rank: null,
         msLeft: 0,
+        name: null,
+        year: null,
       });
       expect(after.total).toBe(0);
       expect(after.deadline).toBeNull();
@@ -371,6 +373,8 @@ describe("PASS, to the millisecond", () => {
       share: null,
       rank: null,
       msLeft: QUESTION_MS - PASS_AFTER_MS,
+      name: null,
+      year: null,
     });
   });
 

@@ -219,6 +219,23 @@ describe("serverClock", () => {
     expect(h.pending).toHaveLength(1);
   });
 
+  test("says whether the site's API answered: a Worker that can run the games too", async () => {
+    const h = harness();
+    expect(h.clock.api()).toBe(false);
+    h.clock.check();
+    h.pending[0].resolve(answer({ date: HTTP_NOON }));
+    await settle();
+    // only a Date header: the dev server alone, a static host
+    expect(h.clock.api()).toBe(false);
+    h.clock.check();
+    h.pending[1].resolve(
+      answer({ date: HTTP_NOON, "x-server-time": String(NOON) }),
+    );
+    await settle();
+    expect(h.clock.api()).toBe(true);
+    expect(deviceClock().api()).toBe(false);
+  });
+
   test("a server that sends no Date leaves the device's clock", async () => {
     const h = harness();
     h.clock.check();

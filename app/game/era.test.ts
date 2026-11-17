@@ -391,7 +391,14 @@ describe("a whole RETRO game and a whole NEXT-GEN game", () => {
         expect(reveal?.rows).toHaveLength(5);
         expect(tableFor(s, i).every((r) => r.year !== null)).toBe(true);
         if (reveal?.row) {
-          expect(reveal.row.year).toBe(rankingYear(reveal.row.answer, rule));
+          // the reveal's row says what is shown; the table's has the whole answer
+          const whole = tableFor(s, i).find(
+            (r) => r.answer.id === reveal.row?.answer.id,
+          );
+          expect(whole).toBeDefined();
+          if (whole) {
+            expect(reveal.row.year).toBe(rankingYear(whole.answer, rule));
+          }
         }
       }
       // The pass: the top of the table is the oldest (or newest) answer.

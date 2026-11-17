@@ -507,8 +507,14 @@ describe("pips and results", () => {
       question: LONG,
       turn: played.turns[0],
       answer: LONG.answers[1],
+      name: LONG.answers[1].name,
     });
-    expect(lines[1]).toMatchObject({ index: 1, question: SHORT, answer: null });
+    expect(lines[1]).toMatchObject({
+      index: 1,
+      question: SHORT,
+      answer: null,
+      name: null,
+    });
     expect(results(start())).toEqual([]);
   });
 });

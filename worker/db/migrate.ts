@@ -54,6 +54,36 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    id: 3,
+    name: "games the server runs: the key their tickets are sealed with, and accounts' games",
+    sql: [
+      // What the Worker makes for itself and keeps to itself (worker/games/ticket.ts).
+      `CREATE TABLE IF NOT EXISTS secrets (
+        name TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      )`,
+      // An account's game of a day and mode (worker/games/store.ts): one each, as it
+      // stands. A player with no account keeps their own game: nothing of it is here.
+      `CREATE TABLE IF NOT EXISTS games (
+        player_id TEXT NOT NULL,
+        day INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        source TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        phase TEXT NOT NULL,
+        turns TEXT NOT NULL,
+        total INTEGER NOT NULL,
+        started_at INTEGER NOT NULL,
+        deadline INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        PRIMARY KEY (player_id, day, mode)
+      )`,
+    ],
+  },
 ];
 
 /** The highest migration there is: what `migrate` brings a database to. */

@@ -32,6 +32,13 @@ answered by `worker/` with a D1 database. A push to `main` deploys it.
   payments ahead of it.
 - Question data is a built-in sample in `app/data`, and stays what the game plays until the
   `QUESTIONS` flag (`wrangler.jsonc`) is switched: the game is still in testing.
+- The server runs every game (`worker/games`): it sends a question as its clock starts,
+  judges the answer and sends the reveal. It stores nothing about a player with no account
+  (their game is a sealed ticket kept on their device); only accounts' games go in the
+  database, and only accounts are on leaderboards. The page has no answers: nothing under
+  `app/routes` or `app/ui` may import the questions in `app/data` in a way a production
+  build keeps. In development with no API (`pnpm dev` alone) the page runs the game itself
+  with the sample.
 - Secrets (API keys, tokens) are put into Cloudflare by the product owner, never into the
   repository or a chat.
 

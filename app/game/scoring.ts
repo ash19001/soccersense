@@ -9,6 +9,7 @@ import type {
   Question,
   RankedAnswer,
   Rule,
+  ShownAnswer,
   Shot,
 } from "./types";
 
@@ -155,9 +156,9 @@ export function rankAnswers(
   question: Question,
   stadium: LatLng,
   rule: Rule,
-): RankedAnswer[] {
+): RankedAnswer<Answer>[] {
   const shots = shotsOf(question, stadium, rule);
-  const rows: RankedAnswer[] = question.answers.map((answer, i) => ({
+  const rows: RankedAnswer<Answer>[] = question.answers.map((answer, i) => ({
     answer,
     km: Math.round(distanceKm(stadium, answer)),
     share: answer.popularity,
@@ -167,9 +168,9 @@ export function rankAnswers(
     year: rankingYear(answer, rule),
   }));
   const keys = new Map(rows.map((row) => [row, keyFor(rule, row)]));
-  const key = (row: RankedAnswer) => keys.get(row) ?? 0;
-  const order = (row: RankedAnswer) => SHOT_ORDER.indexOf(row.shot);
-  const same = (a: RankedAnswer, b: RankedAnswer) =>
+  const key = (row: RankedAnswer<Answer>) => keys.get(row) ?? 0;
+  const order = (row: RankedAnswer<Answer>) => SHOT_ORDER.indexOf(row.shot);
+  const same = (a: RankedAnswer<Answer>, b: RankedAnswer<Answer>) =>
     order(a) === order(b) && key(a) === key(b);
   rows.sort((a, b) => order(a) - order(b) || key(a) - key(b) || byName(a, b));
 
@@ -181,10 +182,10 @@ export function rankAnswers(
 }
 
 /** The table row of one answer, or null when the id is not in the table. */
-export function rankedFor(
-  table: readonly RankedAnswer[],
+export function rankedFor<A extends ShownAnswer>(
+  table: readonly RankedAnswer<A>[],
   answerId: string | null,
-): RankedAnswer | null {
+): RankedAnswer<A> | null {
   if (answerId === null) return null;
   return table.find((row) => row.answer.id === answerId) ?? null;
 }

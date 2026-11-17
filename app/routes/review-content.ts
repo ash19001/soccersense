@@ -3,7 +3,6 @@
 // seven answers), in the interface's words. Each mode is played once a day, so a played
 // mode's card offers this instead of a new game.
 
-import { questionsFor } from "~/data";
 import {
   type Mode,
   MAX_TOTAL,
@@ -38,20 +37,15 @@ export function reviewContent(
   const full = play.fullTime;
   const label = strings.home.modes[mode].label;
   const text = strings.home.review;
-  const questions = questionsFor(mode);
   const results: FullTimeResult[] = done.turns.map((turn) => {
-    const question = questions.find((q) => q.id === turn.questionId);
-    const answer =
-      turn.answerId === null
-        ? null
-        : (question?.answers.find((a) => a.id === turn.answerId) ?? null);
     return {
       grade: turn.grade,
       points: turn.points,
       label: isShot(turn.grade) ? play.shots[turn.grade] : undefined,
-      // An answer the game no longer knows is shown as it was typed.
+      // The turn says its own answer's name (the page has no list to look it up in). A
+      // game saved before turns kept it shows the answer as it was typed.
       answer:
-        answer?.name ??
+        turn.name ??
         (turn.grade === "timeup"
           ? full.timeup
           : turn.grade === "skipped"

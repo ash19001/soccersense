@@ -221,6 +221,8 @@ describe("storage", () => {
     expect(loadGame(dayKeyFor(3), "away", storage)).toEqual({
       total: 100,
       turns: done.turns,
+      // what was asked is kept with it, so the game reads with nothing to look up
+      prompts: done.turns.map((_, i) => done.questions[i].prompt),
     });
     // The same key resolveToday gives for that day.
     const today = resolveToday(new Date(0), "?day=3", [ORIGIN]);

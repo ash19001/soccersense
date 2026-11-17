@@ -5,6 +5,16 @@
 //
 // Browser only: it is made after mounting, and it reads the clock and sets timers.
 //
+// Who decides. The site's server runs the game (./server.ts, worker/games): it sends each
+// question as its clock starts, judges what is typed and sends the reveal. The referee
+// here asks it, waits (`waiting`), and shows what comes back; if it cannot be reached it
+// says so (`trouble`) and asks again. The page has no answers, so nothing in it can be
+// read ahead. The server stores nothing about a player with no account: it hands the game
+// back after every move as a sealed ticket, which is kept on this device (`hold`) and sent
+// with the next move, so a reload carries on from it. In development and in the tests,
+// where no server is given, the page runs the game itself by the same rules (`reduce`),
+// with the questions built into it: those are left out of a production build.
+//
 // The flow (docs/GAME_DESIGN.md sections 3 to 6):
 //   the card   before a new game only: the mode card is up on the ink the page arrives on
 //              (`view.intro`), the scene waits behind it (`scene.holdOpening()`) and no
@@ -24,10 +34,14 @@
 // be stuck; a late answer from the scene is then ignored.
 
 import {
+  type GameSnapshot,
   MAX_TOTAL,
+  QUESTION_COUNT,
   type Session,
   type StorageLike,
   type Today,
+  blankQuestion,
+  canPass,
   clockView,
   createSession,
   dayKeyFor,
@@ -39,7 +53,9 @@ import {
   progressFor,
   reduce,
   saveSession,
+  sessionFrom,
   shareCardFor,
+  storedQuestions,
   streakFor,
 } from "~/game";
 import { questionsFor } from "~/data";
@@ -50,9 +66,12 @@ import {
   clearLive,
   finishedSession,
   loadLive,
+  loadTicket,
   saveLive,
+  saveTicket,
 } from "./progress";
 import { modeName, shareText, tierName, titleName } from "./names";
+import { type GameServer, type Reply, ServerError, gameServer } from "./server";
 import { deliverShare } from "./share-flow";
 import {
   type ShareKit,
@@ -75,6 +94,15 @@ export const PROMOTION_PATIENCE_MS = 4000;
 export const SHARE_LABEL_MS = 2500;
 /** The share picture is made this long after full time, once the card has come in. */
 export const SHARE_IMAGE_DELAY_MS = 700;
+/** The waits before a request the server did not answer is sent again, the last repeated. */
+export const SERVER_RETRY_MS: readonly number[] = [500, 1000, 2000, 4000, 8000];
+
+/**
+ * Whether the page may run a game itself, with the questions built into it: in development
+ * and in the tests. A production build has neither: this is false there, the bundler drops
+ * what it guards (the questions and their answers with it), and the server runs every game.
+ */
+const PAGE_MAY_RUN: boolean = import.meta.env.DEV;
 
 /**
  * Where SHARE is. `making`: the picture is not ready yet (the button is busy). Then how it
@@ -113,6 +141,15 @@ export interface GameView {
    * today (`nextMode`). Null before full time, and once every other mode has been played.
    */
   next: Session["mode"] | null;
+  /**
+   * The server has not yet said what the player's game is (none, one in progress, one
+   * finished): nothing of the game is drawn. Never true where the page runs the game.
+   */
+  loading: boolean;
+  /** A request is with the server and not yet answered: the bar and NEXT wait. */
+  waiting: boolean;
+  /** The server cannot be reached: the page says so, and keeps asking. */
+  trouble: boolean;
 }
 
 export interface GameOptions {
@@ -128,6 +165,11 @@ export interface GameOptions {
   copy?: (text: string) => Promise<void>;
   /** The browser's side of SHARE (the picture, the share sheet, a download). */
   shareKit?: ShareKit;
+  /**
+   * The server that runs the game. Left out, or null: the page runs it itself, in
+   * development and the tests; a production build always asks the site's own server.
+   */
+  server?: GameServer | null;
 }
 
 // The names a result goes by: also the home screen's (its review and SHARE), so they live
@@ -163,6 +205,19 @@ export class GameController {
   private waitToken = 0;
   private started = false;
   private disposed = false;
+  /** Who runs the game: the server, or null for the page itself. */
+  private readonly server: GameServer | null;
+  /** The wait before a request is sent again. */
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Requests in a row the server has not answered. */
+  private failures = 0;
+  /** Bumped with every request: an answer to an earlier one is ignored. */
+  private requests = 0;
+  /**
+   * The game as the server last sealed it, to send with the next move. Null before a
+   * game, and where the server keeps the game itself (an account's).
+   */
+  private ticket: string | null = null;
 
   constructor(options: GameOptions) {
     const { mode, today } = options;
@@ -171,26 +226,46 @@ export class GameController {
     this.kit = options.shareKit ?? browserShareKit();
     this.copy = options.copy ?? this.kit.copy;
     this.locale = options.locale ?? "en-GB";
+    this.server = options.server ?? (PAGE_MAY_RUN ? null : gameServer());
     const context: LiveContext = {
       mode,
       dayNumber: today.dayNumber,
       stadium: today.stadium,
-      questions: questionsFor(mode),
+      // The page's own questions, where it runs the game. Where the server does, blanks:
+      // each question arrives as it is asked.
+      questions:
+        PAGE_MAY_RUN && !this.server
+          ? questionsFor(mode)
+          : Array.from({ length: QUESTION_COUNT }, () => blankQuestion(mode)),
     };
     this.context = context;
     const now = this.clock();
 
-    // A mode is played once a day: today's finished game is shown again, at full time.
+    // A mode is played once a day: today's finished game is shown again, at full time. It
+    // is kept on the device with what it asked, so the server need not be asked for it.
     let session: Session | null = null;
     const done = loadGame(today.dayKey, mode, this.storage);
-    if (done) session = finishedSession(context, done.turns, now);
-    session ??= loadLive(context, this.storage);
+    if (done) {
+      const questions =
+        this.server || done.prompts
+          ? storedQuestions(mode, done.turns, done.prompts)
+          : context.questions;
+      session = finishedSession({ ...context, questions }, done.turns, now);
+    }
+    if (!this.server) session ??= loadLive(context, this.storage);
+    // A game the server runs is kept on this device as the ticket the server sealed: there
+    // is one if a game was left in progress. Where it stands now (its clock has been
+    // running) is not known until the server has looked at it (`start`).
+    if (this.server && session === null) {
+      this.ticket = loadTicket(today.dayKey, mode, this.storage);
+    }
+    const loading = this.ticket !== null;
     // A new game: the mode card first. Its clock is set again when the card goes.
-    const fresh = session === null;
+    const fresh = session === null && !loading;
     session ??= createSession({
       ...context,
       now,
-      noTimer: today.noTimer,
+      noTimer: today.noTimer || loading,
     });
 
     this.scene = new CareerScene({
@@ -206,7 +281,8 @@ export class GameController {
     } else {
       this.scene.setTotal(session.total);
     }
-    if (fresh) this.scene.holdOpening();
+    // On ink until the game is known: behind the mode card, or while the server is asked.
+    if (fresh || loading) this.scene.holdOpening();
 
     this.view = {
       session,
@@ -218,6 +294,9 @@ export class GameController {
       announcement: "",
       streak: session.phase === "done" ? this.streakOn(session.dayNumber) : 0,
       next: session.phase === "done" ? this.nextOn(session) : null,
+      loading,
+      waiting: false,
+      trouble: false,
     };
   }
 
@@ -260,6 +339,10 @@ export class GameController {
     if (this.started || this.disposed) return;
     this.started = true;
     const { session, intro } = this.view;
+    if (this.view.loading) {
+      this.open();
+      return;
+    }
     if (intro) {
       // Nothing is kept yet: a reload while the card is up starts the same new game.
       this.set({ announcement: strings.play.intro.spoken[session.mode] });
@@ -267,7 +350,7 @@ export class GameController {
       return;
     }
     if (session.phase === "asking") {
-      saveLive(session, this.storage);
+      this.keep(session);
       this.startClock();
       this.tick();
     } else if (session.phase === "done") {
@@ -279,6 +362,8 @@ export class GameController {
   dispose(): void {
     this.disposed = true;
     this.waitToken++;
+    this.requests++;
+    this.clearRetry();
     this.stopClock();
     this.clearPatience();
     this.clearIntroTimer();
@@ -306,7 +391,11 @@ export class GameController {
 
   submit = (input: string): void => {
     const { session } = this.view;
-    if (this.view.intro) return;
+    if (this.view.intro || this.view.loading) return;
+    if (this.server) {
+      this.sendAnswer(input, false);
+      return;
+    }
     const next = reduce(session, { type: "submit", input, now: this.clock() });
     if (next === session) return;
     if (next.phase === "resolving") {
@@ -322,34 +411,33 @@ export class GameController {
 
   pass = (): void => {
     const { session } = this.view;
-    if (this.view.intro) return;
+    if (this.view.intro || this.view.loading) return;
+    if (this.server) {
+      this.sendPass();
+      return;
+    }
     const next = reduce(session, { type: "pass", now: this.clock() });
     if (next !== session && next.phase === "resolving") this.shoot(next);
   };
 
   /** NEXT QUESTION or FULL TIME on the reveal sheet. */
   next = (): void => {
-    const { session, promoting } = this.view;
-    if (session.phase !== "reveal" || promoting || this.disposed) return;
+    const { session, promoting, waiting } = this.view;
+    if (session.phase !== "reveal" || promoting || waiting || this.disposed) {
+      return;
+    }
 
     if (isLastQuestion(session)) {
-      const done = reduce(session, { type: "next", now: this.clock() });
-      // The history is pruned from the real day, never from a `?day=` override.
-      saveSession(done, this.storage, dayNumber(new Date(this.clock())));
-      clearLive(dayKeyFor(done.dayNumber), done.mode, this.storage);
-      this.scene.showFullTime(done.total);
-      this.set({
-        session: done,
-        streak: this.streakOn(done.dayNumber),
-        next: this.nextOn(done),
-        announcement: strings.play.fullTime.spoken(
-          done.total,
-          MAX_TOTAL,
-          titleName(done.mode, done.total),
-          tierName(done.total),
-        ),
-      });
-      this.prepareImageSoon();
+      // Full time is the page's to show: the server has had every answer. Where it keeps
+      // the game itself (no ticket: an account's), it is told the card is up, so that it
+      // sends the card too if the game is asked for again; nothing is lost if that never
+      // arrives.
+      if (this.server && this.ticket === null) {
+        void this.server
+          .next(session.mode, null, session.dayNumber, session.index)
+          .catch(() => undefined);
+      }
+      this.fullTime(reduce(session, { type: "next", now: this.clock() }));
       return;
     }
 
@@ -512,13 +600,23 @@ export class GameController {
   private kickOff = (): void => {
     if (this.disposed || this.view.intro === null) return;
     this.clearIntroTimer();
+    const { server } = this;
+    if (server) {
+      // The server sends question 1 as it starts its clock: the ink stays until it has.
+      const { mode } = this.context;
+      this.send(
+        () => server.start(mode),
+        (reply) => this.arrive(this.hold(reply)),
+      );
+      return;
+    }
     const now = this.clock();
     const session = createSession({
       ...this.context,
       now,
       noTimer: this.view.session.noTimer,
     });
-    saveLive(session, this.storage);
+    this.keep(session);
     this.scene.beginOpening();
     this.set({ session, now, intro: null, announcement: "" });
     this.startClock();
@@ -533,7 +631,7 @@ export class GameController {
   /** An answer, a pass or the clock has ended the turn: the shot plays. */
   private shoot(session: Session): void {
     this.stopClock();
-    saveLive(session, this.storage);
+    this.keep(session);
     const token = ++this.waitToken;
     this.set({ session, now: this.clock() });
     const grade = session.turns[session.index].grade;
@@ -546,7 +644,7 @@ export class GameController {
     this.waitToken++;
     this.clearPatience();
     const session = reduce(this.view.session, { type: "resolved" });
-    saveLive(session, this.storage);
+    this.keep(session);
     this.set({ session });
   }
 
@@ -559,23 +657,46 @@ export class GameController {
 
   /** On to the next question, with a fresh clock from now. */
   private advance(): void {
+    const { server } = this;
+    if (server) {
+      // The server sends the next question as it starts its clock.
+      const { mode, dayNumber: day, index } = this.view.session;
+      this.send(
+        () => server.next(mode, this.ticket, day, index),
+        (reply) => this.asked(this.hold(reply), index + 1),
+      );
+      return;
+    }
     const now = this.clock();
     const session = reduce(this.view.session, { type: "next", now });
-    saveLive(session, this.storage);
+    this.keep(session);
     this.set({ session, now, promoting: false });
     this.startClock();
   }
 
   private tick = (): void => {
-    if (this.disposed || this.view.intro) return;
+    if (this.disposed || this.view.intro || this.view.loading) return;
     const now = this.clock();
     const { session } = this.view;
     const draft =
       this.draft.index === session.index ? this.draft.text : undefined;
-    const next = reduce(session, { type: "tick", now, draft });
-    if (next !== session) {
-      this.shoot(next);
-      return;
+    if (this.server) {
+      // The server blows the whistle. At the page's zero it is sent what is in the field,
+      // once: if it says the question is still open (its clock is behind), again.
+      if (
+        session.phase === "asking" &&
+        session.deadline !== null &&
+        now >= session.deadline &&
+        !this.view.waiting
+      ) {
+        this.sendAnswer(draft ?? "", true);
+      }
+    } else {
+      const next = reduce(session, { type: "tick", now, draft });
+      if (next !== session) {
+        this.shoot(next);
+        return;
+      }
     }
     // Only tell the page when something it shows has changed.
     const before = clockView(session, this.view.now);
@@ -602,5 +723,292 @@ export class GameController {
   private clearPatience(): void {
     if (this.patience !== null) clearTimeout(this.patience);
     this.patience = null;
+  }
+
+  /** Full time: the game is kept for the menu, and the card comes up. */
+  private fullTime(done: Session): void {
+    // The history is pruned from the real day, never from a `?day=` override.
+    saveSession(done, this.storage, dayNumber(new Date(this.clock())));
+    clearLive(dayKeyFor(done.dayNumber), done.mode, this.storage);
+    this.scene.showFullTime(done.total);
+    this.set({
+      session: done,
+      loading: false,
+      intro: null,
+      promoting: false,
+      streak: this.streakOn(done.dayNumber),
+      next: this.nextOn(done),
+      announcement: strings.play.fullTime.spoken(
+        done.total,
+        MAX_TOTAL,
+        titleName(done.mode, done.total),
+        tierName(done.total),
+      ),
+    });
+    this.prepareImageSoon();
+  }
+
+  /**
+   * Keeps the game so far on the device, so a reload carries on with it. Only where the
+   * page runs the game: one the server runs is kept as its ticket (`hold`).
+   */
+  private keep(session: Session): void {
+    if (!this.server) saveLive(session, this.storage);
+  }
+
+  /**
+   * Takes what the server said after a move: its ticket is the game from now on, kept on
+   * the device under the game's own day so that a reload carries on from it.
+   */
+  private hold(reply: Reply): GameSnapshot {
+    this.ticket = reply.ticket;
+    if (reply.ticket !== null && reply.game.phase !== "done") {
+      saveTicket(
+        dayKeyFor(reply.game.day),
+        reply.game.mode,
+        reply.ticket,
+        this.storage,
+      );
+    }
+    return reply.game;
+  }
+
+  /** The game in hand is no game any more: its ticket is dropped, here and on the device. */
+  private forget(): void {
+    this.ticket = null;
+    const { dayNumber: day, mode } = this.view.session;
+    clearLive(dayKeyFor(day), mode, this.storage);
+  }
+
+  // --- the server's game --------------------------------------------------------------
+
+  /**
+   * Sends a request to the server until it answers. Meanwhile the page waits (`waiting`);
+   * if the server cannot be reached the page says so (`trouble`) and the request is sent
+   * again after a wait: the same move, with the same ticket, so it is played once (a move
+   * whose answer was lost was never kept). An answer to anything but the latest request
+   * is ignored.
+   */
+  private send<T>(ask: () => Promise<T>, heard: (answer: T) => void): void {
+    if (this.disposed) return;
+    const token = ++this.requests;
+    this.clearRetry();
+    if (!this.view.waiting) this.set({ waiting: true });
+    const go = (): void => {
+      this.retryTimer = null;
+      ask().then(
+        (answer) => {
+          if (token !== this.requests || this.disposed) return;
+          this.failures = 0;
+          const trouble = strings.play.server.trouble;
+          // One change of what is on screen: the answer's own.
+          this.view = {
+            ...this.view,
+            waiting: false,
+            trouble: false,
+            ...(this.view.announcement === trouble && { announcement: "" }),
+          };
+          heard(answer);
+          this.set({});
+        },
+        (error: unknown) => {
+          if (token !== this.requests || this.disposed) return;
+          if (error instanceof ServerError && error.kind === "gone") {
+            // The server will not take the game up (its ticket is another day's, or the
+            // day's questions were changed under it): it is dropped, for a new one.
+            this.view = { ...this.view, waiting: false };
+            this.forget();
+            this.open();
+            return;
+          }
+          const wait =
+            SERVER_RETRY_MS[
+              Math.min(this.failures, SERVER_RETRY_MS.length - 1)
+            ] ?? 8000;
+          this.failures++;
+          if (!this.view.trouble) {
+            this.set({
+              trouble: true,
+              announcement: strings.play.server.trouble,
+            });
+          }
+          this.retryTimer = setTimeout(go, wait);
+        },
+      );
+    };
+    go();
+  }
+
+  private clearRetry(): void {
+    if (this.retryTimer !== null) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+  }
+
+  /** The page's session for what the server sent. */
+  private sessionOf(snapshot: GameSnapshot): Session {
+    return sessionFrom(snapshot, this.context.stadium);
+  }
+
+  /**
+   * Takes up the game left on this device: the server looks at its ticket and says where
+   * it stands now (its clock has been running). With no ticket, or one the server will
+   * not take up, it is a new game and the mode card.
+   */
+  private open(): void {
+    const { server, ticket } = this;
+    if (!server) return;
+    this.waitToken++;
+    this.clearPatience();
+    this.stopClock();
+    this.clearIntroTimer();
+    if (ticket === null) {
+      this.newGame();
+      return;
+    }
+    if (!this.view.loading || this.view.intro || this.view.promoting) {
+      this.set({ loading: true, intro: null, promoting: false });
+    }
+    const { mode } = this.context;
+    this.send(
+      () => server.look(mode, ticket),
+      (reply) => {
+        if (reply) {
+          this.arrive(this.hold(reply));
+        } else {
+          this.forget();
+          this.newGame();
+        }
+      },
+    );
+  }
+
+  /** No game yet today: the mode card, on the ink, then question 1. */
+  private newGame(): void {
+    const { server } = this;
+    if (!server) return;
+    const { mode } = this.context;
+    this.scene.holdOpening();
+    if (!this.scene.waiting) {
+      // The scene is already open (the game was taken away under the page): there is no
+      // ink to put the card on, so the new game starts at once.
+      if (!this.view.loading || this.view.promoting) {
+        this.set({ loading: true, intro: null, promoting: false });
+      }
+      this.send(
+        () => server.start(mode),
+        (reply) => this.arrive(this.hold(reply)),
+      );
+      return;
+    }
+    const now = this.clock();
+    this.set({
+      session: createSession({ ...this.context, now, noTimer: true }),
+      now,
+      loading: false,
+      intro: "showing",
+      announcement: strings.play.intro.spoken[mode],
+    });
+    this.introTimer = setTimeout(this.leaveIntro, INTRO_MS);
+  }
+
+  /**
+   * The game as the server sent it, taken whole: on coming back to the page, when a new
+   * game starts, and whenever what came back is not what the page expected. The scene is
+   * set to where the game is, with no shot replayed.
+   */
+  private arrive(snapshot: GameSnapshot): void {
+    this.waitToken++;
+    this.clearPatience();
+    this.stopClock();
+    this.clearIntroTimer();
+    const session = this.sessionOf(snapshot);
+    if (session.phase === "done") {
+      this.fullTime(session);
+      return;
+    }
+    // A promotion the last turn earned has not been played yet: it plays on NEXT.
+    this.scene.setTotal(
+      session.phase === "reveal"
+        ? progressFor(session).totalBefore
+        : session.total,
+    );
+    this.scene.beginOpening();
+    this.set({
+      session,
+      now: this.clock(),
+      loading: false,
+      intro: null,
+      promoting: false,
+      announcement: "",
+    });
+    if (session.phase === "asking") {
+      this.startClock();
+      this.tick();
+    }
+  }
+
+  /** The next question, as the server sent it: its clock is already running. */
+  private asked(snapshot: GameSnapshot, index: number): void {
+    if (snapshot.phase !== "asking" || snapshot.index !== index) {
+      this.arrive(snapshot);
+      return;
+    }
+    this.set({
+      session: this.sessionOf(snapshot),
+      now: this.clock(),
+      promoting: false,
+    });
+    this.startClock();
+  }
+
+  /**
+   * An answer for the server to judge. `whistle`: it is what was in the field as the
+   * page's clock ran out, sent even if that is nothing.
+   */
+  private sendAnswer(input: string, whistle: boolean): void {
+    const { server } = this;
+    const { session, waiting } = this.view;
+    if (!server || waiting || session.phase !== "asking") return;
+    if (!whistle && input.trim() === "") return;
+    const { mode, dayNumber: day, index } = session;
+    this.send(
+      () => server.answer(mode, this.ticket, day, index, input, whistle),
+      (reply) => this.verdict(this.hold(reply), index, !whistle),
+    );
+  }
+
+  private sendPass(): void {
+    const { server } = this;
+    const { session, waiting } = this.view;
+    if (!server || waiting || !canPass(session, this.clock())) return;
+    const { mode, dayNumber: day, index } = session;
+    this.send(
+      () => server.pass(mode, this.ticket, day, index),
+      (reply) => this.verdict(this.hold(reply), index, false),
+    );
+  }
+
+  /**
+   * What the server said to an answer or a pass on question `index`: decided (the shot
+   * plays, then the sheet), or not an answer the judge knows (the bar shakes if `shake`,
+   * and the clock runs on).
+   */
+  private verdict(snapshot: GameSnapshot, index: number, shake: boolean): void {
+    const { session } = this.view;
+    const mine =
+      session.phase === "asking" &&
+      session.index === index &&
+      snapshot.index === index;
+    if (mine && snapshot.phase === "reveal") {
+      this.shoot({ ...this.sessionOf(snapshot), phase: "resolving" });
+    } else if (mine && snapshot.phase === "asking") {
+      this.set({
+        session: this.sessionOf(snapshot),
+        now: this.clock(),
+        rejections: this.view.rejections + (shake && snapshot.rejected ? 1 : 0),
+      });
+    } else {
+      this.arrive(snapshot);
+    }
   }
 }

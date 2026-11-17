@@ -109,6 +109,52 @@ describe("with a storage", () => {
     expect(loadGame(DAY, "home", storage)).toEqual(GAME);
   });
 
+  it("keeps what the game asked, and each turn's answer by name and year", () => {
+    const storage = new FakeStorage();
+    const turns: Turn[] = TURNS.map((turn, i) => ({
+      ...turn,
+      name: i === 0 ? "Blackburn Rovers" : null,
+      year: i === 0 ? 1995 : null,
+    }));
+    const game: StoredGame = {
+      total: 100,
+      turns,
+      prompts: ["Name a club", "Name a player", "Name a ground"],
+    };
+    expect(saveGame(DAY, "retro", game, storage)).toBe(true);
+    expect(loadGame(DAY, "retro", storage)).toEqual(game);
+  });
+
+  it("drops prompts that do not fit the turns, and keeps the game", () => {
+    const storage = new FakeStorage();
+    for (const prompts of [["only one"], "three", [1, 2, 3], null]) {
+      storage.setItem(
+        storageKey(DAY, "home"),
+        JSON.stringify({ ...GAME, prompts }),
+      );
+      expect(loadGame(DAY, "home", storage), JSON.stringify(prompts)).toEqual(
+        GAME,
+      );
+    }
+    // saved with prompts that do not fit: saved without them
+    saveGame(DAY, "away", { ...GAME, prompts: ["only one"] }, storage);
+    expect(loadGame(DAY, "away", storage)).toEqual(GAME);
+  });
+
+  it("does not read a turn whose name or year is not one", () => {
+    const storage = new FakeStorage();
+    for (const odd of [{ name: 7 }, { year: "1995" }, { name: {} }]) {
+      storage.setItem(
+        storageKey(DAY, "home"),
+        JSON.stringify({
+          total: 100,
+          turns: TURNS.map((turn, i) => (i === 0 ? { ...turn, ...odd } : turn)),
+        }),
+      );
+      expect(loadGame(DAY, "home", storage), JSON.stringify(odd)).toBeNull();
+    }
+  });
+
   it("reads a game saved before HOME and AWAY were scored by popularity", () => {
     const storage = new FakeStorage();
     const old = GAME.turns.map((turn) => {

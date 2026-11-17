@@ -820,6 +820,45 @@ account as a scheduled skill).
 - Still to see: the drafts themselves on the approval page, the runs' final reports, and
   the product owner's choice of model for the weekly run.
 
+## Games run by the server (2026-11-17)
+
+The next step of the backend's agreed order (ARCHITECTURE.md section 8, "Games run by the
+server", has the design).
+
+- **The server runs the game.** `worker/games`: `POST /api/games/<mode>/<move>` (`start`,
+  `look`, `answer`, `pass`, `next`). A question is sent as its clock starts, the answer is
+  judged there, the reveal is sent once the question is decided. The rules are `reduce`,
+  the same code the page ran.
+- **Nothing is stored about a player with no account** (the product owner, the same day,
+  on seeing what the first version wrote to the database: "for no account users everything
+  is stored on localstorage"). The first version kept every game as a row and knew a player
+  by a cookie; now the game is a sealed ticket the page keeps on the device and sends back
+  with each move, and there is no cookie. An account's game is still a row (`games`,
+  migration 3), built and tested, waiting for accounts. **Only accounts are on
+  leaderboards; a player with no account is told where they would have placed.**
+- **The page shows it.** `app/routes/play/server.ts` asks; the referee
+  (`controller.ts`) waits for each verdict, says when the server cannot be reached and
+  keeps asking. `app/game/served.ts` is what both ends agree on.
+- **A turn keeps its answer's name and year, and a finished game what it asked**, so the
+  full-time card, the review and SHARE need no list of answers.
+- **The built site has no questions or answers in it** (checked by searching
+  `build/client` for the sample's prompts and answers: only the home screen's football
+  facts mention any of the names).
+- **Checked:** `pnpm check` (the count is in the commit); the real page against the real
+  Worker code in `served.test.tsx`; and a whole game played through `wrangler dev` on its
+  own database: health `db: 3`, no cookie, one question at a time, an unknown answer
+  turned down, seven reveals, a forged ticket refused, and no row in `games` afterwards.
+- **Not checked: a real browser.** The page's side was tested in jsdom, not by eye. First
+  thing after the deploy: play a game on the live site, and reload in the middle of one.
+- **Not done** (all in ARCHITECTURE.md): a bot check before anything is counted from
+  games with no account; telling such a player where they would have placed (the
+  leaderboard step).
+- For games finished before this deploy, kept on a device without their answers' names:
+  the card, the review and the share picture show those answers as they were typed, and
+  the picture's question lines are blank. Only that day's games.
+- Next in the order: the leaderboard. It ranks accounts' games, so it and accounts now
+  belong together: to be agreed with the product owner which comes first.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

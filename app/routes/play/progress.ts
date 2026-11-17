@@ -73,7 +73,9 @@ function isTurn(value: unknown): value is Turn {
     // carried on (its points were counted by distance).
     (t.share === null || isNumber(t.share)) &&
     (t.rank === null || isNumber(t.rank)) &&
-    isNumber(t.msLeft)
+    isNumber(t.msLeft) &&
+    (t.name === undefined || t.name === null || typeof t.name === "string") &&
+    (t.year === undefined || t.year === null || isNumber(t.year))
   );
 }
 
@@ -114,6 +116,45 @@ export function clearLive(
     resolveStorage(storage)?.removeItem(liveKey(dayKey, mode));
   } catch {
     // Nothing to do.
+  }
+}
+
+/**
+ * A game the server runs for a player with no account, in progress: the server stores
+ * nothing about them, so the game is its ticket (worker/games/ticket.ts), kept here under
+ * the same key as the page's own game in progress, and taken away at full time the same
+ * way (`clearLive`). Returns whether it was written.
+ */
+export function saveTicket(
+  dayKey: string,
+  mode: Session["mode"],
+  ticket: string,
+  storage?: StorageLike | null,
+): boolean {
+  try {
+    const store = resolveStorage(storage);
+    if (!store) return false;
+    store.setItem(liveKey(dayKey, mode), JSON.stringify({ ticket }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The ticket kept for that day and mode, or null if there is none. */
+export function loadTicket(
+  dayKey: string,
+  mode: Session["mode"],
+  storage?: StorageLike | null,
+): string | null {
+  try {
+    const raw = resolveStorage(storage)?.getItem(liveKey(dayKey, mode));
+    if (!raw) return null;
+    const kept = JSON.parse(raw) as { ticket?: unknown } | null;
+    const ticket = kept?.ticket;
+    return typeof ticket === "string" && ticket !== "" ? ticket : null;
+  } catch {
+    return null;
   }
 }
 

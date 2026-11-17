@@ -120,9 +120,19 @@ export type Shot =
 /** How a question went: a shot, or no answer ("timeup": the clock ran out; "skipped": passed). */
 export type Grade = Shot | "timeup" | "skipped";
 
-/** One answer placed in the table for a given stadium and rule. */
-export interface RankedAnswer {
-  answer: Answer;
+/**
+ * An answer as a table shows it: its name and its country, and nothing a row does not say.
+ * A full `Answer` is one; so is what the server sends in a reveal, which has no more.
+ */
+export type ShownAnswer = Pick<Answer, "id" | "name" | "country">;
+
+/**
+ * One answer placed in the table for a given stadium and rule. A table worked out from a
+ * question (`rankAnswers`) carries the whole answer, `RankedAnswer<Answer>`; a row that was
+ * sent carries what is shown.
+ */
+export interface RankedAnswer<A extends ShownAnswer = ShownAnswer> {
+  answer: A;
   /** Whole kilometres from the stadium (shown by the distance rules). */
   km: number;
   /** The answer's popularity: the share of players who give it, in percent. */

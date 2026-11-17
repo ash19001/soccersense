@@ -180,6 +180,9 @@ describe("submit", () => {
         share: 178,
         rank: 2,
         msLeft: QUESTION_MS - 6500,
+        // the turn says its own answer's name; HOME has no year
+        name: "Bravo Smith",
+        year: null,
       },
     ]);
     expect(currentTurn(s)).toBe(s.turns[0]);
@@ -321,6 +324,8 @@ describe("pass", () => {
         share: null,
         rank: null,
         msLeft: QUESTION_MS - PASS_AFTER_MS,
+        name: null,
+        year: null,
       },
     ]);
   });
@@ -383,6 +388,8 @@ describe("tick", () => {
         share: null,
         rank: null,
         msLeft: 0,
+        name: null,
+        year: null,
       },
     ]);
   });

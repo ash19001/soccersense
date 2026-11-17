@@ -67,6 +67,28 @@ describe("reviewContent", () => {
     });
   });
 
+  it("reads each answer's name off the turn: there is no list of answers to look it up in", () => {
+    const saved = game();
+    const named = {
+      ...saved.turns[0],
+      input: "man utd",
+      name: "Manchester United",
+    };
+    const review = reviewContent(4, "home", {
+      ...saved,
+      turns: [named, ...saved.turns.slice(1)],
+    });
+    expect(review?.results[0].answer).toBe("Manchester United");
+    // a game saved before turns kept the name: the answer as it was typed
+    const old = { ...saved.turns[0], input: "man utd" };
+    expect(
+      reviewContent(4, "home", {
+        ...saved,
+        turns: [old, ...saved.turns.slice(1)],
+      })?.results[0].answer,
+    ).toBe("man utd");
+  });
+
   it("shows an answer the game no longer knows as it was typed", () => {
     const saved = game();
     const turns = saved.turns.map((t, i) =>

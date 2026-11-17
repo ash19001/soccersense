@@ -17,6 +17,13 @@ export const STORAGE_PREFIX = "soccersense:v1";
 export interface StoredGame {
   total: number;
   turns: readonly Turn[];
+  /**
+   * The seven questions as they were asked, one per turn. With each turn's own `name`, a
+   * finished game can be shown again and shared with nothing else to look up: the page has
+   * no question list when the server runs the games. Missing from games saved before
+   * 2026-11-18.
+   */
+  prompts?: readonly string[];
 }
 
 /** The slice of the Web Storage API these functions use. `localStorage` fits. */
@@ -83,7 +90,8 @@ function isNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
 
-function isTurn(value: unknown): value is Turn {
+/** Whether `value` is a turn as it is kept and sent: every field of the right kind. */
+export function isTurn(value: unknown): value is Turn {
   if (typeof value !== "object" || value === null) return false;
   const t = value as Record<string, unknown>;
   return (
@@ -100,7 +108,19 @@ function isTurn(value: unknown): value is Turn {
     // Games saved before HOME and AWAY were scored by popularity have no share.
     (t.share === undefined || t.share === null || isNumber(t.share)) &&
     (t.rank === null || isNumber(t.rank)) &&
-    isNumber(t.msLeft)
+    isNumber(t.msLeft) &&
+    // Games saved before a turn kept its answer's name and year have neither.
+    (t.name === undefined || t.name === null || typeof t.name === "string") &&
+    (t.year === undefined || t.year === null || isNumber(t.year))
+  );
+}
+
+/** A finished game's prompts: one line of text for each of its turns. */
+function arePrompts(value: unknown, turns: number): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length === turns &&
+    value.every((prompt) => typeof prompt === "string")
   );
 }
 
@@ -127,11 +147,27 @@ export function saveGame(
     const store = resolveStorage(storage);
     if (!store) return false;
     const value: StoredGame = { total: game.total, turns: [...game.turns] };
+    if (arePrompts(game.prompts, game.turns.length)) {
+      value.prompts = [...game.prompts];
+    }
     store.setItem(storageKey(dayKey, mode), JSON.stringify(value));
     return true;
   } catch {
     return false;
   }
+}
+
+/** What each decided question of a game asked; "" where the game does not say. */
+function promptsOf(session: Session): string[] {
+  const questions: readonly { prompt?: unknown }[] = Array.isArray(
+    session.questions,
+  )
+    ? session.questions
+    : [];
+  return session.turns.map((_, i) => {
+    const prompt = questions[i]?.prompt;
+    return typeof prompt === "string" ? prompt : "";
+  });
 }
 
 /**
@@ -153,7 +189,11 @@ export function saveSession(
     const saved = saveGame(
       dayKeyFor(session.dayNumber),
       session.mode,
-      session,
+      {
+        total: session.total,
+        turns: session.turns,
+        prompts: promptsOf(session),
+      },
       storage,
     );
     // The history keeps a year: anything older goes as a new game comes in.
@@ -189,13 +229,18 @@ export function loadGame(
         parsed = { ...g, turns: g.turns.map(renamed) };
     }
     if (!isStoredGame(parsed)) return null;
-    return {
+    const game: StoredGame = {
       total: parsed.total,
       turns: parsed.turns.map((turn) => ({
         ...turn,
         share: turn.share ?? null,
       })),
     };
+    // Prompts that do not fit the turns are dropped, not the game.
+    if (arePrompts(parsed.prompts, parsed.turns.length)) {
+      return { ...game, prompts: parsed.prompts };
+    }
+    return game;
   } catch {
     return null;
   }

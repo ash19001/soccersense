@@ -959,6 +959,7 @@ describe("home page: choosing a mode", () => {
     setGameClock({
       now: () => server,
       status: () => (server === null ? "checking" : "ready"),
+      api: () => false,
       subscribe: (listener) => {
         listeners.add(listener);
         return () => {

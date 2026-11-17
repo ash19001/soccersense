@@ -1,7 +1,9 @@
 import { tierFor, isPerfect } from "./career";
 import { judge } from "./judge";
+import type { Reveal } from "./reveal";
 import { rankAnswers, rankedFor, ruleFor } from "./scoring";
 import type {
+  Answer,
   Grade,
   Mode,
   Question,
@@ -41,7 +43,21 @@ export interface Turn {
   rank: number | null;
   /** What was left on the clock when the turn was decided. QUESTION_MS with no timer. */
   msLeft: number;
+  /**
+   * The matched answer's name, as it is shown. Null for a pass or a time-up. It is kept on
+   * the turn so that a result reads without the question's answers: in a game the server
+   * runs, the page never has them. Missing from games saved before 2026-11-18.
+   */
+  name?: string | null;
+  /**
+   * The year the answer was ranked by, in RETRO (its first) and NEXT-GEN (its last). Null
+   * in the other modes and with no answer. Missing from games saved before 2026-11-18.
+   */
+  year?: number | null;
 }
+
+/** How many questions a game has. */
+export const QUESTION_COUNT = 7;
 
 export interface Rejection {
   /** What the player typed (trimmed). */
@@ -71,6 +87,12 @@ export interface Session {
    */
   rejected: Rejection | null;
   noTimer: boolean;
+  /**
+   * Only in a game the server runs (./served.ts): each decided question's reveal as the
+   * server sent it, by question index. The page has no answers to work a table out from
+   * there, so `revealFor` reads this. Left out where the page runs the game itself.
+   */
+  reveals?: readonly (Reveal | undefined)[];
 }
 
 export type Action =
@@ -120,13 +142,13 @@ export function createSession(options: SessionOptions): Session {
   };
 }
 
-const TABLES = new WeakMap<Question, Map<string, RankedAnswer[]>>();
+const TABLES = new WeakMap<Question, Map<string, RankedAnswer<Answer>[]>>();
 
 function tableOf(
   question: Question,
   stadium: Stadium,
   rule: Rule,
-): RankedAnswer[] {
+): RankedAnswer<Answer>[] {
   let byPin = TABLES.get(question);
   if (!byPin) {
     byPin = new Map();
@@ -154,7 +176,7 @@ export function ruleOf(session: Session): Rule {
 export function tableFor(
   session: Session,
   index: number,
-): readonly RankedAnswer[] {
+): readonly RankedAnswer<Answer>[] {
   const question = session.questions[index];
   if (!question) return [];
   return tableOf(question, session.stadium, ruleOf(session));
@@ -241,6 +263,8 @@ function blank(session: Session, grade: Grade, left: number): Session {
     share: null,
     rank: null,
     msLeft: left,
+    name: null,
+    year: null,
   });
 }
 
@@ -265,6 +289,8 @@ function answered(
     share: row.share,
     rank: row.rank,
     msLeft: left,
+    name: row.answer.name,
+    year: row.year,
   });
 }
 

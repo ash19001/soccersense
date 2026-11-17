@@ -41,7 +41,12 @@ export interface ShareCard {
 }
 
 /** The share image's content for a game: one row per question decided. */
-export function shareCardFor(session: Session): ShareCard {
+export function shareCardFor(
+  session: Pick<
+    Session,
+    "dayNumber" | "mode" | "total" | "turns" | "questions"
+  >,
+): ShareCard {
   const rule = ruleFor(session.mode);
   return {
     dayNumber: session.dayNumber,
@@ -54,10 +59,20 @@ export function shareCardFor(session: Session): ShareCard {
         turn.answerId === null
           ? undefined
           : question?.answers.find((a) => a.id === turn.answerId);
+      // The turn says its own answer's name and year; one saved before it did is looked
+      // up in the question's list.
       return {
         prompt: question?.prompt ?? "",
-        answer: answer?.name ?? null,
-        year: answer ? rankingYear(answer, rule) : null,
+        answer:
+          turn.name ??
+          answer?.name ??
+          (turn.answerId === null ? null : turn.input),
+        year:
+          turn.year !== undefined
+            ? turn.year
+            : answer
+              ? rankingYear(answer, rule)
+              : null,
         grade: turn.grade,
         points: turn.points,
       };

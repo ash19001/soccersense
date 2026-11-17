@@ -131,6 +131,18 @@ reveal.ts (new 2026-11-12)
 - interface RevealRow extends RankedAnswer { grade: Shot; isPlayer: boolean; index: number }. grade is the row's shot; index is its 0-based place in the full table.
 - shotRows(table: readonly RankedAnswer[], answerId: string | null): RevealRow[]. From a full ranked table: one row per scoring shot the table has, best first. The player's answer takes its own shot's row when it scored; every other row is the shot's most popular answer (ties: the one higher in the table). A miss is never a row.
 - revealRows(question: Question, mode: Mode, result: { answerId: string | null }, stadium: LatLng): RevealRow[]. The same from a question played in a mode (a Turn will do as the result); the stadium only fills km.
+- interface Reveal { rows: RevealRow[]; row: RankedAnswer | null; best: RankedAnswer | null; tableSize: number; oneCountry: boolean } (2026-11-17). A question's reveal, whole: everything the sheet shows once the question is decided, so the server can send it in place of the answers. row is the player's answer in the table (null for a pass or a time-up), best the top row, oneCountry whether every answer is in one country (the table then does not repeat it).
+- revealOf(table: readonly RankedAnswer[], answerId: string | null): Reveal. From a full ranked table.
+- Types (types.ts, 2026-11-17): ShownAnswer = Pick<Answer, "id" | "name" | "country">, what a table row says of an answer. RankedAnswer<A extends ShownAnswer = ShownAnswer> and RevealRow<A> carry it: rankAnswers, tableFor and revealRows give RankedAnswer<Answer> (the whole answer); a row that was sent has only what is shown.
+
+served.ts (new 2026-11-17): a game the server runs. Used by the Worker (to make what it sends) and by the page (to read it).
+- type AskedQuestion = Pick<Question, "id" | "prompt" | "measure" | "measureLabel">. A question with none of its answers.
+- type ServedPhase = "asking" | "reveal" | "done". The server has no "resolving": that is the page playing the shot.
+- interface GameSnapshot { day; mode; count; questions: AskedQuestion[]; index; phase: ServedPhase; turns: Turn[]; total; startedAt; deadline: number | null; reveal: Reveal | null; rejected: Rejection | null }. The game as its player may see it: the questions asked so far (the current one last, never one ahead), the current question's reveal while the game is at it, and the answer just turned down (only in the reply to it).
+- snapshotOf(session: Session, rejected?: Rejection | null): GameSnapshot. From a game held with its whole questions (the server's side). The reveal is trimmed to what is shown (shownReveal).
+- sessionFrom(snapshot: GameSnapshot, stadium: Stadium): Session. The page's session: the questions asked with no answers (blankQuestion), blanks for the ones to come, and the reveal in session.reveals, where revealFor looks. The page sets phase "resolving" itself while the shot plays.
+- isGameSnapshot(value: unknown): value is GameSnapshot. Every part of the right kind, and agreeing with each other. The page reads nothing that fails it.
+- askedQuestion(question), blankQuestion(mode, asked?), shownReveal(reveal), storedQuestions(mode, turns, prompts?): the questions of a finished game kept on the device, as far as it says.
 
 judge.ts
 - type JudgeResult = { kind: "empty" } | { kind: "unknown" } | { kind: "ambiguous"; candidates: Answer[] } | { kind: "match"; answer: Answer; via: "exact" | "surname" | "fuzzy" }
@@ -165,7 +177,8 @@ day.ts
 session.ts
 - QUESTION_MS = 30000; PASS_AFTER_MS = 8000
 - type Phase = "asking" | "resolving" | "reveal" | "done"
-- interface Turn { questionId: string; input: string | null; answerId: string | null; grade: Grade; points: number; km: number | null; share: number | null; rank: number | null; msLeft: number }. share is new (null without an answer).
+- interface Turn { questionId: string; input: string | null; answerId: string | null; grade: Grade; points: number; km: number | null; share: number | null; rank: number | null; msLeft: number; name?: string | null; year?: number | null }. share is new (null without an answer). name (the matched answer's name) and year (the year it was ranked by, in RETRO and NEXT-GEN) are kept on the turn since 2026-11-17, so a result reads without the question's answers; games saved before have neither.
+- QUESTION_COUNT = 7. Session.reveals?: readonly (Reveal | undefined)[]: only in a game the server runs, each decided question's reveal as it was sent.
 - interface Rejection { input: string; reason: "unknown" | "ambiguous" }
 - interface Session { mode; dayNumber; stadium; questions: readonly Question[]; index: number; phase: Phase; turns: readonly Turn[]; total: number; startedAt: number; deadline: number | null; rejected: Rejection | null; noTimer: boolean }
 - type Action = { type: "submit"; input: string; now: number } | { type: "pass"; now: number } | { type: "tick"; now: number; draft?: string } | { type: "resolved" } | { type: "next"; now: number }
@@ -222,7 +235,7 @@ titles.ts (new)
 
 storage.ts (key "soccersense:v1:<dayKey>:<mode>", value { total, turns }; none of these throw. A game saved before Turn.share existed still loads, with share null; one saved with the sliding grades, before the six shots, reads as nothing; one saved under the shots' first names (bicycle, finesse, power, chip) loads with today's names.)
 - STORAGE_PREFIX = "soccersense:v1"
-- interface StoredGame { total: number; turns: readonly Turn[] }
+- interface StoredGame { total: number; turns: readonly Turn[]; prompts?: readonly string[] }. prompts (2026-11-17): what each turn's question asked, kept by saveSession, so a finished game is shown again and shared with nothing to look up. Prompts that do not fit the turns are dropped, not the game. isTurn(value) is exported: a turn as it is kept and sent.
 - type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">
 - storageKey(dayKey: string, mode: Mode): string
 - saveGame(dayKey: string, mode: Mode, game: StoredGame, storage?: StorageLike | null): boolean. Overwrites; returns whether it was written.

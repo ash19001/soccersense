@@ -955,6 +955,7 @@ describe("the game page", () => {
     setGameClock({
       now: () => now,
       status: () => status,
+      api: () => false,
       subscribe: (listener) => {
         listeners.add(listener);
         return () => {

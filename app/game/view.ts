@@ -7,9 +7,8 @@
  */
 import { careerFor, tiersCrossed } from "./career";
 import type { Career } from "./career";
-import { shotRows } from "./reveal";
+import { revealOf } from "./reveal";
 import type { RevealRow } from "./reveal";
-import { rankedFor } from "./scoring";
 import {
   PASS_AFTER_MS,
   QUESTION_MS,
@@ -30,6 +29,7 @@ import type {
   Question,
   RankedAnswer,
   Rule,
+  ShownAnswer,
   Stadium,
 } from "./types";
 
@@ -112,7 +112,7 @@ export interface RevealView {
   /** The outcome: grade, points, share, distance, rank. */
   turn: Turn;
   /** The answer the player gave. Null for a pass or a time-up. */
-  answer: Answer | null;
+  answer: ShownAnswer | null;
   /** That answer's row in the table. Null for a pass or a time-up. */
   row: RankedAnswer | null;
   /** The best answer under the game's rule: the top row. Null only for an empty answer list. */
@@ -129,6 +129,8 @@ export interface RevealView {
   playerInRows: boolean;
   /** How many answers the full table has. */
   tableSize: number;
+  /** Every answer to the question is in the one country: the table does not repeat it. */
+  oneCountry: boolean;
   /** This was the last question: the button reads FULL TIME. */
   isLast: boolean;
 }
@@ -136,6 +138,10 @@ export interface RevealView {
 /**
  * The reveal for one question: the current one unless `index` is given. Null while the
  * question has not been decided yet.
+ *
+ * Where the page runs the game it is worked out from the question's table. In a game the
+ * server runs it is the reveal the server sent (`session.reveals`); a question whose reveal
+ * the page was not sent has an empty table.
  */
 export function revealFor(
   session: Session,
@@ -144,19 +150,20 @@ export function revealFor(
   const question = session.questions[index];
   const turn = session.turns[index];
   if (!question || !turn) return null;
-  const table = tableFor(session, index);
-  const row = rankedFor(table, turn.answerId);
-  const rows = shotRows(table, turn.answerId);
+  const reveal =
+    session.reveals?.[index] ??
+    revealOf(tableFor(session, index), turn.answerId);
   return {
     index,
     question,
     turn,
-    answer: row?.answer ?? null,
-    row,
-    best: table[0] ?? null,
-    rows,
-    playerInRows: rows.some((r) => r.isPlayer),
-    tableSize: table.length,
+    answer: reveal.row?.answer ?? null,
+    row: reveal.row,
+    best: reveal.best,
+    rows: reveal.rows,
+    playerInRows: reveal.rows.some((r) => r.isPlayer),
+    tableSize: reveal.tableSize,
+    oneCountry: reveal.oneCountry,
     isLast: index >= session.questions.length - 1,
   };
 }
@@ -207,8 +214,17 @@ export interface ResultLine {
   index: number;
   question: Question;
   turn: Turn;
-  /** The answer the player gave. Null for a pass or a time-up. */
+  /**
+   * The answer the player gave, from the question's list. Null for a pass or a time-up,
+   * and in a game the server runs (the page has no list): read `name`.
+   */
   answer: Answer | null;
+  /**
+   * The name of the answer the player gave. Null for a pass or a time-up. Where nothing
+   * says its name any more (a game kept before turns carried it, read with no list of
+   * answers), it is the answer as it was typed.
+   */
+  name: string | null;
 }
 
 /** Every question decided so far with the answer that was given, in order. */
@@ -219,6 +235,15 @@ export function results(session: Session): ResultLine[] {
       turn.answerId === null
         ? null
         : (question.answers.find((a) => a.id === turn.answerId) ?? null);
-    return { index, question, turn, answer };
+    return {
+      index,
+      question,
+      turn,
+      answer,
+      name:
+        turn.name ??
+        answer?.name ??
+        (turn.answerId === null ? null : turn.input),
+    };
   });
 }

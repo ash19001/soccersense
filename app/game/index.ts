@@ -7,6 +7,7 @@ export * from "./modes";
 export * from "./nickname";
 export * from "./reveal";
 export * from "./scoring";
+export * from "./served";
 export * from "./session";
 export * from "./share";
 export * from "./shots";

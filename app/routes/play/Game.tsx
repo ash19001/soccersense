@@ -3,6 +3,9 @@
 // mode card alone, on the ink the page arrives on. The rules and the timing
 // live in the controller (./controller.ts); this only draws what it says and passes the
 // player's moves back. Every word comes from `strings.play`.
+//
+// The site's server runs the game (`serverRuns`): the page is sent each question as it is
+// asked and each reveal once it is decided, and has no answers of its own.
 
 import {
   type ReactNode,
@@ -12,7 +15,7 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router";
 
-import { STADIUMS } from "~/data";
+import { STADIUMS } from "~/data/stadiums";
 import {
   type Grade,
   MAX_TOTAL,
@@ -26,6 +29,7 @@ import {
   isEraMode,
   isPerfect,
   isShot,
+  parseOverrides,
   pips,
   playPath,
   progressFor,
@@ -59,6 +63,7 @@ import {
   tierName,
   titleName,
 } from "./controller";
+import { gameServer } from "./server";
 
 const text = strings.play;
 
@@ -72,6 +77,28 @@ function locale(): string {
   } catch {
     return "en-GB";
   }
+}
+
+/**
+ * Whether the site's server runs this game. In a production build, always: the page has no
+ * questions of its own there. In development it does when there is an API behind the page
+ * (`pnpm api` beside `pnpm dev`: `api`, from the game's clock) and no debug switch asks for
+ * a game only the page can make (`?day=`, `?stadium=`, `?notimer=`). Otherwise the page runs
+ * the game itself, with the sample questions.
+ */
+export function serverRuns(
+  api: boolean,
+  search: string,
+  dev: boolean = import.meta.env.DEV,
+): boolean {
+  if (!dev) return true;
+  const switches = parseOverrides(search);
+  return (
+    api &&
+    switches.day === undefined &&
+    switches.stadiumId === undefined &&
+    !switches.noTimer
+  );
 }
 
 /**
@@ -93,16 +120,14 @@ function createGameStore(mode: Mode): GameStore {
       const begin = () => {
         const now = clock.now();
         if (made || now === null) return;
-        const today = resolveToday(
-          new Date(now),
-          gameSearch(window.location.search),
-          STADIUMS,
-        );
+        const search = gameSearch(window.location.search);
+        const today = resolveToday(new Date(now), search, STADIUMS);
         made = new GameController({
           mode,
           today,
           locale: locale(),
           clock: () => clock.now() ?? now,
+          server: serverRuns(clock.api(), search) ? gameServer() : null,
         });
         current = made;
         made.start();
@@ -176,12 +201,8 @@ export function revealSentence(reveal: RevealView, mode: Mode): string {
  * or when every answer to the question shares one country (the Premier League's clubs).
  */
 function tablePlace(reveal: RevealView, row: RevealRow): string {
-  const { question } = reveal;
-  if (question.measure === "capital") return "";
-  const country = row.answer.country;
-  return question.answers.every((answer) => answer.country === country)
-    ? ""
-    : country;
+  if (reveal.question.measure === "capital") return "";
+  return reveal.oneCountry ? "" : row.answer.country;
 }
 
 /**
@@ -294,7 +315,19 @@ export function Game({ mode }: { mode: Mode }) {
   let bottom: ReactNode = null;
   let card: ReactNode = null;
 
-  if (game && view && session && view.intro) {
+  // The server runs the game: while it cannot be reached the page says so, and keeps
+  // asking (the controller's `trouble`).
+  const lost = view?.trouble ? (
+    <Panel variant="plain" className="ss-t10" role="status">
+      {text.server.trouble}
+    </Panel>
+  ) : null;
+
+  if (game && view && session && view.loading) {
+    // The server is being asked what the player's game is: ink, and nothing of a game yet.
+    bottom = lost;
+  } else if (game && view && session && view.intro) {
+    bottom = lost;
     // A new game: the mode card first, on the ink, and nothing else. The scene waits behind
     // it and no clock runs until it has gone (by itself, or on a press anywhere).
     card = (
@@ -360,12 +393,16 @@ export function Game({ mode }: { mode: Mode }) {
           onSubmit={game.submit}
           onPass={game.pass}
           canPass={clock.canPass}
+          // while the server judges an answer: the field holds, the buttons are off
+          busy={view.waiting}
           rejection={
-            showRejection
-              ? rejected.reason === "ambiguous"
-                ? text.answer.ambiguous
-                : text.answer.unknown
-              : null
+            view.trouble
+              ? text.server.trouble
+              : showRejection
+                ? rejected.reason === "ambiguous"
+                  ? text.answer.ambiguous
+                  : text.answer.unknown
+                : null
           }
           shakeKey={view.rejections}
           placeholder={text.answer.placeholder[question.measure]}
@@ -397,11 +434,21 @@ export function Game({ mode }: { mode: Mode }) {
             rows={tableRows(reveal, mode)}
             tableLabels={tableLabels(mode)}
             yours={yoursLine(reveal, mode)}
-            nextLabel={reveal.isLast ? text.toFullTime : text.next}
+            nextLabel={
+              view.trouble
+                ? text.server.retrying
+                : reveal.isLast
+                  ? text.toFullTime
+                  : text.next
+            }
             onNext={game.next}
           />
         );
       }
+    } else if (session.phase === "reveal") {
+      // A promotion has played and the next question has not come: if the server cannot
+      // be reached, the sheet is gone and this is where the page says so.
+      bottom = lost;
     } else if (session.phase === "done") {
       const full = text.fullTime;
       const shareLabel = {
@@ -442,7 +489,7 @@ export function Game({ mode }: { mode: Mode }) {
               ? text.shots[line.turn.grade]
               : undefined,
             answer:
-              line.answer?.name ??
+              line.name ??
               (line.turn.grade === "timeup" ? full.timeup : full.skipped),
           }))}
           resultsLabel={full.results}

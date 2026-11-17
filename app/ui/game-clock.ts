@@ -22,6 +22,12 @@ export interface GameClock {
   /** Milliseconds since 1970 by the server, or null until it has been heard from. */
   now(): number | null;
   status(): ClockStatus;
+  /**
+   * The time came from the site's own API (its `x-server-time`): there is a Worker behind
+   * this page, which can run the games too. False where only a `Date` header answered (the
+   * dev server alone, a static host), and until the server has been heard from.
+   */
+  api(): boolean;
   /** Hear when the status changes or the time is put right. Returns the way to stop. */
   subscribe(onChange: () => void): () => void;
   /** Ask the server again (the tab came back into view, say). */
@@ -58,6 +64,12 @@ export interface ServerClockOptions {
 /** The API's header: the server's time in milliseconds since 1970 (worker/http.ts). */
 export const SERVER_TIME_HEADER = "x-server-time";
 
+/** The API's own time in an answer, if it carries one: thirteen digits, 2001 to 2286. */
+function exactTime(answer: Answer): number | null {
+  const exact = answer.headers.get(SERVER_TIME_HEADER);
+  return exact !== null && /^\d{13}$/.test(exact.trim()) ? Number(exact) : null;
+}
+
 /**
  * The server's time when its answer arrived at `receivedAt` (both ends on the monotonic
  * clock), or null if the answer has no readable time.
@@ -73,11 +85,9 @@ export function serverTimeOf(
   receivedAt: number,
 ): number | null {
   const trip = Math.max(0, receivedAt - sentAt) / 2;
-  const exact = answer.headers.get(SERVER_TIME_HEADER);
-  // a time, not a stray word: thirteen digits is 2001 to 2286
-  if (exact !== null && /^\d{13}$/.test(exact.trim())) {
-    return Number(exact) + trip;
-  }
+  // a time, not a stray word
+  const exact = exactTime(answer);
+  if (exact !== null) return exact + trip;
   const date = Date.parse(answer.headers.get("date") ?? "");
   if (!Number.isFinite(date)) return null;
   const age = Number(answer.headers.get("age") ?? 0);
@@ -115,6 +125,8 @@ export function serverClock(options: ServerClockOptions = {}): GameClock {
   /** The server's time at `at` on the monotonic clock, once heard. */
   let base: { time: number; at: number } | null = null;
   let current: ClockStatus = "checking";
+  /** The last answer was the API's own. */
+  let fromApi = false;
   let asking = false;
   let failures = 0;
   let retry: unknown = null;
@@ -178,6 +190,7 @@ export function serverClock(options: ServerClockOptions = {}): GameClock {
         asking = false;
         const receivedAt = monotonic();
         const time = serverTimeOf(heard, sentAt, receivedAt);
+        fromApi = exactTime(heard) !== null;
         // A server that sends no `Date` leaves the device's clock as the only one there is.
         settle(time ?? device(), receivedAt);
       },
@@ -192,6 +205,7 @@ export function serverClock(options: ServerClockOptions = {}): GameClock {
   return {
     now,
     status: () => current,
+    api: () => fromApi,
     subscribe(onChange) {
       listeners.add(onChange);
       return () => {
@@ -209,6 +223,7 @@ export function deviceClock(
   return {
     now: device,
     status: () => "ready",
+    api: () => false,
     subscribe: () => () => {},
     check: () => {},
   };

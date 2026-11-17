@@ -5,6 +5,7 @@
  *   GET /api/today    the day by the server: the time, the day's number and key, how long
  *                     until the next day, and where the day's questions come from
  *   GET /api/health   whether the Worker and its database are up: for a look after a deploy
+ *   /api/games/...    the games the server runs: questions out, answers judged (./games/play.ts)
  *   /api/admin/...    the approval desk for the day's questions (./questions/admin.ts)
  *
  * `now` is handed in, so every answer is a pure function of the request, the settings, the
@@ -15,6 +16,7 @@ import { dayKeyFor, dayNumber, msUntilNextDay } from "~/game/day";
 
 import { SCHEMA_VERSION, database } from "./db/migrate";
 import { type Env, type QuestionSource, questionSource } from "./env";
+import { games } from "./games/play";
 import { failure, json, wrongMethod } from "./http";
 import { admin } from "./questions/admin";
 
@@ -97,6 +99,9 @@ export async function handle(
     }
     if (route === "/health") {
       return wrongMethod(request, READ, now) ?? (await health(env, now, head));
+    }
+    if (route === "/games" || route.startsWith("/games/")) {
+      return await games(request, env, now, route);
     }
     if (route === "/admin" || route.startsWith("/admin/")) {
       return await admin(request, env, now, route);

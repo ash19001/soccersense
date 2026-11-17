@@ -120,6 +120,39 @@ describe("createTodayShare", () => {
     expect(k.download).not.toHaveBeenCalled();
   });
 
+  it("paints the game as it was kept: what it asked, and each answer by the name on its turn", () => {
+    const storage = memory();
+    const questions = questionsFor("home");
+    const turns = questions.map((q, i) => ({
+      questionId: `served-${i}`,
+      input: i === 0 ? "man utd" : null,
+      answerId: i === 0 ? "manchester-united" : null,
+      grade: i === 0 ? ("worldie" as const) : ("skipped" as const),
+      points: i === 0 ? SHOT_POINTS.worldie : 0,
+      km: null,
+      share: null,
+      rank: null,
+      msLeft: 0,
+      name: i === 0 ? "Manchester United" : null,
+      year: null,
+    }));
+    // a game the server ran: its questions are not the page's, and need not be
+    const prompts = turns.map((_, i) => `Name a marker${i}`);
+    saveGame(TODAY.dayKey, "home", { total: 100, turns, prompts }, storage);
+    const { kit: k } = kit();
+    createTodayShare({ kit: k, storage }).prepare(TODAY, "home");
+    const picture = vi.mocked(k.makeImage).mock.calls[0][0];
+    expect(picture.lines).toHaveLength(7);
+    expect(picture.lines[0]).toMatchObject({
+      answer: "Manchester United",
+      grade: "worldie",
+    });
+    // the picture words a prompt its own way ("Name a" goes); what was asked is in it
+    expect(picture.lines[0].prompt.toLowerCase()).toContain("marker0");
+    expect(picture.lines[6].prompt.toLowerCase()).toContain("marker6");
+    expect(picture.lines[1].answer).toBeNull();
+  });
+
   it("waits for a picture still being made, and copies the text where none can be made", async () => {
     const storage = memory();
     played(storage);

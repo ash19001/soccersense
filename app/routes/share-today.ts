@@ -6,13 +6,13 @@
 // time SHARE is pressed it is usually ready. Browser only: call it from effects and
 // handlers.
 
-import { questionsFor } from "~/data";
 import {
   type Mode,
   type StorageLike,
   type Today,
   loadGame,
   shareCardFor,
+  storedQuestions,
 } from "~/game";
 import { strings } from "~/i18n";
 import { modeName, shareText, tierName, titleName } from "./play/names";
@@ -79,7 +79,8 @@ export function createTodayShare({
         mode,
         dayNumber: today.dayNumber,
         stadium: today.stadium,
-        questions: questionsFor(mode),
+        // what the game asked, as it was kept with it
+        questions: storedQuestions(mode, done.turns, done.prompts),
       },
       done.turns,
       clock(),

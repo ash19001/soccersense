@@ -5,10 +5,11 @@ what the shared contracts are, and how to check your work.
 
 ## 1. Shape of the app
 
-- React Router v8 static site (`ssr: false`, pages prerendered at build time). Everything in
-  this iteration runs in the browser. No backend, and no calls to any other site. Beyond its own
-  files, the page makes one kind of request: a HEAD to its own address, for the server's time
-  (`app/ui/game-clock.ts`), so the day is not the device's clock.
+- React Router v8 static site (`ssr: false`, pages prerendered at build time). The pictures,
+  the sound and the interface all run in the browser, and no other site is ever called. Beyond
+  its own files, the page asks its own API (section 8) for two things: the server's time
+  (`app/ui/game-clock.ts`), so the day is not the device's clock, and the game itself
+  (`app/routes/play/server.ts`): the server runs every game, and the page has no answers.
 - **Scenes are drawn in software.** A scene paints into a `Surface` (a `Uint32Array`
   framebuffer at logical resolution). The browser copies it to a `<canvas>` with
   `putImageData` and scales it up with `image-rendering: pixelated`. Node can render the same
@@ -299,7 +300,8 @@ uses them). The summary below is the original outline.
 It is being built a step at a time (the product owner, 2026-11-17: "how can we go about
 starting to build the cloudflare backend for user auth, leaderboard, etc."), in this order:
 the API and its database; the day's questions, drafted, approved and scheduled; games run by
-the server; the leaderboard; accounts; then membership and the rest of the plan below.
+the server (built, below); the leaderboard (next); accounts; then membership and the rest of
+the plan below.
 
 ### What is built (2026-11-17)
 
@@ -405,8 +407,101 @@ Built:
   after a trial of Sonnet 5.5 and Opus 5.5 on different days (the product owner: "for the
   initial run can you do both so i can assess quality of both outputs then decide").
 
-Still to do there: a trial run that gets past the desk (see docs/PROGRESS.md), and the game playing what is scheduled when the
-`QUESTIONS` flag says so (with games run by the server).
+Still to do there: the product owner's look at the first trial drafts and their choice of
+model for the weekly run (see docs/PROGRESS.md). The game plays what is scheduled once the
+`QUESTIONS` flag says so (below).
+
+### Games run by the server (2026-11-17)
+
+The page used to run its own games: every question, every answer and every answer's share
+shipped in its code. Now the server runs the game, and the page shows it.
+
+- **What the page is sent.** A question as its clock starts, never one ahead, and never its
+  answers. What is typed goes to the server, which judges it and, once the question is
+  decided, sends the reveal: the five rows of the table, the player's own, the best answer.
+  After every move the server answers with the whole game as its player may see it, a
+  `GameSnapshot` (`app/game/served.ts`, used by both ends), and the page makes its
+  `Session` from that, so the board, the sheet and the full-time card read it as before.
+- **The rules are the same code.** The server runs `reduce` (`app/game/session.ts`) with the
+  whole questions and its own clock (`worker/games/play.ts`). Nothing about scoring, the
+  judge, PASS or the whistle is written twice.
+- **The API**: `POST /api/games/<mode>/<move>`, the moves being `start`, `look` (the game as
+  it stands now, on coming back to the page), `answer`, `pass` and `next`. Every answer is
+  `{ game, ticket }`. A move says which day's game and which question it is about, and one
+  that does not fit where the game is changes nothing and gets the game back as it stands.
+- **The clock is the server's.** The page counts down on the server's time. At its zero it
+  sends what is in the answer field (the whistle); the server counts that as sent at the
+  deadline if it arrives within 2 seconds of it (`GRACE_MS`), and as a time-up after. A
+  game left alone is timed out by the next request that sees it.
+- **Who keeps the game** (the product owner, 2026-11-17: "for no account users everything
+  is stored on localstorage. the database is only used to check the question and answer but
+  not actually store anything"):
+  - **A player with no account keeps their own.** The server stores nothing about them: no
+    row, no cookie. After every move it hands the game back as a **ticket**
+    (`worker/games/ticket.ts`): the game as it stands, with the server's seal on it. The
+    page keeps the ticket on the device and sends it with its next move; the server checks
+    the seal, plays the move and seals the result. The seal means a ticket cannot be made up
+    or changed: every answer in it was judged by the server, and its clock is the server's.
+    The key it is sealed with is made by the Worker the first time it is needed and kept in
+    the database (`secrets`, migration 3), so there is nothing to set up.
+  - **An account's game is a row in the database** (`worker/games/store.ts`, the `games`
+    table of migration 3): where the game is, the turns decided, the total, the current
+    question's clock. It is written at the start and at each move that changes the game,
+    and only if the game still stands where the move found it. There are no accounts yet:
+    nothing writes there until there are, and the Worker's tests play through both.
+  - **What only a kept game can promise.** One game a day, and a move happening once
+    however often it is sent. A ticket can be sent again, because the server does not
+    remember it: someone who goes out of their way can answer a question twice or start
+    the day over. What comes of that never leaves their own device, which is where "once a
+    day" has always been for a player with no account.
+  - **So only accounts are on the leaderboards** (the product owner, 2026-11-17: "for no
+    accounts it just says where they land on leaderboard without actually putting them on
+    the leaderboard. only accounts are on leaderboards").
+- **Which questions.** `worker/games/questions.ts`: the sample while `QUESTIONS` is `sample`.
+  At `scheduled`, the seven approved for the day, and the sample for a day that does not
+  have all seven approved: there is always a game, and never an unapproved question. A
+  day's scheduled questions are remembered for a minute by each instance, so a change at
+  the desk reaches the games within a minute. If they change under a game in progress it
+  starts again; a finished game stands.
+- **The page** (`app/routes/play/controller.ts`). A new game is the mode card at once and
+  question 1 asked for as the card goes. The ticket is kept on the device as the game goes
+  (under the key a game in progress has always had), so a reload carries on: the server
+  looks at the ticket and says where the game stands now (a reload in the middle of a shot
+  comes back at the reveal; a question left too long is a time-up). While a request is out
+  the bar and NEXT wait; if the server cannot be reached the page says so and keeps asking.
+  A ticket the server will not take (meddled with, days old, the day's questions changed)
+  is dropped for a new game. A finished game is kept on the device with what it asked and
+  each answer's name, and shown again from there with no request: the home screen's
+  scores, review and SHARE read the same copy.
+- **No answers in the page.** A production build has no questions in it (checked: none of
+  the sample's prompts is in `build/client`). In development, with no API beside the dev
+  server or with a debug switch (`?day=`, `?stadium=`, `?notimer=`), the page runs the game
+  itself with the sample, by the same rules: `serverRuns` in `app/routes/play/Game.tsx`.
+- **Tests.** `worker/games/play.test.ts` (the API against SQLite, for a player with no
+  account and for an account) and `app/routes/play/served.test.tsx`, which puts the real
+  page in front of the real Worker code with only `fetch` stood in for.
+
+Known, and not in this step:
+
+- **What it costs to run.** A game with no account is about 16 requests and no database
+  writes at all; an account's is the same requests and about 16 rows written. By
+  Cloudflare's price list read on 2026-11-17 (Workers Paid: $5 a month, 10 million requests
+  in it, then $0.30 a million; D1: 50 million rows written a month in it, then $1 a million;
+  the site's files are free to serve), with no accounts:
+  - Free plan: about 6,000 games a day (its limit is 100,000 requests a day).
+  - 10,000 daily players, all four modes each: about $10 a month.
+  - 100,000 daily players: about $20 a month at one mode each, $35 at two, $70 at all four.
+
+  Accounts' games add their writes: the first 50 million rows a month (about 100,000
+  account games a day) are in the plan. The plan's "$25–35 a month" (below) counted a
+  player as 20 requests a day, which is about one game.
+
+- **Made-up games.** Nothing stops a script from playing as a player with no account, but
+  nothing comes of it: nothing is stored and nothing is counted. Before anything is counted
+  from such games (the answer shares, below), starting one needs the bot check and the limit
+  per address.
+- **Where a player with no account would have placed** is for the leaderboard step: their
+  total against the accounts' totals of the day, said to them and not stored.
 
 ### What still stands in for the backend
 
@@ -414,11 +509,13 @@ These parts change as it arrives:
 
 - **The day and the time: done** (above). `gameSearch` keeps `?day=`, `?stadium=` and
   `?notimer=` to development builds.
-- **Once a day.** Whether a mode was played today is the device's local storage
-  (`soccersense:v1:<day>:<mode>`, `app/game/storage.ts`; the game in progress is
-  `...:live`, `app/routes/play/progress.ts`). Clearing site data, a private window or another
-  browser gives a fresh game. The backend records each player's game per day and mode and
-  refuses a second; local storage becomes a cache of it.
+- **Once a day.** For a player with no account it is the device's storage, as it always
+  was (`soccersense:v1:<day>:<mode>`, `app/game/storage.ts`, and the game in progress under
+  `...:live`, `app/routes/play/progress.ts`, now the server's ticket): clearing site data,
+  a private window or another browser gives a fresh game. That is the product owner's
+  choice (2026-11-17): nothing is stored about a player with no account. An account's game
+  is kept by the server, which gives the day's game back to a second start (built, waiting
+  for accounts).
 - **Nicknames.** Each player's first nickname is `soccerfan` and a number, given and kept on the
   device (`app/game/nickname.ts`, `app/routes/nickname.ts`); the leaderboard shows it only on the
   player's own row. The product owner wants the numbers to go up one by one so that no two
@@ -429,19 +526,14 @@ These parts change as it arrives:
   characters), and sends the real players' names in `leaderboardFor`'s place. A UUID is the
   right thing to identify a player behind the scenes (it is what anonymous sign-in gives), not
   to show: it is 36 characters.
-- **The questions and the answers.** Every mode's questions and every answer's share ship in
-  the page's code (`app/data`), so anyone can read them. The backend sends only today's
-  questions, judges the answers itself and sends each reveal after it is answered. An answer still
-  typed when the clock runs out counts as sent (2026-11-15, `reduce`'s whistle): the page sends
-  it as the clock reaches zero, so it arrives a moment after the deadline. The server accepts
-  it within a second or two of grace, and nothing later.
+- **The questions and the answers: done** (above). They are in the Worker, not the page.
 - **The rest already noted elsewhere:** popularity shares are estimates until real answers are
   counted (`shotsFor`, docs/data-notes/popularity.md); the leaderboard is mock data behind
   `leaderboardFor` (docs/API_UI.md); streaks, stats and the history are kept on the device only
   (GAME_DESIGN.md section 6.6).
 - **The rendering rules** in CLAUDE.md (`ssr: false`, prerender, no `action`, `clientLoader`
-  for anything fetched at runtime) assume no runtime server, and section 1 of this file allows
-  only the clock's request. Both are revisited with the backend.
+  for anything fetched at runtime) still hold: the pages are files, and what the game needs
+  from the server it asks for itself after mounting.
 
 ### The plan agreed with the product owner (2026-11-15)
 
@@ -450,18 +542,21 @@ Nothing of this is built yet ("Don't build it yet, just tell me").
 - **Platform: Cloudflare.** One Worker serves the static site and an `/api`; D1 (SQL) holds the
   data; R2 keeps archived days; cron triggers run the nightly jobs. Chosen over Supabase,
   Firebase and AWS Lambda for cost at 100,000+ daily players (about $25–35 a month against
-  $60–120 on AWS) and for having one place to maintain. D1 caps a database at 10 GB: archive
+  $60–120 on AWS; "What it costs to run" above has the figures as built) and for having one place to maintain. D1 caps a database at 10 GB: archive
   raw games to R2 nightly after counting.
 - **Lean design:** one row per finished game (its seven answers inside it); ranks from a
   per-day, per-mode tally of the 71 possible totals (0 to 700 in tens); the top ten and today's
   questions cached and refreshed every minute or so; answer popularity counted as the day goes
-  (below). About 20 requests and 2 writes per daily player.
+  (below). About 20 requests and 2 writes per daily player (as built: about 16 requests a
+  game, with no writes for a player with no account and 16 rows for an account's game).
 - **Accounts:** optional. Everyone plays at once as `soccerfanNNNN`; after a first game the page
   offers an account to keep the streak, stats and name on every device, and the games already
   on the device go with it. Sign-in by emailed link and Google (no passwords), with Better Auth
   on the Worker (not a hosted service: those charge per user). Email through Resend.
-- **Leaderboards:** everyone on them, accounts or not; only the first game of a day and mode
-  counts.
+- **Leaderboards:** only accounts are on them (changed 2026-11-17, with games kept on the
+  device for players with no account: it was "everyone on them, accounts or not"). A player
+  with no account is told where their total would have placed, and is not put on the
+  board. Only an account's first game of a day and mode counts.
 - **Membership** (Paddle, which sells as merchant of record and handles VAT; about £2.99 a month
   or £19.99 a year):
   - Free, no account needed: HOME, AWAY, RETRO and NEXT-GEN, once a day each.

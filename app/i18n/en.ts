@@ -317,6 +317,13 @@ export const en = {
     clock: {
       failing: "Can't check today's date. Check your connection.",
     },
+    /** The site's server runs the game: what the page says while it cannot be reached. */
+    server: {
+      /** Before a game is on, and above the answer bar while one is. */
+      trouble: "Can't reach the game. Check your connection.",
+      /** On the reveal's button while the next question cannot be fetched. */
+      retrying: "TRYING AGAIN",
+    },
 
     board: {
       label: "Scoreboard",
