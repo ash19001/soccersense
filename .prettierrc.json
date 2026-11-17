@@ -1,4 +1,10 @@
 {
   "plugins": ["prettier-plugin-tailwindcss"],
-  "tailwindStylesheet": "./app/app.css"
+  "tailwindStylesheet": "./app/app.css",
+  "overrides": [
+    {
+      "files": "wrangler.jsonc",
+      "options": { "trailingComma": "none" }
+    }
+  ]
 }

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "react-router dev",
-    "build": "react-router build",
+    "build": "react-router build && tsx tools/not-found.ts",
     "preview": "sirv build/client --single __spa-fallback.html --port 4173",
     "typecheck": "react-router typegen && tsc",
     "lint": "eslint .",

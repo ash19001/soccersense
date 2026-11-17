@@ -1,0 +1,23 @@
+// Hosting: a Cloudflare Worker that serves the built site as static files (no Worker code
+// yet; docs/ARCHITECTURE.md, "Hosting"). The build is `pnpm build`, the deploy
+// `npx wrangler deploy`.
+//
+// This file being here is what stops Cloudflare's automatic project setup, which runs when
+// a repository has no Wrangler configuration and, on 2026-11-17, failed the deploy by
+// installing wrangler with pnpm (ERR_PNPM_IGNORED_BUILDS).
+{
+  // Must be the Worker's name in the Cloudflare dashboard.
+  "name": "soccersense",
+  "compatibility_date": "2026-11-17",
+  "assets": {
+    // What `pnpm build` writes: every page as a file, and 404.html (tools/not-found.ts).
+    "directory": "./build/client",
+    // A page is served at its address as the game links to it, "/play/home", with no
+    // closing slash ("/play/home/" is sent there). The sitemap and the canonical links
+    // (app/routes/seo.ts) say the same.
+    "html_handling": "drop-trailing-slash",
+    // An address that is not a page gets 404.html with a "404 Not Found": the app's shell,
+    // which shows the Offside! page and asks not to be indexed.
+    "not_found_handling": "404-page"
+  }
+}

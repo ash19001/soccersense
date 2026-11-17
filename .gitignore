@@ -20,6 +20,9 @@ coverage/
 /.react-router/
 /build/
 
+# Wrangler (Cloudflare's deploy tool): its local state
+/.wrangler/
+
 # Rendered art snapshots (scratch)
 /.snaps/
 

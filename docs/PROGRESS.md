@@ -692,6 +692,26 @@ question, and the stadium's is the biggest (`app/scenes/career-pyro.ts`,
 - Looked at: `career/pyro-<grade>-t<tier>` at 960 x 540 and 260 x 562, by day and at
   night, in the three eras. Tests: `app/scenes/career-pyro.test.ts`.
 
+## Hosting on Cloudflare: the first deploy failed (2026-11-17)
+
+The product owner connected the repository to Cloudflare and the deploy failed:
+`[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: workerd@1.20261113.1`, then "Failed: error
+occurred while running deploy command".
+
+- **Why.** The repository had no Wrangler configuration, so `npx wrangler deploy` set the
+  project up by itself: it added wrangler as a dependency with pnpm, and pnpm 11 stops an
+  install when a package's build script (workerd's) is not allowed.
+- **The fix.** `wrangler.jsonc` is in the repository, so there is no automatic setup: a
+  Worker with no code serving `build/client`. `pnpm-workspace.yaml` allows workerd's
+  script as well. `pnpm build` now also writes `404.html` (`tools/not-found.ts`), the page
+  for an address that is not one. `docs/ARCHITECTURE.md`, "Hosting".
+- **Not run here**: no deploy was made from this machine (wrangler is not installed: the
+  disk has under 2 GB free). The keys are Cloudflare's documented ones, and the build was
+  run and its output looked at.
+- **For the product owner in the dashboard**: the build command is `pnpm build`; the
+  Worker's name must be `soccersense` (or `name` in `wrangler.jsonc` changed to match).
+- Once the site has its address, `SITE_URL` (`app/routes/seo.ts`) and `pnpm seo`.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

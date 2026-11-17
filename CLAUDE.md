@@ -23,8 +23,10 @@ done and what comes next.
 
 ## Current scope
 
-Frontend only. Don't add a backend, database, auth, analytics, payments or hosting config until
-asked. Question data is a built-in sample in `app/data`.
+Frontend only. Don't add a backend, database, auth, analytics or payments until asked.
+Question data is a built-in sample in `app/data`. The site is hosted as static files on
+Cloudflare (`wrangler.jsonc`; `docs/ARCHITECTURE.md`, "Hosting"): don't add Worker code or
+bindings until asked.
 
 Borrow the daily-quiz _format_ only. Never copy the name, art, mascot, wording or question
 content of wonderhop.io or any other game. No real club crests, kits or sponsor logos.

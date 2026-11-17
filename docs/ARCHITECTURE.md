@@ -54,8 +54,38 @@ keeps `mix.ts` pure.
 leave to index the page, and the same words as Open Graph tags, which chats, feeds and X read
 for a link's preview. A new page does the same and is added to `PAGES`; a test compares
 `PAGES` with `app/routes.ts`. The development pages say `noindex` themselves, and the root's
-own `meta` (`fallbackMeta`) says it for an address that is not a page: a static host answers
-those "200 OK" with `__spa-fallback.html`, and they would otherwise be listed.
+own `meta` (`fallbackMeta`) says it for an address that is not a page: the host serves the
+app's shell for those (`__spa-fallback.html`; on Cloudflare as `404.html` with a "404 Not
+Found", see "Hosting" below; many static hosts answer "200 OK", and the page would
+otherwise be listed).
+
+### Hosting
+
+The site is static files on **Cloudflare** (since 2026-11-17): a Worker with no code that
+serves `build/client` (`wrangler.jsonc`). In the Cloudflare dashboard the Worker builds
+from the repository: build command `pnpm build`, deploy command `npx wrangler deploy` (the
+default). Node comes from `.nvmrc` and pnpm from `packageManager` in `package.json`.
+
+- **`wrangler.jsonc` has to be in the repository.** Without one, Cloudflare's deploy sets
+  the project up by itself (it detects the framework, adds wrangler with the project's
+  package manager and opens a pull request). That is what failed the first deploy: pnpm
+  refused workerd's install script (`ERR_PNPM_IGNORED_BUILDS`). `pnpm-workspace.yaml`
+  now allows that script too, for the day wrangler is a dependency.
+- **`name` must be the Worker's name in the dashboard**, or the deploy fails saying so.
+- **Addresses have no closing slash** (`html_handling: "drop-trailing-slash"`):
+  `/play/home` is served the file `play/home/index.html`, and `/play/home/` is sent to
+  `/play/home`. The game's links, the sitemap and the canonical links say the same.
+- **An address that is not a page** gets `404.html` with a "404 Not Found"
+  (`not_found_handling: "404-page"`). `pnpm build` writes that file after React Router's
+  build: `tools/not-found.ts` copies the app's shell, `__spa-fallback.html`, to it, so
+  the app loads and shows the Offside! page. (Cloudflare's other setting,
+  `single-page-application`, serves `/index.html`, which here is the home page already
+  rendered, not a shell.)
+- The game clock's HEAD request to `/favicon.svg` (the server's time) works as on any
+  static host.
+- Wrangler is not a dependency of the project: the deploy fetches it with `npx`. Adding it
+  (to pin its version, or to run `wrangler dev`) costs a few hundred MB of downloads.
+- `app/routes/hosting.test.ts` holds the configuration to the build.
 
 - **`SITE_URL` is the one setting, and it is empty until the site has an address.** A
   canonical link, `og:url`, the preview's picture (`og:image`), the home page's structured

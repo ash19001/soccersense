@@ -1,2 +1,6 @@
 allowBuilds:
   esbuild: false
+  # Wrangler (Cloudflare's deploy tool) brings workerd, whose install script must run.
+  # Unlisted, pnpm stops the install with ERR_PNPM_IGNORED_BUILDS, which failed the deploy
+  # of 2026-11-17 when Cloudflare added wrangler to the project by itself.
+  workerd: true
