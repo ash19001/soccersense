@@ -36,5 +36,8 @@ export default [
   // NEXT-GEN's id as an address too, so `/play/${mode}` reaches it as it does the others.
   route("play/nextgen", "routes/play.tsx", { id: "play-nextgen-id" }),
   route("how-to-play", "routes/how-to-play.tsx"),
+  // The approval desk for the day's questions: the product owner's page, on the live site
+  // (it is where they work), useless without the admin token, and not listed anywhere.
+  route("admin", "routes/admin.tsx"),
   ...(built ? [] : DEVELOPMENT_PAGES),
 ] satisfies RouteConfig;

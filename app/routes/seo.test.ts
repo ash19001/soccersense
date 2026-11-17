@@ -196,14 +196,19 @@ describe("the pages players are sent to", () => {
     expect(playPath("nextgen")).toBe("/play/next-gen");
   });
 
-  it("are the pages listed for search engines: every route but the development pages and that second address", () => {
+  it("are the pages listed for search engines: every route but the development pages, the approval desk and that second address", () => {
     const paths = routes.map((route) =>
       route.index ? "/" : `/${route.path ?? ""}`,
     );
     expect(paths).toContain("/play/nextgen");
     expect(paths.some((path) => path.startsWith("/dev/"))).toBe(true);
+    // /admin is the product owner's desk: on the site, never listed
+    expect(paths).toContain("/admin");
     const listed = paths.filter(
-      (path) => !path.startsWith("/dev/") && path !== "/play/nextgen",
+      (path) =>
+        !path.startsWith("/dev/") &&
+        path !== "/play/nextgen" &&
+        path !== "/admin",
     );
     expect([...PAGES].sort()).toEqual([...listed].sort());
     expect(PAGES).toEqual(PUBLIC.map((page) => page.path));

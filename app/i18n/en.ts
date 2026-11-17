@@ -885,6 +885,77 @@ export const en = {
       "soccersense is an independent fan game. It is not affiliated with, endorsed or sponsored by FIFA, UEFA or any league, club or player. All names and brands belong to their owners and are used for identification only.",
   },
 
+  /**
+   * The approval desk (/admin): the product owner's page for the week's drafted questions.
+   * Not a page for players: plain words, no game voice.
+   */
+  admin: {
+    title: "Question approval",
+    intro:
+      "The questions drafted for each day wait here to be approved. A mode is played on a day only when all seven of its questions are approved.",
+    tokenLabel: "Admin token",
+    tokenHelp:
+      "The secret called ADMIN_TOKEN that you set in Cloudflare. It is kept in this browser only.",
+    signIn: "Open the desk",
+    signOut: "Sign out",
+    notSetUp:
+      "The desk is shut: no ADMIN_TOKEN is set in Cloudflare yet, or it is shorter than 24 characters.",
+    wrongToken: "That token was not accepted.",
+    failed: "Could not reach the server. Try again.",
+    loading: "Loading...",
+    earlier: "Earlier",
+    later: "Later",
+    thisWeek: "From today",
+    dayColumn: "Day",
+    weekdays: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
+    day: (weekday: string, date: string, day: number) =>
+      `${weekday} ${date} (day ${day})`,
+    today: "today",
+    /** A day and mode's seven places, counted: "5 approved, 2 draft". */
+    counts: (approved: number, draft: number, rejected: number) =>
+      [
+        approved > 0 ? `${approved} approved` : "",
+        draft > 0 ? `${draft} draft` : "",
+        rejected > 0 ? `${rejected} rejected` : "",
+      ]
+        .filter(Boolean)
+        .join(", "),
+    scheduled: "Scheduled",
+    nothing: "Nothing drafted",
+    missing: (n: number) => `${n} missing`,
+    pick: "Pick a day and mode above to see its questions.",
+    game: (mode: string, day: string) => `${mode}: ${day}`,
+    place: (n: number) => `Question ${n}`,
+    emptyPlace: "Nothing has been drafted for this place.",
+    status: { draft: "Draft", approved: "Approved", rejected: "Rejected" },
+    answers: (n: number) => `${n} answers`,
+    approve: "Approve",
+    reject: "Reject",
+    toDraft: "Back to draft",
+    approveAll: "Approve all drafts",
+    reason: "Why it is rejected (for the next draft)",
+    show: "Show answers",
+    hide: "Hide answers",
+    edit: "Edit",
+    save: "Save",
+    cancel: "Cancel",
+    editHelp:
+      "The question as data. Saving checks it and puts it back as a draft.",
+    notSaved: "It was not saved:",
+    badJson: "That is not valid JSON.",
+    note: "Drafter's note",
+    review: "Reviewer's note",
+    measured: (label: string) => `Measured by ${label}`,
+    columns: {
+      name: "Answer",
+      shot: "Shot",
+      share: "Share",
+      years: "Years",
+      aliases: "Also accepted",
+      place: "Place",
+    },
+  },
+
   errors: {
     title: "Offside!",
     unexpected:

@@ -370,8 +370,17 @@ Built:
 - **The token** is the secret `ADMIN_TOKEN`, set in Cloudflare by the product owner (24
   characters or more; until it is set the desk answers 503). It is compared by hash.
 
-Not built yet: the approval page (the product owner's way to look at a week and pass it),
-the drafting skill and its weekly schedule, and the game playing what is scheduled when the
+- **The approval page** is `/admin` (`app/routes/admin.tsx`), on the live site: the
+  product owner asked for its link (2026-11-17). It asks for the token (kept in that
+  browser's storage, sent only to this site's API), then shows seven days from today, a
+  row a day and a column a mode, each cell counting its seven places (or "Scheduled").
+  Picking a cell lists that game's questions: approve, reject with a reason, send back to
+  draft, show the answers in scoring order, or edit the question as JSON (checked by the
+  server; its problems are listed). "Approve all drafts" passes a whole game. It is a
+  working tool, not part of the game's interface: plain type, no pixel skin, `noindex`,
+  not in `PAGES`. Anyone can load it; nothing in it works without the token.
+
+Not built yet: the drafting skill and its weekly schedule, and the game playing what is scheduled when the
 `QUESTIONS` flag says so (with games run by the server).
 
 ### What still stands in for the backend

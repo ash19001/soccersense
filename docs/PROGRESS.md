@@ -735,8 +735,10 @@ domain is soccersense.io. Built so far (`docs/ARCHITECTURE.md` section 8):
 Checked: the Worker run locally under Cloudflare's own runtime (`wrangler dev`): the API's
 answers, a page, a page with a closing slash (sent to the one without), an address that is
 not a page (the Offside! page, 404). The live site was looked at before this was pushed: it
-serves at soccersense.io as configured. **Not yet seen on Cloudflare**: the Worker's code and
-the database's creation, which the next push will try (`/api/health` says how it went).
+serves at soccersense.io as configured. **Seen on Cloudflare after the push** (2026-11-17):
+`/api/health` answers `{"ok":true,"db":2,"schema":2}`, so Cloudflare made the database from
+the binding alone and the Worker migrated it; `/api/today` answers; `/dev/sound` is a 404;
+the approval desk answers 503 until `ADMIN_TOKEN` is set.
 
 Next, in order: the question pipeline (draft, approve, schedule), games run by the server,
 the leaderboard, accounts.
@@ -760,6 +762,21 @@ the leaderboard, accounts.
 - Suggested and not decided: an LLM as the judge's second opinion for an answer it does
   not know (Claude Haiku through the API, on the server, each new spelling ruled on once
   and remembered). It needs the server-run games first.
+
+## The approval page (2026-11-17)
+
+The product owner: "what is the approval page link?". There was none: only the API. It is
+`/admin` now (`docs/ARCHITECTURE.md` section 8): sign in with the admin token, see the
+week, open a day and mode, approve, reject with a reason, or correct each question.
+
+- Looked at in Chrome against the Worker run locally with sample drafts loaded: signing in,
+  the week's table, a day's questions, the answers, approving one. No console errors.
+- Its words are `strings.admin`. Its tests stand in for the API
+  (`app/routes/admin.test.tsx`).
+- For the product owner before it can be used: the secret `ADMIN_TOKEN` in Cloudflare.
+- Seen and left: the game's click sparks play on this page too (they are the root's);
+  approving or rejecting a question closes its list of answers.
+- Next: the drafting skill and its weekly schedule.
 
 ## Known follow-ups
 
