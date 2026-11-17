@@ -78,12 +78,18 @@ import { howToPlayContent } from "./how-to-play-card";
 import { nicknameStore } from "./nickname";
 import type { ShareOutcome } from "./play/share-flow";
 import { type ReviewContent, reviewContent } from "./review-content";
+import { pageMeta, siteData } from "./seo";
 import { createTodayShare } from "./share-today";
 import { type StatsContent, statsContent } from "./stats-content";
 
 export const meta: Route.MetaFunction = () => [
-  { title: strings.home.title },
-  { name: "description", content: strings.home.description },
+  ...pageMeta({
+    path: "/",
+    title: strings.home.title,
+    description: strings.home.description,
+  }),
+  // The site and the game, by name, for search engines (once the site has an address).
+  ...siteData(),
 ];
 
 /** How long the "coming soon" plate for a locked mode stays up. */

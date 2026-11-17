@@ -18,6 +18,28 @@ import type {
 export const en = {
   siteName: "soccersense",
 
+  /**
+   * What search engines and link previews are told about the site as a whole
+   * (app/routes/seo.ts). Each page's own title and description are with its words below.
+   */
+  seo: {
+    /**
+     * The link preview's picture (public/social-card.png, drawn by
+     * app/scenes/social-card.ts), described for anyone who cannot see it.
+     */
+    cardAlt:
+      "The soccersense home screen in pixel art: a football in front of a stadium, the soccersense wordmark above it, and an airship whose sign reads DAILY FOOTBALL TRIVIA.",
+    /**
+     * The airship's sign in that picture, in place of the fact of the day. Neither line
+     * scrolls in a still: 14 small letters over 10 large ones at most.
+     */
+    cardSign: { header: "DAILY FOOTBALL", text: "TRIVIA" },
+    /** The kind of game it is, for structured data (schema.org's `genre`). */
+    genre: ["Trivia", "Sports"],
+    /** Where it is played, for structured data (schema.org's `gamePlatform`). */
+    platform: "Web browser",
+  },
+
   /** The speaker button in the corner of the home screen and the game. */
   sound: {
     /** Its name for screen readers: a switch, read as "Sound, on" or "Sound, off". */
@@ -33,9 +55,18 @@ export const en = {
   },
 
   home: {
-    title: "soccersense: daily football trivia, one stadium a day",
+    /**
+     * The page's title in a tab and in search results: the name, then what it is. Under 60
+     * characters, or a search result cuts it short.
+     */
+    title: "soccersense: the daily football trivia game",
+    /**
+     * The page's meta description, the lines under the title in a search result, and what
+     * the page says of itself where scripts are off: what it is first, then the four ways to
+     * play. Under 160 characters, or a search result cuts it short.
+     */
     description:
-      "One stadium a day and seven questions a side. Play HOME and give the answer most players give, or play AWAY and find the most uncommon one, the answer hardly anyone thinks of. A new matchday every day, free to play.",
+      "Free daily football trivia: seven questions a match and four ways to win. Give the most common answer, the most uncommon, the oldest or the most recent.",
     /** Read out in place of the airship's sign, which is only pixels. */
     fact: (fact: string) => `Fact of the day: ${fact}`,
     /** The words painted on the canvas. The pixel fonts are capitals. */
@@ -242,12 +273,12 @@ export const en = {
       nextgen: "NEXT-GEN: the most recent answer wins · soccersense",
     },
     description: {
-      home: "Seven questions, and the answer most players give scores 100. Go with the crowd.",
-      away: "Seven questions, and the most uncommon answer, the one fewest players give, scores 100. Find the deep cut.",
+      home: "Seven football questions, and the answer most players give scores 100. Go with the crowd.",
+      away: "Seven football questions, and the most uncommon answer, the one fewest players give, scores 100. Find the deep cut.",
       retro:
-        "Seven questions, and the oldest answer, the one furthest back in football's history, scores 100. Dust off the record books.",
+        "Seven football questions, and the oldest answer, the one furthest back in the game's history, scores 100. Dust off the record books.",
       nextgen:
-        "Seven questions, and the most recent answer, the one that happened last, scores 100. Keep up with the latest.",
+        "Seven football questions, and the most recent answer, the one that happened last, scores 100. Keep up with the latest.",
     },
     /** The page's heading: only read out (the scoreboard says the rest). */
     heading: {

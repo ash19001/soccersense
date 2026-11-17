@@ -30,7 +30,8 @@ app/
   routes/     pages. `/` hosts the game; its "?" opens the rules as a pop-up, and
               `/how-to-play` is the same rules as a page. `/dev/sound` is the sound board.
   i18n/       all user-facing interface text.
-tools/        Node-only scripts: snap.ts (render shots to PNG), png.ts, browser screenshots.
+tools/        Node-only scripts: snap.ts (render shots to PNG), png.ts, browser screenshots,
+              and the two that write files into public/: favicon.ts and seo.ts.
 docs/         these briefs.
 .snaps/       rendered PNGs (git-ignored scratch output).
 ```
@@ -45,6 +46,40 @@ every level of every sound, is pure data (type-only imports, no browser), so sce
 may import it (`import { HOME_PAGE } from "~/audio/mix"`) for the powers and sizes of the
 sound cues they send. They import nothing else from `~/audio`; `app/audio/knobs.test.ts`
 keeps `mix.ts` pure.
+
+### What a page tells search engines and link previews
+
+`app/routes/seo.ts` is the one place. Every page players are sent to builds its `meta` with
+`pageMeta({ path, title, description })`: the title and description (from `app/i18n/en.ts`),
+leave to index the page, and the same words as Open Graph tags, which chats, feeds and X read
+for a link's preview. A new page does the same and is added to `PAGES`; a test compares
+`PAGES` with `app/routes.ts`. The development pages say `noindex` themselves, and the root's
+own `meta` (`fallbackMeta`) says it for an address that is not a page: a static host answers
+those "200 OK" with `__spa-fallback.html`, and they would otherwise be listed.
+
+- **`SITE_URL` is the one setting, and it is empty until the site has an address.** A
+  canonical link, `og:url`, the preview's picture (`og:image`), the home page's structured
+  data (JSON-LD: the site and the game, by name) and the sitemap must all be written out in
+  full, and a preview is fetched by a server that never runs the page, so none of it can be
+  worked out in the browser. Until the address is set they are left out, and a link's preview
+  is words with no picture. To set it: `"https://"` and the host, nothing after; then
+  `pnpm seo`.
+- **`pnpm seo`** (`tools/seo.ts`) writes three files into `public/`: `social-card.png` (the
+  preview's picture, 1200 x 630: `app/scenes/social-card.ts`), `robots.txt` and, with the
+  address set, `sitemap.xml`. Tests hold each file to its source, so `pnpm check` fails when
+  the home screen's art, the list of pages or the address has changed and the tool has not
+  been run.
+- **Titles and descriptions** stay under 60 and 160 characters (a search result cuts them
+  there), no two pages share one, and each page names football in one or the other
+  (`seo.test.ts`).
+- `/play/nextgen` is a second address of NEXT-GEN's page: it gives `/play/next-gen` as its
+  address of record.
+- Nothing is claimed that the page does not show: no ratings, reviews or prices in the
+  structured data.
+- **To check when a host is chosen:** addresses are written without a closing slash
+  (`/play/home`), as the game's own links are. A page is built as `play/home/index.html`,
+  and some hosts send `/play/home` on to `/play/home/`. Have the host serve the address as it
+  is written, or every canonical link points at an address that redirects.
 
 ## 2. Engine (`app/pixel`)
 

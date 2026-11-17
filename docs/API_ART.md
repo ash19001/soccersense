@@ -916,6 +916,26 @@ lower, closer and in front) was tried and turned down: "no don't staircase".
   and a little over half its height, side by side on one line with ink between them,
   italic, round, lit from the top left) and decodes `public/favicon.svg` to hold it to the drawing.
 
+## The link preview's picture (`~/scenes/social-card`, `tools/seo.ts`)
+
+```ts
+SOCIAL_CARD; // { w: 600, h: 315, scale: 2 }: saved as 1200 x 630
+drawSocialCard({ labels, sign }): Surface; // the home scene, by day, at rest
+```
+
+What a chat, a feed or a search result shows beside a link to the site (2026-11-17). It is the
+home screen itself, `MenuScene` on day 1 at 600 x 315, magnified twice: a preview is often
+under 500 pixels across, and at this size the wordmark is over a third of the picture's
+width. The ball shows each mode's badge without its name, as in any small window. The
+airship's sign carries `sign` (`strings.seo.cardSign`, DAILY FOOTBALL / TRIVIA) in place of
+the fact of the day, because a fact scrolls and a still cuts it off; keep both lines short
+enough not to scroll (14 small letters, 10 large).
+
+- **The file.** `pnpm seo` writes `public/social-card.png`. Never edit it by hand. It is a
+  picture of the home screen, so run the tool again whenever the home screen's art changes:
+  `social-card.test.ts` decodes the file and fails, saying so, when it no longer matches.
+- Its words for those who cannot see it are `strings.seo.cardAlt`, which quotes the sign.
+
 ## Putting the home screen together
 
 ```ts

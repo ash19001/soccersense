@@ -557,6 +557,45 @@ Not done: PNG versions (an `apple-touch-icon` for a phone's home screen, and a f
 any browser that does not take an SVG tab icon). Only the SVG is served, as before, and it
 has been looked at in Chrome only.
 
+## Search engines and link previews (2026-11-17)
+
+The product owner: "can you also add meta data to the pages for seo". Each page had a title
+and a description and nothing more.
+
+- **One helper.** `app/routes/seo.ts` `pageMeta` makes the tags of every page players are
+  sent to (the home page, the four mode pages, the rules): title, description, leave to index,
+  and Open Graph tags for a link's preview. The home page adds structured data (the site and
+  the game). `docs/ARCHITECTURE.md` section 1 has the rules.
+- **Words changed.** The home page's title was "soccersense: daily football trivia, one
+  stadium a day" and is "soccersense: the daily football trivia game": the stadium is no
+  longer how HOME and AWAY are scored (the weak point noted on 2026-11-11), and a searcher
+  learns nothing from it. Its description was 215 characters about HOME and AWAY only, cut
+  short in a search result; it is now 152 and names all four ways to play. It is also what
+  the page says of itself with scripts off. Each mode page's description now says "football".
+- **The preview's picture.** `public/social-card.png`, 1200 x 630: the home scene by day at
+  600 x 315, magnified twice, so the wordmark is over a third of the picture's width and reads
+  at a thumbnail's size. The airship's sign says DAILY FOOTBALL / TRIVIA in place of the fact
+  of the day, which scrolls and would be cut off mid-word in a still. 54 KB.
+- **robots.txt** lets every crawler in everywhere. The development pages are not shut out
+  there: each says `noindex`, which a crawler that is kept out never reads.
+- **An address that is not a page** now has a title ("Offside! · soccersense") and says
+  `noindex`: the static host answers it "200 OK" with the one fallback page, and a search
+  engine could have listed any mistyped address.
+- **Waiting on the site's address.** There is none in the repository. `SITE_URL` in
+  `app/routes/seo.ts` is empty, so pages carry no canonical link, no `og:url`, no preview
+  picture and no structured data, and there is no sitemap: all of them must be written out
+  in full. With a pretend address the built pages were checked to carry every one of them,
+  and the sitemap to list the six pages. To switch them on: set `SITE_URL`, run `pnpm seo`.
+- `tools/png.ts` gained `decodePng`, which the picture's test and the tab icon's use to hold
+  a file to its drawing.
+
+Checked on the built site in Chrome: every page has one of each tag after the script takes
+over, the not-found page says `noindex`, and nothing is reported in the console.
+
+Not done: the preview has not been seen in a real chat or feed (it needs a public address);
+each mode shares the one picture; no `apple-touch-icon` or web app manifest; whether the host
+adds a closing slash to addresses (see the architecture's note) is for when one is chosen.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

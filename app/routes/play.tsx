@@ -11,9 +11,10 @@
 
 import { type MetaFunction, useLocation } from "react-router";
 
-import { type Mode, modeOfPath } from "~/game";
+import { type Mode, modeOfPath, playPath } from "~/game";
 import { strings } from "~/i18n";
 import { Game } from "./play/Game";
+import { pageMeta } from "./seo";
 
 /** The mode is the last part of the address (`playPath` the other way round). */
 function modeFor(pathname: string): Mode {
@@ -22,10 +23,12 @@ function modeFor(pathname: string): Mode {
 
 export const meta: MetaFunction = ({ location }) => {
   const mode = modeFor(location.pathname);
-  return [
-    { title: strings.play.title[mode] },
-    { name: "description", content: strings.play.description[mode] },
-  ];
+  // The address the mode is known by: /play/nextgen is filed under /play/next-gen.
+  return pageMeta({
+    path: playPath(mode),
+    title: strings.play.title[mode],
+    description: strings.play.description[mode],
+  });
 };
 
 export default function Play() {

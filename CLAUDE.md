@@ -56,6 +56,9 @@ content of wonderhop.io or any other game. No real club crests, kits or sponsor 
 
 - Interface text goes in `app/i18n/en.ts`, never hard-coded in components. Question content
   lives in `app/data`.
+- A page players are sent to builds its `meta` with `pageMeta` and is listed in `PAGES`
+  (`app/routes/seo.ts`, where `SITE_URL` is the site's address). `pnpm seo` rewrites the
+  link preview's picture, `robots.txt` and the sitemap; `pnpm favicon` the tab icon.
 - Import from `app/` with the `~/` alias.
 - Tests sit next to the code as `*.test.ts(x)`.
 - Run `pnpm check` before calling work done.

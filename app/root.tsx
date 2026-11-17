@@ -20,7 +20,12 @@ import jersey15Latin from "@fontsource/jersey-15/files/jersey-15-latin-400-norma
 import { strings } from "~/i18n";
 import { ClickBurst, Panel, PixelRoot } from "~/ui";
 import type { Route } from "./+types/root";
+import { fallbackMeta } from "./routes/seo";
 import "./app.css";
+
+// Every page gives its own tags (app/routes/seo.ts `pageMeta`), and a page's own replace
+// these. These are for what is left: an address that is not a page, and the error page.
+export const meta: Route.MetaFunction = () => fallbackMeta();
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },

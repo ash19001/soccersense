@@ -13,11 +13,14 @@ import { strings } from "~/i18n";
 import { HowToPlayCard, IconButton, PixelRoot, useArrivalFocus } from "~/ui";
 import type { Route } from "./+types/how-to-play";
 import { howToPlayContent } from "./how-to-play-card";
+import { pageMeta } from "./seo";
 
-export const meta: Route.MetaFunction = () => [
-  { title: `${strings.howToPlay.title} · ${strings.siteName}` },
-  { name: "description", content: strings.howToPlay.description },
-];
+export const meta: Route.MetaFunction = () =>
+  pageMeta({
+    path: "/how-to-play",
+    title: `${strings.howToPlay.title} · ${strings.siteName}`,
+    description: strings.howToPlay.description,
+  });
 
 // The address's query (the debug overrides `?day=`, `?stadium=`, `?time=`) is carried back
 // to the menu. It is not known at build time, so it is read after mounting.
