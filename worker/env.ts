@@ -50,6 +50,11 @@ export interface Env {
    * owner, 2026-11-17).
    */
   QUESTIONS?: string;
+  /**
+   * The approval desk's key (worker/questions/admin.ts): a long random secret the product
+   * owner sets in Cloudflare, never in the repository. Unset, the desk is shut.
+   */
+  ADMIN_TOKEN?: string;
 }
 
 /** The setting as one of its two values: anything else is `sample`. */

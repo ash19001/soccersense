@@ -46,6 +46,7 @@ describe("the source of app/game", () => {
   it("is the set of files this test knows about", () => {
     expect(SOURCES).toEqual([
       "career.ts",
+      "check.ts",
       "day.ts",
       "geo.ts",
       "index.ts",

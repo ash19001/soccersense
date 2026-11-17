@@ -741,6 +741,26 @@ the database's creation, which the next push will try (`/api/health` says how it
 Next, in order: the question pipeline (draft, approve, schedule), games run by the server,
 the leaderboard, accounts.
 
+## The development pages are for development; the question pipeline's foundation (2026-11-17)
+
+- The product owner: "why can i access links like /dev/sound on prod. i thought that was for
+  dev only". They were ordinary pages that asked not to be indexed, so they were built and
+  deployed. `app/routes.ts` now leaves `/dev/ui`, `/dev/sound` and `/dev/stage` out when
+  the site is being built (by the command, `react-router build`: typegen also runs as
+  "production" and must still see them). The dev server and the tests have them as before.
+- The question pipeline's decisions (the product owner): all 196 questions a week will be
+  approved by hand; the weekly draft runs on their Claude account as a scheduled skill, not
+  through the Claude API.
+- Built (`docs/ARCHITECTURE.md` section 8): `checkQuestion`, the rules a drafted question
+  must pass; the table the questions are kept in, a place for each of a day and mode's
+  seven; and the approval desk's API behind an admin token. Tried locally under
+  Cloudflare's runtime: a draft sent, looked at and approved.
+- Next: the approval page, the drafting skill and its schedule, then games run by the
+  server (which is what plays the scheduled questions when the flag is switched).
+- Suggested and not decided: an LLM as the judge's second opinion for an answer it does
+  not know (Claude Haiku through the API, on the server, each new spelling ruled on once
+  and remembered). It needs the server-run games first.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

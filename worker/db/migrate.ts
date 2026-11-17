@@ -33,6 +33,27 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    id: 2,
+    name: "question_slots: the day's questions, drafted, approved, scheduled",
+    sql: [
+      // One row for each of a day and mode's seven places (worker/questions/store.ts).
+      `CREATE TABLE IF NOT EXISTS question_slots (
+        day INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        slot INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        question_id TEXT NOT NULL,
+        question TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        review TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (day, mode, slot)
+      )`,
+    ],
+  },
 ];
 
 /** The highest migration there is: what `migrate` brings a database to. */

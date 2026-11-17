@@ -337,6 +337,43 @@ the server; the leaderboard; accounts; then membership and the rest of the plan 
   migrations against a real SQLite in memory, `worker/testing/d1.ts`, the part of D1 the
   Worker uses over Node's own `node:sqlite`.
 
+### The day's questions: drafted, approved, scheduled (2026-11-17, in progress)
+
+The product owner: "Make a way to draft and schedule them. they will be coming from ai
+after approval and scheduling. preferably generate them all once a week with approval for
+the subsequent days to be scheduled." A week is 196 questions (seven days, four modes,
+seven each), and they will approve them all. The drafting is to be done by a scheduled
+Claude routine on the product owner's own Claude account, **not** through the Claude API
+("the weekly draft will use my claude account so just creating a scheduled skill").
+
+Built:
+
+- **The rules a question must pass**: `checkQuestion(raw, mode)` in `app/game/check.ts`.
+  The sample questions are held to their rules by tests; a question that arrives as data
+  has none, so the same rules are a function. It takes anything and gives back the
+  question, typed, or every problem in plain words. It files each answer's shot itself
+  (`shotsFor` on the shares or the years), so a draft cannot disagree with the scoring.
+  Every sample question passes it.
+- **Where they are kept**: the table `question_slots` (migration 2,
+  `worker/questions/store.ts`). Each day and mode has seven places; a place holds one
+  question, whole, and its state: `draft`, `approved` or `rejected`, with the drafter's
+  note (sources, doubts) and the reviewer's (why it was rejected).
+  `scheduledFor(db, day, mode)` gives a day's seven questions only when all seven places
+  are approved: a day is played whole or not at all, and nothing unapproved is ever played.
+- **The approval desk's API** (`worker/questions/admin.ts`), for whoever holds the admin
+  token: `PUT /api/admin/questions` (send drafts; each is checked, and the unfit are
+  refused with what is wrong while the rest go in; an approved question is never
+  overwritten unless `replace` is set), `GET /api/admin/questions?from=&to=` (look),
+  `POST /api/admin/questions/<day>/<mode>/<slot>` (approve, reject with a reason, send back
+  to draft, or put a corrected question in its place; a question is checked again as it is
+  approved).
+- **The token** is the secret `ADMIN_TOKEN`, set in Cloudflare by the product owner (24
+  characters or more; until it is set the desk answers 503). It is compared by hash.
+
+Not built yet: the approval page (the product owner's way to look at a week and pass it),
+the drafting skill and its weekly schedule, and the game playing what is scheduled when the
+`QUESTIONS` flag says so (with games run by the server).
+
 ### What still stands in for the backend
 
 These parts change as it arrives:
