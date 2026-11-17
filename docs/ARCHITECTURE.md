@@ -380,7 +380,26 @@ Built:
   working tool, not part of the game's interface: plain type, no pixel skin, `noindex`,
   not in `PAGES`. Anyone can load it; nothing in it works without the token.
 
-Not built yet: the drafting skill and its weekly schedule, and the game playing what is scheduled when the
+- **The drafter** is a project skill, `.claude/skills/draft-questions`, run once a week by
+  a scheduled Claude routine on the product owner's Claude account (their choice, not the
+  Claude API). It says what a question is and how to check one, and works through
+  `pnpm questions` (`tools/questions.ts`):
+  - `todo` asks the desk which places from tomorrow to eight days on are empty or rejected
+    (with the reviewer's reason), and what has been asked in the last 90 days, so no week
+    repeats another. A weekly run therefore drafts the week ahead and redoes what was
+    turned down, and a run that stopped early is picked up by the next.
+  - `check <file>` holds a file of drafts to `checkQuestion` and to the file as a whole
+    (no place twice, no prompt twice); `submit <file>` checks, then sends them as drafts.
+  - The admin API's `brief=1` look (the prompt and state, no answers, up to 120 days) is
+    what `todo` reads.
+  - **The token never reaches the routine.** In the cloud environment the product owner
+    stores it as a network secret (Bearer, for soccersense.io): the environment's proxy
+    adds it to requests to the site, and the tool sends them bare. Locally the tool reads
+    `SOCCERSENSE_ADMIN_TOKEN` (and `SOCCERSENSE_SITE` to point it at a local Worker).
+  - Drafts are written to `.drafts/`, which git ignores: they are never committed, so the
+    answers to coming days are not in the repository.
+
+Not built yet: the routine itself (it needs the product owner's environment set up), and the game playing what is scheduled when the
 `QUESTIONS` flag says so (with games run by the server).
 
 ### What still stands in for the backend

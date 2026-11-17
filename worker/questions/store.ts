@@ -121,6 +121,56 @@ export async function slotsBetween(
   return rows.results.map(toSlot);
 }
 
+/** A place without its answers: which question is there, and its state. */
+export interface BriefSlot extends SlotKey {
+  status: SlotStatus;
+  review: string;
+  questionId: string;
+  prompt: string;
+  answers: number;
+  updatedAt: number;
+}
+
+/** Every place filled from day `from` to day `to`, in brief: for a long look back. */
+export async function briefBetween(
+  db: D1,
+  from: number,
+  to: number,
+): Promise<BriefSlot[]> {
+  const rows = await db
+    .prepare(
+      `SELECT day, mode, slot, status, review, question_id, updated_at,
+         json_extract(question, '$.prompt') AS prompt,
+         json_array_length(question, '$.answers') AS answers
+       FROM question_slots WHERE day >= ? AND day <= ?
+       ORDER BY day, CASE mode WHEN 'home' THEN 0 WHEN 'away' THEN 1
+         WHEN 'retro' THEN 2 ELSE 3 END, slot`,
+    )
+    .bind(from, to)
+    .all<{
+      day: number;
+      mode: string;
+      slot: number;
+      status: string;
+      review: string;
+      question_id: string;
+      updated_at: number;
+      prompt: string;
+      answers: number;
+    }>();
+  return rows.results.map((row) => ({
+    day: row.day,
+    mode: row.mode as Mode,
+    slot: row.slot,
+    status: row.status as SlotStatus,
+    review: row.review,
+    questionId: row.question_id,
+    prompt: row.prompt,
+    answers: row.answers,
+    updatedAt: row.updated_at,
+  }));
+}
+
 /**
  * Puts a question in a place as a draft. An approved question is left alone (`kept`) unless
  * `replace` is set: a week drafted twice must not undo what has been passed.

@@ -28,3 +28,6 @@ coverage/
 
 # Windows: `> nul` in Git Bash writes a file called nul instead of discarding
 /nul
+
+# Drafted questions on their way to the approval desk (tools/questions.ts): never committed
+/.drafts/

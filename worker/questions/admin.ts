@@ -6,6 +6,9 @@
  *   PUT  /api/admin/questions                      send drafts: { drafts: [{ day, mode, slot,
  *                                                  question, note? }], source?, replace? }
  *   GET  /api/admin/questions?from=<day>&to=<day>  every place filled in those days, whole
+ *        ...&brief=1                               the same without the answers (the prompt,
+ *                                                  the state, the reviewer's note), over
+ *                                                  up to 120 days: what is taken
  *   POST /api/admin/questions/<day>/<mode>/<slot>  { status?, review?, question? }: approve,
  *                                                  reject, send back to draft, or put a
  *                                                  corrected question in its place
@@ -24,6 +27,7 @@ import {
   SLOT_STATUSES,
   type SlotKey,
   type SlotStatus,
+  briefBetween,
   isSlotKey,
   sameQuestionElsewhere,
   saveDraft,
@@ -37,8 +41,9 @@ export const MIN_TOKEN = 24;
 /** The most a request may carry, and the most drafts in one. */
 export const MAX_BODY = 4_000_000;
 export const MAX_DRAFTS = 250;
-/** The most days one look may span. */
+/** The most days one look may span, whole and in brief. */
 export const MAX_DAYS = 31;
+export const MAX_BRIEF_DAYS = 120;
 
 /** SHA-256 of a text, as bytes: tokens are compared by their hashes, in equal time. */
 async function digest(text: string): Promise<Uint8Array> {
@@ -109,14 +114,18 @@ export async function admin(
       const params = new URL(request.url).searchParams;
       const from = Number(params.get("from"));
       const to = Number(params.get("to") ?? from);
+      const brief = params.get("brief") === "1";
       const ok =
         Number.isInteger(from) &&
         Number.isInteger(to) &&
         from >= 1 &&
         to >= from &&
-        to - from < MAX_DAYS;
+        to - from < (brief ? MAX_BRIEF_DAYS : MAX_DAYS);
       if (!ok) return failure("bad_days", 400, now);
-      return json({ from, to, slots: await slotsBetween(db, from, to) }, now);
+      const slots = brief
+        ? await briefBetween(db, from, to)
+        : await slotsBetween(db, from, to);
+      return json({ from, to, slots }, now);
     }
 
     const sent = await body(request);

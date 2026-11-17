@@ -778,6 +778,26 @@ week, open a day and mode, approve, reject with a reason, or correct each questi
   approving or rejecting a question closes its list of answers.
 - Next: the drafting skill and its weekly schedule.
 
+## The drafter: a skill and its tool (2026-11-17)
+
+The product owner: "okay build the next thing now" (the weekly drafting, on their Claude
+account as a scheduled skill).
+
+- `.claude/skills/draft-questions/SKILL.md`: what the run does, the file it writes, what
+  makes a question, each mode's needs, every field of an answer, and how to get it right
+  (sources not memory, the reviewer's reason for a rejected place).
+- `pnpm questions todo | check | submit` (`tools/questions.ts`), and a brief look in the
+  admin API for it. Tried against the Worker run locally: with no token it says why it was
+  turned away; `todo` listed the 216 open places of the eight days ahead; `check` named a
+  bad share; `submit` saved a game of seven, and `todo` then left that game out.
+- Looked up in Claude Code's docs before designing it: a routine's cloud session clones the
+  repository (so it has the skill), runs pnpm, reaches only allowed domains, and can be
+  given a "network secret" that its proxy adds to requests for a site, so the session never
+  holds the token.
+- Not done: the routine is not created. It needs the product owner to allow soccersense.io
+  (and the sites to check facts against) in a cloud environment and store the token there,
+  and the skill to be pushed. Not yet run for real: no question has been drafted by it.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

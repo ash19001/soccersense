@@ -20,7 +20,8 @@
     "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
     "snap": "tsx tools/snap.ts",
     "favicon": "tsx tools/favicon.ts",
-    "seo": "tsx tools/seo.ts"
+    "seo": "tsx tools/seo.ts",
+    "questions": "tsx tools/questions.ts"
   },
   "dependencies": {
     "@react-router/node": "^8.5.1",

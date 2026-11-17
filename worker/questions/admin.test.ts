@@ -232,6 +232,47 @@ describe("looking, approving, rejecting, correcting", () => {
     }
   });
 
+  test("a brief look is the same places without their answers, over a longer span", async () => {
+    await send([
+      draft(HOME_QUESTIONS[0], 9, 0),
+      draft(RETRO_QUESTIONS[0], 100, 2),
+    ]);
+    await call("/questions/9/home/0", {
+      method: "POST",
+      body: { status: "rejected", review: "one club is missing" },
+    });
+    const response = await call("/questions?from=1&to=120&brief=1");
+    expect(response.status).toBe(200);
+    const brief = ((await response.json()) as { slots: unknown[] }).slots;
+    expect(brief).toEqual([
+      {
+        day: 9,
+        mode: "home",
+        slot: 0,
+        status: "rejected",
+        review: "one club is missing",
+        questionId: HOME_QUESTIONS[0].id,
+        prompt: HOME_QUESTIONS[0].prompt,
+        answers: HOME_QUESTIONS[0].answers.length,
+        updatedAt: NOW,
+      },
+      {
+        day: 100,
+        mode: "retro",
+        slot: 2,
+        status: "draft",
+        review: "",
+        questionId: RETRO_QUESTIONS[0].id,
+        prompt: RETRO_QUESTIONS[0].prompt,
+        answers: RETRO_QUESTIONS[0].answers.length,
+        updatedAt: NOW,
+      },
+    ]);
+    // a whole look may not span that far
+    expect((await call("/questions?from=1&to=120")).status).toBe(400);
+    expect((await call("/questions?from=1&to=121&brief=1")).status).toBe(400);
+  });
+
   test("approve, reject with a reason, and back to draft", async () => {
     await send([draft(HOME_QUESTIONS[0], 9, 0)]);
     const set = async (body: unknown, at = NOW + 60_000) =>
