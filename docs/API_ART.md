@@ -884,6 +884,38 @@ drawLogo(s, cx, top, opts): { w, h }   // centred on cx, top row at `top`
 - A streak of light crosses it every 6 s off `t` (nothing at `t = 0` or with `reducedMotion`).
 - Shots: `logo/stacked`, `line`, `tagline`, `on-skies`, `menu`, `glint`.
 
+## The tab icon (`~/art/tab-icon`, `tools/favicon.ts`)
+
+```ts
+TAB_ICON_SIZE; // 32
+TAB_ICON_BALL_R; // 15.5: the ball is 32 across, the whole picture
+drawTabIcon(): Surface; // the icon, on nothing
+drawTabIconBall(): Surface; // its ball alone, as it is behind the letters
+tabIconLetters(): Uint8Array; // which letter's yellow each pixel is: 1, 2 or 0
+```
+
+The home screen's ball with an italic SS standing in front of it (2026-11-17). The ball is
+`drawBall` in its menu pose, by day, with no patches. The letters are two round S's (two
+ovals each, a round brush three thick, leaned 0.26 of a pixel for every pixel up), 17 tall and
+19 with their line of ink, in the middle of the ball, which shows all round them (the product
+owner, of letters taller than the ball: "make the SS smaller, I don't like it"): gold, pale
+gold along the top and left of each stroke, deep gold along the bottom and right, two white
+pixels of glint on each. They stand side by side on one line, `ADVANCE` (10) from one to the
+next: at anything under that their yellows touch. A staircase (the second letter a step
+lower, closer and in front) was tried and turned down: "no don't staircase".
+
+- **Round, never bolts.** Two leaning lightning bolts side by side are the badge of the Nazi
+  SS. The letters are all curve, with a hook at each end, and the tests hold them to that.
+- **The file.** `pnpm favicon` (`tools/favicon.ts`) writes `public/favicon.svg`: an SVG
+  holding the picture as a PNG magnified four times (`FAVICON_SCALE`), which a browser
+  averages down cleanly to a tab's 16 px; the same pixels as SVG rectangles broke up there.
+  Never edit the file by hand: change the drawing and run the tool. `--png <file>` also
+  writes a PNG to look at.
+- `tab-icon.test.ts` holds the drawing (the ball as the menu draws it wherever the letters
+  are not, more than half of it in view and its outline whole, the letters in its middle
+  and a little over half its height, side by side on one line with ink between them,
+  italic, round, lit from the top left) and decodes `public/favicon.svg` to hold it to the drawing.
+
 ## Putting the home screen together
 
 ```ts

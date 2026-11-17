@@ -1,8 +1,9 @@
 /**
- * PNG output for the snap tool. Node only: never import this from `app/`.
+ * PNG output for the snap tool, and reading one back. Node only: never import this from
+ * `app/` (its tests aside).
  */
 
-import { crc32, deflateSync } from "node:zlib";
+import { crc32, deflateSync, inflateSync } from "node:zlib";
 
 import {
   FONT_3x5,
@@ -68,6 +69,50 @@ export function encodePng(surface: Surface, scale = 1): Buffer {
     chunk("IDAT", deflateSync(raw, { level: 9 })),
     chunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+/** A PNG read back: its size, and its pixels as R, G, B, A bytes, row by row. */
+export interface Picture {
+  w: number;
+  h: number;
+  rgba: Buffer;
+}
+
+/**
+ * Read back a PNG that `encodePng` wrote: eight bits a channel, RGBA, not interlaced,
+ * every row stored as it is. Anything else throws: this is for holding a file the tools
+ * wrote to the drawing it was made from, not for reading pictures in general.
+ */
+export function decodePng(png: Buffer): Picture {
+  if (!png.subarray(0, 8).equals(SIGNATURE)) throw new Error("not a PNG");
+  let at = 8;
+  let w = 0;
+  let h = 0;
+  const packed: Buffer[] = [];
+  while (at < png.length) {
+    const length = png.readUInt32BE(at);
+    const type = png.toString("latin1", at + 4, at + 8);
+    const body = png.subarray(at + 8, at + 8 + length);
+    if (type === "IHDR") {
+      w = body.readUInt32BE(0);
+      h = body.readUInt32BE(4);
+      if (body[8] !== 8 || body[9] !== 6 || body[12] !== 0) {
+        throw new Error("not an 8-bit RGBA PNG without interlacing");
+      }
+    } else if (type === "IDAT") packed.push(body);
+    at += 12 + length;
+  }
+  const raw = inflateSync(Buffer.concat(packed));
+  const stride = w * 4 + 1;
+  if (w === 0 || h === 0 || raw.length !== stride * h) {
+    throw new Error("the PNG's rows are not the size its header gives");
+  }
+  const rgba = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    if (raw[y * stride] !== 0) throw new Error(`row ${y} is filtered`);
+    raw.copy(rgba, y * w * 4, y * stride + 1, (y + 1) * stride);
+  }
+  return { w, h, rgba };
 }
 
 export interface RowOptions {

@@ -3,7 +3,12 @@ import { crc32, inflateSync } from "node:zlib";
 
 import { describe, expect, test } from "vitest";
 
-import { contactSheet, encodePng, sideBySide } from "../../tools/png";
+import {
+  contactSheet,
+  decodePng,
+  encodePng,
+  sideBySide,
+} from "../../tools/png";
 import { TRANSPARENT, rgb } from "./color";
 import { shots } from "./pixel.shots";
 import { Surface } from "./surface";
@@ -34,6 +39,32 @@ function chunks(png: Buffer): Chunk[] {
   }
   return out;
 }
+
+describe("decodePng", () => {
+  test("reads back what encodePng wrote, magnified or not", () => {
+    const s = new Surface(3, 2);
+    s.px(0, 0, RED);
+    s.px(2, 1, BLUE);
+    const one = decodePng(encodePng(s));
+    expect([one.w, one.h]).toEqual([3, 2]);
+    expect([...one.rgba.subarray(0, 4)]).toEqual([255, 0, 0, 255]);
+    expect([...one.rgba.subarray(4, 8)]).toEqual([0, 0, 0, 0]);
+    expect([...one.rgba.subarray(20, 24)]).toEqual([0, 0, 255, 255]);
+    const three = decodePng(encodePng(s, 3));
+    expect([three.w, three.h]).toEqual([9, 6]);
+    // the blue pixel is a block of nine, the last of them the picture's last pixel
+    expect([...three.rgba.subarray(three.rgba.length - 4)]).toEqual([
+      0, 0, 255, 255,
+    ]);
+  });
+
+  test("refuses what is not one of its own", () => {
+    expect(() => decodePng(Buffer.from("<svg/>"))).toThrow(/not a PNG/);
+    const png = encodePng(new Surface(2, 2));
+    png[8 + 8 + 9] = 2; // the header's colour type: RGB, no alpha
+    expect(() => decodePng(png)).toThrow(/RGBA/);
+  });
+});
 
 describe("encodePng", () => {
   const s = new Surface(3, 2);

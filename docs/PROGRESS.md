@@ -515,6 +515,48 @@ plate is close to the patch's own tone (AWAY's at night).
 Not done: tags for HOME and AWAY on a ball too small for their words (they have icons alone
 there, as before).
 
+## The tab icon (2026-11-17)
+
+`public/favicon.svg` was a plain green circle. The product owner asked for a football with SS,
+turned down a first try (a 16 px ball with SS on its middle patch), and said what it should
+be: "a proper football then a big SS in the middle in front of the ball (not within the
+football). Make the football look how it does on the home page but smaller and obviously no
+icons/text. Then in front of it add a yellow electric font of SS which is taller than the
+ball"; then "make the SS italic maybe and slightly smaller"; and, shown letters taller than
+the ball, "make the SS smaller, I don't like it". A staircase was then tried at their
+suggestion ("so the SS can be closer together") and turned down for the letters side by side:
+"no don't staircase. I was happy with this".
+
+- The drawing is `app/art/tab-icon.ts`, 32 x 32: the menu's own ball (`drawBall`, its menu
+  pose, by day, nothing on its patches) filling the picture, and in the middle of it two
+  italic S's 17 tall (19 with their line of ink), in the palette's gold, lit along the top
+  and left of each stroke and shaded along the bottom and right, a glint on each. The ball
+  shows all round them: its black patches above and below, its leather either side. They
+  stand side by side on one line, ten pixels from one to the next, the least that keeps a
+  line of ink between them. (The letters were first the picture's whole height with a 26
+  pixel ball behind them, as first asked; they hid the ball and were not liked. The
+  staircase, the second letter four pixels lower and three closer, in front of the first,
+  was not liked either. Do not bring either back.)
+- The S's are round: each is two ovals drawn with a round brush and leaned to the right. They
+  are deliberately not jagged bolts: two leaning lightning bolts side by side are the badge of
+  the Nazi SS, and an "electric" SS must not drift towards it. A test holds them to curves
+  (a flat of a curve at head and foot, and a stroke that doubles back into a hook).
+- `tools/favicon.ts` (`pnpm favicon`) writes the file: an SVG that holds the picture as a PNG,
+  magnified four times, not as shapes. A tab shows the icon at 16 px, half its size, and as
+  SVG rectangles the pixels broke up there (rows dropped with hard edges, seams showing when
+  smoothed); as a picture it is averaged down cleanly. At 32 px (a high-density screen) it is
+  exact. `app/art/tab-icon.test.ts` decodes the file and holds it to the drawing, pixel for
+  pixel.
+- The file keeps its name and stays an SVG: the game clock asks the server the time with a
+  HEAD request to it.
+
+At a tab's 16 px on an ordinary screen it is soft: a ball and two letters is a lot for 256
+pixels. It is crisp from 32 px up.
+
+Not done: PNG versions (an `apple-touch-icon` for a phone's home screen, and a fallback for
+any browser that does not take an SVG tab icon). Only the SVG is served, as before, and it
+has been looked at in Chrome only.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to
