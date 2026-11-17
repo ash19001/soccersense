@@ -810,15 +810,21 @@ account as a scheduled skill).
   So the cloud setup works up to the token, which is not arriving or is not the right one.
 - The desk now says which (`reason`: `no_token` or `wrong_token`), and the tool repeats
   it, so the next trial names the cause.
-- Not done: no question has been drafted yet. Waiting on the token being put right in the
-  cloud environment (a network secret, or `SOCCERSENSE_ADMIN_TOKEN` as a variable).
+- The second trial answered it: `no_token`. A diagnostic run in the same environment sent
+  the request three ways (curl through the environment's proxy, Node's fetch, Node's fetch
+  told to use the proxy): none carried a token, so the network secret was not being applied
+  there, whatever the reason. Wikipedia was reachable.
+- The product owner then put the token in as the environment variable
+  `SOCCERSENSE_ADMIN_TOKEN`, and the third trial got past the desk: `todo` listed the
+  places and both runs began drafting, reading Wikipedia's pages as their sources.
+- Still to see: the drafts themselves on the approval page, the runs' final reports, and
+  the product owner's choice of model for the weekly run.
 
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to
   "Bayern", "Alberto" next to "Albert", "Palma" next to "Parma"). Fill `Question.decoys`.
 - Estadio Centenario is due to close after 28 Nov 2026: replace it in the stadium list later.
-- `/dev/ui` is registered unconditionally and would be prerendered into a production build.
 - Very short landscape phones (under about 440 CSS px tall) do not have room for the layout.
 - Tablets in portrait at 820 x 1180 get a cramped layout (the font pixel doubles there).
 - Art: the sun jumps sides at solar noon; golden hour turns the pitch a little olive; the
