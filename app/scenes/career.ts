@@ -115,6 +115,13 @@ import {
   type BuildArea,
   type BuildColors,
 } from "./career-fx";
+import {
+  drawPyroBack,
+  drawPyroFront,
+  drawPyroRig,
+  newPyro,
+  type Pyro,
+} from "./career-pyro";
 import type { Ambience, Scene, ScoreShot, SoundCue } from "./scene";
 
 /** Words the ground paints on its boards and banners (from `app/i18n`). */
@@ -650,6 +657,18 @@ export class CareerScene implements Scene {
   private juggling = false;
   /** Misses so far: they are skied and dragged wide by turns. */
   private misses = 0;
+  /** Goals so far: each one's show (career-pyro.ts) is seeded by its number. */
+  private goals = 0;
+  /** The goal show of the moment, filled each frame, and the light its colours are for. */
+  private readonly pyro: Pyro = newPyro();
+  private pyroLight: Lighting | null = null;
+  /**
+   * When the last goal's ball went in, on the scene's clock (or -1: no show), and how big
+   * the shot was. The show plays on after the shot's story is over, and stops with the
+   * next shot or a change of ground.
+   */
+  private pyroAt = -1;
+  private pyroSize = 0;
   /** Where everyone stood when a shot or full time cut in, and how long ago (or -1). */
   private readonly fromX = new Int32Array(CAST);
   private readonly fromY = new Int32Array(CAST);
@@ -785,11 +804,14 @@ export class CareerScene implements Scene {
     const reduced = this.reduced;
     const strike = p.at + strikeDelay(p.anim);
     const low = grade === "miss" && (this.misses++ & 1) === 1;
+    if (p.goal) this.goals++;
     const flight = low ? WIDE_ROLL : p.flight;
     let ta = strike + flight;
     if (grade === "timeup") ta = strike;
     else if (grade === "miss")
       ta = low ? strike + this.wideTime() : strike + flight * 0.72;
+    this.pyroAt = p.goal && !reduced ? this.t + ta : -1;
+    this.pyroSize = p.size;
     const net = p.goal && this.ground.goal.kind !== "jumpers";
     const th = net ? ta + 0.05 : -1;
     // the new ball: how long until he is back in his place and it is at his feet
@@ -1063,7 +1085,11 @@ export class CareerScene implements Scene {
   // -------------------------------------------------------------------------
 
   private setTier(tier: Tier): void {
-    if (tier !== this.tier) this.stale = true;
+    if (tier !== this.tier) {
+      this.stale = true;
+      // a new ground: the last goal's show does not follow him there
+      this.pyroAt = -1;
+    }
     this.tier = tier;
     this.ground.setTier(tier);
   }
@@ -3062,6 +3088,15 @@ export class CareerScene implements Scene {
       );
     }
 
+    // the goal show (career-pyro.ts): the machines stand along the far touchline at the
+    // stadium tiers, and a goal sets them off (birds in the park, flares at a small ground)
+    const pyro = this.pyroNow(
+      this.pyroAt >= 0 && !this.reduced ? t - this.pyroAt : -1,
+      this.pyroSize,
+    );
+    drawPyroRig(s, pyro);
+    drawPyroBack(s, pyro);
+
     // the balls: the shot's, the new one on its way, the juggled one, the ones left lying
     const B = this.balls;
     const shot = B[SHOT - CAST];
@@ -3218,6 +3253,9 @@ export class CareerScene implements Scene {
       }
     }
 
+    // the goal show's confetti comes down in front of everyone
+    drawPyroFront(s, pyro);
+
     // the trophy lift's confetti
     if (this.fullT >= 0 && this.tier === 7 && !this.reduced) {
       const ramp = MODE_COLORS[this.mode];
@@ -3242,6 +3280,44 @@ export class CareerScene implements Scene {
         p.colors = buildColors(p.to <= 1 ? light.env : light.lit, this.era);
       drawBuild(s, p.t, p.area, p.colors, this.seed);
     }
+  }
+
+  /**
+   * The goal show for this frame (career-pyro.ts): `age` seconds after the ball went in
+   * (-1: no show, only the machines), for a shot of `size` 0 to 1.
+   */
+  private pyroNow(age: number, size: number): Pyro {
+    const L = this.L;
+    const p = this.pyro;
+    const light = this.ground.light;
+    if (this.pyroLight !== light) {
+      // what the daylight falls on, graded once per light
+      this.pyroLight = light;
+      const retro = this.era === "retro";
+      p.rigDark = light.lit(retro ? P.wood : P.night);
+      p.rigTop = light.lit(P.steel);
+      p.rigHi = light.lit(retro ? P.chalk : P.steelHi);
+      p.smokeHi = light.lit(P.white);
+      p.smoke = light.lit(P.steelHi);
+      p.smokeShade = light.lit(P.concreteLight);
+      p.bird = light.env(P.slate);
+      p.birdWing = light.env(P.white);
+    }
+    const ramp = MODE_COLORS[this.mode];
+    p.age = age;
+    p.size = size;
+    p.tier = this.tier;
+    p.era = this.era;
+    p.seed = this.seed + this.goals * 131;
+    p.w = L.w;
+    p.x0 = L.stageLeft;
+    p.x1 = L.stageRight;
+    p.touchY = L.farTouchY;
+    p.groundY = L.groundY;
+    p.goalX = this.ground.goal.lineX;
+    p.mode = ramp.base;
+    p.modeLight = ramp.light;
+    return p;
   }
 
   private paintBall(

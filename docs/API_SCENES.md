@@ -797,7 +797,13 @@ opening, the sound), `career-cast.ts` (who stands where, kits, the sprite spots 
 juggle, the kick, the bicycle kick, the keeper's gloves), `career-fx.ts` (the promotion's
 smoke and close-up, fireworks, confetti, the whistle sign, the gold burst, the iris, shadows),
 `career-fx-retro.ts` and `career-fx-nextgen.ts` (each era's close-up colours and ball, goal
-fireworks and confetti, called from `career-fx.ts` when the era asks).
+fireworks and confetti, called from `career-fx.ts` when the era asks), `career-pyro.ts`
+(the goal show, 2026-11-17: `pyroKind(tier)`, `drawPyroRig`, `drawPyroBack`,
+`drawPyroFront` from a `Pyro` the scene fills each frame; the birds, the flares and their
+smoke, the flame jets and the confetti cannons; `docs/CAREER_SCENE.md` section 4. Look at
+it: `tsx tools/snap.ts career/pyro-worldie-t4 --size 960x540 --t 2`, also
+`career/pyro-<worldie|golazo|tapin>-t<0|1|2|3|4|6>` and the same after `pyro-retro-` and
+`pyro-nextgen-`).
 
 ## The career scene and the game page (`~/scenes/career`, `app/routes/play/`)
 

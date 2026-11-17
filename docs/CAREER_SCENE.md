@@ -141,6 +141,53 @@ and bigger for the better shots: a tap in 2, a toe poke 3, a trivela 4, a golazo
 7, the biggest and highest (the product owner asked for this on 2026-11-11). Tiers 6 and 7 are
 at night, where they show best.
 
+**The goal show** (the product owner, 2026-11-17: "make it feel more interactive by having
+some pyro/flame machines going off and maybe confetti ... You decide what makes sense for
+football"; `app/scenes/career-pyro.ts`). Every goal sets something off, sized by the ground
+and by the shot (`size` 0 for a tap in to 1 for a worldie, as the fireworks have it):
+
+| tiers  | what goes off                                                                                                                                                                                                                                                                             | a tap in     | a worldie            |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | -------------------- |
+| 0, 1   | no machines in a park: the cheer puts up the **birds** from behind the goal, pale wings on a dark body, most of them back over the pitch and away into the sky                                                                                                                            | 4 birds      | 12 birds             |
+| 2, 3   | a small ground's own pyro: fans here and there in the crowd light **flares**, each in their own time (a white heart in pale gold in red, breathing, sparks dripping), and white **smoke** rolls up out of the stand and drifts right                                                      | 2 flares     | 5 flares             |
+| 4 to 7 | a stadium's: **flame jets** along the far touchline, a unit about every 52 px from the stage's left to just short of the goal, set off from the goal end outwards in a wave; and for a golazo or a worldie two **confetti cannons** by the goal, the paper coming down over the goalmouth | 2 jets, once | all of them, 3 times |
+
+- A flame is 52 px tall for a tap in and 86 for a worldie (a player is 36), mostly yellow so
+  it stands off a crowd in red. The units stand on the verge in front of the boards whether
+  there is a goal or not.
+- The show starts as the ball goes in and lasts 4.2 s at most. It runs on the scene's own
+  clock, so the last confetti lands while he is juggling again; a new shot or a change of
+  ground ends it. With reduced motion nothing goes off (the units still stand there).
+- It is behind the players (drawn after the ground's back layer), except the confetti,
+  which comes down in front of everyone.
+- **Who lights the flares** (the product owner, 2026-11-17: "random people in crowd, not
+  the same four people in a row that do it at the exact same time. just so it feels more
+  natural"; `flarePlaces`). Anyone in the crowd behind the boards: at tier 2 in the small
+  covered stand, at tier 3 anywhere in the main stand's front and middle rows, across its
+  whole width (on a monitor that is well to the left of the stage too). The goal's seed
+  picks them, so no two goals have the same people, and no two of a goal's are close
+  enough for their plumes to be one. The first is lit as the ball goes in; the others each
+  somewhere in their own slice of the next second or so (never two within a twentieth of
+  a second); each burns for 1.05 to 1.6 s. Not the top rows: a flare under the roof sent
+  its whole plume through it.
+- **The flares' smoke** is one plume a flare, drawn as the promotion's smoke is (a puff is
+  its shade, its body and a lit patch up and to the left): a new small puff every 0.06 s,
+  each swelling as it rises (2 to about 8 px in radius), slowing, leaning further right
+  with the wind the higher it is and a little off the line, so the column has lumpy sides
+  and widens as it climbs. Where it leaves the flare it is lit red; above that it is light
+  grey with white tops and shade down its right side. The top is ragged: the higher, the
+  more puffs have gone, and the last shrink away. Always solid, never dithered. (The first
+  version, 2026-11-17, was a line of separate white blobs, and the product owner could not
+  tell it was smoke.)
+- **RETRO**: the jets are torches on stakes with a dark red rim round the amber (so they
+  stand off a crowd in old gold) and sparks flying off them; the flares are red Bengal
+  lights; the paper is cream. **NEXT-GEN**: the jets are cool plasma, sky light and white
+  (so they stand off a crowd in magenta), with a bar of light at the head and two glints in
+  the mode's colour; the flares are sky light in a cool mist; the confetti glows.
+- **No sound yet.** The jets, flares and cannons are silent; the crowd, the sting and the
+  fireworks are as they were. A whoosh for the jets is to be made with the product owner,
+  by ear.
+
 A goal's ball stays in the net (by the hedge at tier 0), and a miss dragged wide stays where it
 stopped, until the ground changes. A shot asked for while the last one's reaction is still
 playing does not cut: everyone runs from where they are to where the new shot needs them (0.3

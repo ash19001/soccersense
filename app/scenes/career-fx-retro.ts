@@ -268,3 +268,31 @@ export function drawRetroConfetti(
     }
   }
 }
+
+/**
+ * The sparks a RETRO torch throws (career-pyro.ts, the goal show at tiers 4 to 7): the
+ * flame is the show's own, in RETRO's colours; these fly up and out of it from
+ * (`x`, `baseY`) and cool from white to amber as they fall. `h` is the flame's height,
+ * `frame` the show's frame (15 a second) and `id` the torch's number.
+ */
+export function drawRetroJetSparks(
+  s: Surface,
+  x: number,
+  baseY: number,
+  h: number,
+  frame: number,
+  id: number,
+  seed: number,
+): void {
+  if (h < 8) return;
+  for (let k = 0; k < 12; k++) {
+    // each spark's flight is eight frames long, and they are spread through it
+    const q = ((frame + Math.floor(hash2(k, id, seed) * 8)) % 8) / 8;
+    const side = hash2(k, id + 9, seed) < 0.5 ? -1 : 1;
+    const reach = 0.7 + hash2(k, id + 17, seed) * 0.5;
+    const up = q / 0.62 - 1;
+    const sx = x + Math.round(side * (7 + h * 0.3 * q));
+    const sy = baseY - Math.round(h * reach * (1 - up * up));
+    s.rect(sx, sy, 2, 2, q < 0.4 ? P.white : q < 0.75 ? P.goldLight : P.amber);
+  }
+}

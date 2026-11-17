@@ -260,3 +260,23 @@ export function drawNextgenConfetti(
     }
   }
 }
+
+/**
+ * The head of a NEXT-GEN jet (career-pyro.ts, the goal show at tiers 4 to 7): the jet of
+ * plasma is the show's own, in NEXT-GEN's colours; this is the bar of light across its
+ * tip at (`x`, `top`) and two glints in the mode's colour flying off it. `frame` is the
+ * show's frame (15 a second).
+ */
+export function drawNextgenJetHead(
+  s: Surface,
+  x: number,
+  top: number,
+  frame: number,
+  mode: Color,
+): void {
+  s.rect(x - 5, top, 10, 1, P.skyLow);
+  s.rect(x - 2, top - 1, 4, 1, P.white);
+  const out = frame % 4;
+  s.rect(x - 8 - out * 2, top - 2 - out, 3, 2, mode);
+  s.rect(x + 5 + out * 2, top - 2 - out, 3, 2, mode);
+}

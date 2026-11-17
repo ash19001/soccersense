@@ -659,6 +659,39 @@ text SHARE copies, and hands to a phone's share sheet with the picture, is:
 - Known and left: where no picture can be made at all (a browser with no canvas), the two
   lines are copied on their own, and say nothing of the result.
 
+## The goal show: pyro, flares, confetti and birds (2026-11-17)
+
+The product owner: "Inside the game when a right answer is given and the player scores, can
+you make it feel more interactive by having some pyro/flame machines going off and maybe
+confetti - I don't know. You decide what makes sense for football". Decided here: the show
+grows with the ground, as the career does, so every goal sets something off from the first
+question, and the stadium's is the biggest (`app/scenes/career-pyro.ts`,
+`docs/CAREER_SCENE.md` section 4).
+
+- **The park and the Sunday pitch (tiers 0, 1)**: no machines there. The cheer puts up the
+  birds from behind the goal.
+- **A small ground (tiers 2, 3)**: fans here and there in the crowd light flares, each in
+  their own time, and their smoke rolls up out of the stand. (First they were evenly
+  spaced along one row and all lit together; the product owner: "can the smoke be random
+  people in crowd, not the same four people in a row that do it at the exact same time.
+  just so it feels more natural".)
+- **A stadium (tiers 4 to 7)**: flame jets along the far touchline, off in a wave from the
+  goal end; two confetti cannons for a golazo or a worldie. The fireworks over the roof
+  (2026-11-11) go with them.
+- The better the shot, the more of it: a tap in is two jets once (or two flares, or four
+  birds), a worldie every jet three times (five flares, twelve birds).
+- RETRO and NEXT-GEN have their own: torches on stakes throwing sparks and red Bengal
+  lights; jets of cool plasma and flares of sky light.
+- The flares' smoke was drawn twice. The product owner on the first (a line of separate
+  white blobs): "i like it all except the white smoke, you cant tell its smoke properly".
+  It is now a billowing plume a flare, lit red at its foot, grey with shade down one side,
+  leaning with the wind and breaking up at the top (`docs/CAREER_SCENE.md` section 4).
+- With reduced motion nothing goes off.
+- **Not done: sound.** The show is silent. A whoosh for the jets and a fizz for the flares
+  want making and tuning by ear with the product owner.
+- Looked at: `career/pyro-<grade>-t<tier>` at 960 x 540 and 260 x 562, by day and at
+  night, in the three eras. Tests: `app/scenes/career-pyro.test.ts`.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to
