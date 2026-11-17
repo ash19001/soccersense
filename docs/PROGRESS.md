@@ -798,6 +798,21 @@ account as a scheduled skill).
   (and the sites to check facts against) in a cloud environment and store the token there,
   and the skill to be pushed. Not yet run for real: no question has been drafted by it.
 
+## The weekly routine is created; its first trial stopped at the desk (2026-11-17)
+
+- Created with the product owner's answers: Sunday 3:17am UK time (`17 3 * * 0`, UTC),
+  the Default cloud environment, no connectors. Two one-off trial runs were fired, Sonnet
+  5.5 for days 9 to 12 and Opus 5.5 for days 13 to 16, each to begin its notes with the
+  model's name, so the two can be compared on the approval page.
+- **Both trials stopped in under half a minute, as told to**: the repository was cloned,
+  the skill read, `pnpm install` took 8 seconds (pnpm 11.8.0 on Node 22.23.4, with a
+  warning that the project wants Node 26), the site was reached, and the desk answered 401.
+  So the cloud setup works up to the token, which is not arriving or is not the right one.
+- The desk now says which (`reason`: `no_token` or `wrong_token`), and the tool repeats
+  it, so the next trial names the cause.
+- Not done: no question has been drafted yet. Waiting on the token being put right in the
+  cloud environment (a network secret, or `SOCCERSENSE_ADMIN_TOKEN` as a variable).
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

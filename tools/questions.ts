@@ -174,8 +174,16 @@ async function desk(route: string, init: RequestInit = {}): Promise<Response> {
     },
   });
   if (response.status === 401) {
+    let reason = "";
+    try {
+      reason = ((await response.json()) as { reason?: string }).reason ?? "";
+    } catch {
+      // an answer with no reason in it
+    }
     throw new Error(
-      "the desk turned the request away (401): set SOCCERSENSE_ADMIN_TOKEN, or give the cloud environment a Bearer network secret for the site",
+      reason === "wrong_token"
+        ? "the desk turned the request away (401, wrong token): a token arrived, but it is not the one set as ADMIN_TOKEN on the Worker in Cloudflare. The value saved in the cloud environment's network secret (or in SOCCERSENSE_ADMIN_TOKEN) does not match it"
+        : "the desk turned the request away (401, no token): no token arrived. Set SOCCERSENSE_ADMIN_TOKEN, or give the cloud environment a Bearer network secret for the site",
     );
   }
   if (response.status === 503) {

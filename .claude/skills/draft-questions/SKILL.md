@@ -22,8 +22,9 @@ drafts, and never print, echo or store a token.
    `places` (each a day, a mode and a slot 0 to 6 that is `empty` or `rejected`, with the
    reviewer's reason and the question that was turned down) and `used` (every question
    asked in the last 90 days and already drafted for the days ahead).
-   - A 401 means the desk's token is not reaching it: say so and stop. The token is added
-     to requests by the environment (a network secret for soccersense.io) or by the
+   - A 401 means the desk's token is not reaching it: say so, with the tool's own words
+     (it says whether no token arrived or a wrong one), and stop. The token is added to
+     requests by the environment (a network secret for soccersense.io) or by the
      `SOCCERSENSE_ADMIN_TOKEN` variable. Do not look for it or ask for it.
    - No places: say the week is fully drafted, and stop.
 3. Work one game at a time (a day and mode: up to seven places), earliest day first. For

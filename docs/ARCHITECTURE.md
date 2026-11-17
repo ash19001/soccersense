@@ -399,7 +399,13 @@ Built:
   - Drafts are written to `.drafts/`, which git ignores: they are never committed, so the
     answers to coming days are not in the repository.
 
-Not built yet: the routine itself (it needs the product owner's environment set up), and the game playing what is scheduled when the
+- **The routine** is "soccersense: draft the week's questions" on the product owner's
+  Claude account: every Sunday at 03:17 UTC, in the Default cloud environment, with no
+  connectors, its prompt telling the session to follow the skill. Its model is to be chosen
+  after a trial of Sonnet 5.5 and Opus 5.5 on different days (the product owner: "for the
+  initial run can you do both so i can assess quality of both outputs then decide").
+
+Still to do there: a trial run that gets past the desk (see docs/PROGRESS.md), and the game playing what is scheduled when the
 `QUESTIONS` flag says so (with games run by the server).
 
 ### What still stands in for the backend

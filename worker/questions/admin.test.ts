@@ -86,6 +86,11 @@ describe("who may use the desk", () => {
     for (const token of [null, "", "wrong", TOKEN.slice(0, -1), `${TOKEN}x`]) {
       const response = await call("/questions?from=1", { token });
       expect(response.status, String(token)).toBe(401);
+      // and it is told which: no token came, or one that is not the desk's
+      expect(await response.json()).toEqual({
+        error: "unauthorized",
+        reason: token ? "wrong_token" : "no_token",
+      });
     }
     expect((await call("/questions?from=1")).status).toBe(200);
     // and nothing was written by the ones turned away

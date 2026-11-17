@@ -13,6 +13,10 @@
  *                                                  reject, send back to draft, or put a
  *                                                  corrected question in its place
  *
+ * A request without the token is answered 401 with a `reason`: `no_token` (no
+ * `Authorization: Bearer ...` header came) or `wrong_token` (one came that is not the
+ * desk's).
+ *
  * Every question is checked on its way in and again as it is approved (`checkQuestion`):
  * nothing unfit is stored, and nothing is approved that would not play.
  */
@@ -101,7 +105,18 @@ export async function admin(
   if ((env.ADMIN_TOKEN ?? "").length < MIN_TOKEN) {
     return failure("admin_not_set_up", 503, now);
   }
-  if (!(await isAdmin(request, env))) return failure("unauthorized", 401, now);
+  if (!(await isAdmin(request, env))) {
+    // Which it was, for whoever is setting a caller up: nothing is given away, since the
+    // caller knows whether it sent one.
+    const sent = /^Bearer\s+\S+$/i.test(
+      request.headers.get("authorization") ?? "",
+    );
+    return json(
+      { error: "unauthorized", reason: sent ? "wrong_token" : "no_token" },
+      now,
+      { status: 401 },
+    );
+  }
   if (!env.DB) return failure("no_database", 503, now);
   const db = env.DB;
   await database(db, now);
