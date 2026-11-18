@@ -120,6 +120,21 @@ export async function handle(
     if (route === "/games" || route.startsWith("/games/")) {
       // An account's game is kept in the database; anyone else keeps their own.
       const player = await signedIn(request, env, now);
+      // A script sending moves over and over: stopped for the rest of the minute. Counted
+      // in Cloudflare's memory, never kept. An account is counted by itself (players who
+      // share a connection, at a school or behind a phone network, are not added up),
+      // anyone else by their connection.
+      if (env.GAME_LIMIT) {
+        const key = player
+          ? `account:${player.id}`
+          : `address:${request.headers.get("cf-connecting-ip") ?? "unknown"}`;
+        const { success } = await env.GAME_LIMIT.limit({ key });
+        if (!success) {
+          const refused = failure("too_many", 429, now);
+          refused.headers.set("retry-after", "60");
+          return refused;
+        }
+      }
       return await games(
         request,
         env,

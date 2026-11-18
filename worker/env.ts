@@ -87,6 +87,11 @@ export interface Env {
   /** How often one connection may ask for a sign-in link (wrangler.jsonc, `ratelimits`). */
   SIGN_IN_LIMIT?: RateLimit;
   /**
+   * How many requests to `/api/games` one player may send in a minute (wrangler.jsonc,
+   * `ratelimits`): an account counted by itself, anyone else by their connection.
+   */
+  GAME_LIMIT?: RateLimit;
+  /**
    * The bot check on asking for a sign-in link (Cloudflare Turnstile; worker/accounts/
    * check.ts): the widget's site key (not a secret: `vars` in wrangler.jsonc) and its
    * secret key (a secret the product owner sets in Cloudflare). Without both, there is no

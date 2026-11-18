@@ -972,6 +972,14 @@ section 8 has both ("How HOME's and AWAY's shares are worked out", "Moderation")
 - Not built with it: logging the answers the judge does not know, and the day's final counts
   feeding the next outing's foundation.
 
+## A limit on the games' moves (2026-11-18)
+
+The product owner: "yes build the rate limit". `GAME_LIMIT` (`wrangler.jsonc`): 120
+requests to `/api/games` a minute per player, an account counted by itself and anyone else
+by their connection, in Cloudflare's memory and never stored. A refused move is a 429 with
+`retry-after: 60`, which the page already treats as the server out of reach: it asks again
+until the minute is up. Checked by `worker/app.test.ts` and `app/routes/hosting.test.ts`.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

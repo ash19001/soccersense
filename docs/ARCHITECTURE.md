@@ -774,6 +774,15 @@ senstive secrets anywhere public". What is so, and how it was checked:
   `Origin` a browser adds), and no API answer can be read by another site's script (no
   CORS headers). "A developer's own machine" (the link written to the log; any origin
   taken) is plain HTTP to this machine's own address only, never the live site.
+- **Limits** (`ratelimits` in `wrangler.jsonc`, Cloudflare's own counters, kept in memory
+  for a minute and never stored): 5 sign-in links a minute per connection
+  (`SIGN_IN_LIMIT`), and 120 moves of the games a minute per player (`GAME_LIMIT`, added
+  2026-11-18 at the product owner's word: "yes build the rate limit"), an account counted
+  by itself and anyone else by their connection. A game is about 16 requests, so only a
+  script comes near it. A refused move is answered 429 with `retry-after: 60`; the page
+  takes it as the server out of reach and asks again (after 0.5, 1, 2, 4, then every 8
+  seconds), so a player behind a busy shared connection carries on within the minute. The
+  rest of the API is not counted.
 - **Still to know:** commits carry the author's own email address, which a public GitHub
   repository shows (GitHub can give a private `noreply` address instead).
 

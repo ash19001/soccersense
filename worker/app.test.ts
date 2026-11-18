@@ -18,6 +18,7 @@ import {
 import type { Env } from "./env";
 import { SERVER_TIME_HEADER } from "./http";
 import { memoryD1 } from "./testing/d1";
+import { type TestSite, testSite } from "./testing/site";
 
 /** Noon on the game's eighth day: 2026-11-17. */
 const NOON = EPOCH_UTC + 7 * MS_PER_DAY + MS_PER_DAY / 2;
@@ -261,5 +262,86 @@ describe("the database's migrations", () => {
     await expect(database(broken, NOON)).rejects.toThrow();
     await expect(database(broken, NOON)).rejects.toThrow();
     db.close();
+  });
+});
+
+describe("the limit on the games' moves", () => {
+  /** Cloudflare's limit, standing in: each key may send `most` requests. */
+  function limit(most: number) {
+    const seen = new Map<string, number>();
+    return {
+      seen,
+      GAME_LIMIT: {
+        limit: async ({ key }: { key: string }) => {
+          seen.set(key, (seen.get(key) ?? 0) + 1);
+          return { success: (seen.get(key) ?? 0) <= most };
+        },
+      },
+    };
+  }
+
+  const start = (site: TestSite, address: string) =>
+    site.fetch("/api/games/home/start", {
+      method: "POST",
+      headers: {
+        "cf-connecting-ip": address,
+        "content-type": "application/json",
+      },
+      body: "{}",
+    });
+
+  test("a connection sending moves over and over is refused for the minute, and told so", async () => {
+    const { GAME_LIMIT, seen } = limit(3);
+    const site = testSite({ GAME_LIMIT });
+    try {
+      const statuses: number[] = [];
+      let last: Response | null = null;
+      for (let i = 0; i < 4; i++) {
+        last = await start(site, "203.0.113.7");
+        statuses.push(last.status);
+      }
+      expect(statuses).toEqual([200, 200, 200, 429]);
+      expect(last?.headers.get("retry-after")).toBe("60");
+      expect(await last?.json()).toEqual({ error: "too_many" });
+      // another connection is not held up
+      expect((await start(site, "198.51.100.2")).status).toBe(200);
+      expect([...seen.keys()]).toEqual([
+        "address:203.0.113.7",
+        "address:198.51.100.2",
+      ]);
+    } finally {
+      site.close();
+    }
+  });
+
+  test("an account is counted by itself, not with the others on its connection", async () => {
+    const { GAME_LIMIT, seen } = limit(3);
+    const site = testSite({ GAME_LIMIT });
+    try {
+      await site.signIn("fan@example.com");
+      for (let i = 0; i < 3; i++) {
+        expect((await start(site, "203.0.113.7")).status).toBe(200);
+      }
+      site.cookies.clear();
+      expect((await start(site, "203.0.113.7")).status).toBe(200);
+      const keys = [...seen.keys()];
+      expect(keys).toHaveLength(2);
+      expect(keys[0]).toMatch(/^account:[0-9a-f-]{36}$/);
+      expect(keys[1]).toBe("address:203.0.113.7");
+    } finally {
+      site.close();
+    }
+  });
+
+  test("the rest of the API is not counted by it", async () => {
+    const { GAME_LIMIT, seen } = limit(0);
+    const site = testSite({ GAME_LIMIT });
+    try {
+      expect((await site.fetch("/api/today")).status).toBe(200);
+      expect((await site.fetch("/api/leaderboard")).status).toBe(200);
+      expect(seen.size).toBe(0);
+    } finally {
+      site.close();
+    }
   });
 });

@@ -40,6 +40,14 @@
       "name": "SIGN_IN_LIMIT",
       "namespace_id": "1001",
       "simple": { "limit": 5, "period": 60 }
+    },
+    // How many moves of the games one player may send: 120 a minute (worker/app.ts). An
+    // account is counted by itself, anyone else by their connection. A whole game is about
+    // 16 requests, so only a script comes near it.
+    {
+      "name": "GAME_LIMIT",
+      "namespace_id": "1002",
+      "simple": { "limit": 120, "period": 60 }
     }
   ],
   // The secrets are not here and never will be: the product owner puts them in the

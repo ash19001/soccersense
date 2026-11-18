@@ -61,14 +61,22 @@ describe("hosting on Cloudflare", () => {
     expect(config.vars?.MAIL_FROM).toMatch(
       /^soccersense <[a-z]+@soccersense\.io>$/,
     );
-    // how often one connection may ask for a sign-in link (worker/env.ts, SIGN_IN_LIMIT)
+    // how often one connection may ask for a sign-in link (worker/env.ts, SIGN_IN_LIMIT),
+    // and how many moves of the games one player may send (GAME_LIMIT)
     expect(config.ratelimits).toEqual([
       {
         name: "SIGN_IN_LIMIT",
         namespace_id: expect.stringMatching(/^\d+$/),
         simple: { limit: 5, period: 60 },
       },
+      {
+        name: "GAME_LIMIT",
+        namespace_id: expect.stringMatching(/^\d+$/),
+        simple: { limit: 120, period: 60 },
+      },
     ]);
+    // each its own counter
+    expect(new Set(config.ratelimits?.map((r) => r.namespace_id)).size).toBe(2);
     // nothing in the file but these settings: every key and token that is secret is a
     // secret in Cloudflare, never in the repository. The bot check's site key and Google's
     // client id are not secret (every page that shows the check, and every link to Google's
