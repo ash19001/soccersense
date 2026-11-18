@@ -33,6 +33,11 @@ export interface Account {
   nickname: string;
   createdAt: number;
   updatedAt: number;
+  /**
+   * When the admin took the account off the leaderboards (./moderation.ts), or null. It
+   * still plays; its games are on no board and its answers are not counted.
+   */
+  bannedAt: number | null;
 }
 
 interface Stored {
@@ -42,6 +47,7 @@ interface Stored {
   nickname: string;
   created_at: number;
   updated_at: number;
+  banned_at?: number | null;
 }
 
 const toAccount = (row: Stored): Account => ({
@@ -51,6 +57,7 @@ const toAccount = (row: Stored): Account => ({
   nickname: row.nickname,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
+  bannedAt: row.banned_at ?? null,
 });
 
 const one = async (
@@ -103,6 +110,7 @@ export async function createAccount(
       nickname: fanNickname(await nextFanNumber(db)),
       createdAt: at,
       updatedAt: at,
+      bannedAt: null,
     };
     const done = await db
       .prepare(
@@ -170,16 +178,18 @@ export async function rename(
 /** Takes an account away with everything kept for it: its games, its devices, its links. */
 export async function deleteAccount(db: D1, account: Account): Promise<void> {
   await db.batch([
-    // Its games come off the boards' counts first (one game a day and mode each).
+    // Its games come off the boards' counts first (one game a day and mode each), unless
+    // they came off when it was taken off the leaderboards.
     db
       .prepare(
         `UPDATE board_tally SET players = players - 1
-         WHERE (day, mode, total) IN (
-           SELECT day, mode, total FROM games
-           WHERE player_id = ? AND origin = 'server' AND finished_at IS NOT NULL
-         )`,
+         WHERE (SELECT banned_at FROM accounts WHERE id = ?) IS NULL
+           AND (day, mode, total) IN (
+             SELECT day, mode, total FROM games
+             WHERE player_id = ? AND origin = 'server' AND finished_at IS NOT NULL
+           )`,
       )
-      .bind(account.id),
+      .bind(account.id, account.id),
     db.prepare("DELETE FROM board_tally WHERE players <= 0"),
     db.prepare("DELETE FROM games WHERE player_id = ?").bind(account.id),
     db.prepare("DELETE FROM sessions WHERE account_id = ?").bind(account.id),

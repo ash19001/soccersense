@@ -13,6 +13,8 @@
  *                                                  reject, send back to draft, or put a
  *                                                  corrected question in its place
  *
+ * The same token opens moderation, `/api/admin/players` (../accounts/moderation.ts).
+ *
  * A request without the token is answered 401 with a `reason`: `no_token` (no
  * `Authorization: Bearer ...` header came) or `wrong_token` (one came that is not the
  * desk's).
@@ -24,6 +26,7 @@
 import { checkQuestion } from "~/game/check";
 import type { Mode } from "~/game/types";
 
+import { players } from "../accounts/moderation";
 import { database } from "../db/migrate";
 import type { Env } from "../env";
 import { failure, json, wrongMethod } from "../http";
@@ -120,6 +123,11 @@ export async function admin(
   if (!env.DB) return failure("no_database", 503, now);
   const db = env.DB;
   await database(db, now);
+
+  // Moderation: the players with accounts (../accounts/moderation.ts).
+  if (route === "/admin/players" || route.startsWith("/admin/players/")) {
+    return players(request, db, now, route);
+  }
 
   if (route === "/admin/questions") {
     const wrong = wrongMethod(request, ["GET", "PUT"], now);

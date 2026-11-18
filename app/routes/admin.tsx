@@ -1,6 +1,7 @@
 // The approval desk: the product owner's page for the day's questions (docs/ARCHITECTURE.md
 // section 8). A week's drafts arrive in the database; here each is looked at, approved,
 // rejected with a reason, or put right, through the admin API (worker/questions/admin.ts).
+// Its other tab is moderation: the players with accounts (./admin-players.tsx).
 //
 // Not a page for players, and not in the game's skin: it is a working tool with long tables
 // of answers to read, so it is plain and legible (system type, no pixel fonts). It asks not
@@ -21,6 +22,7 @@ import {
 import { MODES, type Mode, type Question, SHOT_ORDER, dayKeyFor } from "~/game";
 import { strings } from "~/i18n";
 import type { Route } from "./+types/admin";
+import { Players } from "./admin-players";
 
 const text = strings.admin;
 const TOKEN_KEY = "soccersense:admin-token";
@@ -119,6 +121,8 @@ export default function Admin() {
   const [picked, setPicked] = useState<{ day: number; mode: Mode } | null>(
     null,
   );
+  const [view, setView] = useState<"questions" | "players">("questions");
+  const failed = useCallback(() => setMessage(text.failed), []);
 
   const signOut = useCallback((why = "") => {
     writeToken(null);
@@ -283,156 +287,192 @@ export default function Admin() {
     <main className="min-h-screen bg-slate-50 p-4 font-sans text-slate-900 sm:p-6">
       <div className="mx-auto max-w-5xl space-y-4">
         <header className="flex flex-wrap items-center gap-2">
-          <h1 className="mr-auto text-2xl font-semibold">{text.title}</h1>
-          <button
-            type="button"
-            className={button}
-            disabled={busy || from === null || from <= 1}
-            onClick={() => from !== null && void load(Math.max(1, from - DAYS))}
-          >
-            {text.earlier}
-          </button>
-          <button
-            type="button"
-            className={button}
-            disabled={busy || today === null}
-            onClick={() => today !== null && void load(today)}
-          >
-            {text.thisWeek}
-          </button>
-          <button
-            type="button"
-            className={button}
-            disabled={busy || from === null}
-            onClick={() => from !== null && void load(from + DAYS)}
-          >
-            {text.later}
-          </button>
+          <h1 className="mr-auto text-2xl font-semibold">
+            {view === "players" ? text.players.title : text.title}
+          </h1>
+          {view === "questions" && (
+            <>
+              <button
+                type="button"
+                className={button}
+                disabled={busy || from === null || from <= 1}
+                onClick={() =>
+                  from !== null && void load(Math.max(1, from - DAYS))
+                }
+              >
+                {text.earlier}
+              </button>
+              <button
+                type="button"
+                className={button}
+                disabled={busy || today === null}
+                onClick={() => today !== null && void load(today)}
+              >
+                {text.thisWeek}
+              </button>
+              <button
+                type="button"
+                className={button}
+                disabled={busy || from === null}
+                onClick={() => from !== null && void load(from + DAYS)}
+              >
+                {text.later}
+              </button>
+            </>
+          )}
           <button type="button" className={button} onClick={() => signOut()}>
             {text.signOut}
           </button>
         </header>
-        <p className="text-sm text-slate-600">{text.intro}</p>
+        <nav className="flex gap-1 border-b border-slate-300">
+          {(["questions", "players"] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              aria-pressed={view === tab}
+              onClick={() => setView(tab)}
+              className={`-mb-px rounded-t border px-3 py-1.5 text-sm font-medium ${view === tab ? "border-slate-300 border-b-slate-50 bg-slate-50 text-slate-900" : "border-transparent text-slate-600 hover:text-slate-900"}`}
+            >
+              {text.tabs[tab]}
+            </button>
+          ))}
+        </nav>
         {message && (
           <p role="alert" className="text-sm text-rose-700">
             {message}
           </p>
         )}
-        {from === null ? (
-          <p>{text.loading}</p>
+        {view === "players" ? (
+          <Players ask={ask} failed={failed} />
         ) : (
-          <table className="w-full border-collapse bg-white text-sm shadow-sm">
-            <thead>
-              <tr className="bg-slate-100 text-left">
-                <th className="border border-slate-200 p-2">
-                  {text.dayColumn}
-                </th>
-                {MODES.map((mode) => (
-                  <th key={mode} className="border border-slate-200 p-2">
-                    {strings.home.modes[mode].label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: DAYS }, (_, i) => from + i).map((day) => (
-                <tr key={day}>
-                  <th className="border border-slate-200 p-2 text-left font-medium">
-                    {dayLabel(day, today)}
-                  </th>
-                  {MODES.map((mode) => {
-                    const mine = slots.filter(
-                      (s) => s.day === day && s.mode === mode,
-                    );
-                    const count = (status: Status) =>
-                      mine.filter((s) => s.status === status).length;
-                    const approved = count("approved");
-                    const on = picked?.day === day && picked.mode === mode;
-                    return (
-                      <td key={mode} className="border border-slate-200 p-0">
-                        <button
-                          type="button"
-                          aria-pressed={on}
-                          onClick={() => setPicked({ day, mode })}
-                          className={`block w-full p-2 text-left hover:bg-slate-100 ${on ? "bg-sky-100" : ""}`}
-                        >
-                          {approved === PLACES ? (
-                            <span className="font-medium text-emerald-800">
-                              {text.scheduled}
-                            </span>
-                          ) : mine.length === 0 ? (
-                            <span className="text-slate-400">
-                              {text.nothing}
-                            </span>
-                          ) : (
-                            <>
-                              {text.counts(
-                                approved,
-                                count("draft"),
-                                count("rejected"),
-                              )}
-                              {mine.length < PLACES && (
-                                <span className="text-slate-400">
-                                  {`, ${text.missing(PLACES - mine.length)}`}
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </button>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+          <>
+            <p className="text-sm text-slate-600">{text.intro}</p>
+            {from === null ? (
+              <p>{text.loading}</p>
+            ) : (
+              <table className="w-full border-collapse bg-white text-sm shadow-sm">
+                <thead>
+                  <tr className="bg-slate-100 text-left">
+                    <th className="border border-slate-200 p-2">
+                      {text.dayColumn}
+                    </th>
+                    {MODES.map((mode) => (
+                      <th key={mode} className="border border-slate-200 p-2">
+                        {strings.home.modes[mode].label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: DAYS }, (_, i) => from + i).map(
+                    (day) => (
+                      <tr key={day}>
+                        <th className="border border-slate-200 p-2 text-left font-medium">
+                          {dayLabel(day, today)}
+                        </th>
+                        {MODES.map((mode) => {
+                          const mine = slots.filter(
+                            (s) => s.day === day && s.mode === mode,
+                          );
+                          const count = (status: Status) =>
+                            mine.filter((s) => s.status === status).length;
+                          const approved = count("approved");
+                          const on =
+                            picked?.day === day && picked.mode === mode;
+                          return (
+                            <td
+                              key={mode}
+                              className="border border-slate-200 p-0"
+                            >
+                              <button
+                                type="button"
+                                aria-pressed={on}
+                                onClick={() => setPicked({ day, mode })}
+                                className={`block w-full p-2 text-left hover:bg-slate-100 ${on ? "bg-sky-100" : ""}`}
+                              >
+                                {approved === PLACES ? (
+                                  <span className="font-medium text-emerald-800">
+                                    {text.scheduled}
+                                  </span>
+                                ) : mine.length === 0 ? (
+                                  <span className="text-slate-400">
+                                    {text.nothing}
+                                  </span>
+                                ) : (
+                                  <>
+                                    {text.counts(
+                                      approved,
+                                      count("draft"),
+                                      count("rejected"),
+                                    )}
+                                    {mine.length < PLACES && (
+                                      <span className="text-slate-400">
+                                        {`, ${text.missing(PLACES - mine.length)}`}
+                                      </span>
+                                    )}
+                                  </>
+                                )}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            )}
 
-        {!picked ? (
-          from !== null && <p className="text-sm text-slate-600">{text.pick}</p>
-        ) : (
-          <section className="space-y-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="mr-auto text-xl font-semibold">
-                {text.game(
-                  strings.home.modes[picked.mode].label,
-                  dayLabel(picked.day, today),
-                )}
-              </h2>
-              <button
-                type="button"
-                className={primary}
-                disabled={busy || !game.some((s) => s.status === "draft")}
-                onClick={async () => {
-                  for (const slot of game) {
-                    if (slot.status === "draft") {
-                      await change(slot, { status: "approved" });
-                    }
-                  }
-                }}
-              >
-                {text.approveAll}
-              </button>
-            </div>
-            {Array.from({ length: PLACES }, (_, place) => {
-              const slot = game.find((s) => s.slot === place);
-              return slot ? (
-                <Place
-                  key={`${slot.day}-${slot.mode}-${place}-${slot.updatedAt}`}
-                  slot={slot}
-                  busy={busy}
-                  change={change}
-                />
-              ) : (
-                <article
-                  key={place}
-                  className="rounded border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500"
-                >
-                  <strong>{text.place(place + 1)}</strong>: {text.emptyPlace}
-                </article>
-              );
-            })}
-          </section>
+            {!picked ? (
+              from !== null && (
+                <p className="text-sm text-slate-600">{text.pick}</p>
+              )
+            ) : (
+              <section className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="mr-auto text-xl font-semibold">
+                    {text.game(
+                      strings.home.modes[picked.mode].label,
+                      dayLabel(picked.day, today),
+                    )}
+                  </h2>
+                  <button
+                    type="button"
+                    className={primary}
+                    disabled={busy || !game.some((s) => s.status === "draft")}
+                    onClick={async () => {
+                      for (const slot of game) {
+                        if (slot.status === "draft") {
+                          await change(slot, { status: "approved" });
+                        }
+                      }
+                    }}
+                  >
+                    {text.approveAll}
+                  </button>
+                </div>
+                {Array.from({ length: PLACES }, (_, place) => {
+                  const slot = game.find((s) => s.slot === place);
+                  return slot ? (
+                    <Place
+                      key={`${slot.day}-${slot.mode}-${place}-${slot.updatedAt}`}
+                      slot={slot}
+                      busy={busy}
+                      change={change}
+                    />
+                  ) : (
+                    <article
+                      key={place}
+                      className="rounded border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500"
+                    >
+                      <strong>{text.place(place + 1)}</strong>:{" "}
+                      {text.emptyPlace}
+                    </article>
+                  );
+                })}
+              </section>
+            )}
+          </>
         )}
       </div>
     </main>

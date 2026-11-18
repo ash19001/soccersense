@@ -36,6 +36,10 @@ answered by `worker/` with a D1 database. A push to `main` deploys it.
   server's. A game a device sent up (`games.origin = 'device'`) never counts on a
   leaderboard. The leaderboards are the server's (`GET /api/leaderboard`): accounts only;
   a player with no account is told where they would have placed, worked out on their page.
+  The admin can rename, take off the leaderboards, or delete an account (`/admin`, Players).
+- HOME's and AWAY's shares move with the day: each question's natural shares blended with
+  the answers accounts gave it that day (`~/game/day-shares`, `worker/games/shares.ts`).
+  Everyone is scored on the blend; only accounts' answers are counted.
 - Question data is a built-in sample in `app/data`, and stays what the game plays until the
   `QUESTIONS` flag (`wrangler.jsonc`) is switched: the game is still in testing.
 - The server runs every game (`worker/games`): it sends a question as its clock starts,

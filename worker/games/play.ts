@@ -38,6 +38,11 @@
  * A ticket can be sent again, because the server does not remember it; what comes of that
  * never leaves the player's own device. So only accounts are on the leaderboards, and a
  * player with no account is told where their total would have placed.
+ *
+ * **HOME's and AWAY's shares move with the day** (~/game/day-shares): the question being
+ * asked is scored on its natural shares blended with the answers accounts have given it
+ * so far that day (./shares.ts), for every player alike. A score is the player's as they
+ * answer: the turn keeps it, and nothing is scored again later.
  */
 
 import { STADIUMS } from "~/data";
@@ -48,6 +53,7 @@ import {
   snapshotOf,
   storedQuestions,
 } from "~/game/served";
+import { scoredToday, sharesMove } from "~/game/day-shares";
 import {
   PASS_AFTER_MS,
   type Rejection,
@@ -62,6 +68,7 @@ import type { D1, Env } from "../env";
 import { failure, json, wrongMethod } from "../http";
 import { QUESTION_MODES } from "../questions/store";
 import { type DayQuestions, questionsOn } from "./questions";
+import { type CountedAnswer, dayCounts } from "./shares";
 import type { GameState } from "./state";
 import { deleteGame, gameOf, insertGame, updateGame } from "./store";
 import { MAX_TICKET, seal, ticketKey, unseal } from "./ticket";
@@ -102,13 +109,16 @@ interface Keeper {
   /**
    * The game after a move. False if it had been moved on meanwhile: nothing is kept.
    * `prompts`: what the questions asked, once the game is decided. `decided`: this move
-   * decided it (an account's game is then counted on the day's board).
+   * decided it (an account's game is then counted on the day's board). `answer`: the
+   * answer this move decided, in HOME or AWAY (an account's is counted for the day's
+   * shares).
    */
   save(
     state: GameState,
     was: { index: number; phase: ServedPhase },
     prompts: readonly string[] | null,
     decided: boolean,
+    answer: CountedAnswer | null,
   ): Promise<boolean>;
   /** Takes away a game that cannot be carried on. */
   remove(state: GameState): Promise<void>;
@@ -132,13 +142,29 @@ function ticketKeeper(
   };
 }
 
-/** An account: the game is a row in the database. */
-function rowKeeper(db: D1, account: string, mode: Mode): Keeper {
+/**
+ * An account: the game is a row in the database. `counted`: its games go on the boards
+ * and its answers into the day's shares; false for an account taken off the leaderboards
+ * (../accounts/moderation.ts), which still plays.
+ */
+function rowKeeper(
+  db: D1,
+  account: string,
+  mode: Mode,
+  counted: boolean,
+): Keeper {
   return {
     load: (day) => gameOf(db, { playerId: account, day, mode }),
     create: (state) => insertGame(db, { ...state, playerId: account }),
-    save: (state, was, prompts, decided) =>
-      updateGame(db, { ...state, playerId: account }, was, prompts, decided),
+    save: (state, was, prompts, decided, answer) =>
+      updateGame(
+        db,
+        { ...state, playerId: account },
+        was,
+        prompts,
+        decided && counted,
+        counted ? answer : null,
+      ),
     remove: (state) =>
       deleteGame(db, { playerId: account, day: state.day, mode }),
     hand: async () => null,
@@ -196,6 +222,49 @@ function stateAfter(
     deadline: phase === "asking" ? session.deadline : null,
     updatedAt: now,
     finishedAt: state.finishedAt ?? (decided ? now : null),
+  };
+}
+
+/**
+ * The game with the question in hand as it is scored now: in HOME and AWAY, its shares
+ * blended with the day's answers so far (~/game/day-shares). Asked for while the question
+ * is being asked (to score an answer) and at its reveal (to show the table).
+ */
+async function withTheDay(db: D1, held: Held, now: number): Promise<Held> {
+  const { session } = held;
+  if (!sharesMove(session.mode)) return held;
+  if (session.phase !== "asking" && session.phase !== "reveal") return held;
+  const question = session.questions[session.index];
+  // A finished game held with only what its turns say has no answers to score.
+  if (!question || question.answers.length === 0) return held;
+  const counts = await dayCounts(
+    db,
+    session.dayNumber,
+    session.mode,
+    question.id,
+    now,
+  );
+  const scored = scoredToday(question, counts);
+  if (scored === question) return held;
+  const questions = [...session.questions];
+  questions[session.index] = scored;
+  return { state: held.state, session: { ...session, questions } };
+}
+
+/**
+ * The answer a move decided, to count for the day's shares: the new turn's, in HOME or
+ * AWAY, where the judge accepted one (not a pass or a time-up).
+ */
+function answerDecided(before: Session, after: Session): CountedAnswer | null {
+  if (!sharesMove(after.mode)) return null;
+  if (after.turns.length <= before.turns.length) return null;
+  const turn = after.turns[before.turns.length];
+  if (!turn || turn.answerId === null) return null;
+  return {
+    day: after.dayNumber,
+    mode: after.mode,
+    questionId: turn.questionId,
+    answerId: turn.answerId,
   };
 }
 
@@ -258,7 +327,8 @@ async function bodyOf(request: Request): Promise<MoveBody | null> {
 /**
  * Answers a request under `/api/games`. `route` is the path after `/api`. `account` is
  * the id of the signed-in player's account, whose games are kept in the database; null
- * is a player with no account, who keeps their own.
+ * is a player with no account, who keeps their own. `counted`: an account's games go on
+ * the boards and its answers into the day's shares (false: taken off the leaderboards).
  */
 export async function games(
   request: Request,
@@ -266,6 +336,7 @@ export async function games(
   now: number,
   route: string,
   account: string | null = null,
+  counted = true,
 ): Promise<Response> {
   const [, modeName, moveName, ...rest] = route.split("/").filter(Boolean);
   const mode = QUESTION_MODES.find((m) => m === modeName);
@@ -282,7 +353,7 @@ export async function games(
 
   let keeper: Keeper;
   if (account !== null) {
-    keeper = rowKeeper(db, account, mode);
+    keeper = rowKeeper(db, account, mode, counted);
   } else {
     const key = await ticketKey(db, now);
     const given =
@@ -317,6 +388,7 @@ export async function games(
       { index: held.state.index, phase: held.state.phase },
       prompts,
       held.state.finishedAt === null && state.finishedAt !== null,
+      answerDecided(held.session, session),
     );
     return kept ? { state, session } : null;
   };
@@ -328,8 +400,9 @@ export async function games(
     const state = await keeper.load(day);
     if (!state) return { held: null, stale: null };
     const set = await questionsOn(env, db, day, mode, now);
-    let held = hold(state, set);
-    if (!held) return { held: null, stale: state };
+    const kept = hold(state, set);
+    if (!kept) return { held: null, stale: state };
+    let held: Held | null = await withTheDay(db, kept, now);
     if (timedOut(held, now)) {
       const late = await write(
         held,

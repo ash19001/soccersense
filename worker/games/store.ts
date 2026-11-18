@@ -21,6 +21,7 @@ import type { Turn } from "~/game/session";
 import type { Mode } from "~/game/types";
 
 import type { D1 } from "../env";
+import { type CountedAnswer, countAnswer } from "./shares";
 import type { GameState } from "./state";
 
 export interface GameKey {
@@ -105,9 +106,10 @@ export async function insertGame(db: D1, row: GameRow): Promise<boolean> {
  * False means another request moved it first (a second tab, a press sent twice): nothing
  * is written, and the caller reads the game again. `prompts`, once the game is decided:
  * what its questions asked, so another device can show it again. `decided`: this move
- * decided the game, so its total is counted on the day's board (`board_tally`), in the
- * same transaction and only if the game was written: a game is counted once, however many
- * requests carry its last move.
+ * decided the game, so its total is counted on the day's board (`board_tally`). `answer`:
+ * the answer this move decided, to be counted for the day's shares (./shares.ts). Both are
+ * counted in the same transaction as the move, and only if the move was written: once,
+ * however many requests carry it.
  */
 export async function updateGame(
   db: D1,
@@ -115,6 +117,7 @@ export async function updateGame(
   was: { index: number; phase: ServedPhase },
   prompts: readonly string[] | null = null,
   decided = false,
+  answer: CountedAnswer | null = null,
 ): Promise<boolean> {
   const update = db
     .prepare(
@@ -138,20 +141,27 @@ export async function updateGame(
       was.index,
       was.phase,
     );
-  if (!decided) {
+  if (!decided && answer === null) {
     const done = await update.run();
     return (done.meta.changes ?? 0) > 0;
   }
+  // Each count goes in only if the statement before it changed a row (`changes()`): the
+  // update, or the count before it, which went in only if the update did. An update that
+  // changed nothing counts nothing.
   const [done] = await db.batch([
     update,
-    // `changes()`: the rows the update above changed. None, and nothing is counted.
-    db
-      .prepare(
-        `INSERT INTO board_tally (day, mode, total, players)
-         SELECT ?, ?, ?, 1 WHERE changes() > 0
-         ON CONFLICT (day, mode, total) DO UPDATE SET players = players + 1`,
-      )
-      .bind(row.day, row.mode, row.total),
+    ...(answer === null ? [] : [countAnswer(db, answer)]),
+    ...(decided
+      ? [
+          db
+            .prepare(
+              `INSERT INTO board_tally (day, mode, total, players)
+               SELECT ?, ?, ?, 1 WHERE changes() > 0
+               ON CONFLICT (day, mode, total) DO UPDATE SET players = players + 1`,
+            )
+            .bind(row.day, row.mode, row.total),
+        ]
+      : []),
   ]);
   return (done.meta.changes ?? 0) > 0;
 }

@@ -157,6 +157,28 @@ export const MIGRATIONS: readonly Migration[] = [
         GROUP BY day, mode, total`,
     ],
   },
+  {
+    id: 6,
+    name: "HOME's and AWAY's answers counted for the day's shares; accounts taken off the leaderboards",
+    sql: [
+      // For each day, mode and question, how many accounts gave each answer the judge
+      // accepted (worker/games/shares.ts): it moves the answers' shares as the day goes
+      // (~/game/day-shares). Counts only: nothing says whose answer was whose.
+      `CREATE TABLE IF NOT EXISTS answer_tally (
+        day INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        question_id TEXT NOT NULL,
+        answer_id TEXT NOT NULL,
+        players INTEGER NOT NULL,
+        PRIMARY KEY (day, mode, question_id, answer_id)
+      )`,
+      // An account the admin has taken off the leaderboards (worker/accounts/moderation.ts):
+      // when, and the admin's note of why. It still plays; its games are on no board and
+      // its answers are not counted.
+      `ALTER TABLE accounts ADD COLUMN banned_at INTEGER`,
+      `ALTER TABLE accounts ADD COLUMN banned_note TEXT`,
+    ],
+  },
 ];
 
 /** The highest migration there is: what `migrate` brings a database to. */

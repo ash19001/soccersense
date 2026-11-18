@@ -301,8 +301,9 @@ It is being built a step at a time (the product owner, 2026-11-17: "how can we g
 starting to build the cloudflare backend for user auth, leaderboard, etc."), in this order:
 the API and its database; the day's questions, drafted, approved and scheduled; games run by
 the server (built, below); accounts (built, below: they came before the leaderboard, which
-now ranks only accounts); the leaderboards (built, below); then membership and the rest of
-the plan below.
+now ranks only accounts); the leaderboards (built, below); HOME's and AWAY's shares moving
+with the day's answers, and moderation (built 2026-11-18, below); then membership and the
+rest of the plan below.
 
 ### What is built (2026-11-17)
 
@@ -496,9 +497,8 @@ Known, and not in this step:
   player as 20 requests a day, which is about one game.
 
 - **Made-up games.** Nothing stops a script from playing as a player with no account, but
-  nothing comes of it: nothing is stored and nothing is counted. Before anything is counted
-  from such games (the answer shares, below), starting one needs the bot check and the limit
-  per address.
+  nothing comes of it: nothing is stored and nothing is counted. The day's answer counts
+  (below) are taken from accounts only, for this reason.
 - **Where a player with no account would have placed** is for the leaderboard step: their
   total against the accounts' totals of the day, said to them and not stored.
 
@@ -704,6 +704,34 @@ Known, and not in this step:
 - **Members' modes** (CLOSEST, FURTHEST, and the rest) will have boards of their own when
   they are built; the API already answers per mode.
 
+### Moderation (2026-11-18)
+
+The product owner: "build the admin action to remove players for moderation". It is a
+second tab on `/admin`, Players (`app/routes/admin-players.tsx`), behind the same admin
+token, and an API beside the desk's (`worker/accounts/moderation.ts`):
+
+- `GET /api/admin/players?q=` finds accounts by any part of their name or email address
+  (or their id), at most 25; with nothing given, the newest. Each with when it joined, its
+  games, the last day it played and whether it is on the leaderboards.
+- `POST /api/admin/players/<id>` with an `action`:
+  - `rename`: a new soccerfan name in place of theirs, for a name that breaks the terms.
+  - `ban`: **off the leaderboards**, with a note of why (`accounts.banned_at`,
+    `banned_note`, migration 6). The account still plays and keeps its games, streak and
+    stats; its games are on no board and out of the boards' counts (taken off in the same
+    transaction), its answers are not counted for the day's shares, and it is told where
+    it would have placed, as a player with no account is. Nothing on the page tells it why.
+  - `unban`: back on, with every game it has played through the server, those finished
+    while off too.
+  - `delete`: the account and everything kept for it, as the player can do themselves. An
+    account already off the boards is not taken off their counts twice.
+- The terms already allow each: "We may change a name that breaks this, or close the
+  account", and "We may remove scores or accounts that do". The privacy notice says a note
+  of when and why is kept with an account taken off.
+- The answers an account gave before it was taken off stay in the day's counts: they are
+  counts with nothing saying whose they were.
+- Checked by `worker/accounts/moderation.test.ts`, `app/routes/admin.test.tsx`, and on
+  Cloudflare's own engine through `wrangler dev`.
+
 ### Security (2026-11-17)
 
 The product owner: "ensure everything is secure so no jwt in headers or session cookies. no
@@ -773,8 +801,8 @@ These parts change as it arrives:
   right thing to identify a player behind the scenes (it is what anonymous sign-in gives), not
   to show: it is 36 characters.
 - **The questions and the answers: done** (above). They are in the Worker, not the page.
-- **The rest already noted elsewhere:** popularity shares are estimates until real answers are
-  counted (`shotsFor`, docs/data-notes/popularity.md); streaks, stats and the history are
+- **The rest already noted elsewhere:** popularity shares are estimates, the foundation that
+  the day's counted answers move (below; docs/data-notes/popularity.md); streaks, stats and the history are
   kept on the device for a player with no account, and are the account's for one who has one
   ("Accounts", above).
 - **The rendering rules** in CLAUDE.md (`ssr: false`, prerender, no `action`, `clientLoader`
@@ -818,9 +846,41 @@ Nothing of this is built yet ("Don't build it yet, just tell me").
   privacy, terms and refund pages; the ICO data protection fee if it applies. Each day needs its
   own questions before the leaderboard means anything.
 
-### How HOME's and AWAY's shares will be worked out (decided 2026-11-16)
+### How HOME's and AWAY's shares are worked out (decided 2026-11-16, built 2026-11-18)
 
-Not built. The question put to the product owner: should an answer's share (how common it is,
+Built on 2026-11-18 (the product owner: "you can proceed with the home and away scoring from
+what players type"), as below, with these choices made in the building:
+
+- **Whose answers are counted: accounts' only.** A player with no account is scored by the
+  same blend, but their answers are not counted. Their game is a ticket the server does not
+  remember, which can be sent again, so a script could count one answer as often as it
+  liked; counting them safely would need the server to remember their games, and nothing is
+  kept about a player with no account. Accounts play a day and mode once, and each move is
+  kept once. The day's weight grows with the accounts that play (`t` is small while there
+  are few), which is the rule working as meant.
+- **The counts are in D1**, not a Durable Object: `answer_tally` (migration 6), one row
+  per day, mode, question and answer, one more in the same transaction as the move that
+  decided it and only if that move was written (as the boards' counts are; checked on
+  Cloudflare's own engine). At 100,000 daily players in both modes that is about 1.4 million
+  rows written a day, within Workers Paid's 50 million a month. A Durable Object can take
+  it over if that ever stops being true.
+- **Each instance remembers a question's counts for ten seconds** (`COUNTS_KEPT_MS`), so
+  an answer is scored on counts at most that old and the database is not read for each one.
+- **The shots are filed again** from the blended shares by the mode's rule (`shotsFor`),
+  as every drafted question is. A sample answer whose shot was moved by eye goes back to
+  the rule once its question has counts.
+- **The reveal at the moment of answering** is the table the answer was scored on. Coming
+  back to a reveal later (a reload) shows the table as it is then, which can differ a
+  little; the score in the turn does not change.
+- **Not built with it:** logging what players type that the judge does not know, and the
+  final counts feeding the next outing's foundation.
+
+The code: the rule is `~/game/day-shares` (`scoredToday`, `blendShares`, `dayWeight`,
+`DAY_WEIGHT_MOST` 0.35, `DAY_WEIGHT_HALF` 300); the counts are `worker/games/shares.ts`;
+`worker/games/play.ts` scores the question in hand on them (`withTheDay`) and counts the
+answer a move decided (`answerDecided`).
+
+The decision, as it was written on 2026-11-16. The question put to the product owner: should an answer's share (how common it is,
 which is the whole score in HOME and AWAY) be counted from what players type that day, or be a
 fixed table of what fans say when they are not trying to be clever? Their answer: "a combo of
 both. perhaps what fans would naturally say have a strong foundation and the premise, then the
@@ -864,10 +924,11 @@ answers given that day also add weight to the scores".
   that was wrong.
 - **Not in this:** RETRO, NEXT-GEN, CLOSEST and FURTHEST are scored on years and distances,
   which are facts. Their tables never move.
-- **With it:** what players type that the judge does not know is logged (missing answers and
-  spellings show up in the first week), and starting a game needs a bot check (Cloudflare
-  Turnstile) and a limit per address, or made-up players could push an answer's share about.
-  The counts for a day and mode are kept in memory by one Durable Object and saved now and
-  then, not written to the database answer by answer.
-- **In the code today:** the game reads one number per answer (`Answer.popularity`, through
+- **With it** (as planned on 2026-11-16; as built, see above): what players type that the
+  judge does not know is logged (missing answers and spellings show up in the first week),
+  and starting a game needs a bot check (Cloudflare Turnstile) and a limit per address, or
+  made-up players could push an answer's share about. The counts for a day and mode are
+  kept in memory by one Durable Object and saved now and then, not written to the database
+  answer by answer.
+- **In the code:** the game reads one number per answer (`Answer.popularity`, through
   `rankAnswers`), so the blend is the server's: it sends the shares with each reveal.

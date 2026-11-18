@@ -947,6 +947,31 @@ leaderboards", has the design.
   made-up players are not in the production build.
 - Next in the order: membership (the product owner will choose Stripe or Paddle).
 
+## HOME's and AWAY's shares move with the day; moderation (2026-11-18)
+
+The product owner: "you can proceed with the home and away scoring from what players type.
+also you can build the admin action to remove players for moderation". ARCHITECTURE.md
+section 8 has both ("How HOME's and AWAY's shares are worked out", "Moderation").
+
+- **The shares.** A HOME or AWAY question is scored on its natural shares blended with the
+  answers accounts have given it that day: at most about a third, half that after 300
+  answers (`~/game/day-shares`). Every player is scored on the blend; only accounts' accepted
+  answers are counted (`answer_tally`, migration 6), once each, in the same transaction as
+  the move. A score is the player's as they answer.
+- **Moderation.** `/admin` has a Players tab: find an account by name or address, give it a
+  new soccerfan name, take it off the leaderboards with a note (it still plays) or put it
+  back, or delete it.
+- **The privacy notice** says answers are counted with nothing linking the count to the
+  player, and that a note is kept with an account taken off the leaderboards.
+- **Checked:** `pnpm check` (the count is in the commit); the Worker's tests (what is
+  counted and what is not, the blend for players with and without an account, the counts'
+  ten seconds, a score that does not change, every moderation action); the admin page's
+  tests; on Cloudflare's own engine through `wrangler dev` (an account's seven accepted
+  answers counted once each with its last answer sent twice, a player with no account not
+  counted, off the boards and back, AWAY not counted while off, a new name, deleted).
+- Not built with it: logging the answers the judge does not know, and the day's final counts
+  feeding the next outing's foundation.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to
@@ -958,8 +983,7 @@ leaderboards", has the design.
 - The interface kit has only been checked in Chrome.
 - Words painted into the stadium (banners and hoardings) are fixed English art, not text from
   `app/i18n`.
-- Sound: record the source and licence of the product owner's recordings in
-  `public/sounds/CREDITS.md`. If the idle juggling still sounds too present, lower
+- Sound: if the idle juggling still sounds too present, lower
   `JUGGLE_TOUCH` in `app/scenes/career.ts` from 0.15 to 0.08 (about 5.5 dB quieter).
 
 ## Working notes

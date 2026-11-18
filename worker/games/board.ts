@@ -5,7 +5,9 @@
  * 'server'`): a game a device sent up after signing in counts for the account's streak and
  * stats, never here; a player with no account is on no board, and is told where they would
  * have placed by their own page, from the counts this sends (`rankFor`, ~/game/board). Each
- * account has one game a day and mode, so the first is the one that counts.
+ * account has one game a day and mode, so the first is the one that counts. An account the
+ * admin took off the leaderboards (../accounts/moderation.ts) is on none, and is not in the
+ * counts.
  *
  * For each mode: the top ten (best first; equal totals share a place, the one who finished
  * first listed first), how many accounts finished on each total (`board_tally`, one more as
@@ -67,7 +69,7 @@ export async function leaderboard(
           `SELECT a.nickname AS name, g.total AS points, g.player_id = ? AS you
            FROM games g JOIN accounts a ON a.id = g.player_id
            WHERE g.day = ? AND g.mode = ? AND g.origin = 'server'
-             AND g.finished_at IS NOT NULL
+             AND g.finished_at IS NOT NULL AND a.banned_at IS NULL
            ORDER BY g.total DESC, g.finished_at ASC
            LIMIT ?`,
         )

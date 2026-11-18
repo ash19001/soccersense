@@ -1075,7 +1075,8 @@ export const en = {
           "the name the leaderboards show for you;",
           "your games: your answers and scores, including the games your device had played before you signed in, for your streak and stats;",
           "a record of each device you're signed in on;",
-          "the sign-in links we've emailed you.",
+          "the sign-in links we've emailed you;",
+          "if we take your name or scores off the leaderboards for breaking the terms, when and why.",
         ],
       },
       {
@@ -1083,6 +1084,7 @@ export const en = {
         paragraphs: [
           "To sign you in, keep your games and stats on every device, and show your name and scores on the leaderboards. We rely on providing the game you've asked for, and on our legitimate interest in keeping it fair and free of abuse.",
           "Other players see your name and your score on the leaderboards. They never see your email address.",
+          "Your answers in HOME and AWAY are also added to a count of how many players gave each answer that day, with nothing in the count linking it to you: it's how the game works out how common each answer is.",
         ],
       },
       {
@@ -1258,6 +1260,44 @@ export const en = {
       years: "Years",
       aliases: "Also accepted",
       place: "Place",
+    },
+    tabs: { questions: "Questions", players: "Players" },
+    /** Moderation: the players with accounts (worker/accounts/moderation.ts). */
+    players: {
+      title: "Players",
+      intro:
+        "Players with accounts. Find one by any part of their name or email address. Taking a player off the leaderboards keeps their account: they still play, but are on no board and their answers are not counted. The terms allow both: a name that breaks them can be changed, and scores or accounts can be removed.",
+      search: "Name or email address",
+      find: "Find",
+      newest: "The newest accounts:",
+      found: (n: number) =>
+        n === 1 ? "1 account found:" : `${n} accounts found:`,
+      none: "No account matches that.",
+      columns: {
+        name: "Name",
+        email: "Email",
+        joined: "Joined",
+        games: "Games",
+        lastPlayed: "Last played",
+        boards: "Leaderboards",
+        actions: "Actions",
+      },
+      on: "On",
+      off: (date: string) => `Off since ${date}`,
+      never: "Never",
+      rename: "New name",
+      renameHelp:
+        "Gives them a new soccerfan name in place of theirs. They can choose another later.",
+      ban: "Take off leaderboards",
+      banNote: "Why (kept with the account)",
+      banConfirm: "Take off",
+      unban: "Put back on leaderboards",
+      remove: "Delete account",
+      removeSure:
+        "Delete this account, its games and its sign-ins for good? This cannot be undone.",
+      removeConfirm: "Delete for good",
+      removed: (name: string) => `${name}'s account was deleted.`,
+      cancel: "Cancel",
     },
   },
 

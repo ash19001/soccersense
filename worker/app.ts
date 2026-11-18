@@ -120,11 +120,26 @@ export async function handle(
     if (route === "/games" || route.startsWith("/games/")) {
       // An account's game is kept in the database; anyone else keeps their own.
       const player = await signedIn(request, env, now);
-      return await games(request, env, now, route, player?.id ?? null);
+      return await games(
+        request,
+        env,
+        now,
+        route,
+        player?.id ?? null,
+        // an account taken off the leaderboards plays, and is not counted
+        player?.bannedAt == null,
+      );
     }
     if (route === "/leaderboard") {
       const player = await signedIn(request, env, now);
-      return await leaderboard(request, env, now, player?.id ?? null);
+      // An account taken off the leaderboards is told where it would have placed, as a
+      // player with no account is.
+      return await leaderboard(
+        request,
+        env,
+        now,
+        player && player.bannedAt === null ? player.id : null,
+      );
     }
     if (route === "/account" || route.startsWith("/account/")) {
       return await account(request, env, now, route, outside);

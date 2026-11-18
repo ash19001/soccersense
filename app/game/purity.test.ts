@@ -49,6 +49,7 @@ describe("the source of app/game", () => {
       "board.ts",
       "career.ts",
       "check.ts",
+      "day-shares.ts",
       "day.ts",
       "geo.ts",
       "index.ts",

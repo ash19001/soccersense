@@ -57,11 +57,12 @@ gold (a sepia-warmed brass), NEXT-GEN electric magenta.
 - Each mode has its **own** 7 questions, so the reveal in one mode never gives away the other.
   The demo ships one fixed set per mode.
 - Popularity is a share of players in percent, at most one decimal place, and the shares of a
-  question add up to about 100. There is no backend yet, so in the demo it is an **estimate**
-  built into the sample questions (method: `docs/data-notes/popularity.md`). With a
-  backend the estimates stay, as the foundation ("what fans would naturally say"), and the
-  answers players give that day add weight to them: at most about a third of a share (decided
-  2026-11-16; the rule and its numbers are in docs/ARCHITECTURE.md section 8).
+  question add up to about 100. Each question carries an **estimate** of it, written with it
+  (method: `docs/data-notes/popularity.md`): the foundation, "what fans would naturally
+  say". In HOME and AWAY the answers accounts give that day add weight to it as the day goes:
+  at most about a third of a share (decided 2026-11-16, built 2026-11-18; the rule and its
+  numbers are in docs/ARCHITECTURE.md section 8). Every player is scored on the shares as
+  they stand when they answer, and the score never changes afterwards.
 - Debug overrides (query string): `?stadium=<id>`, `?day=<n>`, `?time=HH:MM` (forces the sky's
   time of day), `?notimer=1`. `?day=`, `?stadium=` and `?notimer=` change the game itself, so
   they work in development builds only (`gameSearch`); a production build ignores them.

@@ -3,6 +3,7 @@ export * from "./account";
 export * from "./board";
 export * from "./career";
 export * from "./day";
+export * from "./day-shares";
 export * from "./geo";
 export * from "./judge";
 export * from "./modes";

@@ -1,7 +1,8 @@
 /**
  * The approval desk (app/routes/admin.tsx) against a stand-in for the admin API: signing
  * in with the token, the week's table, looking at a day's questions, approving, rejecting
- * and correcting them.
+ * and correcting them; and its Players tab (./admin-players.tsx): finding a player, a new
+ * name, off the leaderboards and back, deleting an account.
  */
 import {
   act,
@@ -28,9 +29,46 @@ interface Call {
   body: unknown;
 }
 
-/** The desk's API, in memory: day 8 has HOME's seven sample questions as drafts. */
+/** A player with an account, as the moderation API sends one. */
+interface Player {
+  id: string;
+  nickname: string;
+  email: string;
+  createdAt: number;
+  bannedAt: number | null;
+  note: string;
+  games: number;
+  lastDay: number | null;
+}
+
+/**
+ * The desk's API, in memory: day 8 has HOME's seven sample questions as drafts, and two
+ * players have accounts.
+ */
 function server(options: { accept?: boolean; shut?: boolean } = {}) {
   const calls: Call[] = [];
+  const players: Player[] = [
+    {
+      id: "a1",
+      nickname: "Row Z Rita",
+      email: "rita@example.com",
+      createdAt: Date.UTC(2026, 10, 17),
+      bannedAt: null,
+      note: "",
+      games: 3,
+      lastDay: 8,
+    },
+    {
+      id: "b2",
+      nickname: "soccerfan2",
+      email: "two@example.com",
+      createdAt: Date.UTC(2026, 10, 16),
+      bannedAt: null,
+      note: "",
+      games: 0,
+      lastDay: null,
+    },
+  ];
   const slots = HOME_QUESTIONS.map((question, slot) => ({
     day: 8,
     mode: "home",
@@ -93,11 +131,39 @@ function server(options: { accept?: boolean; shut?: boolean } = {}) {
         slot.updatedAt += 1;
         return json({ slot });
       }
+      if (url.startsWith("/api/admin/players?q=")) {
+        const q = decodeURIComponent(url.slice(21)).toLowerCase();
+        return json({
+          players: players.filter(
+            (p) => p.nickname.toLowerCase().includes(q) || p.email.includes(q),
+          ),
+        });
+      }
+      const who = /^\/api\/admin\/players\/(\w+)$/.exec(url);
+      if (who) {
+        const at = players.findIndex((p) => p.id === who[1]);
+        const sent = body as { action: string; note?: string };
+        if (sent.action === "delete") {
+          players.splice(at, 1);
+          return json({ player: null });
+        }
+        const player = players[at];
+        if (sent.action === "rename") player.nickname = "soccerfan99";
+        if (sent.action === "ban") {
+          player.bannedAt = Date.UTC(2026, 10, 18);
+          player.note = sent.note ?? "";
+        }
+        if (sent.action === "unban") {
+          player.bannedAt = null;
+          player.note = "";
+        }
+        return json({ player: { ...player } });
+      }
       return json({ error: "not_found" }, 404);
     },
   );
   vi.stubGlobal("fetch", fetcher);
-  return { calls, slots };
+  return { calls, slots, players };
 }
 
 async function signIn(): Promise<void> {
@@ -280,5 +346,146 @@ describe("the approval desk", () => {
     await waitFor(() =>
       expect(screen.getByText(text.notSetUp)).toBeInTheDocument(),
     );
+  });
+});
+
+describe("the Players tab", () => {
+  const players = text.players;
+
+  async function openPlayers() {
+    render(<Admin />);
+    await signIn();
+    await waitFor(() => screen.getByText(text.counts(0, 7, 0)));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: text.tabs.players }));
+    });
+    await waitFor(() =>
+      expect(screen.getByText("Row Z Rita")).toBeInTheDocument(),
+    );
+  }
+
+  const rowOf = (name: string) =>
+    screen.getByText(name).closest("tr") as HTMLElement;
+
+  test("lists the newest accounts, and finds one by its name or address", async () => {
+    const { calls } = server();
+    await openPlayers();
+    expect(
+      screen.getByRole("heading", { name: players.title }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(players.newest)).toBeInTheDocument();
+    expect(screen.getByText("two@example.com")).toBeInTheDocument();
+    const rita = rowOf("Row Z Rita");
+    // joined, and last played, on day 8
+    expect(within(rita).getAllByText("2026-11-17")).toHaveLength(2);
+    expect(within(rita).getByText(players.on)).toBeInTheDocument();
+    expect(
+      within(rowOf("soccerfan2")).getByText(players.never),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(players.search), {
+      target: { value: "rita" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: players.find }));
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("soccerfan2")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText(players.found(1))).toBeInTheDocument();
+    expect(calls.at(-1)?.url).toBe("/api/admin/players?q=rita");
+    expect(calls.at(-1)?.token).toBe(TOKEN);
+  });
+
+  test("takes a player off the leaderboards with a note of why, and puts them back", async () => {
+    const { calls } = server();
+    await openPlayers();
+    fireEvent.click(
+      within(rowOf("Row Z Rita")).getByRole("button", { name: players.ban }),
+    );
+    fireEvent.change(
+      within(rowOf("Row Z Rita")).getByLabelText(players.banNote),
+      {
+        target: { value: "  offensive name  " },
+      },
+    );
+    await act(async () => {
+      fireEvent.click(
+        within(rowOf("Row Z Rita")).getByRole("button", {
+          name: players.banConfirm,
+        }),
+      );
+    });
+    expect(calls.at(-1)).toMatchObject({
+      url: "/api/admin/players/a1",
+      method: "POST",
+      body: { action: "ban", note: "offensive name" },
+    });
+    await waitFor(() =>
+      expect(
+        within(rowOf("Row Z Rita")).getByText(players.off("2026-11-18")),
+      ).toBeInTheDocument(),
+    );
+    expect(
+      within(rowOf("Row Z Rita")).getByText("offensive name"),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(
+        within(rowOf("Row Z Rita")).getByRole("button", {
+          name: players.unban,
+        }),
+      );
+    });
+    await waitFor(() =>
+      expect(
+        within(rowOf("Row Z Rita")).getByText(players.on),
+      ).toBeInTheDocument(),
+    );
+    expect(calls.at(-1)?.body).toEqual({ action: "unban", note: "" });
+  });
+
+  test("gives a new name, and deletes an account only once asked a second time", async () => {
+    const { calls } = server();
+    await openPlayers();
+    await act(async () => {
+      fireEvent.click(
+        within(rowOf("Row Z Rita")).getByRole("button", {
+          name: players.rename,
+        }),
+      );
+    });
+    await waitFor(() =>
+      expect(screen.getByText("soccerfan99")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Row Z Rita")).not.toBeInTheDocument();
+
+    fireEvent.click(
+      within(rowOf("soccerfan2")).getByRole("button", { name: players.remove }),
+    );
+    expect(screen.getByText(players.removeSure)).toBeInTheDocument();
+    const asked = calls.length;
+    // not yet: cancel leaves it be
+    fireEvent.click(
+      within(rowOf("soccerfan2")).getByRole("button", { name: players.cancel }),
+    );
+    expect(calls.length).toBe(asked);
+    fireEvent.click(
+      within(rowOf("soccerfan2")).getByRole("button", { name: players.remove }),
+    );
+    await act(async () => {
+      fireEvent.click(
+        within(rowOf("soccerfan2")).getByRole("button", {
+          name: players.removeConfirm,
+        }),
+      );
+    });
+    expect(calls.at(-1)?.body).toEqual({ action: "delete", note: "" });
+    await waitFor(() =>
+      expect(
+        screen.getByText(players.removed("soccerfan2")),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("two@example.com")).not.toBeInTheDocument();
   });
 });
