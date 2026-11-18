@@ -63,6 +63,7 @@ import {
   tierName,
   titleName,
 } from "./controller";
+import { FirstGameCheck } from "../first-check";
 import { gameServer } from "./server";
 
 const text = strings.play;
@@ -537,6 +538,8 @@ export function Game({ mode }: { mode: Mode }) {
           {view?.announcement ?? ""}
         </p>
         {card}
+        {/* The bot check before a first game, out of sight (../first-check.tsx). */}
+        <FirstGameCheck />
       </GameLayout>
     </main>
   );

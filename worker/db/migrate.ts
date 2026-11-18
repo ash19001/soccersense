@@ -179,6 +179,43 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE accounts ADD COLUMN banned_note TEXT`,
     ],
   },
+  {
+    id: 7,
+    name: "every player kept by the server: a player with no account is an account with no email address",
+    sql: [
+      // The product owner, 2026-11-18: players with no account on the leaderboards, their
+      // answers counted, only their stats and streak on the device. Such a player is a
+      // row here with no address (a guest, worker/accounts/store.ts); signing in gives it
+      // one. SQLite cannot let a column go empty in place: the table is made again, with
+      // the rows it had and the same indexes, in this migration's one transaction.
+      `CREATE TABLE IF NOT EXISTS accounts_new (
+        id TEXT PRIMARY KEY,
+        email TEXT,
+        google_id TEXT,
+        nickname TEXT NOT NULL,
+        nickname_key TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        banned_at INTEGER,
+        banned_note TEXT
+      )`,
+      `INSERT INTO accounts_new (id, email, google_id, nickname, nickname_key, created_at,
+         updated_at, banned_at, banned_note)
+        SELECT id, email, google_id, nickname, nickname_key, created_at, updated_at,
+          banned_at, banned_note
+        FROM accounts`,
+      `DROP TABLE accounts`,
+      `ALTER TABLE accounts_new RENAME TO accounts`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS accounts_email ON accounts (email)
+        WHERE email IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS accounts_google ON accounts (google_id)
+        WHERE google_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS accounts_nickname ON accounts (nickname_key)`,
+      // The guests the nightly tidy looks through (../tidy.ts).
+      `CREATE INDEX IF NOT EXISTS accounts_guests ON accounts (created_at)
+        WHERE email IS NULL`,
+    ],
+  },
 ];
 
 /** The highest migration there is: what `migrate` brings a database to. */

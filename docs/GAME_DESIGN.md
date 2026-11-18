@@ -520,12 +520,13 @@ WAITING`); and how many are on the board (`ON THE BOARD / 1,136`; the place mess
 - **Today's leaderboard** (the product owner, 2026-11-11: "leaderboard in home screen (just
   mock data for now)"): today's top ten for HOME and for AWAY, a tab each, every row a rank, a
   handle and a total out of 700, the leader in gold, and under it how many are on the board
-  ("1,137 on today's board"). **Only accounts are on the boards** (2026-11-17), with a game
-  played through the server. A signed-in player who has played the mode today is in its table
+  ("1,137 on today's board"). **Every player the server keeps is on the boards**, with an
+  account or not (since 2026-11-18; from 2026-11-17 it was accounts only). A player who has played the mode today is in its table
   under their **nickname**, at their rank (first among equal totals): highlighted in place if
   they made the top ten, otherwise under it after a gap ("289 soccerfan4821 420"). A player
-  with no account who has played is told where they would have placed ("You'd be 289th of
-  1,138") and is not put on the board. The tab shown first is the mode they played,
+  whose game could not be kept (the server turned their connection away for making too many
+  players) is told where they would have placed ("You'd be 289th of 1,138") and is not put
+  on the board. The tab shown first is the mode they played,
   if they played only one. On a monitor it is a bolted scoreboard panel standing on the right
   of the picture over the park, always open, level with the airship on the other side of the
   logo (higher on a short screen, so it stays clear of the captions), and it slides away with
@@ -554,7 +555,9 @@ WAITING`); and how many are on the board (`ON THE BOARD / 1,136`; the place mess
   **EMAIL ME A LINK** (the link in the email signs the player in: there is no password),
   or **CONTINUE WITH GOOGLE**. An account keeps the player's name, games, streak and stats
   on the server, the same on every device (the games the device had played before go with
-  it), and only accounts are on the leaderboards. A new account is the next soccerfan
+  it). A player with no account is kept by the server too, from their first game, with
+  their name and games (on the leaderboards; only their streak and stats are on the
+  device), and can delete them from the card (**DELETE MY GAMES**). A new player is the next soccerfan
   (soccerfan1, soccerfan2, ...), and its name can be changed to any that is free. Signed
   in, SIGN IN reads **ACCOUNT**, and its card says who, with **SIGN OUT** and **DELETE
   ACCOUNT** (which asks first). Its foot links the **terms** and the **privacy notice**

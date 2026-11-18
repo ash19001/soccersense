@@ -92,6 +92,11 @@ export interface Env {
    */
   GAME_LIMIT?: RateLimit;
   /**
+   * How many new players one connection may make in a minute (wrangler.jsonc,
+   * `ratelimits`): a player with no account is made at their first game (worker/app.ts).
+   */
+  NEW_PLAYER_LIMIT?: RateLimit;
+  /**
    * The bot check on asking for a sign-in link (Cloudflare Turnstile; worker/accounts/
    * check.ts): the widget's site key (not a secret: `vars` in wrangler.jsonc) and its
    * secret key (a secret the product owner sets in Cloudflare). Without both, there is no

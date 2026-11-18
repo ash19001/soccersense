@@ -51,10 +51,24 @@ export interface SignInWays {
   check: string | null;
 }
 
+/**
+ * Whoever plays on this device as the server keeps them: an account, or a player with no
+ * account (a guest, since 2026-11-18), whose games and name the server keeps too.
+ */
+export interface PlayerView {
+  /** The name the leaderboards show for them. */
+  nickname: string;
+}
+
 /** What `/api/account` says, and what every change to an account answers with. */
 export interface AccountAnswer {
   /** Who is signed in on this device, or null. */
   account: AccountView | null;
+  /**
+   * Whoever plays on this device, signed in or not, or null before their first game (or a
+   * server from before players with no account were kept, which leaves it out).
+   */
+  player?: PlayerView | null;
   signIn: SignInWays;
 }
 
@@ -71,10 +85,20 @@ export function isAccountView(value: unknown): value is AccountView {
 }
 
 /** Whether something the server sent is an answer about the account. */
+/** Whether something the server sent is a player. */
+export function isPlayerView(value: unknown): value is PlayerView {
+  return (
+    isBag(value) && typeof value.nickname === "string" && value.nickname !== ""
+  );
+}
+
 export function isAccountAnswer(value: unknown): value is AccountAnswer {
   return (
     isBag(value) &&
     (value.account === null || isAccountView(value.account)) &&
+    (value.player === undefined ||
+      value.player === null ||
+      isPlayerView(value.player)) &&
     isBag(value.signIn) &&
     typeof value.signIn.email === "boolean" &&
     typeof value.signIn.google === "boolean" &&
@@ -254,6 +278,34 @@ export function saveAccount(
     }
   } catch {
     // nothing can be kept: the server still knows
+  }
+}
+
+/**
+ * This device plays as a player the server keeps (an account, or a guest: a player with no
+ * account, since 2026-11-18). The game page then asks the server for a game left in
+ * progress, as it does for an account: there is no ticket on the device to say so.
+ */
+export const PLAYER_KEY = "soccersense:v1:player";
+
+/** Whether the server has said that this device plays as a player it keeps. */
+export function hasPlayer(storage?: StorageLike | null): boolean {
+  try {
+    return resolveStorage(storage)?.getItem(PLAYER_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+/** Notes whether this device plays as a player the server keeps. */
+export function notePlayer(on: boolean, storage?: StorageLike | null): void {
+  try {
+    const store = resolveStorage(storage);
+    if (!store) return;
+    if (on) store.setItem(PLAYER_KEY, "1");
+    else store.removeItem(PLAYER_KEY);
+  } catch {
+    // nothing can be kept: the game page starts a game, and the server finds theirs
   }
 }
 

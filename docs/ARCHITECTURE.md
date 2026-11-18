@@ -435,7 +435,9 @@ shipped in its code. Now the server runs the game, and the page shows it.
   game left alone is timed out by the next request that sees it.
 - **Who keeps the game** (the product owner, 2026-11-17: "for no account users everything
   is stored on localstorage. the database is only used to check the question and answer but
-  not actually store anything"):
+  not actually store anything". **Changed 2026-11-18**: every player is kept by the server,
+  a player with no account as a guest; see "Every player kept by the server". A ticket is
+  now only the fallback where no guest can be made):
   - **A player with no account keeps their own.** The server stores nothing about them: no
     row, no cookie. After every move it hands the game back as a **ticket**
     (`worker/games/ticket.ts`): the game as it stands, with the server's seal on it. The
@@ -456,7 +458,8 @@ shipped in its code. Now the server runs the game, and the page shows it.
     day" has always been for a player with no account.
   - **So only accounts are on the leaderboards** (the product owner, 2026-11-17: "for no
     accounts it just says where they land on leaderboard without actually putting them on
-    the leaderboard. only accounts are on leaderboards").
+    the leaderboard. only accounts are on leaderboards"). Changed 2026-11-18: guests are
+    on them too.
 - **Which questions.** `worker/games/questions.ts`: the sample while `QUESTIONS` is `sample`.
   At `scheduled`, the seven approved for the day, and the sample for a day that does not
   have all seven approved: there is always a game, and never an unapproved question. A
@@ -497,8 +500,9 @@ Known, and not in this step:
   player as 20 requests a day, which is about one game.
 
 - **Made-up games.** Nothing stops a script from playing as a player with no account, but
-  nothing comes of it: nothing is stored and nothing is counted. The day's answer counts
-  (below) are taken from accounts only, for this reason.
+  nothing comes of it: nothing is stored and nothing is counted. Since 2026-11-18 a game
+  with no account makes a guest, which is counted; the new-player limit holds a script to a
+  trickle ("Every player kept by the server").
 - **Where a player with no account would have placed** is for the leaderboard step: their
   total against the accounts' totals of the day, said to them and not stored.
 
@@ -542,7 +546,8 @@ account is still never stored, given a cookie or asked about.
 - **A device is signed in by a cookie** (`worker/accounts/session.ts`): a random token, of
   which the database holds only the hash (`sessions`), `HttpOnly`, `Secure`,
   `SameSite=Lax`, named `__Host-ss` so a browser takes it from this exact site only. It
-  lasts 90 days and is renewed past halfway. Only accounts have one.
+  lasts 90 days and is renewed past halfway. Since 2026-11-18 a guest (a player with no
+  account) has one too, for a year ("Every player kept by the server").
 - **The page keeps a note** of who the server last said is signed in (`loadAccount` in
   `app/game/account.ts`; the cookie itself cannot be read by scripts). The note is how the
   page knows to ask the server at all: with none, `/api/account` is never requested, and
@@ -667,11 +672,13 @@ The product owner: "proceed with leaderboard". Today's boards on the home screen
 the mock (`app/data/leaderboard.ts`) is left to development with no API, and the tests.
 
 - **Who is on them**: accounts only, with a game played through the server (the product
-  owner, 2026-11-17: "only accounts are on leaderboards"). A game a device sent up after
+  owner, 2026-11-17: "only accounts are on leaderboards"); since 2026-11-18 guests too,
+  every player the server keeps ("Every player kept by the server"). A game a device sent up after
   signing in (`games.origin = 'device'`) counts for the account's streak and stats, never on
   a board. One game a day and mode each, so the first counts.
-- **A player with no account** is told where they would have placed ("You'd be 37th of
-  1,285", they counted in) and is not put on the board. Their page works it out from the
+- **A player whose game is not kept** (a ticket, where no guest could be made) is told
+  where they would have placed ("You'd be 37th of 1,285", they counted in) and is not put
+  on the board. Their page works it out from the
   board's counts (`rankFor`, `app/game/board.ts`): nothing about them is sent or kept.
 - **The API**: `GET /api/leaderboard?day=<n>` (today when left out; any day that has been,
   never one to come), `worker/games/board.ts`. For each mode: `count` (accounts on the
@@ -703,6 +710,60 @@ Known, and not in this step:
   archive, with membership).
 - **Members' modes** (CLOSEST, FURTHEST, and the rest) will have boards of their own when
   they are built; the API already answers per mode.
+
+### Every player kept by the server (2026-11-18)
+
+The product owner: "i do want non account players answers to count towards it too...
+maybe change architecture then so non account players can still come on leaderboard and
+their answers also influence the ranking for home and away. only thing on localstorage
+should be their stats and streak". They accepted that people can cheat ("all trivia games
+are cheatable but that isn't the point") and twelve months' keeping. This replaces the
+2026-11-17 rule that nothing was stored about a player with no account; the sections above
+and below say where it changed.
+
+- **A guest** is a player with no account: a row in `accounts` with no email address
+  (migration 7 made the table again so that the address can be empty, keeping its rows and
+  indexes; checked on Cloudflare's own engine). It has a name like any player, unique, and
+  the same session cookie (`__Host-ss`), which lasts a year for a guest (renewed past
+  halfway) and 90 days for an account.
+- **Made at the first game** (`worker/app.ts`, `newGuest` in `worker/accounts/api.ts`): a
+  start with no player makes one. Its name is the one the device has been showing, where
+  the server would take it from a player and it is free (a name the player chose); a
+  `soccerfan` name made up on the device is not taken, and the guest gets the next number
+  from the counter. Changing the name before any game makes the guest too, with that name
+  (`POST /api/account/name`; a taken or unfit name makes nothing).
+- **Their games are the server's**, as an account's: one a day and mode, kept as rows, on
+  the leaderboards, their answers counted for HOME's and AWAY's shares. Their streak, stats
+  and settings stay on the device (the history swap is for accounts: a guest gets nothing
+  to swap). The page knows to ask the server for a game in progress by a device note
+  (`hasPlayer`, `app/game/account.ts`), as it does for an account.
+- **Signing in** with an address that has no account turns the guest into it, name and
+  games and all (same row). With an address that has an account, the guest's games come
+  into the account except for a day and mode the account has played (the account's game
+  stands), the boards' counts are put right in the same transaction, and the guest goes.
+- **Deleting**: a guest can delete itself (DELETE MY GAMES on the sign-in card,
+  `POST /api/account/delete`). The nightly tidy (`worker/tidy.ts`, the Worker's
+  `scheduled`, cron `41 3 * * *`) deletes a guest a year after its last game, or a year
+  after it was made if it never played, and clears sessions that have run out and sign-in
+  links over a day old.
+- **The new-player limit** (`NEW_PLAYER_LIMIT`, 10 a minute per connection, in Cloudflare's
+  memory): a script making player after player is held to a trickle; a person never meets
+  it. Where it says no, the game is a ticket on the device as before (not kept, not on a
+  board, not counted), and a name change says "too many".
+- **A visitor who has not played** has no row and no cookie; the home screen asks who plays
+  here as it opens, which without a cookie does not touch the database.
+- **The bot check** (Turnstile, the product owner, 2026-11-18: "yes add both
+  protections"): a first game, or a first name, makes a player only with a token that
+  Turnstile says is good (`mayMakePlayer`, `worker/accounts/api.ts`). It stops scripts
+  however many connections they use, which the new-player limit alone does not. The page
+  runs the widget out of sight on the home screen and the mode pages for a device the
+  server does not know yet (`FirstGameCheck`, `app/routes/first-check.tsx`), so a token is
+  waiting when the game starts; a first game waits for one up to 10 seconds, then starts
+  without it, and is then a ticket (played, not kept). Where Turnstile has to ask, its
+  widget shows at the foot of the screen. A device the server knows runs nothing.
+- **Cost**: every game is now rows written (about 16 a game, plus its counted answers), where
+  a game with no account wrote none. "What it costs to run", above, counted no-account games
+  as free.
 
 ### Moderation (2026-11-18)
 
@@ -776,7 +837,8 @@ senstive secrets anywhere public". What is so, and how it was checked:
   taken) is plain HTTP to this machine's own address only, never the live site.
 - **Limits** (`ratelimits` in `wrangler.jsonc`, Cloudflare's own counters, kept in memory
   for a minute and never stored): 5 sign-in links a minute per connection
-  (`SIGN_IN_LIMIT`), and 120 moves of the games a minute per player (`GAME_LIMIT`, added
+  (`SIGN_IN_LIMIT`), 10 new players a minute per connection (`NEW_PLAYER_LIMIT`, "Every
+  player kept by the server"), and 120 moves of the games a minute per player (`GAME_LIMIT`, added
   2026-11-18 at the product owner's word: "yes build the rate limit"), an account counted
   by itself and anyone else by their connection. A game is about 16 requests, so only a
   script comes near it. A refused move is answered 429 with `retry-after: 60`; the page
@@ -796,8 +858,9 @@ These parts change as it arrives:
   was (`soccersense:v1:<day>:<mode>`, `app/game/storage.ts`, and the game in progress under
   `...:live`, `app/routes/play/progress.ts`, now the server's ticket): clearing site data,
   a private window or another browser gives a fresh game. That is the product owner's
-  choice (2026-11-17): nothing is stored about a player with no account. An account's game
-  is kept by the server, which gives the day's game back to a second start, on any device.
+  choice (2026-11-17): nothing is stored about a player with no account. Since 2026-11-18
+  the server keeps a guest's game as it keeps an account's, and gives the day's game back to
+  a second start; clearing site data or a private window is a new guest.
 - **Nicknames.** Each player's first nickname is `soccerfan` and a number, given and kept on the
   device (`app/game/nickname.ts`, `app/routes/nickname.ts`); the leaderboard shows it only on the
   player's own row. The product owner wants the numbers to go up one by one so that no two
@@ -840,7 +903,8 @@ Nothing of this is built yet ("Don't build it yet, just tell me").
   directly, not with that library; the offer after a first game, and the device's games
   going with the account, are not built.)
 - **Leaderboards:** only accounts are on them (changed 2026-11-17, with games kept on the
-  device for players with no account: it was "everyone on them, accounts or not"). A player
+  device for players with no account: it was "everyone on them, accounts or not"; and back
+  on 2026-11-18: everyone the server keeps, guests included). A player
   with no account is told where their total would have placed, and is not put on the
   board. Only an account's first game of a day and mode counts.
 - **Membership** (Paddle, which sells as merchant of record and handles VAT; about £2.99 a month
@@ -860,7 +924,8 @@ Nothing of this is built yet ("Don't build it yet, just tell me").
 Built on 2026-11-18 (the product owner: "you can proceed with the home and away scoring from
 what players type"), as below, with these choices made in the building:
 
-- **Whose answers are counted: accounts' only.** A player with no account is scored by the
+- **Whose answers are counted: accounts' only** (as first built; since the same day, every
+  player the server keeps, guests included: "Every player kept by the server"). A player with no account is scored by the
   same blend, but their answers are not counted. Their game is a ticket the server does not
   remember, which can be sent again, so a script could count one answer as often as it
   liked; counting them safely would need the server to remember their games, and nothing is

@@ -132,13 +132,102 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-describe("a player with no account", () => {
-  test("the home screen asks the server nothing about accounts, and no cookie is set", async () => {
+describe("a player with no account, with the server behind the page", () => {
+  beforeEach(() => {
+    setGameClock({ ...deviceClock(), api: () => true });
+  });
+  afterEach(() => {
+    setGameClock(deviceClock());
+  });
+
+  test("a new name is the server's to keep: it makes them a player, with that name", async () => {
     mount();
     await settle();
-    expect(accountCalls()).toEqual([]);
+    const card = openName();
+    fireEvent.change(within(card).getByRole("textbox", { name: names.field }), {
+      target: { value: "Top Bins" },
+    });
+    fireEvent.click(within(card).getByRole("button", { name: names.save }));
+    await settle();
+    expect(accountCalls()).toContain("POST /api/account/name");
+    expect(site.cookies.size).toBe(1);
+    expect(nickname()).toBe("Top Bins");
+    expect(
+      (await site.env.DB.prepare("SELECT email, nickname FROM accounts").all())
+        .results,
+    ).toEqual([{ email: null, nickname: "Top Bins" }]);
+    // a name another player has is turned down, and the card says so
+    await site.env.DB.prepare(
+      `INSERT INTO accounts (id, email, nickname, nickname_key, created_at, updated_at)
+       VALUES ('x', NULL, 'Nutmeg Nina', 'nutmeg nina', 1, 1)`,
+    ).run();
+    const again = openName();
+    fireEvent.change(
+      within(again).getByRole("textbox", { name: names.field }),
+      {
+        target: { value: "nutmeg nina" },
+      },
+    );
+    fireEvent.click(within(again).getByRole("button", { name: names.save }));
+    await settle();
+    expect(within(again).getByText(names.taken)).toBeInTheDocument();
+    expect(nickname()).toBe("Top Bins");
+  });
+
+  test("a player the server keeps can delete their name and games from it", async () => {
+    mount();
+    await settle();
+    const named = openName();
+    fireEvent.change(
+      within(named).getByRole("textbox", { name: names.field }),
+      {
+        target: { value: "Top Bins" },
+      },
+    );
+    fireEvent.click(within(named).getByRole("button", { name: names.save }));
+    await settle();
+    cleanup();
+
+    mount();
+    await settle();
+    const card = openAccount();
+    await settle();
+    fireEvent.click(within(card).getByRole("button", { name: words.forget }));
+    expect(within(card).getByText(words.forgetAsk)).toBeInTheDocument();
+    fireEvent.click(
+      within(card).getByRole("button", { name: words.forgetYes }),
+    );
+    await settle();
+    expect(within(card).getByRole("status")).toHaveTextContent(words.forgotten);
+    expect(
+      within(card).queryByRole("button", { name: words.forget }),
+    ).toBeNull();
+    expect(site.cookies.size).toBe(0);
+    expect(
+      (await site.env.DB.prepare("SELECT 1 FROM accounts").all()).results,
+    ).toEqual([]);
+  });
+
+  test("a visitor who has not played is offered no such thing: nothing is kept", async () => {
+    mount();
+    await settle();
+    const card = openAccount();
+    await settle();
+    expect(
+      within(card).queryByRole("button", { name: words.forget }),
+    ).toBeNull();
+  });
+});
+
+describe("a player with no account", () => {
+  test("the home screen asks once who plays here: before a first game nobody, and no cookie is set", async () => {
+    mount();
+    await settle();
+    expect(accountCalls()).toEqual(["GET /api/account"]);
     expect(site.cookies.size).toBe(0);
     expect(loadAccount()).toBeNull();
+    // and the database was not even opened
+    expect(site.env.DB.log).toEqual([]);
   });
 
   test("the bottom left opens the sign-in card, which asks which ways in there are", async () => {
@@ -146,9 +235,9 @@ describe("a player with no account", () => {
     await settle();
     const card = openAccount();
     expect(card).toHaveAccessibleName(words.heading);
-    expect(within(card).getByRole("status")).toHaveTextContent(words.checking);
     await settle();
-    expect(accountCalls()).toEqual(["GET /api/account"]);
+    // asked as the screen opened, and again as the card did
+    expect(accountCalls()).toEqual(["GET /api/account", "GET /api/account"]);
     // the player's name is on it
     expect(within(card).getByText(nickname())).toBeInTheDocument();
     // email is switched on here; Google has no key, so it is not offered
@@ -162,7 +251,7 @@ describe("a player with no account", () => {
     expect(
       within(card).getByText(words.problems.bad_email),
     ).toBeInTheDocument();
-    expect(accountCalls()).toEqual(["GET /api/account"]);
+    expect(accountCalls()).toEqual(["GET /api/account", "GET /api/account"]);
 
     // a real one: the link is sent
     fireEvent.change(field, { target: { value: FAN } });

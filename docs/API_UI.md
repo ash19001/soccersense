@@ -889,7 +889,7 @@ all fit). It must be inside a `GameLayout`; it reads the scale with `usePixelRoo
 
 The home page builds the boards from the server's (`GET /api/leaderboard`, `boardStore` in
 `app/routes/board.ts`; made up by `mockBoards` in development with no API) once the day is
-known (never at build time): only accounts are on them. A signed-in player on a board has
+known (never at build time): every player the server keeps is on them. A player on a board has
 their row (`you`, in the ten or under the gap) and `mine` ("You're 37th of 1,284"); a player
 who has played but is not on it gets `mine` as where they would have placed ("You'd be 37th
 of 1,285"), and no row. `empty` (new 2026-11-18): the line in the table while it has no rows
@@ -1214,6 +1214,10 @@ under the field otherwise. It is opened from the name in the top right corner (a
 or CHANGE on the account's card; the leaderboard no longer opens it.
 
 ### `Account` (new 2026-11-17)
+
+`kept` (new 2026-11-18): the server keeps a player for this device, with an account or not.
+Without an account it adds **DELETE MY GAMES** under the ways in, which asks first
+(`forgetAsk`, `forgetYes`, `forgetNo`) and then says `forgotten`; it calls `onDelete`.
 
 `labels: AccountLabels` (`strings.account`), `open`, `name` (the player's name on this
 device), `account` (`{ nickname, email }` or null), `ways` (`{ email, google, check }`: the

@@ -79,6 +79,7 @@ import {
 } from "~/ui";
 import type { Route } from "./+types/home";
 import { type AccountResult, accountStore } from "./account";
+import { FirstGameCheck, firstCheck } from "./first-check";
 import { boardStore } from "./board";
 import { planeFits } from "./home-plane";
 import { signMessages } from "./home-sign";
@@ -450,10 +451,11 @@ function weekdayOf(day: number): number {
 
 /**
  * Today's top ten for each mode, from the server's boards (./board.ts; made up in
- * development with no API). Only accounts are on them. A signed-in player on a board has
- * their own row (in the ten, or under the gap) and their place; a player who has played but
- * is not on it (no account, or a game from before signing in) is told where they would have
- * placed, worked out here from the board's counts: nothing about them is sent.
+ * development with no API). Everyone the server keeps is on them, with an account or not
+ * (since 2026-11-18). A player on a board has their own row (in the ten, or under the gap)
+ * and their place; a player who has played but is not on it (a game kept on their device
+ * alone, or one from before they signed in) is told where they would have placed, worked
+ * out here from the board's counts.
  */
 function leaderboards(
   day: number,
@@ -593,9 +595,9 @@ export default function Home() {
   const nameButton = useRef<HTMLButtonElement | null>(null);
   const accountButton = useRef<HTMLButtonElement | null>(null);
   /**
-   * The player's account, if they have one (./account.ts), and its pop-up, up from the
-   * name's card. The server is asked who is signed in only where this device has a note
-   * that someone is: a player with no account is never asked about.
+   * Who plays on this device as the server keeps them (./account.ts): an account, or a
+   * player with no account (a guest), and the account's pop-up, up from the name's card.
+   * The server is asked as the screen opens; before a first game it says nobody.
    */
   const account = useSyncExternalStore(
     accountStore.subscribe,
@@ -603,7 +605,9 @@ export default function Home() {
     accountStore.server,
   );
   const [accounting, setAccounting] = useState(false);
-  useEffect(() => accountStore.refreshIfSignedIn(), []);
+  useEffect(() => {
+    void accountStore.refresh();
+  }, []);
   /** The day's leaderboards, kept fresh while the day is shown (./board.ts). */
   const board = useSyncExternalStore(
     boardStore.subscribe,
@@ -933,6 +937,8 @@ export default function Home() {
         <p className="ss-sr" aria-live="polite">
           {review ? "" : shareStatus}
         </p>
+        {/* The bot check before a first game, out of sight (./first-check.tsx). */}
+        <FirstGameCheck />
         {/* The player's name (a press changes it) and SIGN IN, in the top right corner. */}
         {nickname && (
           <AccountCorner
@@ -1023,15 +1029,21 @@ export default function Home() {
           name={nickname ?? ""}
           maxLength={NICKNAME_MAX}
           problem={nicknameProblem}
-          // An account's name is the server's to give (it may be taken); anyone else's
-          // is kept on the device.
+          // Every player's name is the server's to keep (it may be taken, or not a fit
+          // one): a player with no game yet is made one with it. With no server behind the
+          // page (development), the device keeps it.
           onSave={(name) => {
-            if (!account.account) {
+            if (!account.account && !account.player && !gameClock().api()) {
               nicknameStore.save(name);
               return;
             }
-            return accountStore
-              .rename(name)
+            // A first name makes the player: it needs the bot check where there is one.
+            const checked =
+              account.account || account.player
+                ? Promise.resolve(null)
+                : firstCheck.take();
+            return checked
+              .then((check) => accountStore.rename(name, check))
               .then((done) => (done.ok ? null : renameProblem(done)));
           }}
           onClose={() => setRenaming(false)}
@@ -1042,6 +1054,7 @@ export default function Home() {
           open={accounting}
           name={nickname ?? ""}
           account={account.account}
+          kept={account.player !== null}
           ways={account.signIn}
           status={
             account.asked === "failed"

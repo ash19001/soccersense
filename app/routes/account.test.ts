@@ -8,6 +8,7 @@ import {
   LINK_ASKED_KEY,
   dayKeyFor,
   dayNumber,
+  hasPlayer,
   loadAccount,
   loadGame,
   loadNickname,
@@ -40,15 +41,52 @@ afterEach(() => {
 });
 
 describe("a player with no account", () => {
-  test("is nobody, and the server is not asked about them", () => {
+  test("is nobody until the server is asked; before a first game it says nobody, and keeps nothing", async () => {
     expect(accountStore.read()).toEqual({
       account: null,
+      player: null,
       signIn: null,
       asked: "no",
       synced: 0,
     });
-    accountStore.refreshIfSignedIn();
-    expect(site.calls).toEqual([]);
+    await accountStore.refresh();
+    expect(accountStore.read()).toMatchObject({
+      account: null,
+      player: null,
+      asked: "yes",
+    });
+    expect(site.cookies.size).toBe(0);
+    expect(hasPlayer()).toBe(false);
+  });
+
+  test("once their first game has made them a player, the server gives their name, and it is the device's", async () => {
+    await site.fetch("/api/games/home/start", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Row Z Rita" }),
+    });
+    expect(site.cookies.size).toBe(1);
+    await accountStore.refresh();
+    expect(accountStore.read()).toMatchObject({
+      account: null,
+      player: { nickname: "Row Z Rita" },
+    });
+    expect(hasPlayer()).toBe(true);
+    expect(loadNickname()).toBe("Row Z Rita");
+    // the history is an account's: none is swapped
+    expect(site.calls).not.toContain("POST /api/account/history");
+  });
+
+  test("a name chosen before any game makes them a player with it", async () => {
+    expect(await accountStore.rename("Nutmeg Nina")).toEqual({ ok: true });
+    expect(accountStore.read().player).toEqual({ nickname: "Nutmeg Nina" });
+    expect(accountStore.read().account).toBeNull();
+    expect(loadNickname()).toBe("Nutmeg Nina");
+    // and they can delete it all again
+    expect(await accountStore.remove()).toEqual({ ok: true });
+    expect(accountStore.read().player).toBeNull();
+    expect(hasPlayer()).toBe(false);
+    expect(site.cookies.size).toBe(0);
   });
 
   test("when they open the account's card the server says which ways in there are", async () => {
@@ -56,6 +94,7 @@ describe("a player with no account", () => {
     expect(site.calls).toEqual(["GET /api/account"]);
     expect(accountStore.read()).toEqual({
       account: null,
+      player: null,
       signIn: { email: true, google: false, check: null },
       asked: "yes",
       synced: 0,
@@ -112,6 +151,7 @@ describe("signing in by an emailed link", () => {
     const fan = { nickname: "soccerfan1", email: "fan@example.com" };
     expect(accountStore.read()).toEqual({
       account: fan,
+      player: { nickname: "soccerfan1" },
       signIn: { email: true, google: false, check: null },
       asked: "yes",
       synced: 0,
@@ -154,7 +194,7 @@ describe("a device signed in", () => {
     // known at once from the note, before any request
     expect(accountStore.read().account?.email).toBe("fan@example.com");
     expect(accountStore.read().asked).toBe("no");
-    accountStore.refreshIfSignedIn();
+    void accountStore.refresh();
     await vi.waitFor(() =>
       expect(site.calls).toEqual([
         "GET /api/account",
@@ -207,11 +247,10 @@ describe("a device signed in", () => {
       JSON.stringify({ nickname: "soccerfan1", email: "fan@example.com" }),
     );
     stop = accountStore.subscribe(() => heard++);
-    expect(await accountStore.rename("Nutmeg Nina")).toMatchObject({
-      ok: false,
-      problem: "signed_out",
-    });
+    // the server knows nobody here: the name makes them a new player with no account
+    expect(await accountStore.rename("Nutmeg Nina")).toEqual({ ok: true });
     expect(accountStore.read().account).toBeNull();
+    expect(accountStore.read().player).toEqual({ nickname: "Nutmeg Nina" });
     expect(loadAccount()).toBeNull();
   });
 

@@ -5334,6 +5334,25 @@ html:has(.ss-help-dialog[open]) {
   display: none;
 }
 
+/*
+ * The bot check before a first game (app/routes/first-check.tsx): out of sight at the foot
+ * of the screen, taking no room, unless Turnstile has to ask for a click; then its widget,
+ * above the scene.
+ */
+.ss-first-check {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--u4) + env(safe-area-inset-bottom, 0px));
+  z-index: 3;
+  width: min(20rem, calc(100vw - 2rem));
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.ss-first-check > .ss-check {
+  pointer-events: auto;
+}
+
 .ss-lb__week {
   margin-top: var(--u2);
   padding: var(--u2) var(--u2) var(--u);

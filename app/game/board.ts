@@ -1,12 +1,13 @@
 /**
  * The day's leaderboards, as the page and the server agree on them (worker/games/board.ts):
- * for each mode, the top ten accounts, how many accounts have each total, and, for a
- * signed-in player who is on the board, their own place. Pure: both ends import it.
+ * for each mode, the top ten players, how many players have each total, and, for a player
+ * who is on the board, their own place. Pure: both ends import it.
  *
- * Only accounts are on the leaderboards, and only with a game played through the server
- * (the product owner, 2026-11-17: "only accounts are on leaderboards"). A player with no
- * account is told where they would have placed: the page works it out from the totals'
- * counts (`rankFor`), and nothing about them is sent or kept.
+ * Every player the server keeps is on the leaderboards, with an account or not (since
+ * 2026-11-18; from 2026-11-17 it was "only accounts are on leaderboards"), with a game
+ * played through the server. A player whose game was not kept (a ticket on their device) is
+ * told where they would have placed: the page works it out from the totals' counts
+ * (`rankFor`).
  */
 
 import { MODES } from "./storage";

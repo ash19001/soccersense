@@ -3,13 +3,16 @@
  * The games the server runs (worker/games/play.ts), against a real SQLite in memory. Each
  * `Browser` here is one player, of one of two kinds:
  *
- * - with no account: they keep their own game. The browser keeps the ticket it is handed
- *   and sends it back, as the page does, through the Worker's own `handle`.
+ * - with no account: through the Worker's own `handle`, as the page does. Their first game
+ *   makes them a guest, kept by the server (worker/accounts/api.ts) with a cookie, which
+ *   the browser keeps and sends back. Where no player can be made (the new-player limit
+ *   refuses: `NO_NEW_PLAYERS`), the game is a ticket they keep themselves, and the browser
+ *   keeps that and sends it back.
  * - with an account: the game is kept in the database. Signing in is tested with the
  *   accounts themselves (../accounts/api.test.ts), so these go straight to `games` with
  *   an account's id, as the Worker does for whoever is signed in.
  */
-import { afterEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
 import { AWAY_QUESTIONS, HOME_QUESTIONS } from "~/data";
 import { EPOCH_UTC, MS_PER_DAY } from "~/game/day";
@@ -42,12 +45,24 @@ afterEach(() => {
   for (const db of open.splice(0)) db.close();
 });
 
+/** Settings every world starts with in a test (see `NO_NEW_PLAYERS`). */
+let defaults: Omit<Partial<Env>, "DB"> = {};
+afterEach(() => {
+  defaults = {};
+});
+
+/** A new-player limit that turns every new player away: games are tickets again. */
+const NO_NEW_PLAYERS: Omit<Partial<Env>, "DB"> = {
+  NEW_PLAYER_LIMIT: { limit: async () => ({ success: false }) },
+};
+
 function world(over: Omit<Partial<Env>, "DB"> = {}): Env & { DB: MemoryD1 } {
   const DB = memoryD1();
   open.push(DB);
   return {
     DB,
     ASSETS: { fetch: async () => new Response("the built site") },
+    ...defaults,
     ...over,
   };
 }
@@ -64,6 +79,8 @@ interface Heard {
 /** One player. With no account, the ticket of each mode's game is kept and sent back. */
 class Browser {
   readonly tickets = new Map<string, string>();
+  /** The cookies the server has set: a guest's, once their first game has made one. */
+  readonly cookies = new Map<string, string>();
   constructor(
     readonly env: Env,
     readonly account: string | null = null,
@@ -81,14 +98,19 @@ class Browser {
       typeof body === "string"
         ? body
         : JSON.stringify({ ...(ticket && { ticket }), ...(body as object) });
+    const headers: Record<string, string> = {};
+    if (method === "POST") headers["content-type"] = "application/json";
+    if (this.cookies.size > 0) {
+      headers.cookie = [...this.cookies]
+        .map(([name, value]) => `${name}=${value}`)
+        .join("; ");
+    }
     const request = new Request(
       `https://soccersense.example/api/games/${mode}/${move}`,
       {
         method,
-        ...(method === "POST" && {
-          headers: { "content-type": "application/json" },
-          body: sent,
-        }),
+        headers,
+        ...(method === "POST" && { body: sent }),
       },
     );
     const response =
@@ -101,6 +123,11 @@ class Browser {
             `/games/${mode}/${move}`,
             this.account,
           );
+    for (const line of response.headers.getSetCookie()) {
+      const [pair] = line.split("; ");
+      const at = pair.indexOf("=");
+      this.cookies.set(pair.slice(0, at), pair.slice(at + 1));
+    }
     const text = await response.text();
     let heard: Partial<GameAnswer>;
     try {
@@ -143,13 +170,23 @@ const best = (q: Question) =>
 const rows = async <T>(db: MemoryD1, sql: string) =>
   (await db.prepare(sql).all<T>()).results;
 
-const PLAYERS: [string, string | null][] = [
-  ["a player with no account", null],
-  ["an account", "account-1"],
+const PLAYERS: [string, string | null, Omit<Partial<Env>, "DB">][] = [
+  ["a player with no account (a guest, kept by the server)", null, {}],
+  [
+    "a player with no account who could not be made one (their game a ticket)",
+    null,
+    NO_NEW_PLAYERS,
+  ],
+  ["an account", "account-1", {}],
 ];
 
-describe.each(PLAYERS)("%s", (_, account) => {
+describe.each(PLAYERS)("%s", (name, account, settings) => {
+  beforeEach(() => {
+    defaults = settings;
+  });
   const player = (env: Env) => new Browser(env, account);
+  /** Whose game is a ticket: kept on their own device, not by the server. */
+  const ticketed = name.includes("ticket");
 
   describe("starting a game", () => {
     test("start sends question 1 as its clock starts, and nothing else of the game", async () => {
@@ -183,8 +220,12 @@ describe.each(PLAYERS)("%s", (_, account) => {
       }
       expect(heard.text).not.toContain(HOME_QUESTIONS[1].prompt);
       expect(heard.response.headers.get("cache-control")).toBe("no-store");
-      // nobody is given a cookie: an account will have its own
-      expect(heard.response.headers.get("set-cookie")).toBeNull();
+      // a player with no account is given one with their first game, where one can be
+      // made; an account has its own already
+      expect(heard.response.headers.get("set-cookie") !== null).toBe(
+        account === null && !ticketed,
+      );
+      expect(heard.ticket !== null).toBe(ticketed);
     });
 
     test("another mode is another game", async () => {
@@ -599,7 +640,11 @@ describe.each(PLAYERS)("%s", (_, account) => {
   });
 });
 
-describe("a player with no account keeps their own game", () => {
+describe("where no player can be made, a player with no account keeps their own game", () => {
+  beforeEach(() => {
+    defaults = NO_NEW_PLAYERS;
+  });
+
   test("nothing about them is stored: no row, no cookie, only the ticket they are handed", async () => {
     const env = world();
     const me = new Browser(env);

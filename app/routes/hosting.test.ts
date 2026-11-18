@@ -27,6 +27,7 @@ function wrangler(): {
     namespace_id: string;
     simple: { limit: number; period: number };
   }[];
+  triggers?: { crons: string[] };
   vars?: Record<string, string>;
 } {
   return JSON.parse(text("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
@@ -74,9 +75,16 @@ describe("hosting on Cloudflare", () => {
         namespace_id: expect.stringMatching(/^\d+$/),
         simple: { limit: 120, period: 60 },
       },
+      {
+        name: "NEW_PLAYER_LIMIT",
+        namespace_id: expect.stringMatching(/^\d+$/),
+        simple: { limit: 10, period: 60 },
+      },
     ]);
     // each its own counter
-    expect(new Set(config.ratelimits?.map((r) => r.namespace_id)).size).toBe(2);
+    expect(new Set(config.ratelimits?.map((r) => r.namespace_id)).size).toBe(3);
+    // the nightly tidy (worker/tidy.ts)
+    expect(config.triggers).toEqual({ crons: ["41 3 * * *"] });
     // nothing in the file but these settings: every key and token that is secret is a
     // secret in Cloudflare, never in the repository. The bot check's site key and Google's
     // client id are not secret (every page that shows the check, and every link to Google's

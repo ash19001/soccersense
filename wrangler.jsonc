@@ -48,8 +48,19 @@
       "name": "GAME_LIMIT",
       "namespace_id": "1002",
       "simple": { "limit": 120, "period": 60 }
+    },
+    // How many new players one connection may make: 10 a minute (worker/accounts/api.ts). A
+    // player with no account is made at their first game; a script making player after
+    // player is held to a trickle, and a person never meets it.
+    {
+      "name": "NEW_PLAYER_LIMIT",
+      "namespace_id": "1003",
+      "simple": { "limit": 10, "period": 60 }
     }
   ],
+  // The nightly tidy (worker/tidy.ts): guests who have not played for a year, sessions that
+  // have run out, old sign-in links. 03:41 UTC, out of the way of the drafting routine.
+  "triggers": { "crons": ["41 3 * * *"] },
   // The secrets are not here and never will be: the product owner puts them in the
   // Cloudflare dashboard (the Worker's Settings, "Variables and Secrets", type Secret):
   //   ADMIN_TOKEN           the approval desk's key

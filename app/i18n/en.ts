@@ -198,7 +198,7 @@ export const en = {
         return `You: ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
       },
       gap: "Rows left out",
-      /** Only accounts are on the boards (the product owner, 2026-11-17). */
+      /** Everyone the server keeps is on the boards (since 2026-11-18). */
       played: (count: number) =>
         `${count.toLocaleString("en-GB")} on today's board`,
       /** In the table while nobody is on it yet. */
@@ -889,7 +889,7 @@ export const en = {
     close: "Close",
     /** The one line under the heading, and the dialog's description: nobody signed in. */
     intro:
-      "New or back, it's the same: sign in by email or with Google. An account keeps your name, streak and stats on every device. Only accounts are on the leaderboards.",
+      "New or back, it's the same: sign in by email or with Google. An account keeps your name, streak and stats on every device.",
     /** The same line once someone is signed in. */
     introIn: "Your name, streak and stats are kept for you on every device.",
     /** The player's name, at the top of the card, and the way to change it. */
@@ -916,6 +916,16 @@ export const en = {
     checkWaiting: "CHECKING",
     checkFailed:
       "The check that you're not a robot didn't load. Try again, or continue with Google.",
+    /**
+     * A player with no account, whose games the server keeps for the leaderboards: deleting
+     * them, the question, yes, no, and done.
+     */
+    forget: "DELETE MY GAMES",
+    forgetAsk:
+      "Delete your name and games from our server? You come off the leaderboards, and your next game starts you afresh with a new name. This device keeps its own copy of your games, streak and stats.",
+    forgetYes: "DELETE THEM",
+    forgetNo: "KEEP THEM",
+    forgotten: "Your name and games have been deleted from our server.",
     /** Deleting the account: the button, the question, and the answer. */
     remove: "DELETE ACCOUNT",
     removeAsk:
@@ -1044,13 +1054,13 @@ export const en = {
   privacy: {
     title: "Privacy",
     description:
-      "What soccersense, the daily football trivia game, keeps about you, why and for how long. Play without an account and nothing is stored.",
+      "What soccersense, the daily football trivia game, keeps about you, why and for how long. No ads, no tracking, and no email address needed to play.",
     heading: "PRIVACY",
     sections: [
       {
         heading: "In short",
         paragraphs: [
-          "You can play without telling us anything, and then nothing about you is kept on our server. If you make an account, we keep your email address, your name and your games so they're the same on every device. We don't sell data, show ads or track you across the web.",
+          "You can play without telling us anything. Once you play, we keep a name for you and your games, so you're on the leaderboards: nothing that says who you are. If you make an account, we also keep your email address, so your name, streak and stats are the same on every device. We don't sell data, show ads or track you across the web.",
         ],
       },
       {
@@ -1062,8 +1072,9 @@ export const en = {
       {
         heading: "Playing without an account",
         paragraphs: [
-          "Your games, streak, stats, name and settings are kept in your browser's storage on your device, not on our server.",
-          "While you play, our server sends each question and checks each answer. It keeps nothing about you afterwards and sets no cookie: your game in progress is a sealed record that your own browser holds.",
+          "When you play your first game, or pick a name, our server gives your browser a cookie holding a random code, and keeps a name for you (soccerfan and a number, or the one you chose) and your games: your answers and scores. That's what puts you on the leaderboards. It doesn't keep an email address, your IP address or anything else that says who you are.",
+          "Your streak, stats and settings stay in your browser's storage, on your device.",
+          "Before your first game, nothing about you is kept and no cookie is set.",
         ],
       },
       {
@@ -1075,22 +1086,22 @@ export const en = {
           "the name the leaderboards show for you;",
           "your games: your answers and scores, including the games your device had played before you signed in, for your streak and stats;",
           "a record of each device you're signed in on;",
-          "the sign-in links we've emailed you;",
-          "if we take your name or scores off the leaderboards for breaking the terms, when and why.",
+          "the sign-in links we've emailed you.",
         ],
       },
       {
         heading: "Why",
         paragraphs: [
-          "To sign you in, keep your games and stats on every device, and show your name and scores on the leaderboards. We rely on providing the game you've asked for, and on our legitimate interest in keeping it fair and free of abuse.",
+          "To run your games, show your name and scores on the leaderboards, and, with an account, sign you in and keep your stats on every device. We rely on providing the game you've asked for, and on our legitimate interest in keeping it fair and free of abuse.",
           "Other players see your name and your score on the leaderboards. They never see your email address.",
           "Your answers in HOME and AWAY are also added to a count of how many players gave each answer that day, with nothing in the count linking it to you: it's how the game works out how common each answer is.",
+          "If we take your name or scores off the leaderboards for breaking the terms, we keep a note of when and why.",
         ],
       },
       {
         heading: "Cookies and storage",
         paragraphs: [
-          "Only accounts get a cookie: one that keeps you signed in, and a short-lived one while you sign in with Google. Both are needed to sign in, so we don't ask before setting them. There are no advertising or analytics cookies.",
+          "Once you've played, your browser has one cookie that tells our server which player you are and, with an account, keeps you signed in. While you sign in with Google there's a short-lived second one. Both are needed for the game to work, so we don't ask before setting them. There are no advertising or analytics cookies.",
           "To see how many people visit and which pages they use, we use Cloudflare Web Analytics. It counts page visits without cookies and without recognising you from one visit to the next.",
           "Your browser's storage holds your games and settings so the game works. Clearing your site data removes them from that device.",
         ],
@@ -1101,7 +1112,7 @@ export const en = {
           "These companies work on our behalf and only as we instruct them. Some may handle data outside the UK, with the safeguards UK data protection law requires.",
         ],
         list: [
-          "Cloudflare hosts the site, runs our server and database, and counts visits (Web Analytics). When you ask for a sign-in link, its Turnstile check looks at your browser to tell people from bots.",
+          "Cloudflare hosts the site, runs our server and database, and counts visits (Web Analytics). Before your first game, and when you ask for a sign-in link, its Turnstile check looks at your browser to tell people from bots.",
           "Resend sends the sign-in emails.",
           "Google, only if you choose to continue with Google.",
         ],
@@ -1109,15 +1120,16 @@ export const en = {
       {
         heading: "How long we keep it",
         list: [
-          "Your account and games: until you delete your account.",
-          "A signed-in device: 90 days after its last visit.",
+          "Without an account, your name and games: until a year after your last game, or until you delete them.",
+          "With an account, your account and games: until you delete your account.",
+          "A device's cookie: 90 days after its last visit with an account, a year without one.",
           "Sign-in links: one day.",
         ],
       },
       {
         heading: "Your rights",
         paragraphs: [
-          "You can change your name at any time, and delete your account from Your account: that removes your name, games and sign-ins from our server straight away.",
+          "You can change your name at any time. With an account, delete it from Your account; without one, use DELETE MY GAMES in the sign-in card. Either removes your name, games and sign-ins from our server straight away.",
           "To get a copy of your data, correct it, or ask anything else, email info@soccersense.io. If you're unhappy with how we've handled your data, you can complain to the Information Commissioner's Office at ico.org.uk.",
         ],
       },
@@ -1266,7 +1278,7 @@ export const en = {
     players: {
       title: "Players",
       intro:
-        "Players with accounts. Find one by any part of their name or email address. Taking a player off the leaderboards keeps their account: they still play, but are on no board and their answers are not counted. The terms allow both: a name that breaks them can be changed, and scores or accounts can be removed.",
+        "Everyone who has played, with an account or not. Find one by any part of their name or email address. Taking a player off the leaderboards keeps their account: they still play, but are on no board and their answers are not counted. The terms allow both: a name that breaks them can be changed, and scores or accounts can be removed.",
       search: "Name or email address",
       find: "Find",
       newest: "The newest accounts:",
@@ -1284,6 +1296,7 @@ export const en = {
       },
       on: "On",
       off: (date: string) => `Off since ${date}`,
+      guest: "No account",
       never: "Never",
       rename: "New name",
       renameHelp:

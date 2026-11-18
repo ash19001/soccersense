@@ -1,11 +1,13 @@
-// The player's account, for the pages: who is signed in on this device, and the requests
-// that sign in and out (worker/accounts/api.ts). One store for the page, for
-// `useSyncExternalStore`: nothing is read until React subscribes, which is after mounting.
-// Browser only.
+// The player's account, for the pages: who plays on this device as the server keeps them,
+// who is signed in, and the requests that sign in and out (worker/accounts/api.ts). One
+// store for the page, for `useSyncExternalStore`: nothing is read until React subscribes,
+// which is after mounting. Browser only.
 //
-// An account is optional. A player with no account is never asked about: the server is
-// only asked who is signed in where the device has a note that someone is (`loadAccount`),
-// or when the player opens the account pop-up.
+// An account is optional. Every player who has played is kept by the server all the same
+// (the product owner, 2026-11-18): a player with no account is a guest, with a name the
+// server gave or took and a place on the leaderboards. The home screen asks who plays here
+// as it opens (`refresh`): before a first game the answer is nobody, at no cost to the
+// server. Whoever it is, their name is this device's nickname from then on.
 //
 // A device signed in swaps its finished games with the account's (`sync`), each time the
 // server says who is signed in: the account's games it lacks are kept on the device, where
@@ -22,6 +24,7 @@ import {
   type HistoryAnswer,
   type HistoryGame,
   type HistoryKey,
+  type PlayerView,
   type SignInWays,
   dayKeyFor,
   dayNumber,
@@ -32,6 +35,7 @@ import {
   loadGame,
   loadHistory,
   noteLinkAsked,
+  notePlayer,
   saveAccount,
   saveGame,
 } from "~/game";
@@ -44,6 +48,11 @@ export const ACCOUNT_TIMEOUT_MS = 10_000;
 export interface AccountState {
   /** Who is signed in on this device, as far as the page knows. */
   account: AccountView | null;
+  /**
+   * Whoever plays on this device as the server keeps them, signed in or not (a guest); null
+   * before their first game, or until the server has said.
+   */
+  player: PlayerView | null;
   /** The ways of signing in the server is set up for; null until it has said. */
   signIn: SignInWays | null;
   /**
@@ -61,6 +70,7 @@ export type AccountResult =
 
 const NOBODY: AccountState = {
   account: null,
+  player: null,
   signIn: null,
   asked: "no",
   synced: 0,
@@ -74,11 +84,23 @@ function set(change: Partial<AccountState>): void {
   for (const listener of [...listeners]) listener();
 }
 
-/** Takes what the server said about the account: the device's note and the nickname follow. */
+/**
+ * Takes what the server said about who plays here: the device's notes and the nickname
+ * follow.
+ */
 function take(answer: AccountAnswer): void {
   saveAccount(answer.account);
-  if (answer.account) nicknameStore.adopt(answer.account.nickname);
-  set({ account: answer.account, signIn: answer.signIn, asked: "yes" });
+  const player =
+    answer.player ??
+    (answer.account ? { nickname: answer.account.nickname } : null);
+  notePlayer(player !== null);
+  if (player) nicknameStore.adopt(player.nickname);
+  set({
+    account: answer.account,
+    player,
+    signIn: answer.signIn,
+    asked: "yes",
+  });
 }
 
 function api(path: string): string {
@@ -211,10 +233,11 @@ async function change(
 ): Promise<AccountResult> {
   const heard = await ask(path, body);
   if (failed(heard)) {
-    // The device thought someone was signed in; the server says nobody is.
+    // The device thought someone played here; the server says nobody does.
     if (heard.problem === "signed_out") {
       saveAccount(null);
-      set({ account: null });
+      notePlayer(false);
+      set({ account: null, player: null });
     }
     return heard;
   }
@@ -260,11 +283,6 @@ export const accountStore = {
     await sync();
   },
 
-  /** Asks only where this device has a note that someone is signed in. */
-  refreshIfSignedIn(): void {
-    if (loadAccount() !== null) void accountStore.refresh();
-  },
-
   /**
    * Sends a sign-in link to an email address, with the bot check's token where the server
    * has a check.
@@ -293,16 +311,23 @@ export const accountStore = {
     return done;
   },
 
-  /** Changes the account's nickname. */
-  rename: (nickname: string): Promise<AccountResult> =>
-    change("/name", { nickname }),
+  /**
+   * Changes the player's nickname: an account's, a guest's, or (before a first game) the
+   * name a new guest is made with, which needs the bot check's token where the server has
+   * a check (./first-check.tsx).
+   */
+  rename: (
+    nickname: string,
+    check: string | null = null,
+  ): Promise<AccountResult> =>
+    change("/name", { nickname, ...(check !== null && { check }) }),
 
   /** Signs this device out. */
   leave: (): Promise<AccountResult> => change("/leave", {}),
 
   /**
-   * Deletes the account and everything the server keeps for it. This device keeps its own
-   * copy of the games, as any device with no account does.
+   * Deletes the account (or the guest) and everything the server keeps for it. This device
+   * keeps its own copy of the games, and its streak and stats.
    */
   remove: (): Promise<AccountResult> => change("/delete", {}),
 

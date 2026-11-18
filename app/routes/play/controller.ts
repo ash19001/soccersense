@@ -46,11 +46,13 @@ import {
   createSession,
   dayKeyFor,
   dayNumber,
+  hasPlayer,
   isLastQuestion,
   loadAccount,
   loadGame,
   loadHistory,
   nextMode,
+  notePlayer,
   progressFor,
   reduce,
   saveSession,
@@ -220,9 +222,10 @@ export class GameController {
    */
   private ticket: string | null = null;
   /**
-   * This device has a note that someone is signed in (`loadAccount`): their game is kept
-   * by the server, which is asked for it whatever this device holds. If the note is out of
-   * date the server simply has no game of theirs, and the player keeps their own.
+   * This device has a note that it plays as a player the server keeps (`loadAccount` for an
+   * account, `hasPlayer` for anyone, a player with no account included): their game is
+   * kept by the server, which is asked for it whatever this device holds. If the note is
+   * out of date the server simply has no game of theirs, and a new one starts.
    */
   private readonly signedIn: boolean;
 
@@ -266,7 +269,9 @@ export class GameController {
     if (this.server && session === null) {
       this.ticket = loadTicket(today.dayKey, mode, this.storage);
     }
-    this.signedIn = this.server !== null && loadAccount(this.storage) !== null;
+    this.signedIn =
+      this.server !== null &&
+      (loadAccount(this.storage) !== null || hasPlayer(this.storage));
     const loading = session === null && (this.ticket !== null || this.signedIn);
     // A new game: the mode card first. Its clock is set again when the card goes.
     const fresh = session === null && !loading;
@@ -771,10 +776,16 @@ export class GameController {
   private hold(reply: Reply): GameSnapshot {
     this.ticket = reply.ticket;
     if (reply.ticket === null) {
-      // An account's game: the server keeps it. A ticket left on the device from before
-      // they signed in is nobody's game now.
+      // The server keeps the game (an account's, or a guest's: a player with no account,
+      // made one by their first game). A ticket left on the device from before is nobody's
+      // game now, and the device plays as that player from now on.
       clearLive(dayKeyFor(reply.game.day), reply.game.mode, this.storage);
-    } else if (reply.game.phase !== "done") {
+      notePlayer(true, this.storage);
+    } else {
+      // The game is the player's own: the server does not keep this device's player.
+      notePlayer(false, this.storage);
+    }
+    if (reply.ticket !== null && reply.game.phase !== "done") {
       saveTicket(
         dayKeyFor(reply.game.day),
         reply.game.mode,

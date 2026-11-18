@@ -1,11 +1,13 @@
 /**
  * The day's leaderboards: `GET /api/leaderboard?day=<n>` (today when left out).
  *
- * Only accounts are on them, and only with a game played through the server (`origin =
- * 'server'`): a game a device sent up after signing in counts for the account's streak and
- * stats, never here; a player with no account is on no board, and is told where they would
- * have placed by their own page, from the counts this sends (`rankFor`, ~/game/board). Each
- * account has one game a day and mode, so the first is the one that counts. An account the
+ * Every player the server keeps is on them, with an account or not (a guest, since
+ * 2026-11-18), with a game played through the server (`origin = 'server'`): a game a device
+ * sent up after signing in counts for the account's streak and stats, never here; a game
+ * kept on the device alone (a ticket) is on no board, and its player is told where they
+ * would have placed by their own page, from the counts this sends (`rankFor`,
+ * ~/game/board). Each player has one game a day and mode, so the first is the one that
+ * counts. An account the
  * admin took off the leaderboards (../accounts/moderation.ts) is on none, and is not in the
  * counts.
  *

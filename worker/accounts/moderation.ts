@@ -34,7 +34,8 @@ export const MAX_NOTE = 500;
 export interface PlayerView {
   id: string;
   nickname: string;
-  email: string;
+  /** Null for a player with no account (a guest). */
+  email: string | null;
   createdAt: number;
   /** When it was taken off the leaderboards, or null. */
   bannedAt: number | null;
@@ -52,7 +53,7 @@ export type PlayerAction = (typeof PLAYER_ACTIONS)[number];
 interface Found {
   id: string;
   nickname: string;
-  email: string;
+  email: string | null;
   created_at: number;
   banned_at: number | null;
   banned_note: string | null;

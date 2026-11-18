@@ -2,16 +2,18 @@
  * Accounts in the database (migration 4): who has one, the devices signed in to it, and the
  * sign-in links that have been sent.
  *
- * - `accounts`: one row for a player who chose to have an account: their email address,
- *   Google's id for them if they have signed in with Google, and their nickname. No
- *   password: there are none.
+ * - `accounts`: one row for each player the server keeps (migration 7): one who chose to
+ *   have an account, with their email address and Google's id for them if they have signed
+ *   in with Google; or a guest, a player with no account (no address), since 2026-11-18.
+ *   Each with their nickname. No password: there are none.
  * - `sessions`: one row for each device signed in. Its key is the hash of the token in that
  *   device's cookie (./tokens.ts), never the token.
  * - `sign_in_links`: one row for each link sent, by the hash of its token. A link works
  *   once and for a short while; the rows are also how many have been sent to an address
  *   lately, so nobody's inbox can be filled from here.
  *
- * Nothing here is about a player with no account: they have no row anywhere.
+ * A guest is made at their first game, or when they first change their name, and is kept
+ * until a year after their last game (../tidy.ts) or until they delete it.
  */
 
 import { fanNickname, nicknameKey } from "~/game/nickname";
@@ -27,7 +29,12 @@ export const LINK_KEPT_MS = 24 * 60 * 60 * 1000;
 
 export interface Account {
   id: string;
-  email: string;
+  /**
+   * The address it signs in with. Null for a guest: a player with no account, whose games
+   * and name the server keeps all the same (the product owner, 2026-11-18). Signing in
+   * gives a guest an address, or brings its games into the account the address has.
+   */
+  email: string | null;
   /** Google's id for the person, once they have signed in with Google. */
   googleId: string | null;
   nickname: string;
@@ -42,7 +49,7 @@ export interface Account {
 
 interface Stored {
   id: string;
-  email: string;
+  email: string | null;
   google_id: string | null;
   nickname: string;
   created_at: number;
@@ -175,8 +182,124 @@ export async function rename(
   return (done.meta.changes ?? 0) > 0;
 }
 
-/** Takes an account away with everything kept for it: its games, its devices, its links. */
-export async function deleteAccount(db: D1, account: Account): Promise<void> {
+/** A new guest: a player with no account, kept by the server. Named `wish` where it is free
+ * (it has been checked: ./names.ts), else `soccerfan` and the next number. */
+export async function createGuest(
+  db: D1,
+  wish: string | null,
+  now: number,
+): Promise<Account> {
+  const at = Math.round(now);
+  const fans = async () => fanNickname(await nextFanNumber(db));
+  for (let tries = 0; tries < 10; tries++) {
+    const nickname = tries === 0 && wish !== null ? wish : await fans();
+    const guest: Account = {
+      id: crypto.randomUUID(),
+      email: null,
+      googleId: null,
+      nickname,
+      createdAt: at,
+      updatedAt: at,
+      bannedAt: null,
+    };
+    const done = await db
+      .prepare(
+        `INSERT OR IGNORE INTO accounts
+           (id, email, google_id, nickname, nickname_key, created_at, updated_at)
+         VALUES (?, NULL, NULL, ?, ?, ?, ?)`,
+      )
+      .bind(guest.id, nickname, nicknameKey(nickname), at, at)
+      .run();
+    if ((done.meta.changes ?? 0) > 0) return guest;
+    // Not written: the name is taken. The next soccerfan number is tried.
+  }
+  throw new Error("no nickname could be given to a new guest");
+}
+
+/**
+ * A guest signs in with an address no account has: the guest becomes that account, with
+ * its name and its games. Null if the address (or the Google id) has an account after all
+ * (two sign-ins at once): the caller brings the guest into it instead.
+ */
+export async function upgradeGuest(
+  db: D1,
+  guest: Account,
+  who: { email: string; googleId: string | null },
+  now: number,
+): Promise<Account | null> {
+  const done = await db
+    .prepare(
+      `UPDATE OR IGNORE accounts SET email = ?, google_id = ?, updated_at = ?
+       WHERE id = ? AND email IS NULL`,
+    )
+    .bind(who.email, who.googleId, Math.round(now), guest.id)
+    .run();
+  if ((done.meta.changes ?? 0) === 0) return null;
+  return {
+    ...guest,
+    email: who.email,
+    googleId: who.googleId,
+    updatedAt: Math.round(now),
+  };
+}
+
+/**
+ * A guest signs in to an account that already exists: its games become the account's,
+ * but for the days and modes the account has played (the account's game stands, and the
+ * guest's goes), and the guest is gone. The boards' counts follow, all in one transaction:
+ * the guest's games come off them and the ones kept go back on as the account's (only
+ * where the guest, and then the account, were on the leaderboards).
+ */
+export async function adoptGuest(
+  db: D1,
+  guest: Pick<Account, "id">,
+  into: Pick<Account, "id">,
+): Promise<void> {
+  const counted = `origin = 'server' AND finished_at IS NOT NULL`;
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE board_tally SET players = players - 1
+         WHERE (SELECT banned_at FROM accounts WHERE id = ?) IS NULL
+           AND (day, mode, total) IN (
+             SELECT day, mode, total FROM games WHERE player_id = ? AND ${counted}
+           )`,
+      )
+      .bind(guest.id, guest.id),
+    db.prepare("DELETE FROM board_tally WHERE players <= 0"),
+    db
+      .prepare(
+        `DELETE FROM games WHERE player_id = ? AND EXISTS (
+           SELECT 1 FROM games mine
+           WHERE mine.player_id = ? AND mine.day = games.day AND mine.mode = games.mode
+         )`,
+      )
+      .bind(guest.id, into.id),
+    db
+      .prepare(
+        `INSERT INTO board_tally (day, mode, total, players)
+         SELECT day, mode, total, 1 FROM games
+         WHERE player_id = ? AND ${counted}
+           AND (SELECT banned_at FROM accounts WHERE id = ?) IS NULL
+         ON CONFLICT (day, mode, total) DO UPDATE SET players = players + 1`,
+      )
+      .bind(guest.id, into.id),
+    db
+      .prepare("UPDATE games SET player_id = ? WHERE player_id = ?")
+      .bind(into.id, guest.id),
+    db.prepare("DELETE FROM sessions WHERE account_id = ?").bind(guest.id),
+    db.prepare("DELETE FROM accounts WHERE id = ?").bind(guest.id),
+  ]);
+}
+
+/**
+ * Takes an account (or a guest) away with everything kept for it: its games, its devices,
+ * its links.
+ */
+export async function deleteAccount(
+  db: D1,
+  account: Pick<Account, "id" | "email">,
+): Promise<void> {
   await db.batch([
     // Its games come off the boards' counts first (one game a day and mode each), unless
     // they came off when it was taken off the leaderboards.
@@ -208,6 +331,7 @@ export async function createSession(
   db: D1,
   accountId: string,
   now: number,
+  life = SESSION_LIFE_MS,
 ): Promise<string> {
   const token = randomToken();
   const at = Math.round(now);
@@ -220,7 +344,7 @@ export async function createSession(
         `INSERT INTO sessions (id, account_id, created_at, expires_at)
          VALUES (?, ?, ?, ?)`,
       )
-      .bind(await hashOf(token), accountId, at, at + SESSION_LIFE_MS),
+      .bind(await hashOf(token), accountId, at, at + life),
   ]);
   return token;
 }
@@ -248,10 +372,11 @@ export async function renewSession(
   db: D1,
   token: string,
   now: number,
+  life = SESSION_LIFE_MS,
 ): Promise<void> {
   await db
     .prepare("UPDATE sessions SET expires_at = ? WHERE id = ?")
-    .bind(Math.round(now) + SESSION_LIFE_MS, await hashOf(token))
+    .bind(Math.round(now) + life, await hashOf(token))
     .run();
 }
 

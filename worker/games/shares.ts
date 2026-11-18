@@ -2,18 +2,17 @@
  * The day's answers in HOME and AWAY, counted (`answer_tally`, migration 6), for the shares
  * a question is scored by on its day (`scoredToday`, ~/game/day-shares).
  *
- * **Whose answers count**: accounts', with a game played through the server, and only the
- * answers the judge accepted (its aliases and spellings count as the one answer). Not
- * passes, time-ups or answers it did not know; not an account taken off the leaderboards.
- * An account plays a day and mode once, and a move is kept once however often it is sent,
- * so an answer is counted once: in the same transaction as the move that decided it, and
- * only if that move was written (worker/games/store.ts, `updateGame`).
+ * **Whose answers count**: every player the server keeps, with an account or not (a
+ * guest: the product owner, 2026-11-18), and only the answers the judge accepted (its
+ * aliases and spellings count as the one answer). Not passes, time-ups or answers it did
+ * not know; not a player taken off the leaderboards. A kept player plays a day and mode
+ * once, and a move is kept once however often it is sent, so an answer is counted once: in
+ * the same transaction as the move that decided it, and only if that move was written
+ * (worker/games/store.ts, `updateGame`).
  *
- * A player with no account is scored by the same blend but not counted: their game is a
- * ticket the server does not remember (./ticket.ts), which can be sent again, so a script
- * could count one answer as often as it liked. Counting them safely would mean the server
- * remembering their games, and nothing is kept about a player with no account (the product
- * owner, 2026-11-17).
+ * A game no player could be made for (the new-player limit said no) is a ticket the server
+ * does not remember (./ticket.ts), which can be sent again: it is scored by the same blend
+ * but not counted.
  *
  * **What is kept**: for each day, mode, question and answer, how many. Nothing says whose
  * answer was whose. The counts of a day stop moving once its games are played: they are

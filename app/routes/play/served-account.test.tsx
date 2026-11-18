@@ -1,10 +1,11 @@
-// The game page for a player who is signed in: the page's own code against the Worker's
-// own (`handle`), with a real SQLite in memory and a browser's cookie jar behind a stand-in
-// for `fetch` (worker/testing/site.ts).
+// The game page for a player the server keeps: one who is signed in, and one with no
+// account (a guest, made one by their first game). The page's own code against the
+// Worker's own (`handle`), with a real SQLite in memory and a browser's cookie jar behind a
+// stand-in for `fetch` (worker/testing/site.ts).
 //
-// An account's game is kept by the server, not on the device: it is asked for on arriving,
-// it is the same on every device, and it cannot be started twice. (./served.test.tsx is the
-// same page for a player with no account, who keeps their own game.)
+// Their game is kept by the server, not on the device: it is asked for on arriving, and it
+// cannot be started twice; an account's is the same on every device. (./served.test.tsx is
+// the same page for a player the server could not keep, whose game is a ticket.)
 
 import {
   act,
@@ -240,8 +241,11 @@ describe("a signed-in player's game", () => {
   });
 
   test("a ticket left on the device from before signing in is dropped for the account's game", async () => {
-    // a game in progress with no account: its ticket is on the device
+    // a game in progress with no account, from a connection that could make no new
+    // player just then: its ticket is on the device
+    site.env.NEW_PLAYER_LIMIT = { limit: async () => ({ success: false }) };
     await kickOff();
+    delete site.env.NEW_PLAYER_LIMIT;
     expect(loadTicket(DAY_KEY, "home")).not.toBeNull();
     expect(await storedGames()).toEqual([]);
     cleanup();
@@ -260,7 +264,7 @@ describe("a signed-in player's game", () => {
     ]);
   });
 
-  test("a note that is out of date: the server knows nobody, and the player keeps their own game", async () => {
+  test("a note that is out of date: the server knows nobody, and a new game makes them a player it keeps", async () => {
     await signIn();
     // signed out everywhere since: the device still has its note
     await site.env.DB.prepare("DELETE FROM sessions").run();
@@ -271,9 +275,11 @@ describe("a signed-in player's game", () => {
     await wait(INTRO_MS + INTRO_LEAVE_MS);
     await wait();
     expect(asked(HOME_QUESTIONS[0])).not.toBeNull();
-    // a ticket, as for any player with no account, and nothing in the database
-    expect(loadTicket(DAY_KEY, "home")).not.toBeNull();
-    expect(await storedGames()).toEqual([]);
+    // no ticket: a player with no account, kept by the server
+    expect(loadTicket(DAY_KEY, "home")).toBeNull();
+    expect(await storedGames()).toEqual([
+      { email: null, day: 8, mode: "home", idx: 0, phase: "asking" },
+    ]);
   });
 
   test("two accounts on the same day each have their own game", async () => {
@@ -294,5 +300,37 @@ describe("a signed-in player's game", () => {
       [FAN, "reveal"],
       ["other@example.com", "asking"],
     ]);
+  });
+});
+
+describe("a player with no account, kept by the server", () => {
+  test("their first game makes them one: no ticket on the device, and their name goes with it", async () => {
+    window.localStorage.setItem("soccersense:v1:nickname", "Row Z Rita");
+    await kickOff();
+    expect(asked(HOME_QUESTIONS[0])).not.toBeNull();
+    expect(gameCalls()).toEqual(["POST /api/games/home/start"]);
+    expect(loadTicket(DAY_KEY, "home")).toBeNull();
+    expect(site.cookies.size).toBe(1);
+    expect(
+      (await site.env.DB.prepare("SELECT email, nickname FROM accounts").all())
+        .results,
+    ).toEqual([{ email: null, nickname: "Row Z Rita" }]);
+    expect(await storedGames()).toEqual([
+      { email: null, day: 8, mode: "home", idx: 0, phase: "asking" },
+    ]);
+  });
+
+  test("coming back to a game in progress asks the server for it: the page has no ticket to go on", async () => {
+    await kickOff();
+    await answer(best(HOME_QUESTIONS[0]));
+    expect(sheetUp()).toBeGreaterThan(0);
+    cleanup();
+    site.calls.length = 0;
+
+    page();
+    await wait();
+    expect(gameCalls()).toEqual(["POST /api/games/home/look"]);
+    expect(modeCard()).toBeNull();
+    expect(sheetUp()).toBeGreaterThan(0);
   });
 });

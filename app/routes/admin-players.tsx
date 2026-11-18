@@ -14,7 +14,8 @@ const text = strings.admin.players;
 export interface PlayerView {
   id: string;
   nickname: string;
-  email: string;
+  /** Null for a player with no account. */
+  email: string | null;
   createdAt: number;
   bannedAt: number | null;
   note: string;
@@ -191,7 +192,9 @@ function PlayerRow({
   return (
     <tr>
       <td className={`${cell} font-medium`}>{player.nickname}</td>
-      <td className={cell}>{player.email}</td>
+      <td className={cell}>
+        {player.email ?? <span className="text-slate-500">{text.guest}</span>}
+      </td>
       <td className={cell}>{dateOf(player.createdAt)}</td>
       <td className={cell}>{player.games}</td>
       <td className={cell}>

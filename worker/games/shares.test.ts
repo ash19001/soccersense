@@ -34,9 +34,14 @@ function world(): Env & { DB: MemoryD1 } {
   return { DB, ASSETS: { fetch: async () => new Response("") } };
 }
 
-/** One player: an account (by id) or, with null, a player with no account keeping a ticket. */
+/**
+ * One player: an account (by id) or, with null, a player with no account, who is made a
+ * guest by their first game and kept by a cookie (or, where no player can be made, keeps a
+ * ticket).
+ */
 class Player {
   ticket: string | null = null;
+  cookie: string | null = null;
   constructor(
     readonly env: Env,
     readonly account: string | null = null,
@@ -53,7 +58,10 @@ class Player {
       `https://soccersense.example/api/games/${mode}/${move}`,
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(this.cookie && { cookie: this.cookie }),
+        },
         body: JSON.stringify({
           ...(this.ticket && move !== "start" ? { ticket: this.ticket } : {}),
           ...body,
@@ -71,6 +79,8 @@ class Player {
             this.account,
             this.counted,
           );
+    const set = response.headers.getSetCookie()[0];
+    if (set) this.cookie = set.split("; ")[0];
     const heard = (await response.json()) as GameAnswer;
     if (heard.ticket) this.ticket = heard.ticket;
     return heard.game;
@@ -100,7 +110,7 @@ const tally = async (db: MemoryD1): Promise<Tally> =>
       .all<Tally[number]>()
   ).results;
 
-/** Puts counts in for a question, as though that many accounts had answered. */
+/** Adds counts for a question, as though that many more players had answered. */
 async function counted(
   db: MemoryD1,
   mode: string,
@@ -112,7 +122,9 @@ async function counted(
     await db
       .prepare(
         `INSERT INTO answer_tally (day, mode, question_id, answer_id, players)
-         VALUES (?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (day, mode, question_id, answer_id)
+         DO UPDATE SET players = players + excluded.players`,
       )
       .bind(TODAY, mode, question.id, answerId, players)
       .run();
@@ -173,10 +185,27 @@ describe("what is counted", () => {
     expect(await tally(env.DB)).toEqual([]);
   });
 
-  test("not a player with no account", async () => {
+  test("a player with no account's too: their first game makes them a player the server keeps", async () => {
     const env = world();
     const guest = new Player(env);
     await guest.start("away", NOON);
+    expect(guest.cookie).not.toBeNull();
+    const answer = rarest(AWAY_QUESTIONS[0]);
+    await guest.answer("away", NOON + 1000, 0, answer.name);
+    await guest.answer("away", NOON + 1500, 0, answer.name);
+    expect(await tally(env.DB)).toEqual([
+      expect.objectContaining({ answer_id: answer.id, players: 1 }),
+    ]);
+  });
+
+  test("not a game no player could be made for: a ticket can be sent again", async () => {
+    const env = {
+      ...world(),
+      NEW_PLAYER_LIMIT: { limit: async () => ({ success: false }) },
+    };
+    const guest = new Player(env);
+    await guest.start("away", NOON);
+    expect(guest.cookie).toBeNull();
     const game = await guest.answer(
       "away",
       NOON + 1000,

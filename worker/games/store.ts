@@ -1,10 +1,12 @@
 /**
- * Games kept in the database: an account's. One row for a player's game of a day and mode,
+ * Games kept in the database: every player's the server keeps. One row for a player's game
+ * of a day and mode,
  * as it stands (./state.ts). It is written when the game starts and at each move that
  * changes it (an answer the judge knows, a pass, the clock running out, the next question).
  *
- * Only accounts' games are kept here (the product owner, 2026-11-17): a player with no
- * account keeps their own (./ticket.ts) and nothing about them is stored.
+ * The player is an account, or a guest (a player with no account, since 2026-11-18:
+ * ../accounts/store.ts). A game no player could be made for is a ticket the player keeps
+ * (./ticket.ts), and nothing about it is stored.
  *
  * Two kinds of row (`origin`, migration 4): `server`, a game played through the server, and
  * `device`, a finished game one of the account's devices had played before it signed in,
@@ -12,7 +14,7 @@
  * games can stand on a leaderboard. Either way, a day and mode is played once: a `device`
  * game of today's is today's game for the account too.
  * A game kept here cannot be answered twice or played twice in a day, which is what a
- * leaderboard needs: only accounts are on the leaderboards.
+ * leaderboard needs: only kept games are on the leaderboards.
  */
 
 import type { HistoryGame } from "~/game/account";

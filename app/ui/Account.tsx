@@ -55,6 +55,15 @@ export interface AccountLabels {
   /** On the send button while the bot check has not decided yet; and if it cannot run. */
   checkWaiting: string;
   checkFailed: string;
+  /**
+   * A player with no account, whose games the server keeps all the same: deleting them
+   * ("DELETE MY GAMES"), the question, yes, no, and done. While is the account's.
+   */
+  forget: string;
+  forgetAsk: string;
+  forgetYes: string;
+  forgetNo: string;
+  forgotten: string;
   /** Deleting the account: the button, the question, yes and no, while, and done. */
   remove: string;
   removeAsk: string;
@@ -77,6 +86,11 @@ export interface AccountProps {
   /** Who is signed in on this device, or null. */
   account: { nickname: string; email: string } | null;
   /**
+   * The server keeps a player for this device: an account, or one with no account (their
+   * games are on the leaderboards). Such a player can delete what is kept.
+   */
+  kept?: boolean;
+  /**
    * The ways of signing in that are switched on, and the bot check's site key where asking
    * for a link needs it; null while that is not known.
    */
@@ -97,7 +111,10 @@ export interface AccountProps {
   onSend(email: string, check: string | null): Promise<string | null>;
   /** Signs the device out. Resolves to what went wrong, in words, or null. */
   onLeave(): Promise<string | null>;
-  /** Deletes the account. Resolves to what went wrong, in words, or null. */
+  /**
+   * Deletes the account, or what the server keeps for a player with no account. Resolves
+   * to what went wrong, in words, or null.
+   */
   onDelete(): Promise<string | null>;
   /** Asks the server again. */
   onRetry(): void;
@@ -118,7 +135,9 @@ export const CHECK_PATIENCE_MS = 15_000;
  * EMAIL ME A LINK (with the bot check where there is one), and CONTINUE WITH GOOGLE, each
  * only where that way is switched on. Once the link has gone it says where to, and how
  * long it works. Someone signed in: who, the name they play under (CHANGE), SIGN OUT, and
- * DELETE ACCOUNT, which asks first. The terms and the privacy notice are linked at the foot.
+ * DELETE ACCOUNT, which asks first. A player with no account whose games the server keeps
+ * has DELETE MY GAMES under the ways in, which asks first too. The terms and the privacy
+ * notice are linked at the foot.
  */
 export function Account({ open, ...rest }: AccountProps) {
   return open ? <Card {...rest} /> : null;
@@ -128,6 +147,7 @@ function Card({
   labels,
   name,
   account,
+  kept = false,
   ways,
   status,
   googleHref,
@@ -153,6 +173,9 @@ function Card({
   const [asking, setAsking] = useState(false);
   /** The account was deleted from this card. */
   const [removed, setRemoved] = useState(false);
+  /** A player with no account: deleting what is kept, asked; and done. */
+  const [forgetting, setForgetting] = useState(false);
+  const [forgot, setForgot] = useState(false);
   const working = useRef(false);
 
   // The bot check: its token, a fresh one asked for after each send, and a send waiting
@@ -262,7 +285,43 @@ function Card({
   );
 
   let body;
-  if (account && asking) {
+  if (!account && forgetting) {
+    body = (
+      <div className="ss-acct__form">
+        <p className="ss-acct__ask">{labels.forgetAsk}</p>
+        {errorLine}
+        <Button
+          variant="mode"
+          mode="home"
+          full
+          disabled={busy}
+          className="ss-acct__go"
+          onClick={() =>
+            run(onDelete, (problem) => {
+              if (problem === null) {
+                setForgetting(false);
+                setForgot(true);
+              } else {
+                setError(problem);
+              }
+            })
+          }
+        >
+          {busy ? labels.removing : labels.forgetYes}
+        </Button>
+        <Button
+          full
+          disabled={busy}
+          onClick={() => {
+            setForgetting(false);
+            setError(null);
+          }}
+        >
+          {labels.forgetNo}
+        </Button>
+      </div>
+    );
+  } else if (account && asking) {
     body = (
       <div className="ss-acct__form">
         <p className="ss-acct__ask">{labels.removeAsk}</p>
@@ -436,6 +495,19 @@ function Card({
             <span className="ss-btn__label">{labels.google}</span>
           </a>
         )}
+        {kept && (
+          <Button
+            variant="ghost"
+            full
+            disabled={busy}
+            onClick={() => {
+              setError(null);
+              setForgetting(true);
+            }}
+          >
+            {labels.forget}
+          </Button>
+        )}
       </div>
     );
   }
@@ -453,6 +525,11 @@ function Card({
       {removed && !account && (
         <p className="ss-popup__status" role="status">
           {labels.removed}
+        </p>
+      )}
+      {forgot && !kept && (
+        <p className="ss-popup__status" role="status">
+          {labels.forgotten}
         </p>
       )}
       {/* Nobody signed in: the name this device plays under, whatever the server says. */}

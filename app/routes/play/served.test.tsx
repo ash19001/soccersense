@@ -2,8 +2,10 @@
 // the referee, its requests) against the Worker's own (`handle`), with a real SQLite in
 // memory behind it. Only `fetch` is stood in for: it hands each request to the Worker.
 //
-// The player here has no account (./served-account.test.tsx is one who has): the server
-// stores nothing about them, and the game is the ticket the page keeps on the device.
+// The player here has no account, and the server could not make them a player it keeps
+// (its new-player limit says no: a busy connection), so the game is the ticket the page
+// keeps on the device and the server stores nothing about them. A player the server keeps,
+// with an account or not, is ./served-account.test.tsx.
 
 import {
   act,
@@ -67,7 +69,12 @@ let shots: MockInstance<CareerScene["playShot"]>;
 function openSite(): Site {
   const DB = memoryD1();
   const made: Site = {
-    env: { DB, ASSETS: { fetch: async () => new Response("the site") } },
+    env: {
+      DB,
+      ASSETS: { fetch: async () => new Response("the site") },
+      // no new player can be made: the game is a ticket
+      NEW_PLAYER_LIMIT: { limit: async () => ({ success: false }) },
+    },
     calls: [],
     down: false,
     pending: 0,
@@ -134,6 +141,10 @@ function page(): void {
 }
 
 const modeCard = () => document.querySelector(".ss-intro");
+
+/** The requests about the game (the page also asks who plays here, for the bot check). */
+const gameCalls = () =>
+  site.calls.filter((call) => call.includes("/api/games/"));
 
 /** The page says, on screen, that the server cannot be reached. */
 const lost = () =>
@@ -236,13 +247,13 @@ describe("a game the server runs", () => {
     await wait();
     // nothing to ask the server yet: there is no game on this device
     expect(modeCard()).not.toBeNull();
-    expect(site.calls).toEqual([]);
+    expect(gameCalls()).toEqual([]);
     expect(asked(HOME_QUESTIONS[0])).toBeNull();
     expect(screen.queryByRole("textbox")).toBeNull();
 
     await wait(INTRO_MS + INTRO_LEAVE_MS);
     await wait();
-    expect(site.calls).toEqual(["POST /api/games/home/start"]);
+    expect(gameCalls()).toEqual(["POST /api/games/home/start"]);
     expect(modeCard()).toBeNull();
     expect(asked(HOME_QUESTIONS[0])).not.toBeNull();
     expect(asked(HOME_QUESTIONS[1])).toBeNull();
@@ -357,7 +368,7 @@ describe("a game the server runs", () => {
       screen.getByRole("img", { name: text.fullTime.totalSpoken(700, 700) }),
     ).toBeInTheDocument();
     expect(modeCard()).toBeNull();
-    expect(site.calls).toEqual([]);
+    expect(gameCalls()).toEqual([]);
 
     // The device is all that remembers: one that has forgotten is offered the game anew.
     cleanup();
@@ -366,7 +377,7 @@ describe("a game the server runs", () => {
     await wait();
     expect(document.querySelector(".ss-play-full")).toBeNull();
     expect(modeCard()).not.toBeNull();
-    expect(site.calls).toEqual([]);
+    expect(gameCalls()).toEqual([]);
   });
 
   test("coming back to a game in progress carries on from the ticket, with the clock still the server's", async () => {
@@ -379,7 +390,7 @@ describe("a game the server runs", () => {
     shots.mockClear();
     page();
     await wait();
-    expect(site.calls).toEqual(["POST /api/games/home/look"]);
+    expect(gameCalls()).toEqual(["POST /api/games/home/look"]);
     expect(modeCard()).toBeNull();
     expect(rowShots()).toEqual(FIVE_SHOTS);
     expect(shots).not.toHaveBeenCalled();

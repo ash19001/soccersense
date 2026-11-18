@@ -31,21 +31,27 @@ answered by `worker/` with a D1 database. A push to `main` deploys it.
 - Build the backend in the agreed order, a step at a time; don't add analytics or
   payments ahead of it. (Cloudflare Web Analytics, switched on in the dashboard, stays: the
   product owner, 2026-11-18. The security headers in `public/_headers` allow it.)
+- Every player who plays is kept by the server (the product owner, 2026-11-18): a player
+  with no account is a guest, a row in `accounts` with no email address, made at their
+  first game (or first name change) and known by the same session cookie as an account.
+  Their games and name are the server's, they are on the leaderboards and their answers are
+  counted; only their streak and stats are on the device. A guest is deleted a year after
+  their last game (`worker/tidy.ts`, nightly) or when they ask. Making one needs the bot
+  check (Turnstile, run out of sight by `app/routes/first-check.tsx`) and passes the
+  new-player limit; where either says no, the game falls back to a sealed ticket on the
+  device, not kept.
 - Accounts are optional (`worker/accounts`): sign-in by an emailed link or Google, no
-  passwords, a cookie for accounts only. Their games, streak, stats and nickname are the
-  server's. A game a device sent up (`games.origin = 'device'`) never counts on a
-  leaderboard. The leaderboards are the server's (`GET /api/leaderboard`): accounts only;
-  a player with no account is told where they would have placed, worked out on their page.
-  The admin can rename, take off the leaderboards, or delete an account (`/admin`, Players).
+  passwords. Signing in turns the guest into the account, or brings its games into the
+  account the address has. An account's games, streak, stats and nickname are the server's,
+  the same on every device. A game a device sent up (`games.origin = 'device'`) never
+  counts on a leaderboard. The leaderboards are the server's (`GET /api/leaderboard`).
+  The admin can rename, take off the leaderboards, or delete a player (`/admin`, Players).
 - HOME's and AWAY's shares move with the day: each question's natural shares blended with
-  the answers accounts gave it that day (`~/game/day-shares`, `worker/games/shares.ts`).
-  Everyone is scored on the blend; only accounts' answers are counted.
+  the answers players gave it that day (`~/game/day-shares`, `worker/games/shares.ts`).
 - Question data is a built-in sample in `app/data`, and stays what the game plays until the
   `QUESTIONS` flag (`wrangler.jsonc`) is switched: the game is still in testing.
 - The server runs every game (`worker/games`): it sends a question as its clock starts,
-  judges the answer and sends the reveal. It stores nothing about a player with no account
-  (their game is a sealed ticket kept on their device); only accounts' games go in the
-  database, and only accounts are on leaderboards. The page has no answers: nothing under
+  judges the answer and sends the reveal. The page has no answers: nothing under
   `app/routes` or `app/ui` may import the questions in `app/data` in a way a production
   build keeps. In development with no API (`pnpm dev` alone) the page runs the game itself
   with the sample.

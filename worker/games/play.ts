@@ -1,7 +1,9 @@
 /**
  * The games the server runs: `POST /api/games/<mode>/<move>`.
  *
- *   start    start today's game: question 1 is sent and its clock starts now
+ *   start    start today's game: question 1 is sent and its clock starts now. With no
+ *            player yet, { name?, check? } makes one (worker/app.ts): the name the device
+ *            has shown, and the bot check's token
  *   look     the game as it stands now (on coming back to the page)
  *   answer   { day, index, input, whistle? }: an answer to question `index`. `whistle`: it
  *            is what was in the field when the page's clock ran out.
@@ -36,11 +38,13 @@
  *
  * What only a kept game can promise: one game a day, and a move sent twice happening once.
  * A ticket can be sent again, because the server does not remember it; what comes of that
- * never leaves the player's own device. So only accounts are on the leaderboards, and a
- * player with no account is told where their total would have placed.
+ * never leaves the player's own device. So a ticket's game is on no board, and its player
+ * is told where their total would have placed. Since 2026-11-18 a player with no account is
+ * kept by the server as a guest (../accounts/api.ts), made at their first game: a ticket is
+ * only where no guest could be made (the new-player limit).
  *
  * **HOME's and AWAY's shares move with the day** (~/game/day-shares): the question being
- * asked is scored on its natural shares blended with the answers accounts have given it
+ * asked is scored on its natural shares blended with the answers players have given it
  * so far that day (./shares.ts), for every player alike. A score is the player's as they
  * answer: the turn keeps it, and nothing is scored again later.
  */

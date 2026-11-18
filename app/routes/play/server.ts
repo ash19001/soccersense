@@ -2,11 +2,19 @@
 // and what each can come back with. The referee (./controller.ts) decides what to do with
 // the answers; this only asks, and says plainly how asking went.
 //
-// Browser only. A player with no account keeps their own game: the server hands it back
-// after every move as a sealed ticket, which the page keeps on the device and sends with
-// the next move. The server stores nothing about them, and sets no cookie.
+// Browser only. The server keeps every player's game (an account's, or a guest's: a player
+// with no account, made one by their first game, with a cookie). Where it could not make
+// one, the game is the player's own: the server hands it back after every move as a sealed
+// ticket, which the page keeps on the device and sends with the next move.
 
-import { type GameSnapshot, type Mode, isGameSnapshot } from "~/game";
+import {
+  type GameSnapshot,
+  type Mode,
+  isGameSnapshot,
+  loadNickname,
+} from "~/game";
+
+import { firstCheck } from "../first-check";
 
 /** A request with no answer by now has failed. */
 export const SERVER_TIMEOUT_MS = 8000;
@@ -150,7 +158,18 @@ export function gameServer(options: GameServerOptions = {}): GameServer {
   const held = (ticket: string | null) => (ticket === null ? {} : { ticket });
 
   return {
-    start: (mode) => move(`${mode}/start`, {}),
+    // A first game makes the device a player the server keeps: the name the device has
+    // been showing goes with it (taken where the server would take it), and the bot
+    // check's token, where there is a check (../first-check.tsx). A device the server
+    // knows already sends neither (`take` gives null at once).
+    start: async (mode) => {
+      const name = loadNickname();
+      const check = await firstCheck.take();
+      return move(`${mode}/start`, {
+        ...(name !== null && { name }),
+        ...(check !== null && { check }),
+      });
+    },
     look: (mode, ticket) => ask(`${mode}/look`, held(ticket)),
     answer: (mode, ticket, day, index, input, whistle) =>
       move(`${mode}/answer`, { ...held(ticket), day, index, input, whistle }),

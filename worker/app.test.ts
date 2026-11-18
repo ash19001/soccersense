@@ -296,7 +296,9 @@ describe("the limit on the games' moves", () => {
     try {
       const statuses: number[] = [];
       let last: Response | null = null;
+      // a script keeping no cookie: each start is a new player (one is made each time)
       for (let i = 0; i < 4; i++) {
+        site.cookies.clear();
         last = await start(site, "203.0.113.7");
         statuses.push(last.status);
       }
@@ -304,6 +306,7 @@ describe("the limit on the games' moves", () => {
       expect(last?.headers.get("retry-after")).toBe("60");
       expect(await last?.json()).toEqual({ error: "too_many" });
       // another connection is not held up
+      site.cookies.clear();
       expect((await start(site, "198.51.100.2")).status).toBe(200);
       expect([...seen.keys()]).toEqual([
         "address:203.0.113.7",

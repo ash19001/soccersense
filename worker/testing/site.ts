@@ -1,10 +1,12 @@
 /**
  * The whole site for the page's tests: the Worker's own `handle` behind a stand-in for
  * `fetch`, with a real SQLite in memory and a browser's cookie jar. The email service is
- * stood in for (the links it was asked to send are kept in `links`), so nothing leaves the
- * machine. Tests only: nothing in the Worker or the app imports this.
+ * stood in for (the links it was asked to send are kept in `links`), and so is Turnstile's
+ * check of a bot check's token (a token starting "pass-" passes, once), so nothing leaves
+ * the machine. Tests only: nothing in the Worker or the app imports this.
  */
 
+import { SITEVERIFY_URL } from "../accounts/check";
 import { RESEND_URL } from "../accounts/mail";
 import { handle } from "../app";
 import type { Env, Outside } from "../env";
@@ -39,7 +41,16 @@ export function testSite(
   origin = "http://localhost:3000",
 ): TestSite {
   const DB = memoryD1();
+  const spent = new Set<string>();
   const outside: Outside = async (url, init) => {
+    if (url === SITEVERIFY_URL) {
+      const token = String(
+        (JSON.parse(String(init.body)) as { response?: unknown }).response,
+      );
+      const success = token.startsWith("pass-") && !spent.has(token);
+      spent.add(token);
+      return new Response(JSON.stringify({ success }), { status: 200 });
+    }
     if (url !== RESEND_URL) throw new Error(`an unexpected request to ${url}`);
     const mail = JSON.parse(String(init.body)) as { text: string };
     const link = /https?:\/\/\S+/.exec(mail.text)?.[0];

@@ -7,7 +7,7 @@
  *   GET /api/health   whether the Worker and its database are up: for a look after a deploy
  *   /api/games/...    the games the server runs: questions out, answers judged (./games/play.ts)
  *   /api/account/...  accounts: signing in and out, the nickname (./accounts/api.ts)
- *   GET /api/leaderboard?day=<n>   the day's boards: accounts only (./games/board.ts)
+ *   GET /api/leaderboard?day=<n>   the day's boards (./games/board.ts)
  *   /api/admin/...    the approval desk for the day's questions (./questions/admin.ts)
  *
  * `now` is handed in, so every answer is a pure function of the request, the settings, the
@@ -20,7 +20,7 @@
 
 import { dayKeyFor, dayNumber, msUntilNextDay } from "~/game/day";
 
-import { account, fromThisSite, signedIn } from "./accounts/api";
+import { account, fromThisSite, newGuest, signedIn } from "./accounts/api";
 import { SCHEMA_VERSION, database } from "./db/migrate";
 import {
   type Env,
@@ -91,6 +91,9 @@ async function health(env: Env, now: number, head: boolean): Promise<Response> {
 
 const READ: readonly string[] = ["GET", "HEAD"];
 
+/** The first move of a game: where a device with no player is given one. */
+const STARTS = /^\/games\/[a-z]+\/start$/;
+
 /** Answers one request. */
 export async function handle(
   request: Request,
@@ -119,7 +122,7 @@ export async function handle(
     }
     if (route === "/games" || route.startsWith("/games/")) {
       // An account's game is kept in the database; anyone else keeps their own.
-      const player = await signedIn(request, env, now);
+      let player = await signedIn(request, env, now);
       // A script sending moves over and over: stopped for the rest of the minute. Counted
       // in Cloudflare's memory, never kept. An account is counted by itself (players who
       // share a connection, at a school or behind a phone network, are not added up),
@@ -135,15 +138,46 @@ export async function handle(
           return refused;
         }
       }
-      return await games(
+      // A first game on a device with no player: a guest is made for it (the product
+      // owner, 2026-11-18: players with no account on the leaderboards, their answers
+      // counted), so the game is kept, counted and on the boards. Where no guest can be
+      // made (the new-player limit, or the bot check did not pass), the game is the
+      // player's own, kept on their device (a ticket).
+      let made: string | null = null;
+      if (!player && request.method === "POST" && STARTS.test(route)) {
+        const sent = await request
+          .clone()
+          .json()
+          .catch(() => null);
+        const bag =
+          typeof sent === "object" && sent !== null
+            ? (sent as Record<string, unknown>)
+            : {};
+        // the name the device has shown, and the bot check's token
+        const guest = await newGuest(
+          request,
+          env,
+          now,
+          bag.name,
+          bag.check,
+          outside,
+        );
+        if (guest) {
+          player = guest.player;
+          made = guest.cookie;
+        }
+      }
+      const response = await games(
         request,
         env,
         now,
         route,
         player?.id ?? null,
-        // an account taken off the leaderboards plays, and is not counted
+        // a player taken off the leaderboards plays, and is not counted
         player?.bannedAt == null,
       );
+      if (made) response.headers.append("set-cookie", made);
+      return response;
     }
     if (route === "/leaderboard") {
       const player = await signedIn(request, env, now);

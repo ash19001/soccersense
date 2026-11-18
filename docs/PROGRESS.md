@@ -980,6 +980,35 @@ by their connection, in Cloudflare's memory and never stored. A refused move is 
 `retry-after: 60`, which the page already treats as the server out of reach: it asks again
 until the minute is up. Checked by `worker/app.test.ts` and `app/routes/hosting.test.ts`.
 
+## Every player kept by the server (2026-11-18)
+
+The product owner: "i do want non account players answers to count towards it too...
+non account players can still come on leaderboard ... only thing on localstorage should be
+their stats and streak". ARCHITECTURE.md section 8, "Every player kept by the server".
+
+- **Built.** A player with no account is a guest: an account with no address (migration 7
+  rebuilt `accounts` so the address can be empty), made at their first game with the name
+  their device showed (where it is theirs to have and free) or the next soccerfan number,
+  and kept by the session cookie for a year. Their games are on the leaderboards and their
+  HOME and AWAY answers are counted. Signing in turns the guest into the account, or brings
+  its games into the one the address has. DELETE MY GAMES on the sign-in card deletes a
+  guest; a nightly tidy (cron) deletes a guest a year after their last game.
+- **The new-player limit**: 10 new players a minute per connection. Where it says no, the
+  game is the old ticket on the device (not kept, not counted).
+- **The privacy notice** says what is kept for a player with no account, the cookie, and
+  how long; the sign-in card no longer says only accounts are on the leaderboards.
+- **Checked:** `pnpm check` (the count is in the commit); the Worker's tests (guests made,
+  named, on the board, counted, signing in both ways, Google, deleting, the limit, the
+  tidy; the whole game suite for a guest, an account and a ticket); the page's (the home
+  screen's name and DELETE MY GAMES, the game page carrying a guest's game on); on
+  Cloudflare's own engine through `wrangler dev` (migration 7 kept every account, game and
+  index; a guest made with its name, on the board; it signs in and becomes the account;
+  a second guest's games brought in; a third deletes itself).
+- **The bot check** (the product owner: "yes add both protections"): a first game or a
+  first name makes a player only with a Turnstile token that passes. The check runs out of
+  sight on the home screen and the mode pages for a device the server does not know; a
+  first game waits up to 10 seconds for it, then plays as a ticket (not kept).
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

@@ -7,7 +7,9 @@
  */
 import { afterEach, describe, expect, test, vi } from "vitest";
 
+import { HOME_QUESTIONS } from "~/data";
 import type { AccountAnswer } from "~/game/account";
+import type { BoardAnswer } from "~/game/board";
 import { EPOCH_UTC, MS_PER_DAY } from "~/game/day";
 
 import { handle } from "../app";
@@ -242,6 +244,7 @@ describe("a player with no account", () => {
     expect(heard.status).toBe(200);
     expect(heard.body).toEqual({
       account: null,
+      player: null,
       signIn: { email: true, google: true, check: null },
     });
     expect(heard.set).toEqual([]);
@@ -269,22 +272,272 @@ describe("a player with no account", () => {
     expect(off.response.headers.get("location")).toBe("/enter#failed");
   });
 
-  test("playing a game still stores nothing and sets no cookie", async () => {
+  test("before their first game, nothing about them is kept", async () => {
     const env = world();
     const device = new Device(env, outsideWorld());
-    const started = await device.ask<GameAnswer>(
-      "/api/games/home/start",
-      NOON,
-      {
-        body: {},
-      },
+    await device.me(NOON);
+    await device.ask("/api/leaderboard", NOON);
+    expect(device.cookies.size).toBe(0);
+    expect(await count(env.DB, "accounts")).toBe(0);
+    expect(await count(env.DB, "sessions")).toBe(0);
+  });
+});
+
+describe("a player with no account is kept by the server: a guest", () => {
+  const start = (
+    device: Device,
+    now: number,
+    body: Record<string, unknown> = {},
+    mode = "home",
+  ) => device.ask<GameAnswer>(`/api/games/${mode}/start`, now, { body });
+
+  /** Plays today's HOME game through from its start, the best answer to each question. */
+  async function playHome(device: Device, from: number): Promise<number> {
+    let now = from;
+    const started = await start(device, now);
+    const day = started.body.game?.day;
+    for (let index = 0; index < HOME_QUESTIONS.length; index++) {
+      const best =
+        HOME_QUESTIONS[index].answers.find((a) => a.shot === "worldie") ??
+        HOME_QUESTIONS[index].answers[0];
+      await device.ask<GameAnswer>("/api/games/home/answer", (now += 1000), {
+        body: { day, index, input: best.name },
+      });
+      await device.ask<GameAnswer>("/api/games/home/next", (now += 1000), {
+        body: { day, index },
+      });
+    }
+    return now;
+  }
+
+  const accounts = (env: Env & { DB: MemoryD1 }) =>
+    rows<{ id: string; email: string | null; nickname: string }>(
+      env.DB,
+      "SELECT id, email, nickname FROM accounts ORDER BY created_at, nickname",
     );
+
+  test("their first game makes them one: a soccerfan name, a cookie for a year, the game kept", async () => {
+    const env = world();
+    const device = new Device(env, outsideWorld());
+    const started = await start(device, NOON);
+    expect(started.status).toBe(200);
+    expect(started.body.ticket).toBeNull();
+    expect(started.set).toHaveLength(1);
+    expect(started.set[0]).toMatch(/^__Host-ss=[\w-]{43}; /);
+    expect(started.set[0]).toContain(`Max-Age=${365 * 24 * 60 * 60}`);
+    expect(started.set[0]).toContain("HttpOnly");
+    const [guest] = await accounts(env);
+    expect(guest).toMatchObject({ email: null, nickname: "soccerfan1" });
+    expect(
+      await rows(env.DB, "SELECT player_id, day, mode FROM games"),
+    ).toEqual([{ player_id: guest.id, day: 8, mode: "home" }]);
+    // the page is told their name, and that nobody is signed in
+    expect((await device.me(NOON + 1)).body).toEqual({
+      account: null,
+      player: { nickname: "soccerfan1" },
+      signIn: { email: true, google: true, check: null },
+    });
+    // a mode is played once a day: starting again is the same game
+    const again = await start(device, NOON + 5000);
+    expect(again.body.game?.startedAt).toBe(NOON);
+    expect(again.set).toEqual([]);
+    expect(await count(env.DB, "games")).toBe(1);
+    expect(await count(env.DB, "accounts")).toBe(1);
+  });
+
+  test("the name their device has shown is theirs, where it is a fit one and free", async () => {
+    const env = world();
+    const nameOf = async (name: unknown) => {
+      const device = new Device(env, outsideWorld());
+      await start(device, NOON, { name });
+      return (await device.me(NOON + 1)).body.player?.nickname;
+    };
+    expect(await nameOf("Row Z Rita")).toBe("Row Z Rita");
+    // taken (in any capitals), made up on the device, unfit, or none: the next number
+    expect(await nameOf("row z rita")).toBe("soccerfan1");
+    expect(await nameOf("soccerfan4821")).toBe("soccerfan2");
+    expect(await nameOf("hitler fan")).toBe("soccerfan3");
+    expect(await nameOf(42)).toBe("soccerfan4");
+  });
+
+  test("a name chosen before a first game makes them one, with it; one taken or unfit makes nothing", async () => {
+    const env = world();
+    const first = new Device(env, outsideWorld());
+    const named = await first.ask("/api/account/name", NOON, {
+      body: { nickname: "  Nutmeg   Nina " },
+    });
+    expect(named.status).toBe(200);
+    expect(named.body).toMatchObject({
+      account: null,
+      player: { nickname: "Nutmeg Nina" },
+    });
+    expect(named.set).toHaveLength(1);
+    expect(await count(env.DB, "accounts")).toBe(1);
+
+    const second = new Device(env, outsideWorld());
+    const taken = await second.ask<{ error: string }>(
+      "/api/account/name",
+      NOON,
+      { body: { nickname: "nutmeg nina" } },
+    );
+    expect(taken.status).toBe(409);
+    expect(taken.body).toEqual({ error: "taken" });
+    const unfit = await second.ask<{ error: string; problem: string }>(
+      "/api/account/name",
+      NOON,
+      { body: { nickname: "soccerfan77" } },
+    );
+    expect(unfit.status).toBe(400);
+    expect(unfit.body).toEqual({ error: "bad_name", problem: "reserved" });
+    expect(second.cookies.size).toBe(0);
+    expect(await count(env.DB, "accounts")).toBe(1);
+
+    // and with a player made, the name is changed as an account's is
+    const changed = await first.ask("/api/account/name", NOON + 1, {
+      body: { nickname: "Keeper Kim" },
+    });
+    expect(changed.body.player?.nickname).toBe("Keeper Kim");
+    expect(await count(env.DB, "accounts")).toBe(1);
+  });
+
+  test("they are on the leaderboard by their name, and told their own place", async () => {
+    const env = world();
+    const device = new Device(env, outsideWorld());
+    await playHome(device, NOON);
+    const board = (
+      await device.ask<BoardAnswer>("/api/leaderboard", NOON + 60_000)
+    ).body.modes.home;
+    expect(board.count).toBe(1);
+    expect(board.top).toEqual([
+      { rank: 1, name: "soccerfan1", points: 700, you: true },
+    ]);
+    expect(board.you).toEqual({ rank: 1, points: 700 });
+  });
+
+  test("signing in with an address that has no account: the guest becomes it, name and games and all", async () => {
+    const env = world();
+    const device = new Device(env, outsideWorld());
+    await start(device, NOON);
+    await device.ask("/api/account/name", NOON + 1, {
+      body: { nickname: "Keeper Kim" },
+    });
+    const [guest] = await accounts(env);
+    const signed = await device.signIn("fan@example.com", NOON + 2);
+    expect(signed.body).toMatchObject({
+      account: { nickname: "Keeper Kim", email: "fan@example.com" },
+      player: { nickname: "Keeper Kim" },
+    });
+    expect(await accounts(env)).toEqual([
+      { id: guest.id, email: "fan@example.com", nickname: "Keeper Kim" },
+    ]);
+    expect(await rows(env.DB, "SELECT player_id FROM games")).toEqual([
+      { player_id: guest.id },
+    ]);
+    // a new cookie, for an account's life; the guest's is gone
+    expect(signed.set[0]).toContain(`Max-Age=${SESSION_LIFE_MS / 1000}`);
+    expect(await count(env.DB, "sessions")).toBe(1);
+  });
+
+  test("signing in to an account there is: the guest's games come into it, but the account's own stand", async () => {
+    const env = world();
+    const out = outsideWorld();
+    const mine = new Device(env, out);
+    await mine.signIn("fan@example.com", NOON);
+    await playHome(mine, NOON);
+    const [account] = await accounts(env);
+
+    const other = new Device(env, out);
+    await playHome(other, NOON + 100_000);
+    await start(other, NOON + 200_000, {}, "away");
+    // two on today's HOME board: the account and the guest
+    expect(
+      (await other.ask<BoardAnswer>("/api/leaderboard", NOON + 200_001)).body
+        .modes.home.count,
+    ).toBe(2);
+
+    const signed = await other.signIn("fan@example.com", NOON + 300_000);
+    expect(signed.body.account?.email).toBe("fan@example.com");
+    // the guest is gone, with its HOME game: the account had played HOME
+    expect(await accounts(env)).toEqual([
+      { id: account.id, email: "fan@example.com", nickname: "soccerfan1" },
+    ]);
+    expect(
+      await rows(
+        env.DB,
+        "SELECT player_id, mode, created_at FROM games ORDER BY mode",
+      ),
+    ).toEqual([
+      { player_id: account.id, mode: "away", created_at: NOON + 200_000 },
+      { player_id: account.id, mode: "home", created_at: NOON },
+    ]);
+    const board = (
+      await other.ask<BoardAnswer>("/api/leaderboard", NOON + 300_001)
+    ).body.modes.home;
+    expect(board.count).toBe(1);
+    expect(board.you).toEqual({ rank: 1, points: 700 });
+  });
+
+  test("signing in with Google: the guest becomes the account too", async () => {
+    const env = world();
+    const out = outsideWorld();
+    const device = new Device(env, out);
+    await start(device, NOON);
+    const [guest] = await accounts(env);
+    const back = await device.google(
+      { sub: "google-7", email: "kim@example.com", email_verified: true },
+      NOON + 1,
+    );
+    expect(back.status).toBe(302);
+    expect(
+      await rows(env.DB, "SELECT id, email, google_id FROM accounts"),
+    ).toEqual([
+      { id: guest.id, email: "kim@example.com", google_id: "google-7" },
+    ]);
+  });
+
+  test("their streak and stats are their device's own: nothing to swap", async () => {
+    const env = world();
+    const device = new Device(env, outsideWorld());
+    await start(device, NOON);
+    const heard = await device.ask("/api/account/history", NOON + 1, {
+      body: { have: [[7, "home", 500]] },
+    });
+    expect(heard.status).toBe(200);
+    expect(heard.body).toEqual({ games: [], want: [], saved: 0 });
+  });
+
+  test("they can delete everything the server keeps for them", async () => {
+    const env = world();
+    const device = new Device(env, outsideWorld());
+    await playHome(device, NOON);
+    const gone = await device.ask("/api/account/delete", NOON + 60_000, {
+      body: {},
+    });
+    expect(gone.status).toBe(200);
+    expect(gone.body).toMatchObject({ account: null, player: null });
+    expect(device.cookies.size).toBe(0);
+    for (const table of ["accounts", "games", "sessions", "board_tally"]) {
+      expect(await count(env.DB, table), table).toBe(0);
+    }
+  });
+
+  test("where this connection has made too many players just now, the game is the player's own", async () => {
+    const env = world({
+      NEW_PLAYER_LIMIT: { limit: async () => ({ success: false }) },
+    });
+    const device = new Device(env, outsideWorld());
+    const started = await start(device, NOON);
     expect(started.status).toBe(200);
     expect(typeof started.body.ticket).toBe("string");
     expect(started.set).toEqual([]);
-    expect(await count(env.DB, "games")).toBe(0);
     expect(await count(env.DB, "accounts")).toBe(0);
-    expect(await count(env.DB, "sessions")).toBe(0);
+    const named = await device.ask<{ error: string }>(
+      "/api/account/name",
+      NOON,
+      { body: { nickname: "Nutmeg Nina" } },
+    );
+    expect(named.status).toBe(429);
+    expect(named.body).toEqual({ error: "too_many" });
   });
 });
 
@@ -673,7 +926,8 @@ describe("a device signed in", () => {
     });
     expect(await count(env.DB, "games")).toBe(1);
 
-    // signed out, the same device is a player with no account again
+    // signed out, the same device is a new player with no account: its next game makes
+    // it a guest, with a game of its own
     await phone.ask("/api/account/leave", NOON + 7, { body: {} });
     const fresh = await phone.ask<GameAnswer>(
       "/api/games/home/start",
@@ -682,8 +936,10 @@ describe("a device signed in", () => {
         body: {},
       },
     );
-    expect(typeof fresh.body.ticket).toBe("string");
-    expect(await count(env.DB, "games")).toBe(1);
+    expect(fresh.body.ticket).toBeNull();
+    expect(fresh.body.game?.startedAt).toBe(NOON + 8);
+    expect(await count(env.DB, "games")).toBe(2);
+    expect(await count(env.DB, "accounts")).toBe(2);
   });
 });
 
@@ -778,18 +1034,17 @@ describe("the nickname", () => {
     }
   });
 
-  test("needs someone signed in", async () => {
+  test("with nobody playing here yet, a fit name makes them a player (a guest) with it", async () => {
     const env = world();
     const device = new Device(env, outsideWorld());
-    const heard = await device.ask<{ error: string }>(
-      "/api/account/name",
-      NOON,
-      {
-        body: { nickname: "Nutmeg Nina" },
-      },
-    );
-    expect(heard.status).toBe(401);
-    expect(heard.body).toEqual({ error: "signed_out" });
+    const heard = await device.ask("/api/account/name", NOON, {
+      body: { nickname: "Nutmeg Nina" },
+    });
+    expect(heard.status).toBe(200);
+    expect(heard.body).toMatchObject({
+      account: null,
+      player: { nickname: "Nutmeg Nina" },
+    });
   });
 });
 
@@ -1347,5 +1602,84 @@ describe("the bot check on asking for a link (Turnstile)", () => {
     );
     expect(heard.status).toBe(403);
     expect(out.mails).toEqual([]);
+  });
+});
+
+describe("the bot check before a first game (Turnstile)", () => {
+  const KEYS = {
+    TURNSTILE_SITE_KEY: "site-key",
+    TURNSTILE_SECRET_KEY: "secret-key",
+  };
+
+  /** Turnstile's siteverify: these tokens pass, once each. */
+  function withTurnstile(good: string[]) {
+    const out = outsideWorld();
+    const left = new Set(good);
+    const asked: string[] = [];
+    const inner = out.outside;
+    const outside: Outside = async (url, init) => {
+      if (url !== SITEVERIFY_URL) return inner(url, init);
+      const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      asked.push(String(body.response));
+      const success =
+        body.secret === "secret-key" && left.delete(String(body.response));
+      return new Response(JSON.stringify({ success }), { status: 200 });
+    };
+    return { ...out, outside, asked };
+  }
+
+  const start = (device: Device, body: Record<string, unknown>) =>
+    device.ask<GameAnswer>("/api/games/home/start", NOON, { body });
+
+  test("a first game makes a player only with a token that passes; without, it is the player's own", async () => {
+    const env = world(KEYS);
+    const out = withTurnstile(["good-1"]);
+    for (const body of [{}, { check: "made-up" }]) {
+      const device = new Device(env, out);
+      const started = await start(device, body);
+      expect(started.status).toBe(200);
+      // still a game: kept on the device, on no board, not counted
+      expect(typeof started.body.ticket).toBe("string");
+      expect(started.set).toEqual([]);
+    }
+    expect(await count(env.DB, "accounts")).toBe(0);
+
+    const device = new Device(env, out);
+    const started = await start(device, { check: "good-1" });
+    expect(started.body.ticket).toBeNull();
+    expect(started.set).toHaveLength(1);
+    expect(await count(env.DB, "accounts")).toBe(1);
+    expect(out.asked).toEqual(["made-up", "good-1"]);
+    // a token works once
+    const again = await start(new Device(env, out), { check: "good-1" });
+    expect(typeof again.body.ticket).toBe("string");
+    expect(await count(env.DB, "accounts")).toBe(1);
+    // and a player already made is not asked again
+    await device.ask("/api/games/home/look", NOON + 1, { body: {} });
+    expect(out.asked).toEqual(["made-up", "good-1", "good-1"]);
+  });
+
+  test("a name chosen before a first game needs it too", async () => {
+    const env = world(KEYS);
+    const out = withTurnstile(["good-2"]);
+    const device = new Device(env, out);
+    const refused = await device.ask<{ error: string }>(
+      "/api/account/name",
+      NOON,
+      { body: { nickname: "Nutmeg Nina" } },
+    );
+    expect(refused.status).toBe(403);
+    expect(refused.body).toEqual({ error: "bot_check" });
+    expect(await count(env.DB, "accounts")).toBe(0);
+    const named = await device.ask("/api/account/name", NOON, {
+      body: { nickname: "Nutmeg Nina", check: "good-2" },
+    });
+    expect(named.status).toBe(200);
+    expect(named.body.player).toEqual({ nickname: "Nutmeg Nina" });
+    // a player already made changes their name with no check
+    const changed = await device.ask("/api/account/name", NOON + 1, {
+      body: { nickname: "Keeper Kim" },
+    });
+    expect(changed.body.player).toEqual({ nickname: "Keeper Kim" });
   });
 });
