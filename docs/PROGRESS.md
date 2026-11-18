@@ -1009,6 +1009,16 @@ their stats and streak". ARCHITECTURE.md section 8, "Every player kept by the se
   sight on the home screen and the mode pages for a device the server does not know; a
   first game waits up to 10 seconds for it, then plays as a ticket (not kept).
 
+## "Send us an idea" is an email (2026-11-18)
+
+The product owner: "wire up the send us an idea (just opens email sending email to us with
+prefilled data". The button opens the player's mail app with an email to
+info@soccersense.io: subject "An idea for soccersense", a first line to write under, and
+their name in the game. No form service: nothing goes through anyone else. For a device
+with no mail app, the address is shown under the buttons, to copy. "Buy us a coffee" opens
+the game's Ko-fi page (https://ko-fi.com/soccersense) in a new tab: tips go through Ko-fi
+(no fee on one-off tips), membership will go through Paddle, which takes no donations.
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

@@ -28,7 +28,7 @@ import { PrefetchPageLinks, useNavigate } from "react-router";
 import { MODE_PICTURES } from "~/art/ball-icons";
 import { STADIUMS } from "~/data";
 import { factForDay, type Fact } from "~/data/facts";
-import { COFFEE_URL, IDEAS_URL, usableLink } from "~/data/links";
+import { COFFEE_URL, IDEAS_EMAIL, mailLink, usableLink } from "~/data/links";
 import {
   type BoardAnswer,
   MODES,
@@ -134,7 +134,6 @@ const FACES_AFTER_MS = 1500;
 /** What the rules' pop-up says (the "?" button opens it): no line under its heading. */
 const RULES = howToPlayContent({ intro: false });
 /** Where the Support pop-up's buttons go: null while a link is still a placeholder. */
-const IDEAS = usableLink(IDEAS_URL);
 const COFFEE = usableLink(COFFEE_URL);
 
 /**
@@ -589,6 +588,18 @@ export default function Home() {
     nicknameStore.server,
   );
   const [renaming, setRenaming] = useState(false);
+  /** "Send us an idea": an email to us, its subject and first lines written, their name in it. */
+  const ideas = useMemo(
+    () =>
+      usableLink(
+        mailLink(
+          IDEAS_EMAIL,
+          strings.support.mail.subject,
+          strings.support.mail.body(nickname ?? ""),
+        ),
+      ),
+    [nickname],
+  );
   /** Where the focus goes back to once the name's card has gone. */
   const renameButton = useRef<HTMLElement | null>(null);
   /** The name and SIGN IN at the bottom left (on a phone, its one button). */
@@ -1017,7 +1028,8 @@ export default function Home() {
         )}
         <Support
           labels={strings.support}
-          ideas={IDEAS}
+          ideas={ideas}
+          ideasAddress={IDEAS_EMAIL}
           coffee={COFFEE}
           open={support}
           onClose={() => setSupport(false)}

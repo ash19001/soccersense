@@ -1146,15 +1146,23 @@ exported: `HEART` (its button's icon), `BULB` and `CUP` (beside the two buttons'
 pixels, two to a cell).
 
 - **The card**: "SUPPORT US"; a line of thanks (the dialog's description); two big buttons,
-  **SEND US AN IDEA** (steel) and **BUY US A COFFEE** (gold), each a link that opens in a new
-  tab (`target="_blank"`, `rel="noopener noreferrer"`, read out "(opens in a new tab)"). A
+  **SEND US AN IDEA** (steel) and **BUY US A COFFEE** (gold), each a link. A page opens in a
+  new tab (`target="_blank"`, `rel="noopener noreferrer"`, read out "(opens in a new tab)");
+  a `mailto:` link opens the player's mail app, in place, with nothing read out after it. A
   button whose address is `null` is a disabled button showing "COMING SOON" under its words
-  (read out "SEND US AN IDEA, COMING SOON").
-- **The addresses** are in `app/data/links.ts`: `IDEAS_URL` and `COFFEE_URL`, placeholders on
-  example.com until the product owner sets the real ones (a `mailto:` address works for ideas
-  too). The home page passes each through `usableLink(url)`, which gives `null` for a
-  placeholder (example.com, .org, .net, `.example`, `.invalid`, `.test`, `.localhost`), an
-  empty or broken address, or anything but `https:`, `http:` and `mailto:`.
+  (read out "SEND US AN IDEA, COMING SOON"). `ideasAddress` (new 2026-11-18): the address
+  ideas go to, shown under the buttons ("Or write to info@soccersense.io", selectable) for
+  anyone whose device opens no mail app.
+- **The addresses** are in `app/data/links.ts`. Ideas (2026-11-18, the product owner: "just
+  opens email sending email to us with prefilled data"): an email to `IDEAS_EMAIL`
+  (info@soccersense.io), made by `mailLink(to, subject, body)` with the subject "An idea
+  for soccersense" and a first few lines with the player's name (`strings.support.mail`);
+  no form and no other company. `COFFEE_URL` is the game's Ko-fi page,
+  https://ko-fi.com/soccersense (2026-11-18: tips go through Ko-fi; Paddle, for membership,
+  takes no donations). The home page passes each through `usableLink(url)`,
+  which gives `null` for a placeholder (example.com, .org, .net, `.example`, `.invalid`,
+  `.test`, `.localhost`), an empty or broken address, or anything but `https:`, `http:`
+  and `mailto:`.
 
 **The buttons.** `MenuCaptions` renders the bell (`remind`, named "Remind me") and the heart
 (`support`, "Support us") as `PopupButton`s inside the day plate, after the day and the streak

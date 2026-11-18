@@ -1025,6 +1025,14 @@ export const en = {
     /** On a button whose link is not set yet. */
     soon: "COMING SOON",
     newTab: "(opens in a new tab)",
+    /** Under the buttons, before the address ideas go to: for anyone with no mail app. */
+    orWrite: "Or write to",
+    /** The email "Send us an idea" starts, in the player's own mail app. */
+    mail: {
+      subject: "An idea for soccersense",
+      body: (name: string) =>
+        `Hi soccersense,\n\nMy idea:\n\n\n${name ? `\n(My name in the game: ${name})\n` : ""}`,
+    },
   },
 
   /** Small print at the foot of the rules and the stats. */

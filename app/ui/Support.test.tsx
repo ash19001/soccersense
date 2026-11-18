@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useRef, useState } from "react";
 import { describe, expect, test, vi } from "vitest";
 
-import { COFFEE_URL, IDEAS_URL, usableLink } from "~/data/links";
+import { COFFEE_URL, IDEAS_EMAIL, mailLink, usableLink } from "~/data/links";
 import { strings } from "~/i18n";
 
 import { WideContext } from "./GameLayout";
@@ -17,9 +17,20 @@ function soon(words: string): RegExp {
 }
 
 describe("the Support links", () => {
-  test("the two in app/data/links.ts are still placeholders", () => {
-    expect(usableLink(IDEAS_URL)).toBeNull();
-    expect(usableLink(COFFEE_URL)).toBeNull();
+  test("the coffee is the game's Ko-fi page", () => {
+    expect(usableLink(COFFEE_URL)).toBe("https://ko-fi.com/soccersense");
+  });
+
+  test("ideas go by email to the game's address, its subject and first lines written", () => {
+    expect(IDEAS_EMAIL).toBe("info@soccersense.io");
+    const link = mailLink(IDEAS_EMAIL, "An idea", "One line\nAnd one & more");
+    expect(link).toBe(
+      "mailto:info@soccersense.io?subject=An%20idea&body=One%20line%0AAnd%20one%20%26%20more",
+    );
+    expect(usableLink(link)).toBe(link);
+    // the player's name goes in the body, where they have one
+    expect(strings.support.mail.body("Top Bins")).toContain("Top Bins");
+    expect(strings.support.mail.body("")).not.toContain("name");
   });
 
   test("a real page or address is used as it is", () => {
@@ -180,6 +191,31 @@ describe("the Support button", () => {
 });
 
 describe("Support", () => {
+  test("an idea is an email: it opens the mail app, not a tab, and the address is there to copy", () => {
+    const mail = mailLink(IDEAS_EMAIL, "An idea", "Hi");
+    render(
+      <Support
+        labels={LABELS}
+        ideas={mail}
+        ideasAddress={IDEAS_EMAIL}
+        coffee="https://coffee.soccersense.app/"
+        open
+        onClose={() => {}}
+      />,
+    );
+    const idea = screen.getByRole("link", { name: new RegExp(LABELS.idea) });
+    expect(idea).toHaveAttribute("href", mail);
+    expect(idea).not.toHaveAttribute("target");
+    expect(idea).not.toHaveTextContent(LABELS.newTab);
+    // a page still opens in a new tab, and says so
+    const coffee = screen.getByRole("link", {
+      name: new RegExp(LABELS.coffee),
+    });
+    expect(coffee).toHaveAttribute("target", "_blank");
+    expect(screen.getByText(IDEAS_EMAIL)).toBeInTheDocument();
+    expect(screen.getByText(new RegExp(LABELS.orWrite))).toBeInTheDocument();
+  });
+
   test("is nothing while it is not open", () => {
     render(
       <Support labels={LABELS} {...NONE} open={false} onClose={() => {}} />,

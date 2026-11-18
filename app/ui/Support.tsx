@@ -57,12 +57,19 @@ export interface SupportLabels {
   soon: string;
   /** Read out after a link's name: "(opens in a new tab)". */
   newTab: string;
+  /** Under the buttons, before the ideas' address, for anyone with no mail app: "Or write to". */
+  orWrite: string;
 }
 
 export interface SupportProps {
   labels: SupportLabels;
-  /** Where "Send us an idea" goes, or null while there is nowhere yet ("Coming soon"). */
+  /**
+   * Where "Send us an idea" goes (an email written in the player's mail app: a `mailto:`
+   * link), or null while there is nowhere yet ("Coming soon").
+   */
   ideas: string | null;
+  /** The address ideas go to, shown under the buttons to copy where no mail app opens. */
+  ideasAddress?: string;
   /** Where "Buy us a coffee" goes, or null while there is nowhere yet. */
   coffee: string | null;
   open: boolean;
@@ -80,6 +87,7 @@ export interface SupportProps {
 export function Support({
   labels,
   ideas,
+  ideasAddress,
   coffee,
   open,
   onClose,
@@ -105,6 +113,12 @@ export function Support({
           primary
         />
       </div>
+      {ideas !== null && ideasAddress && (
+        <p className="ss-popup__note ss-support__write">
+          {labels.orWrite}{" "}
+          <span className="ss-support__address">{ideasAddress}</span>
+        </p>
+      )}
     </Popup>
   );
 }
@@ -145,6 +159,8 @@ function Way({
       </button>
     );
   }
+  // An email opens the player's mail app, not a tab.
+  const page = !href.startsWith("mailto:");
   return (
     <a
       className={cx(
@@ -152,14 +168,13 @@ function Way({
         primary ? "ss-btn--primary" : "ss-btn--secondary",
       )}
       href={href}
-      target="_blank"
-      rel="noopener noreferrer"
+      {...(page && { target: "_blank", rel: "noopener noreferrer" })}
     >
       <span className="ss-btn__label">
         {glyph}
         <span className="ss-support__words">
           {label}
-          <span className="ss-sr"> {labels.newTab}</span>
+          {page && <span className="ss-sr"> {labels.newTab}</span>}
         </span>
       </span>
     </a>

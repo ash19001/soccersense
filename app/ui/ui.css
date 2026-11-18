@@ -5334,6 +5334,18 @@ html:has(.ss-help-dialog[open]) {
   display: none;
 }
 
+/* Support: the ideas' address under the buttons, to copy where no mail app opens. */
+.ss-support__write {
+  margin-top: var(--u2);
+  text-align: center;
+}
+
+.ss-support__address {
+  color: var(--c-chalk);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
 /*
  * The bot check before a first game (app/routes/first-check.tsx): out of sight at the foot
  * of the screen, taking no room, unless Turnstile has to ask for a click; then its widget,

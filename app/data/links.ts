@@ -1,16 +1,25 @@
 // Where the home screen's Support pop-up sends people (Support in ~/ui, opened by the heart
 // button beside the day). One place to change them.
 //
-// PLACEHOLDERS: both addresses below are on example.com, a domain reserved for examples
-// that never belongs to anyone. The product owner replaces them with the real pages (an
-// ideas form, a "buy me a coffee" page; a mailto: address works for ideas too). Until a
-// link is replaced, its button in the pop-up says "Coming soon" and cannot be pressed.
+// "Send us an idea" is an email to the game's own address, written by the player's own
+// mail app with its subject and a first line filled in (`mailLink`; the product owner,
+// 2026-11-18: "just opens email sending email to us with prefilled data"). No form and no
+// other company: what is sent goes from the player's mail to ours.
+//
+// "Buy us a coffee" is the game's Ko-fi page (the product owner, 2026-11-18): tips go
+// through Ko-fi, not Paddle, which takes no donations; Paddle is for membership. A link
+// set to a placeholder (example.com and the like) makes its button say "Coming soon".
 
-/** Where "Send us an idea" goes: a form, a page or a `mailto:` address. */
-export const IDEAS_URL = "https://example.com/soccersense/ideas";
+/** Where "Send us an idea" goes: the game's address (the privacy notice's contact too). */
+export const IDEAS_EMAIL = "info@soccersense.io";
 
-/** Where "Buy us a coffee" goes: a tipping page. */
-export const COFFEE_URL = "https://example.com/soccersense/coffee";
+/** Where "Buy us a coffee" goes: the game's tipping page, on Ko-fi. */
+export const COFFEE_URL = "https://ko-fi.com/soccersense";
+
+/** A `mailto:` link to `to`, its subject and its body filled in. */
+export function mailLink(to: string, subject: string, body: string): string {
+  return `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
 
 /** Hosts that are only ever placeholders (RFC 2606 and RFC 6761). */
 const PLACEHOLDER_HOSTS = ["example.com", "example.org", "example.net"];
