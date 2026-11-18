@@ -116,7 +116,7 @@ export const en = {
       /** A mode not played yet: its label over "IS WAITING". */
       isWaiting: "IS WAITING",
       /** "PLAYED TODAY" over "1,136". */
-      crowd: "PLAYED TODAY",
+      crowd: "ON THE BOARD",
       count: (count: number) => count.toLocaleString("en-GB"),
     },
     /**
@@ -198,8 +198,11 @@ export const en = {
         return `You: ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
       },
       gap: "Rows left out",
+      /** Only accounts are on the boards (the product owner, 2026-11-17). */
       played: (count: number) =>
-        `${count.toLocaleString("en-GB")} played today`,
+        `${count.toLocaleString("en-GB")} on today's board`,
+      /** In the table while nobody is on it yet. */
+      empty: "Nobody on today's board yet.",
       open: "Today's top 10",
       close: "Close the leaderboard",
       /** The tab on the panel's edge (a monitor) that slides it away and back. */
@@ -218,8 +221,23 @@ export const en = {
             : (["th", "st", "nd", "rd"][rank % 10] ?? "th");
         return `You're ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
       },
+      /**
+       * ...or, played but not on the board (no account, or a game from before signing in),
+       * where they would have placed: "You'd be 37th of 1,285" (they counted in)...
+       */
+      wouldBe: (rank: number, count: number) => {
+        const tens = rank % 100;
+        const suffix =
+          tens >= 11 && tens <= 13
+            ? "th"
+            : (["th", "st", "nd", "rd"][rank % 10] ?? "th");
+        return `You'd be ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
+      },
       /** ...or, not played yet, a nudge (short: the monitor's panel shows one line). */
-      nudge: (count: number) => `${count.toLocaleString("en-GB")} played. You?`,
+      nudge: (count: number) =>
+        count === 0
+          ? "Nobody yet. You?"
+          : `${count.toLocaleString("en-GB")} on the board. You?`,
       /** Over the strip of the player's last seven days in the mode. */
       week: "LAST 7 DAYS",
       /** The days under the bars, Sunday first (`Date.getUTCDay`). */

@@ -132,6 +132,31 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE games ADD COLUMN prompts TEXT`,
     ],
   },
+  {
+    id: 5,
+    name: "the leaderboards: how many accounts finished on each total, and the top ten's index",
+    sql: [
+      // For each day, mode and total, how many accounts' games (played through the server)
+      // were decided on it (worker/games/board.ts): a place is worked out from these
+      // counts, so a board never has to read every game. One more as each game is decided.
+      `CREATE TABLE IF NOT EXISTS board_tally (
+        day INTEGER NOT NULL,
+        mode TEXT NOT NULL,
+        total INTEGER NOT NULL,
+        players INTEGER NOT NULL,
+        PRIMARY KEY (day, mode, total)
+      )`,
+      // The top ten of a day and mode, read from the index alone.
+      `CREATE INDEX IF NOT EXISTS games_board
+        ON games (day, mode, total DESC, finished_at)
+        WHERE origin = 'server' AND finished_at IS NOT NULL`,
+      // The counts of the games already decided.
+      `INSERT OR IGNORE INTO board_tally (day, mode, total, players)
+        SELECT day, mode, total, COUNT(*) FROM games
+        WHERE origin = 'server' AND finished_at IS NOT NULL
+        GROUP BY day, mode, total`,
+    ],
+  },
 ];
 
 /** The highest migration there is: what `migrate` brings a database to. */

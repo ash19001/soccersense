@@ -422,7 +422,8 @@ crowd colours and kit differ.
   the player's place on today's leaderboard (`NEXT-GEN / 37 OF 1,284`, as the leaderboard
   panel places it) and the title it earned, alone on two lines (`FROM THE / FUTURE`); the
   daily streak (`DAILY STREAK / 4 DAYS`); a nudge for each mode not played yet (`AWAY / IS
-WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the era-art
+WAITING`); and how many are on the board (`ON THE BOARD / 1,136`; the place message is
+  only for a player on a board). Since the era-art
   review (2026-11-13) every message fits the smallest sign whole, nothing scrolling: a header
   of 12 small letters at most, a line of 8 big or 12 small ones. The words are in `strings.home.sign`, the list
   in `app/routes/home-sign.ts`.
@@ -517,20 +518,21 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
   day's full-time card again. Testing uses `?day=` for another day (development builds only).
 - **Today's leaderboard** (the product owner, 2026-11-11: "leaderboard in home screen (just
   mock data for now)"): today's top ten for HOME and for AWAY, a tab each, every row a rank, a
-  handle and a total out of 700, the leader in gold, and under it how many played today
-  ("1,137 played today"). A player who has played the mode today is in its table under their
-  **nickname**, at their rank (first among equal totals): highlighted in place if they made the
-  top ten, otherwise under it after a gap ("289 soccerfan4821 420"). The tab shown first is the mode they played,
+  handle and a total out of 700, the leader in gold, and under it how many are on the board
+  ("1,137 on today's board"). **Only accounts are on the boards** (2026-11-17), with a game
+  played through the server. A signed-in player who has played the mode today is in its table
+  under their **nickname**, at their rank (first among equal totals): highlighted in place if
+  they made the top ten, otherwise under it after a gap ("289 soccerfan4821 420"). A player
+  with no account who has played is told where they would have placed ("You'd be 289th of
+  1,138") and is not put on the board. The tab shown first is the mode they played,
   if they played only one. On a monitor it is a bolted scoreboard panel standing on the right
   of the picture over the park, always open, level with the airship on the other side of the
   logo (higher on a short screen, so it stays clear of the captions), and it slides away with
   the captions at the kick-off. On a phone a gold trophy button above the "?" button opens it as
-  a sheet over the lower half of the screen. The players are **mock data**
-  (`app/data/leaderboard.ts`): a few hundred to about 1,900 invented players a day per mode,
-  with light-hearted handles built from football words and first names ("NutmegNina",
-  "Row Z Rita", "TifoTony94"; nothing about real people, clubs or nations) and totals that are
-  sums of seven shots (0, 10, 30, 60, 80 or 100 each): mostly in the 300s, a handful in the
-  600s, a 700 about one day in thirty. A backend replaces it behind the same function.
+  a sheet over the lower half of the screen. The boards are the server's (since 2026-11-18:
+  docs/ARCHITECTURE.md section 8, "The leaderboards"), refreshed every minute while the page
+  is in view; while nobody is on one its table says "Nobody on today's board yet." In
+  development with no API the players are made up (`app/data/leaderboard.ts`).
 - **Nicknames** (the product owner, 2026-11-15: "everyone who joins gets a nickname assigned to
   them. They can change this. But this is what's used for leaderboard names"; then "make the
   names just soccerfan followed by numbers that increment so its always unique"). The first
@@ -750,8 +752,8 @@ with a `?day=` override ahead of the day shown is left out. Nothing leaves the d
 
 ## 7. What is deliberately not in this iteration
 
-Real daily content, real leaderboards (the home screen's is mock data), payments,
-analytics, other languages, more categories. (The backend and accounts were on this list:
+Real daily content (it waits on the `QUESTIONS` flag), payments, other languages, more
+categories. (The backend and accounts were on this list:
 they are being built a step at a time, docs/ARCHITECTURE.md section 8.) (Drag-to-spin on the ball and sound
 were on this list; the product owner asked for both on 2026-11-11 and they are built. So are
 streaks and stats, on 2026-11-12, kept on the device only: section 6.6.) The code should

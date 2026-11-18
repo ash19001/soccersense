@@ -301,8 +301,8 @@ It is being built a step at a time (the product owner, 2026-11-17: "how can we g
 starting to build the cloudflare backend for user auth, leaderboard, etc."), in this order:
 the API and its database; the day's questions, drafted, approved and scheduled; games run by
 the server (built, below); accounts (built, below: they came before the leaderboard, which
-now ranks only accounts); the leaderboard (next); then membership and the rest of the plan
-below.
+now ranks only accounts); the leaderboards (built, below); then membership and the rest of
+the plan below.
 
 ### What is built (2026-11-17)
 
@@ -661,6 +661,49 @@ Known, and not in this step:
   swapped) and its name stay, so the streak a shared computer shows is the last
   account's until another signs in there.
 
+### The leaderboards (2026-11-18)
+
+The product owner: "proceed with leaderboard". Today's boards on the home screen are real:
+the mock (`app/data/leaderboard.ts`) is left to development with no API, and the tests.
+
+- **Who is on them**: accounts only, with a game played through the server (the product
+  owner, 2026-11-17: "only accounts are on leaderboards"). A game a device sent up after
+  signing in (`games.origin = 'device'`) counts for the account's streak and stats, never on
+  a board. One game a day and mode each, so the first counts.
+- **A player with no account** is told where they would have placed ("You'd be 37th of
+  1,285", they counted in) and is not put on the board. Their page works it out from the
+  board's counts (`rankFor`, `app/game/board.ts`): nothing about them is sent or kept.
+- **The API**: `GET /api/leaderboard?day=<n>` (today when left out; any day that has been,
+  never one to come), `worker/games/board.ts`. For each mode: `count` (accounts on the
+  board), `top` (the ten best, best first: equal totals share a place, the one who finished
+  first listed first; the signed-in player's row marked `you`), `tally` (how many accounts
+  finished on each total) and `you` (the signed-in player's place, where they are on the
+  board). Anyone may read it; it is the same for everyone but `you`.
+- **Cheap at any size**: a place is worked out from the counts, never by reading every game.
+  `board_tally` (migration 5) holds, for each day, mode and total, how many accounts' games
+  were decided on it: one more as each game is decided, in the same transaction as the move
+  that decides it and only if that move was written (a game is counted once however many
+  requests carry its last move; checked on SQLite and on Cloudflare's own engine through
+  `wrangler dev`). Deleting an account takes its games off the counts. The top ten come
+  from an index (`games_board`). A whole day's boards are one round trip of six reads at
+  most: at most 71 counts a mode, and ten rows each.
+- **On the page** (`app/routes/board.ts`, `boardStore`): the home screen watches the day's
+  boards, asking at once, every minute while the tab is in view, when it comes back into
+  view, and when who is signed in changes. The panel's table is the ten (or "Nobody on today's
+  board yet."); under it the player's own line: their place ("You're 37th of 1,284"), where
+  they would have placed, or the count and a nudge ("1,284 on the board. You?"). The airship
+  says the count ("ON THE BOARD / 1,284") and, for a player on a board, their place.
+- **In development** with no API behind the dev server (`gameClock().api()` false) the
+  boards are made up (`mockBoards`); a production build leaves that module out (checked: none
+  of its names is in `build/client`).
+
+Known, and not in this step:
+
+- **Past days' boards** can be asked for, but nothing on the page shows them yet (the
+  archive, with membership).
+- **Members' modes** (CLOSEST, FURTHEST, and the rest) will have boards of their own when
+  they are built; the API already answers per mode.
+
 ### Security (2026-11-17)
 
 The product owner: "ensure everything is secure so no jwt in headers or session cookies. no
@@ -725,15 +768,15 @@ These parts change as it arrives:
   picks a random one from 1000 to 9999 (`fanNumber`). **For an account this is done**
   ("Accounts", above): the server hands out the next number from a counter (`fanNickname(n)`
   makes the name: soccerfan1, soccerfan2, ...), checks a changed name is free and turns down
-  offensive or impersonating ones (the device only checks length and characters). Still to
-  come: the real players' names in `leaderboardFor`'s place. A UUID is the
+  offensive or impersonating ones (the device only checks length and characters). The
+  leaderboards show accounts' names ("The leaderboards", above). A UUID is the
   right thing to identify a player behind the scenes (it is what anonymous sign-in gives), not
   to show: it is 36 characters.
 - **The questions and the answers: done** (above). They are in the Worker, not the page.
 - **The rest already noted elsewhere:** popularity shares are estimates until real answers are
-  counted (`shotsFor`, docs/data-notes/popularity.md); the leaderboard is mock data behind
-  `leaderboardFor` (docs/API_UI.md); streaks, stats and the history are kept on the device only
-  (GAME_DESIGN.md section 6.6).
+  counted (`shotsFor`, docs/data-notes/popularity.md); streaks, stats and the history are
+  kept on the device for a player with no account, and are the account's for one who has one
+  ("Accounts", above).
 - **The rendering rules** in CLAUDE.md (`ssr: false`, prerender, no `action`, `clientLoader`
   for anything fetched at runtime) still hold: the pages are files, and what the game needs
   from the server it asks for itself after mounting.

@@ -1,14 +1,17 @@
 // Today's leaderboard, per mode: who played and what they scored.
 //
-// MOCK DATA. There is no backend yet, so the field is invented: a deterministic crowd of a
-// few hundred to a couple of thousand players a day, each with a light-hearted football
-// handle and a total made of seven shots from the game's scoring (0, 10, 30, 60, 80 or 100
-// points each). A backend replaces `leaderboardFor` behind the same signature; nothing that
-// calls it needs to know.
+// MOCK DATA, for development only: the real boards are the server's (GET /api/leaderboard,
+// worker/games/board.ts, since 2026-11-18). This invents a deterministic crowd of a few
+// hundred to a couple of thousand players a day, each with a light-hearted football handle
+// and a total made of seven shots from the game's scoring (0, 10, 30, 60, 80 or 100 points
+// each). The home screen shows it (`mockBoards`) only in development with no API behind the
+// dev server, and in the tests; a production build does not contain it.
 //
 // Pure: no clock, no storage, no unseeded randomness. The same day and mode always give
 // the same table.
 
+import { BOARD_TOP, type BoardAnswer, type ModeBoard } from "~/game/board";
+import { MODES } from "~/game/storage";
 import type { Mode } from "~/game/types";
 import { hash2, rng, type Rng } from "~/pixel";
 
@@ -153,12 +156,24 @@ const NAMES: readonly string[] = [
 /** No handle is longer than this, so it fits the leaderboard's name column. */
 export const NAME_MAX = 10;
 
-const TERMS_BY_INITIAL = new Map<string, string[]>();
-for (const term of TERMS) {
-  const initial = term.charAt(0);
-  const list = TERMS_BY_INITIAL.get(initial) ?? [];
-  list.push(term);
-  TERMS_BY_INITIAL.set(initial, list);
+/**
+ * The terms by their first letter, made the first time a handle is (not as the module
+ * loads: nothing runs at load, so a build that does not call into this module leaves it
+ * out altogether).
+ */
+let termsByInitial: Map<string, string[]> | null = null;
+
+function termsStarting(initial: string): readonly string[] {
+  if (!termsByInitial) {
+    termsByInitial = new Map();
+    for (const term of TERMS) {
+      const first = term.charAt(0);
+      const list = termsByInitial.get(first) ?? [];
+      list.push(term);
+      termsByInitial.set(first, list);
+    }
+  }
+  return termsByInitial.get(initial) ?? [];
 }
 
 function handle(r: Rng, numbered = false): string {
@@ -167,7 +182,7 @@ function handle(r: Rng, numbered = false): string {
     term.includes(" ") ? `${term} ${name}` : `${term}${name}`;
   const fits = (term: string) => join(term).length <= NAME_MAX;
   // Mostly alliterative; now and then any term at all.
-  const matching = (TERMS_BY_INITIAL.get(name.charAt(0)) ?? []).filter(fits);
+  const matching = termsStarting(name.charAt(0)).filter(fits);
   const base = join(
     matching.length > 0 && r.chance(0.7)
       ? r.pick(matching)
@@ -296,4 +311,31 @@ export function leaderboardFor(
     yourRank = rank;
   }
   return { rows, total: rows.length, yourRank };
+}
+
+/**
+ * The day's boards made up from the field above, in the shape the server sends
+ * (`BoardAnswer`, ~/game/board): what the home screen shows in development when there is no
+ * API behind it, and in the tests. Nobody is signed in, so nobody is "you". Never in a
+ * production build: the page reaches it only behind `import.meta.env.DEV`
+ * (app/routes/board.ts).
+ */
+export function mockBoards(day: number): BoardAnswer {
+  const modes = {} as Record<Mode, ModeBoard>;
+  for (const mode of MODES) {
+    const board = leaderboardFor(day, mode);
+    const counts = new Map<number, number>();
+    for (const row of board.rows) {
+      counts.set(row.total, (counts.get(row.total) ?? 0) + 1);
+    }
+    modes[mode] = {
+      count: board.total,
+      top: board.rows
+        .slice(0, BOARD_TOP)
+        .map((row) => ({ rank: row.rank, name: row.name, points: row.total })),
+      tally: [...counts].sort((a, b) => b[0] - a[0]),
+      you: null,
+    };
+  }
+  return { day, modes };
 }

@@ -887,11 +887,13 @@ all fit). It must be inside a `GameLayout`; it reads the scale with `usePixelRoo
   the trophy slides down off the screen with the captions (`useStowSlide`: the same distance
   in the same frames) and an open sheet closes at once; both are `inert`.
 
-The home page builds the boards from `leaderboardFor(day, mode, you)` in
-`app/data/leaderboard.ts` (mock data; a backend replaces it behind the same signature:
-`{ rows, total, yourRank }`, every player best first, the player among them as `you: true` and
-counted in `total`), takes the top ten, and renders it once the day is known (never at build
-time).
+The home page builds the boards from the server's (`GET /api/leaderboard`, `boardStore` in
+`app/routes/board.ts`; made up by `mockBoards` in development with no API) once the day is
+known (never at build time): only accounts are on them. A signed-in player on a board has
+their row (`you`, in the ten or under the gap) and `mine` ("You're 37th of 1,284"); a player
+who has played but is not on it gets `mine` as where they would have placed ("You'd be 37th
+of 1,285"), and no row. `empty` (new 2026-11-18): the line in the table while it has no rows
+("Nobody on today's board yet.", `.ss-lb__empty`).
 
 ### `HowToPlay` and `HowToPlayCard`
 

@@ -101,12 +101,14 @@ interface Keeper {
   create(state: GameState): Promise<boolean>;
   /**
    * The game after a move. False if it had been moved on meanwhile: nothing is kept.
-   * `prompts`: what the questions asked, once the game is decided.
+   * `prompts`: what the questions asked, once the game is decided. `decided`: this move
+   * decided it (an account's game is then counted on the day's board).
    */
   save(
     state: GameState,
     was: { index: number; phase: ServedPhase },
     prompts: readonly string[] | null,
+    decided: boolean,
   ): Promise<boolean>;
   /** Takes away a game that cannot be carried on. */
   remove(state: GameState): Promise<void>;
@@ -135,8 +137,8 @@ function rowKeeper(db: D1, account: string, mode: Mode): Keeper {
   return {
     load: (day) => gameOf(db, { playerId: account, day, mode }),
     create: (state) => insertGame(db, { ...state, playerId: account }),
-    save: (state, was, prompts) =>
-      updateGame(db, { ...state, playerId: account }, was, prompts),
+    save: (state, was, prompts, decided) =>
+      updateGame(db, { ...state, playerId: account }, was, prompts, decided),
     remove: (state) =>
       deleteGame(db, { playerId: account, day: state.day, mode }),
     hand: async () => null,
@@ -314,6 +316,7 @@ export async function games(
       state,
       { index: held.state.index, phase: held.state.phase },
       prompts,
+      held.state.finishedAt === null && state.finishedAt !== null,
     );
     return kept ? { state, session } : null;
   };

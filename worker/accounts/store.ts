@@ -170,6 +170,17 @@ export async function rename(
 /** Takes an account away with everything kept for it: its games, its devices, its links. */
 export async function deleteAccount(db: D1, account: Account): Promise<void> {
   await db.batch([
+    // Its games come off the boards' counts first (one game a day and mode each).
+    db
+      .prepare(
+        `UPDATE board_tally SET players = players - 1
+         WHERE (day, mode, total) IN (
+           SELECT day, mode, total FROM games
+           WHERE player_id = ? AND origin = 'server' AND finished_at IS NOT NULL
+         )`,
+      )
+      .bind(account.id),
+    db.prepare("DELETE FROM board_tally WHERE players <= 0"),
     db.prepare("DELETE FROM games WHERE player_id = ?").bind(account.id),
     db.prepare("DELETE FROM sessions WHERE account_id = ?").bind(account.id),
     db.prepare("DELETE FROM sign_in_links WHERE email = ?").bind(account.email),

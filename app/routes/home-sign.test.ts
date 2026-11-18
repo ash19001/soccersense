@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { signFits, signPlace } from "~/art/stadium-airship";
 import { makeView } from "~/art/stadium-view";
-import { leaderboardFor, MOCK_FIELD } from "~/data/leaderboard";
-import { TITLES, titleFor } from "~/game";
+import { MOCK_FIELD, mockBoards } from "~/data/leaderboard";
+import { type BoardAnswer, TITLES, rankFor, titleFor } from "~/game";
 import { strings } from "~/i18n";
 
 import { signMessages } from "./home-sign";
@@ -19,19 +19,52 @@ const day = (scores: Partial<Record<Mode, number>> = {}) => ({
   nextgen: scores.nextgen ?? null,
 });
 
+const BOARDS = mockBoards(DAY);
+
+/** The day's boards with a signed-in player on one of them, at the place `points` gives. */
+function withYou(mode: Mode, points: number): BoardAnswer {
+  const board = BOARDS.modes[mode];
+  return {
+    ...BOARDS,
+    modes: {
+      ...BOARDS.modes,
+      [mode]: {
+        ...board,
+        count: board.count + 1,
+        you: { rank: rankFor(board.tally, points), points },
+      },
+    },
+  };
+}
+
 describe("the airship's messages", () => {
-  it("before a game: a nudge for each mode and how many have played", () => {
-    const out = signMessages(DAY, day(), 0);
+  it("before a game: a nudge for each mode and how many are on the board", () => {
+    const out = signMessages(DAY, day(), 0, BOARDS);
     expect(out).toEqual([
       { header: "HOME", text: "IS WAITING" },
       { header: "AWAY", text: "IS WAITING" },
       { header: "RETRO", text: "IS WAITING" },
       { header: "NEXT-GEN", text: "IS WAITING" },
       {
-        header: "PLAYED TODAY",
-        text: leaderboardFor(DAY, "home").total.toLocaleString("en-GB"),
+        header: "ON THE BOARD",
+        text: BOARDS.modes.home.count.toLocaleString("en-GB"),
       },
     ]);
+  });
+
+  it("before the boards have arrived, no count", () => {
+    expect(signMessages(DAY, day(), 0, null).map((m) => m.header)).toEqual([
+      "HOME",
+      "AWAY",
+      "RETRO",
+      "NEXT-GEN",
+    ]);
+    // nor another day's
+    expect(
+      signMessages(DAY + 1, day(), 0, BOARDS).some(
+        (m) => m.header === "ON THE BOARD",
+      ),
+    ).toBe(false);
   });
 
   it("a streak still alive from yesterday is shown before the nudges", () => {
@@ -40,10 +73,10 @@ describe("the airship's messages", () => {
     expect(signMessages(DAY, day(), 1)[0].text).toBe("1 DAY");
   });
 
-  it("after HOME: its total, the place the leaderboard gives it, its title, the streak, then AWAY", () => {
-    const out = signMessages(DAY, day({ home: 360 }), 2);
-    const board = leaderboardFor(DAY, "home", 360);
-    const rank = board.yourRank as number;
+  it("after HOME, on the board: its total, its place there, its title, the streak, then AWAY", () => {
+    const boards = withYou("home", 360);
+    const out = signMessages(DAY, day({ home: 360 }), 2, boards);
+    const board = boards.modes.home;
     expect(out.map((m) => m.header)).toEqual([
       "HOME",
       "HOME",
@@ -52,21 +85,28 @@ describe("the airship's messages", () => {
       "AWAY",
       "RETRO",
       "NEXT-GEN",
-      "PLAYED TODAY",
+      "ON THE BOARD",
     ]);
     expect(out[0].text).toBe("360 PTS");
     expect(out[1].text).toBe(
-      `${rank} OF ${board.total.toLocaleString("en-GB")}`,
+      `${board.you?.rank} OF ${board.count.toLocaleString("en-GB")}`,
     );
     expect(out[2].text).toBe(strings.play.titles.home[titleFor("home", 360)]);
     // the crowd is the leaderboard panel's own count
-    expect(out.at(-1)?.text).toBe(board.total.toLocaleString("en-GB"));
+    expect(out.at(-1)?.text).toBe(board.count.toLocaleString("en-GB"));
+  });
+
+  it("after HOME with no account: no place on the sign (the panel says where it would be)", () => {
+    const out = signMessages(DAY, day({ home: 360 }), 0, BOARDS);
+    expect(out.filter((m) => m.header === "HOME").map((m) => m.text)).toEqual([
+      "360 PTS",
+    ]);
   });
 
   it("after AWAY only, the crowd is AWAY's, as the panel opens on AWAY", () => {
-    const out = signMessages(DAY, day({ away: 200 }), 1);
+    const out = signMessages(DAY, day({ away: 200 }), 1, BOARDS);
     expect(out.at(-1)?.text).toBe(
-      leaderboardFor(DAY, "away", 200).total.toLocaleString("en-GB"),
+      BOARDS.modes.away.count.toLocaleString("en-GB"),
     );
     expect(
       out.some((m) => m.header === "HOME" && m.text === "IS WAITING"),
@@ -74,12 +114,13 @@ describe("the airship's messages", () => {
   });
 
   it("after RETRO only, the crowd is RETRO's; with two played, HOME's", () => {
-    expect(signMessages(DAY, day({ retro: 410 }), 0).at(-1)?.text).toBe(
-      leaderboardFor(DAY, "retro", 410).total.toLocaleString("en-GB"),
+    expect(signMessages(DAY, day({ retro: 410 }), 0, BOARDS).at(-1)?.text).toBe(
+      BOARDS.modes.retro.count.toLocaleString("en-GB"),
     );
     expect(
-      signMessages(DAY, day({ away: 90, nextgen: 300 }), 0).at(-1)?.text,
-    ).toBe(leaderboardFor(DAY, "home").total.toLocaleString("en-GB"));
+      signMessages(DAY, day({ away: 90, nextgen: 300 }), 0, BOARDS).at(-1)
+        ?.text,
+    ).toBe(BOARDS.modes.home.count.toLocaleString("en-GB"));
   });
 
   it("puts the place out of everyone who played: 37 OF 1,284", () => {
@@ -98,8 +139,9 @@ describe("the airship's messages", () => {
         DAY,
         day({ home: 0, away: 700, retro: 350, nextgen: 10 }),
         365,
+        withYou("away", 700),
       ),
-      ...signMessages(DAY, day(), 0),
+      ...signMessages(DAY, day(), 0, BOARDS),
     ];
     // every title, and the longest rank
     for (const mode of ["home", "away", "retro", "nextgen"] as const) {

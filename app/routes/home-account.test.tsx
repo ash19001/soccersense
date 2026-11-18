@@ -28,9 +28,11 @@ import {
   saveGame,
 } from "~/game";
 import { strings } from "~/i18n";
+import { deviceClock, setGameClock } from "~/ui/game-clock";
 import { importGames } from "../../worker/games/store";
 import { type TestSite, testSite } from "../../worker/testing/site";
 import { resetAccountStore } from "./account";
+import { resetBoardStore } from "./board";
 import Home from "./home";
 
 const names = strings.nickname;
@@ -116,6 +118,7 @@ const accountId = async () =>
 beforeEach(() => {
   window.localStorage.clear();
   resetAccountStore();
+  resetBoardStore();
   site = testSite();
   vi.stubGlobal("fetch", site.fetch);
 });
@@ -352,5 +355,92 @@ describe("a signed-in player's streak, stats and scores are the account's", () =
     ).toEqual([
       { day: TODAY - 2, mode: "retro", total: 210, origin: "device" },
     ]);
+  });
+});
+
+describe("today's leaderboard, from the server", () => {
+  const board = strings.home.leaderboard;
+
+  /** An account with a game of today's in HOME decided through the server. */
+  async function onTheBoard(email: string, total: number) {
+    const db = site.env.DB;
+    const account = await site.signIn(email);
+    const row = await db
+      .prepare("SELECT id FROM accounts WHERE email = ?")
+      .bind(email)
+      .first<{ id: string }>();
+    await db
+      .prepare(
+        `INSERT INTO games (player_id, day, mode, source, idx, phase, turns, total,
+           started_at, deadline, created_at, updated_at, finished_at, origin)
+         VALUES (?, ?, 'home', 'sample', 6, 'done', '[]', ?, 1, NULL, 1, 1, 1, 'server')`,
+      )
+      .bind(row?.id, TODAY, total)
+      .run();
+    await db
+      .prepare(
+        `INSERT INTO board_tally (day, mode, total, players) VALUES (?, 'home', ?, 1)
+         ON CONFLICT (day, mode, total) DO UPDATE SET players = players + 1`,
+      )
+      .bind(TODAY, total)
+      .run();
+    return account;
+  }
+
+  function openBoard(): HTMLElement {
+    fireEvent.click(screen.getByRole("button", { name: board.open }));
+    return screen.getByRole("dialog", { name: board.heading });
+  }
+
+  beforeEach(() => {
+    // there is an API behind the page
+    setGameClock({ ...deviceClock(), api: () => true });
+  });
+
+  test("nobody yet: the table says so", async () => {
+    mount(TODAY);
+    await settle();
+    const sheet = openBoard();
+    expect(within(sheet).getByText(board.empty)).toBeInTheDocument();
+    expect(within(sheet).getByText(board.nudge(0))).toBeInTheDocument();
+  });
+
+  test("a signed-in player on the board has their row and their place", async () => {
+    await onTheBoard("top@example.com", 700);
+    site.cookies.clear();
+    const me = await onTheBoard(FAN, 560);
+    saveAccount(me);
+    const { total, turns } = game(TODAY, "home");
+    saveGame(dayKeyFor(TODAY), "home", { total, turns });
+    mount(TODAY);
+    await settle();
+    const sheet = openBoard();
+    const table = within(sheet).getByRole("table");
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toHaveTextContent(/^1.*soccerfan1.*700$/);
+    expect(rows[0]).not.toHaveClass("is-you");
+    expect(rows[1]).toHaveTextContent(/soccerfan2.*560$/);
+    expect(rows[1]).toHaveClass("is-you");
+    expect(within(sheet).getByText(board.mine(2, 2))).toBeInTheDocument();
+  });
+
+  test("a player with no account who has played is told where they would have placed", async () => {
+    await onTheBoard("top@example.com", 700);
+    await onTheBoard("mid@example.com", 400);
+    site.cookies.clear();
+    const { total, turns } = game(TODAY, "home", 90);
+    saveGame(dayKeyFor(TODAY), "home", { total, turns });
+    site.calls.length = 0;
+    mount(TODAY);
+    await settle();
+    const sheet = openBoard();
+    // 630: between the two, them counted in
+    expect(within(sheet).getByText(board.wouldBe(2, 3))).toBeInTheDocument();
+    // and not put on the board
+    const rows = within(within(sheet).getByRole("table")).getAllByRole("row");
+    expect(rows).toHaveLength(3);
+    expect(sheet.querySelector(".is-you")).toBeNull();
+    expect(site.calls.filter((call) => call.startsWith("POST"))).toEqual([]);
   });
 });

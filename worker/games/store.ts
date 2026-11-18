@@ -104,15 +104,19 @@ export async function insertGame(db: D1, row: GameRow): Promise<boolean> {
  * The game after a move, written only if it still stands where the move found it (`was`).
  * False means another request moved it first (a second tab, a press sent twice): nothing
  * is written, and the caller reads the game again. `prompts`, once the game is decided:
- * what its questions asked, so another device can show it again.
+ * what its questions asked, so another device can show it again. `decided`: this move
+ * decided the game, so its total is counted on the day's board (`board_tally`), in the
+ * same transaction and only if the game was written: a game is counted once, however many
+ * requests carry its last move.
  */
 export async function updateGame(
   db: D1,
   row: GameRow,
   was: { index: number; phase: ServedPhase },
   prompts: readonly string[] | null = null,
+  decided = false,
 ): Promise<boolean> {
-  const done = await db
+  const update = db
     .prepare(
       `UPDATE games SET idx = ?, phase = ?, turns = ?, total = ?, started_at = ?,
          deadline = ?, updated_at = ?, finished_at = ?, prompts = COALESCE(?, prompts)
@@ -133,8 +137,22 @@ export async function updateGame(
       row.mode,
       was.index,
       was.phase,
-    )
-    .run();
+    );
+  if (!decided) {
+    const done = await update.run();
+    return (done.meta.changes ?? 0) > 0;
+  }
+  const [done] = await db.batch([
+    update,
+    // `changes()`: the rows the update above changed. None, and nothing is counted.
+    db
+      .prepare(
+        `INSERT INTO board_tally (day, mode, total, players)
+         SELECT ?, ?, ?, 1 WHERE changes() > 0
+         ON CONFLICT (day, mode, total) DO UPDATE SET players = players + 1`,
+      )
+      .bind(row.day, row.mode, row.total),
+  ]);
   return (done.meta.changes ?? 0) > 0;
 }
 

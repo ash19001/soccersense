@@ -40,8 +40,10 @@ export interface LeaderboardBoard {
   you?: LeaderboardEntry | null;
   /** The table's caption for screen readers: "Today's top 10, HOME". */
   caption: string;
-  /** Under the table: "1,284 played today". */
+  /** Under the table: "1,284 on today's board". */
   played: string;
+  /** In the table while it has no rows: "Nobody on today's board yet." */
+  empty?: string;
   /** Read out for the player's row in place of YOU: "You: 37th of 1,284". */
   youSpoken?: string;
   /**
@@ -472,6 +474,11 @@ function Body({
               </tr>
             </thead>
             <tbody>
+              {board.rows.length === 0 && board.empty && (
+                <tr className="ss-lb__empty">
+                  <td colSpan={3}>{board.empty}</td>
+                </tr>
+              )}
               {board.rows.map((entry) => (
                 <Row
                   key={entry.id ?? `${entry.rank}-${entry.name}`}

@@ -925,6 +925,28 @@ keys". ARCHITECTURE.md section 8, "Accounts", has the design.
 - Next in the order: the leaderboard (accounts only, `origin = 'server'` games only; a
   player with no account is told where they would have placed).
 
+## The leaderboards (2026-11-18)
+
+The product owner: "proceed with leaderboard". ARCHITECTURE.md section 8, "The
+leaderboards", has the design.
+
+- **Built.** `GET /api/leaderboard`: each mode's top ten, how many accounts finished on each
+  total, and a signed-in player's own place. Accounts only, with games played through the
+  server. Migration 5: `board_tally` (counted as each game is decided) and an index for the
+  top ten.
+- **On the home screen**: the panel and the airship read the real boards, refreshed every
+  minute. A player with no account who has played sees where they would have placed
+  ("You'd be 2nd of 2") and is not on the board. "1,284 played today" is now "1,284 on
+  today's board" (it counts accounts), and the airship's "PLAYED TODAY" is "ON THE BOARD".
+- **Checked:** `pnpm check` (the count is in the commit); the Worker's tests (places, ties,
+  the ten, a game counted once however often its last move is sent, the clock deciding a
+  game, deleting an account, migration 5 counting what was there); on Cloudflare's own
+  engine through `wrangler dev` (an account signs in, plays, sends its last moves again:
+  counted once; a game with no account: not counted); in Chrome on the built site (the
+  panel with an account's row, and "You'd be 2nd of 2" for a player with no account); the
+  made-up players are not in the production build.
+- Next in the order: membership (the product owner will choose Stripe or Paddle).
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

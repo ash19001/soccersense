@@ -19,10 +19,11 @@ import {
 } from "vitest";
 
 import { factForDay } from "~/data/facts";
-import { leaderboardFor } from "~/data/leaderboard";
+import { leaderboardFor, mockBoards } from "~/data/leaderboard";
 import {
   type Mode,
   NICKNAME_KEY,
+  rankFor,
   checkNickname,
   dayKeyFor,
   storageKey,
@@ -414,7 +415,7 @@ describe("home page: today's leaderboard", () => {
     ).toBeTruthy();
   });
 
-  test("a mode played today puts the player in its table, at their rank", () => {
+  test("a mode played today with no account: not in its table, but told where they would have placed", () => {
     saveGame(1, "away", [100, 100, 100, 100, 80, 0, 0]);
     mount();
     fireEvent.click(screen.getByRole("button", { name: text.open }));
@@ -423,18 +424,19 @@ describe("home page: today's leaderboard", () => {
     expect(
       within(sheet).getByRole("tab", { name: strings.home.modes.away.label }),
     ).toHaveAttribute("aria-selected", "true");
-    const board = leaderboardFor(1, "away", 480);
-    const rank = board.yourRank ?? 0;
-    expect(rank).toBeGreaterThan(10);
-    const you = within(sheet).getByRole("rowheader", {
-      name: text.youSpoken(rank, board.total),
-    });
-    // named by the player's nickname
+    const board = mockBoards(1).modes.away;
+    const table = within(sheet).getByRole("table");
+    // only accounts are on the boards: the ten, and nobody is YOU
+    expect(within(table).getAllByRole("row")).toHaveLength(11);
+    expect(table.querySelector(".is-you, .ss-lb__gap")).toBeNull();
     const nickname = window.localStorage.getItem(NICKNAME_KEY) ?? "";
-    expect(nickname).not.toBe("");
-    expect(you.closest("tr")).toHaveTextContent(`${rank}${nickname}`);
-    expect(you.closest("tr")?.lastElementChild).toHaveTextContent("480");
-    expect(within(sheet).getByText(text.mine(rank, board.total))).toBeTruthy();
+    expect(within(table).queryByText(nickname)).toBeNull();
+    // where 480 would have placed, them counted in
+    const rank = rankFor(board.tally, 480);
+    expect(rank).toBeGreaterThan(10);
+    expect(
+      within(sheet).getByText(text.wouldBe(rank, board.count + 1)),
+    ).toBeTruthy();
   });
 
   test("a first visit is given soccerfan and a number, kept on the device, at the bottom left", () => {
@@ -496,13 +498,10 @@ describe("home page: today's leaderboard", () => {
       }),
     );
 
+    // with no account the name is on no board: the table stays the accounts'
     fireEvent.click(trophy);
     const sheet = screen.getByRole("dialog");
-    const board = leaderboardFor(1, "away", 480);
-    const you = within(sheet).getByRole("rowheader", {
-      name: text.youSpoken(board.yourRank ?? 0, board.total),
-    });
-    expect(you.closest("tr")).toHaveTextContent("Top Bins");
+    expect(within(sheet).queryByText("Top Bins")).toBeNull();
   });
 
   test("has a tab for each of the four modes, and each has its own table", () => {

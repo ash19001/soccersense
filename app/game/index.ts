@@ -1,5 +1,6 @@
 /** The game rules. Pure TypeScript: no DOM, and the current time is always passed in. */
 export * from "./account";
+export * from "./board";
 export * from "./career";
 export * from "./day";
 export * from "./geo";

@@ -34,7 +34,8 @@ answered by `worker/` with a D1 database. A push to `main` deploys it.
 - Accounts are optional (`worker/accounts`): sign-in by an emailed link or Google, no
   passwords, a cookie for accounts only. Their games, streak, stats and nickname are the
   server's. A game a device sent up (`games.origin = 'device'`) never counts on a
-  leaderboard.
+  leaderboard. The leaderboards are the server's (`GET /api/leaderboard`): accounts only;
+  a player with no account is told where they would have placed, worked out on their page.
 - Question data is a built-in sample in `app/data`, and stays what the game plays until the
   `QUESTIONS` flag (`wrangler.jsonc`) is switched: the game is still in testing.
 - The server runs every game (`worker/games`): it sends a question as its clock starts,

@@ -7,6 +7,7 @@
  *   GET /api/health   whether the Worker and its database are up: for a look after a deploy
  *   /api/games/...    the games the server runs: questions out, answers judged (./games/play.ts)
  *   /api/account/...  accounts: signing in and out, the nickname (./accounts/api.ts)
+ *   GET /api/leaderboard?day=<n>   the day's boards: accounts only (./games/board.ts)
  *   /api/admin/...    the approval desk for the day's questions (./questions/admin.ts)
  *
  * `now` is handed in, so every answer is a pure function of the request, the settings, the
@@ -27,6 +28,7 @@ import {
   type QuestionSource,
   questionSource,
 } from "./env";
+import { leaderboard } from "./games/board";
 import { games } from "./games/play";
 import { failure, json, wrongMethod } from "./http";
 import { admin } from "./questions/admin";
@@ -119,6 +121,10 @@ export async function handle(
       // An account's game is kept in the database; anyone else keeps their own.
       const player = await signedIn(request, env, now);
       return await games(request, env, now, route, player?.id ?? null);
+    }
+    if (route === "/leaderboard") {
+      const player = await signedIn(request, env, now);
+      return await leaderboard(request, env, now, player?.id ?? null);
     }
     if (route === "/account" || route.startsWith("/account/")) {
       return await account(request, env, now, route, outside);

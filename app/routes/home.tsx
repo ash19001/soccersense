@@ -28,9 +28,9 @@ import { PrefetchPageLinks, useNavigate } from "react-router";
 import { MODE_PICTURES } from "~/art/ball-icons";
 import { STADIUMS } from "~/data";
 import { factForDay, type Fact } from "~/data/facts";
-import { leaderboardFor } from "~/data/leaderboard";
 import { COFFEE_URL, IDEAS_URL, usableLink } from "~/data/links";
 import {
+  type BoardAnswer,
   MODES,
   type Mode,
   type NicknameProblem,
@@ -41,10 +41,12 @@ import {
   NICKNAME_MAX,
   checkEmail,
   checkNickname,
+  emptyBoard,
   loadDay,
   loadHistory,
   msUntilNextDay,
   playPath,
+  rankFor,
   resolveToday,
   streakFor,
 } from "~/game";
@@ -77,6 +79,7 @@ import {
 } from "~/ui";
 import type { Route } from "./+types/home";
 import { type AccountResult, accountStore } from "./account";
+import { boardStore } from "./board";
 import { planeFits } from "./home-plane";
 import { signMessages } from "./home-sign";
 import { howToPlayContent } from "./how-to-play-card";
@@ -157,6 +160,8 @@ interface Matchday {
   streak: number;
   /** The streak went up since this device last showed it: it hops, once. */
   bump: boolean;
+  /** The day's leaderboards, for the airship's sign: null until they have arrived. */
+  boards: BoardAnswer | null;
   scene: MenuScene;
   /** `?speed=`: how fast the scene's time runs. 1 unless asked. */
   speed: number;
@@ -242,6 +247,7 @@ function createMatchdayStore(): MatchdayStore {
     const days = history.map((game) => game.day);
     const streak = streakFor(days, today.dayNumber).current;
     const week = weekOf(history, today.dayNumber);
+    const boards = boardStore.read().answer;
     if (
       current &&
       current.today.dayNumber === today.dayNumber &&
@@ -249,7 +255,8 @@ function createMatchdayStore(): MatchdayStore {
       current.search === search &&
       MODES.every((mode) => current?.scores[mode] === scores[mode]) &&
       JSON.stringify(current.week) === JSON.stringify(week) &&
-      current.streak === streak
+      current.streak === streak &&
+      current.boards === boards
     ) {
       return false;
     }
@@ -286,7 +293,9 @@ function createMatchdayStore(): MatchdayStore {
     }
     scene.setScores(scores);
     // The airship's sign: the player's day, one message after another.
-    scene.setSignMessages(signMessages(today.dayNumber, scores, streak));
+    scene.setSignMessages(
+      signMessages(today.dayNumber, scores, streak, boards),
+    );
     // The streak hops the first time it is seen after it went up (remembered per device).
     const seen = readStreakSeen();
     if (streak !== seen) writeStreakSeen(streak);
@@ -298,6 +307,7 @@ function createMatchdayStore(): MatchdayStore {
       week,
       streak,
       bump: streak > seen,
+      boards,
       scene,
       speed: speedFrom(search),
     };
@@ -339,6 +349,8 @@ function createMatchdayStore(): MatchdayStore {
         synced = now;
         look();
       });
+      // The day's boards have arrived (./board.ts): the sign's place and count.
+      const stopBoards = boardStore.subscribe(look);
       document.addEventListener("visibilitychange", onVisibility);
       waitForMidnight();
       // The first value: React is told like any other change, and renders again with it.
@@ -347,6 +359,7 @@ function createMatchdayStore(): MatchdayStore {
         window.clearTimeout(timer);
         stopClock();
         stopAccount();
+        stopBoards();
         document.removeEventListener("visibilitychange", onVisibility);
       };
     },
@@ -436,46 +449,61 @@ function weekdayOf(day: number): number {
 }
 
 /**
- * Today's top ten for each mode, the player placed in it if they have played (mock data for
- * now: `leaderboardFor` in app/data/leaderboard.ts, which a backend will replace).
+ * Today's top ten for each mode, from the server's boards (./board.ts; made up in
+ * development with no API). Only accounts are on them. A signed-in player on a board has
+ * their own row (in the ten, or under the gap) and their place; a player who has played but
+ * is not on it (no account, or a game from before signing in) is told where they would have
+ * placed, worked out here from the board's counts: nothing about them is sent.
  */
 function leaderboards(
   day: number,
   scores: Record<Mode, number | null>,
   week: Record<Mode, readonly (number | null)[]> | null,
+  /** The day's boards, or null until they have arrived (empty boards meanwhile). */
+  boards: BoardAnswer | null,
   /** The player's nickname, on their own row (empty: YOU). */
   nickname = "",
 ): LeaderboardBoard[] {
   const text = strings.home.leaderboard;
   return MODES.map((mode) => {
-    const board = leaderboardFor(day, mode, scores[mode]);
-    const top = board.rows.slice(0, TOP);
-    const mine =
-      board.yourRank === null ? null : board.rows.find((row) => row.you);
+    const board =
+      boards !== null && boards.day === day ? boards.modes[mode] : emptyBoard();
     const label = strings.home.modes[mode].label;
+    const score = scores[mode];
+    const listed = board.top.some((row) => row.you);
+    let mine: string;
+    if (board.you) {
+      mine = text.mine(board.you.rank, board.count);
+    } else if (score !== null) {
+      mine = text.wouldBe(rankFor(board.tally, score), board.count + 1);
+    } else {
+      mine = text.nudge(board.count);
+    }
     return {
       mode,
       label,
       caption: text.caption(label),
-      played: text.played(board.total),
-      rows: top.map((row) => ({
+      played: text.played(board.count),
+      empty: text.empty,
+      rows: board.top.slice(0, TOP).map((row) => ({
         rank: row.rank,
-        name: row.you ? nickname : row.name,
-        points: row.total,
+        name: row.you ? nickname || row.name : row.name,
+        points: row.points,
         you: row.you,
       })),
       you:
-        mine && !top.includes(mine)
-          ? { rank: mine.rank, name: nickname, points: mine.total, you: true }
+        board.you && !listed
+          ? {
+              rank: board.you.rank,
+              name: nickname,
+              points: board.you.points,
+              you: true,
+            }
           : null,
-      youSpoken:
-        board.yourRank === null
-          ? undefined
-          : text.youSpoken(board.yourRank, board.total),
-      mine:
-        board.yourRank === null
-          ? text.nudge(board.total)
-          : text.mine(board.yourRank, board.total),
+      youSpoken: board.you
+        ? text.youSpoken(board.you.rank, board.count)
+        : undefined,
+      mine,
       week: week ? weekBoard(day, label, week[mode]) : undefined,
     };
   });
@@ -576,6 +604,12 @@ export default function Home() {
   );
   const [accounting, setAccounting] = useState(false);
   useEffect(() => accountStore.refreshIfSignedIn(), []);
+  /** The day's leaderboards, kept fresh while the day is shown (./board.ts). */
+  const board = useSyncExternalStore(
+    boardStore.subscribe,
+    boardStore.read,
+    boardStore.server,
+  );
   /**
    * A mode played today, again (its card's REVIEW or its patch on the ball open it), with
    * what it says (read from storage on opening), and its REVIEW button to give the focus
@@ -773,12 +807,14 @@ export default function Home() {
   const day = matchday?.today.dayNumber ?? null;
   const scores = matchday?.scores ?? null;
   const week = matchday?.week ?? null;
+  useEffect(() => (day === null ? undefined : boardStore.watch(day)), [day]);
+  const answer = board.answer;
   const boards = useMemo(
     () =>
       day === null || scores === null
         ? null
-        : leaderboards(day, scores, week, nickname ?? ""),
-    [day, scores, week, nickname],
+        : leaderboards(day, scores, week, answer, nickname ?? ""),
+    [day, scores, week, answer, nickname],
   );
   /** The account's card, and who is signed in asked again as it comes up. */
   const openAccount = () => {

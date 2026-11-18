@@ -6536,3 +6536,10 @@ html:has(.ss-help-dialog[open]) {
     display: none;
   }
 }
+
+/* The leaderboard's table while nobody is on it yet: one quiet line where the rows would be. */
+.ss-lb__empty td {
+  padding: var(--u2) var(--u);
+  color: var(--c-mist);
+  white-space: normal;
+}
