@@ -70,13 +70,19 @@ describe("hosting on Cloudflare", () => {
       },
     ]);
     // nothing in the file but these settings: every key and token that is secret is a
-    // secret in Cloudflare, never in the repository. The bot check's site key is not
-    // secret (every page that shows the check has it).
+    // secret in Cloudflare, never in the repository. The bot check's site key and Google's
+    // client id are not secret (every page that shows the check, and every link to Google's
+    // sign-in, has them).
     expect(Object.keys(config.vars ?? {}).sort()).toEqual([
+      "GOOGLE_CLIENT_ID",
       "MAIL_FROM",
       "QUESTIONS",
       "TURNSTILE_SITE_KEY",
     ]);
+    // the Google client's id is not secret either (it is in every link to Google's sign-in)
+    expect(config.vars?.GOOGLE_CLIENT_ID).toMatch(
+      /^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/,
+    );
     expect(config.vars?.TURNSTILE_SITE_KEY).toMatch(
       /^0x4[0-9A-Za-z_-]{16,24}$/,
     );
@@ -143,8 +149,8 @@ describe("hosting on Cloudflare", () => {
     const csp = header("Content-Security-Policy");
     for (const part of [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
-      "connect-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com",
+      "connect-src 'self' https://cloudflareinsights.com",
       "frame-src https://challenges.cloudflare.com",
       "object-src 'none'",
       "base-uri 'self'",
@@ -153,9 +159,13 @@ describe("hosting on Cloudflare", () => {
     ]) {
       expect(csp).toContain(part);
     }
-    // nothing but this site and the bot check's
+    // nothing but this site, the bot check's and Cloudflare Web Analytics'
     for (const origin of csp.match(/https?:\/\/[^\s;]+/g) ?? []) {
-      expect(origin).toBe("https://challenges.cloudflare.com");
+      expect([
+        "https://challenges.cloudflare.com",
+        "https://static.cloudflareinsights.com",
+        "https://cloudflareinsights.com",
+      ]).toContain(origin);
     }
     expect(header("Strict-Transport-Security")).toMatch(/^max-age=\d{8}/);
     expect(header("X-Content-Type-Options")).toBe("nosniff");

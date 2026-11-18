@@ -29,7 +29,8 @@ Worker at https://soccersense.io (`wrangler.jsonc`): the built site as files, an
 answered by `worker/` with a D1 database. A push to `main` deploys it.
 
 - Build the backend in the agreed order, a step at a time; don't add analytics or
-  payments ahead of it.
+  payments ahead of it. (Cloudflare Web Analytics, switched on in the dashboard, stays: the
+  product owner, 2026-11-18. The security headers in `public/_headers` allow it.)
 - Accounts are optional (`worker/accounts`): sign-in by an emailed link or Google, no
   passwords, a cookie for accounts only. Their games, streak, stats and nickname are the
   server's. A game a device sent up (`games.origin = 'device'`) never counts on a

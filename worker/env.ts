@@ -78,8 +78,9 @@ export interface Env {
   /** Who the sign-in email is from: "soccersense <signin@soccersense.io>" (wrangler.jsonc). */
   MAIL_FROM?: string;
   /**
-   * The Google sign-in client's id and secret (worker/accounts/google.ts): secrets the
-   * product owner sets in Cloudflare. Without both, signing in with Google is off.
+   * The Google sign-in client's id (not a secret: `vars` in wrangler.jsonc) and its secret
+   * (a secret the product owner sets in Cloudflare). Without both, signing in with Google is
+   * off.
    */
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;

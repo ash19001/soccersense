@@ -46,8 +46,7 @@
   // Cloudflare dashboard (the Worker's Settings, "Variables and Secrets", type Secret):
   //   ADMIN_TOKEN           the approval desk's key
   //   RESEND_API_KEY        the email service's key, for sign-in links
-  //   GOOGLE_CLIENT_ID      the Google sign-in client ...
-  //   GOOGLE_CLIENT_SECRET  ... and its secret
+  //   GOOGLE_CLIENT_SECRET  the Google sign-in client's secret
   //   TURNSTILE_SECRET_KEY  the bot check's (Cloudflare Turnstile) secret key
   // For `pnpm api` on a developer's machine they go in a file called .dev.vars (one
   // NAME=value a line), which git ignores.
@@ -61,6 +60,8 @@
     // The bot check's site key (Cloudflare Turnstile, on asking for a sign-in link). Not a
     // secret: it is in every page that shows the check. Its secret key is a secret (above).
     "TURNSTILE_SITE_KEY": "0x4AAAAAAGGDv04TBSbYhvnI",
+    // The Google sign-in client's id. Not a secret either: it is in every link to Google's
+    // sign-in page. Its secret is a secret (above).
     "GOOGLE_CLIENT_ID": "999264126454-vdk54s13i2u0pgpls8h10lddf9p1feld.apps.googleusercontent.com"
   }
 }

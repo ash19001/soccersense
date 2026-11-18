@@ -817,8 +817,8 @@ account as a scheduled skill).
 - The product owner then put the token in as the environment variable
   `SOCCERSENSE_ADMIN_TOKEN`, and the third trial got past the desk: `todo` listed the
   places and both runs began drafting, reading Wikipedia's pages as their sources.
-- Still to see: the drafts themselves on the approval page, the runs' final reports, and
-  the product owner's choice of model for the weekly run.
+- The product owner picked Sonnet 5.5 for the weekly run (2026-11-18); the routine was
+  already set to it.
 
 ## Games run by the server (2026-11-17)
 
@@ -929,7 +929,6 @@ keys". ARCHITECTURE.md section 8, "Accounts", has the design.
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to
   "Bayern", "Alberto" next to "Albert", "Palma" next to "Parma"). Fill `Question.decoys`.
-- Estadio Centenario is due to close after 28 Nov 2026: replace it in the stadium list later.
 - Very short landscape phones (under about 440 CSS px tall) do not have room for the layout.
 - Tablets in portrait at 820 x 1180 get a cramped layout (the font pixel doubles there).
 - Art: the sun jumps sides at solar noon; golden hour turns the pitch a little olive; the

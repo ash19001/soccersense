@@ -1020,7 +1020,7 @@ export const en = {
     play: "PLAY",
     /** The foot's links, read out as a group. */
     nav: "The site's pages",
-    updated: "Last updated 17 November 2026",
+    updated: "Last updated 18 November 2026",
     contact: "info@soccersense.io",
   },
   privacy: {
@@ -1032,13 +1032,13 @@ export const en = {
       {
         heading: "In short",
         paragraphs: [
-          "You can play without telling us anything, and then nothing about you is kept on our server. If you make an account, we keep your email address, your name and your games so they're the same on every device. We don't sell data, show ads or track you.",
+          "You can play without telling us anything, and then nothing about you is kept on our server. If you make an account, we keep your email address, your name and your games so they're the same on every device. We don't sell data, show ads or track you across the web.",
         ],
       },
       {
         heading: "Who we are",
         paragraphs: [
-          "soccersense is a daily football trivia game at soccersense.io. For anything about your data, email info@soccersense.io.",
+          "soccersense is a daily football trivia game at soccersense.io, run by sole traders in the United Kingdom under the name soccersense. For anything about your data, email info@soccersense.io.",
         ],
       },
       {
@@ -1071,6 +1071,7 @@ export const en = {
         heading: "Cookies and storage",
         paragraphs: [
           "Only accounts get a cookie: one that keeps you signed in, and a short-lived one while you sign in with Google. Both are needed to sign in, so we don't ask before setting them. There are no advertising or analytics cookies.",
+          "To see how many people visit and which pages they use, we use Cloudflare Web Analytics. It counts page visits without cookies and without recognising you from one visit to the next.",
           "Your browser's storage holds your games and settings so the game works. Clearing your site data removes them from that device.",
         ],
       },
@@ -1080,7 +1081,7 @@ export const en = {
           "These companies work on our behalf and only as we instruct them. Some may handle data outside the UK, with the safeguards UK data protection law requires.",
         ],
         list: [
-          "Cloudflare hosts the site and runs our server and database. When you ask for a sign-in link, its Turnstile check looks at your browser to tell people from bots.",
+          "Cloudflare hosts the site, runs our server and database, and counts visits (Web Analytics). When you ask for a sign-in link, its Turnstile check looks at your browser to tell people from bots.",
           "Resend sends the sign-in emails.",
           "Google, only if you choose to continue with Google.",
         ],
@@ -1123,7 +1124,7 @@ export const en = {
       {
         heading: "The game",
         paragraphs: [
-          "soccersense is a free daily football trivia game. We work to keep it running and the questions right, but it's provided as it is, and we can't promise it will always be available or free of mistakes.",
+          "soccersense is a free daily football trivia game, run by its founders as sole traders in the United Kingdom under the name soccersense. We work to keep it running and the questions right, but it's provided as it is, and we can't promise it will always be available or free of mistakes.",
         ],
       },
       {

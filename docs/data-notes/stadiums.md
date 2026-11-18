@@ -58,8 +58,9 @@ game. What is said below about how names were chosen is kept as the record of th
 - Four names carry accents: Maracanã, Santiago Bernabéu, Estádio da Luz, Estadio Cuscatlán. The
   canvas bitmap fonts cover unaccented letters only, so the scoreboard has to strip accents
   before drawing.
-- Estadio Centenario is expected to be closed for rebuilding from 2027. Replace it if this list
-  is still in use then.
+- Estadio Centenario is expected to be closed for rebuilding from 2027. That no longer matters:
+  since 2026-11-17 a pin is only a point on the map for the locked distance modes, never shown
+  or named, and a ground being rebuilt does not move.
 - In-use status was confirmed by search only for Estadio Centenario, Cairo International Stadium
   and Japan National Stadium. The other 18 are long-standing active venues and were not
   individually re-checked.

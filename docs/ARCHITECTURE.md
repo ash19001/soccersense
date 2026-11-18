@@ -404,13 +404,11 @@ Built:
 
 - **The routine** is "soccersense: draft the week's questions" on the product owner's
   Claude account: every Sunday at 03:17 UTC, in the Default cloud environment, with no
-  connectors, its prompt telling the session to follow the skill. Its model is to be chosen
-  after a trial of Sonnet 5.5 and Opus 5.5 on different days (the product owner: "for the
-  initial run can you do both so i can assess quality of both outputs then decide").
+  connectors, its prompt telling the session to follow the skill. Its model is Sonnet 5.5,
+  the product owner's pick (2026-11-18: "i pick sonnet") after a trial of Sonnet 5.5 and
+  Opus 5.5 on different days.
 
-Still to do there: the product owner's look at the first trial drafts and their choice of
-model for the weekly run (see docs/PROGRESS.md). The game plays what is scheduled once the
-`QUESTIONS` flag says so (below).
+The game plays what is scheduled once the `QUESTIONS` flag says so (below).
 
 ### Games run by the server (2026-11-17)
 
@@ -623,10 +621,12 @@ account is still never stored, given a cookie or asked about.
   a bar along the top with the game's name and PLAY, held there as the page scrolls, the
   words in a column about seventy characters wide, and a foot with the two pages' links
   and the small print (`app/routes/legal-page.tsx`). They are drafts written
-  to match what the game does (no ads, no analytics, what an account keeps and for how
-  long, Cloudflare, Resend and Google as processors, the ICO), for the product owner to
-  have checked. They name `info@soccersense.io` (`strings.pages.contact`, the product owner's address,
-  2026-11-18) for questions, and do not yet name who runs the game.
+  to match what the game does (no ads, cookie-free Cloudflare Web Analytics only, what an
+  account keeps and for how long, Cloudflare, Resend and Google as processors, the ICO), for
+  the product owner to have checked. They name `info@soccersense.io`
+  (`strings.pages.contact`, the product owner's address, 2026-11-18) for questions, and
+  who runs the game: its founders, as sole traders in the UK under the name soccersense
+  (the product owner, 2026-11-18: not registered yet; a broader name may come later).
 - **Written directly, not with Better Auth.** The plan named that library. Signing in here
   is two small flows with no passwords, and the Worker is plain TypeScript on web
   standards with its time handed in and its tests on a real SQLite: written directly it is
@@ -635,7 +635,8 @@ account is still never stored, given a cookie or asked about.
 - **The secrets** are the product owner's to put in Cloudflare (the Worker's Settings,
   "Variables and Secrets", type **Secret**: a plain variable set there is wiped by the next
   deploy): `RESEND_API_KEY` (and the domain verified in Resend, for the sender in
-  `MAIL_FROM`), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (the client's redirect address:
+  `MAIL_FROM`), `GOOGLE_CLIENT_SECRET` (its client's id, not a secret, is in `wrangler.jsonc`;
+  the client's redirect address:
   `https://soccersense.io/api/account/google/callback`), `TURNSTILE_SECRET_KEY` (the
   Turnstile widget for `soccersense.io`; its site key is not a secret and is in
   `wrangler.jsonc`). Until a key is there its way of signing in, or the check, is off and
@@ -676,10 +677,10 @@ senstive secrets anywhere public". What is so, and how it was checked:
   `Authorization` header is the approval desk's, sent from the product owner's own
   browser.
 - **No secret anywhere public.** The keys (`ADMIN_TOKEN`, `RESEND_API_KEY`,
-  `GOOGLE_CLIENT_SECRET`, `TURNSTILE_SECRET_KEY`, and the Google client's id kept with its
-  secret) live only in Cloudflare as secrets; `wrangler.jsonc` names them and holds none.
-  It does hold the Turnstile site key, which is public by design (every page that shows
-  the check has it). Checked by searching the working tree, every commit in the history and the
+  `GOOGLE_CLIENT_SECRET`, `TURNSTILE_SECRET_KEY`) live only in Cloudflare as secrets;
+  `wrangler.jsonc` names them and holds none. It does hold the Turnstile site key and the
+  Google client's id, which are public by design (every page that shows the check, and
+  every link to Google's sign-in page, has them). Checked by searching the working tree, every commit in the history and the
   built site for key shapes (Resend, Google, Turnstile, JWTs, private keys) and for the
   product owner's address: nothing. The built site ships no source maps and no server
   code; the page reads no setting but where it is served from. A developer's own keys go in
@@ -687,7 +688,8 @@ senstive secrets anywhere public". What is so, and how it was checked:
   the database. Tests hold the settings to this (`app/routes/hosting.test.ts`).
 - **Headers.** Every file the site serves carries `public/_headers`: a content security
   policy (scripts, styles, pictures, sounds and requests from this site only, plus
-  Turnstile's script and frame from `challenges.cloudflare.com`; no plugins, no other base
+  Turnstile's script and frame from `challenges.cloudflare.com` and Cloudflare Web
+  Analytics' script and its count, which the product owner keeps on (2026-11-18); no plugins, no other base
   address, no form posted elsewhere, no framing by another site), HSTS for a year,
   `nosniff`, `X-Frame-Options: DENY`, a referrer cut to the site, no camera, microphone,
   location or payments, and `Cross-Origin-Opener-Policy: same-origin`. Every API answer
