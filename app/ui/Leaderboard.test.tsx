@@ -306,54 +306,6 @@ describe("Leaderboard with four modes", () => {
     expect(top.querySelector(".ss-lb__nm-tail")).toBeNull();
   });
 
-  test("the nickname has its own line under the table, and CHANGE", () => {
-    const onChange = vi.fn();
-    render(
-      at(
-        MONITOR,
-        <Leaderboard
-          boards={BOARDS}
-          labels={{ ...LABELS, me: "Your name:", change: "CHANGE" }}
-          me={{
-            name: "HeaderWes1",
-            changeSpoken: "Change your name, HeaderWes1",
-            onChange,
-          }}
-        />,
-      ),
-    );
-    const line = document.querySelector(".ss-lb__me") as HTMLElement;
-    expect(line).toHaveTextContent("Your name: HeaderWes1CHANGE");
-    expect(within(line).getByText("Your name:")).toHaveClass("ss-sr");
-    const change = screen.getByRole("button", {
-      name: "Change your name, HeaderWes1",
-    });
-    expect(change).toHaveAttribute("aria-haspopup", "dialog");
-    fireEvent.click(change);
-    // The focus comes back to the link once the name is done.
-    expect(onChange).toHaveBeenCalledWith(change);
-  });
-
-  test("on a phone CHANGE closes the sheet, and the focus goes back to the trophy", () => {
-    const onChange = vi.fn();
-    render(
-      at(
-        DEFAULT_SCALE,
-        <Leaderboard
-          boards={BOARDS}
-          labels={{ ...LABELS, change: "CHANGE" }}
-          me={{ name: "HeaderWes1", changeSpoken: "Change", onChange }}
-        />,
-      ),
-    );
-    const trophy = screen.getByRole("button", { name: LABELS.open });
-    fireEvent.click(trophy);
-    const sheet = document.querySelector("dialog") as HTMLElement;
-    fireEvent.click(within(sheet).getByRole("button", { name: "Change" }));
-    expect(onChange).toHaveBeenCalledWith(trophy);
-    expect(document.querySelector("dialog")).toBeNull();
-  });
-
   test("on a phone the link closes the sheet and opens the stats", () => {
     const onStats = vi.fn();
     render(

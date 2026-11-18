@@ -5,8 +5,9 @@
  *
  * - with no account: they keep their own game. The browser keeps the ticket it is handed
  *   and sends it back, as the page does, through the Worker's own `handle`.
- * - with an account: the game is kept in the database. There are no accounts yet, so these
- *   go straight to `games` with an account's id, as the Worker will once there are.
+ * - with an account: the game is kept in the database. Signing in is tested with the
+ *   accounts themselves (../accounts/api.test.ts), so these go straight to `games` with
+ *   an account's id, as the Worker does for whoever is signed in.
  */
 import { afterEach, describe, expect, test } from "vitest";
 

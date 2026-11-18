@@ -19,8 +19,8 @@
  * - A player with no account keeps it themselves. `ticket` is the game with the server's
  *   seal on it (./ticket.ts); the page keeps it on the device and sends it back with every
  *   move. The server stores nothing about them: no row, no cookie.
- * - An account's game is a row in the database (./store.ts), and `ticket` is null. There
- *   are no accounts yet: `account` is null for every request, until there are.
+ * - An account's game is a row in the database (./store.ts), and `ticket` is null. The
+ *   Worker says who is signed in (`account`, from ../accounts/api.ts).
  *
  * The rules are the game's own (`reduce`, ~/game/session), the same code that runs a game
  * in the page, here with the questions' answers and the server's clock:
@@ -99,10 +99,14 @@ interface Keeper {
   load(day: number): Promise<GameState | null>;
   /** A new game. False if there is one already (it is kept). */
   create(state: GameState): Promise<boolean>;
-  /** The game after a move. False if it had been moved on meanwhile: nothing is kept. */
+  /**
+   * The game after a move. False if it had been moved on meanwhile: nothing is kept.
+   * `prompts`: what the questions asked, once the game is decided.
+   */
   save(
     state: GameState,
     was: { index: number; phase: ServedPhase },
+    prompts: readonly string[] | null,
   ): Promise<boolean>;
   /** Takes away a game that cannot be carried on. */
   remove(state: GameState): Promise<void>;
@@ -131,7 +135,8 @@ function rowKeeper(db: D1, account: string, mode: Mode): Keeper {
   return {
     load: (day) => gameOf(db, { playerId: account, day, mode }),
     create: (state) => insertGame(db, { ...state, playerId: account }),
-    save: (state, was) => updateGame(db, { ...state, playerId: account }, was),
+    save: (state, was, prompts) =>
+      updateGame(db, { ...state, playerId: account }, was, prompts),
     remove: (state) =>
       deleteGame(db, { playerId: account, day: state.day, mode }),
     hand: async () => null,
@@ -250,8 +255,8 @@ async function bodyOf(request: Request): Promise<MoveBody | null> {
 
 /**
  * Answers a request under `/api/games`. `route` is the path after `/api`. `account` is
- * the signed-in player, whose games are kept in the database; null (as it is for every
- * request until there are accounts) is a player who keeps their own.
+ * the id of the signed-in player's account, whose games are kept in the database; null
+ * is a player with no account, who keeps their own.
  */
 export async function games(
   request: Request,
@@ -299,10 +304,17 @@ export async function games(
   const write = async (held: Held, next: Session): Promise<Held | null> => {
     const session = settled(next);
     const state = stateAfter(held.state, session, now);
-    const kept = await keeper.save(state, {
-      index: held.state.index,
-      phase: held.state.phase,
-    });
+    const prompts =
+      state.finishedAt === null
+        ? null
+        : session.questions
+            .slice(0, session.turns.length)
+            .map((question) => question.prompt);
+    const kept = await keeper.save(
+      state,
+      { index: held.state.index, phase: held.state.phase },
+      prompts,
+    );
     return kept ? { state, session } : null;
   };
 

@@ -5201,28 +5201,6 @@ html:has(.ss-help-dialog[open]) {
 }
 
 /*
- * The player's nickname (2026-11-15) on one line under the table: the name on the chalk
- * plate of the player's own row, and CHANGE at the right end. A long name gives way to the
- * link, never the other way round.
- */
-.ss-lb__me {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--u3);
-  margin: var(--u2) 0 0;
-  white-space: nowrap;
-}
-
-.ss-lb__me-name {
-  display: flex;
-  min-width: 0;
-  padding: 0 var(--u2);
-  background: var(--c-chalk);
-  color: var(--c-ink);
-}
-
-/*
  * A name in the leaderboard (Name): its words give way to an ellipsis, never the number at
  * its end, so "soccerf…4821" still says which soccerfan it is. A flex box of its own: beside
  * the flag of the player's row under the gap, it takes the room the flag leaves.
@@ -5245,13 +5223,9 @@ html:has(.ss-help-dialog[open]) {
   flex: none;
 }
 
-.ss-lb__me .ss-lb__change {
-  flex: none;
-  margin: 0;
-}
-
 /* The name pop-up (Nickname): the field, why a name cannot be used, the rules, SAVE. */
-.ss-nick__form {
+.ss-nick__form,
+.ss-acct__form {
   display: flex;
   flex-direction: column;
   gap: var(--u2);
@@ -5261,7 +5235,8 @@ html:has(.ss-help-dialog[open]) {
  * The answer bar's field, in a column here: its own height, not the bar's share of the row,
  * and its type worked out from the card's font pixel (as the reminder's time is).
  */
-.ss-nick__form .ss-input {
+.ss-nick__form .ss-input,
+.ss-acct__form .ss-input {
   flex: none;
   font-size: calc(var(--fp) * 27);
   line-height: calc(var(--fp) * 24);
@@ -5280,8 +5255,83 @@ html:has(.ss-help-dialog[open]) {
   clip-path: inset(50%);
 }
 
-.ss-nick__save {
+.ss-nick__save,
+.ss-acct__go,
+.ss-acct__google {
   margin-top: var(--u2);
+}
+
+/* The account pop-up (Account): who is signed in, a label over each value. */
+.ss-acct__row {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+/* An address can be long: it breaks where it must, never out of the card. */
+.ss-acct__v {
+  overflow-wrap: anywhere;
+}
+
+/* The name, and CHANGE at the end of its line. A long name gives way, never the link. */
+.ss-acct__name {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--u3);
+}
+
+/* CHANGE, Terms, Privacy: amber words, underlined in whole pixels, as ALL STATS is. */
+.ss-acct__link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--c-amber);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: var(--u);
+  text-underline-offset: var(--u);
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .ss-acct__link:hover {
+    color: var(--c-gold-light);
+  }
+}
+
+.ss-acct__link:focus {
+  outline: none;
+}
+
+.ss-acct__link:focus-visible {
+  outline: var(--ring) solid var(--c-amber);
+  outline-offset: var(--u);
+}
+
+/* CHANGE is a button on its own line: a touch target. */
+.ss-acct__change {
+  flex: none;
+  min-height: var(--tap);
+}
+
+/* Deleting: the question, in chalk. */
+.ss-acct__ask {
+  color: var(--c-chalk);
+}
+
+/* The small print at the foot: the terms and the privacy notice. */
+.ss-acct__small {
+  margin-top: var(--u2);
+}
+
+/*
+ * The bot check (BotCheck: Cloudflare Turnstile's widget). Empty, and taking no room, unless
+ * Turnstile has to ask something; then its widget, the card's width.
+ */
+.ss-check:empty {
+  display: none;
 }
 
 .ss-lb__week {
@@ -6133,5 +6183,356 @@ html:has(.ss-help-dialog[open]) {
   to {
     clip-path: inset(50% 0);
     visibility: visible;
+  }
+}
+
+/*
+ * The privacy notice and the terms (app/routes/legal-page.tsx): ordinary pages that scroll
+ * (the product owner, 2026-11-17: "full scrollable pages, not a black page and a popup
+ * appearance"). The card's face across the whole page; a bar of ink along the top, held
+ * there as the page scrolls; the words in a column about seventy characters wide; a foot of
+ * ink. On a monitor the type is in caption pixels, as the home screen's words are.
+ */
+.ss-doc {
+  min-height: 100dvh;
+  background: var(--c-night);
+  color: var(--c-chalk);
+}
+
+.ss-doc__page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  font-family: var(--font-10);
+  font-size: calc(var(--fp) * 56 / 3);
+  line-height: calc(var(--fp) * 18);
+}
+
+.ss-doc__page[data-wide] {
+  --fp: var(--cp);
+}
+
+.ss-doc__bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--u4);
+  padding: var(--u2) var(--u5);
+  background: var(--c-ink);
+  box-shadow: 0 var(--u) 0 0 var(--c-slate);
+}
+
+/* The game's name, a link home: chalk capitals in the bigger face. */
+.ss-doc__brand {
+  color: var(--c-chalk);
+  font-family: var(--font-15);
+  font-size: calc(var(--fp) * 27);
+  line-height: calc(var(--fp) * 24);
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+@media (hover: hover) {
+  .ss-doc__brand:hover {
+    color: var(--c-gold-light);
+  }
+}
+
+.ss-doc__brand:focus {
+  outline: none;
+}
+
+.ss-doc__brand:focus-visible {
+  outline: var(--ring) solid var(--c-amber);
+  outline-offset: var(--u);
+}
+
+.ss-doc__play {
+  flex: none;
+}
+
+.ss-doc__main {
+  box-sizing: border-box;
+  flex: 1 0 auto;
+  width: 100%;
+  max-width: calc(var(--fp) * 420 + var(--u5) * 2);
+  margin: 0 auto;
+  padding: var(--u8) var(--u5);
+}
+
+.ss-doc__title {
+  margin: 0;
+  font-family: var(--font-25);
+  font-size: calc(var(--fp) * 41);
+  font-weight: 400;
+  line-height: calc(var(--fp) * 36);
+}
+
+.ss-doc__title:focus {
+  outline: none;
+}
+
+.ss-doc__updated {
+  margin: var(--u2) 0 0;
+  color: var(--c-mist);
+}
+
+.ss-doc__part {
+  margin-top: var(--u8);
+}
+
+.ss-doc__part h2 {
+  margin: 0 0 var(--u2);
+  color: var(--c-amber);
+  font-family: var(--font-15);
+  font-size: calc(var(--fp) * 27);
+  font-weight: 400;
+  line-height: calc(var(--fp) * 24);
+}
+
+.ss-doc__part p {
+  margin: 0 0 var(--u3);
+}
+
+.ss-doc__part ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--u2);
+  margin: 0 0 var(--u3);
+  padding-left: var(--u5);
+  list-style: square;
+}
+
+.ss-doc__part li::marker {
+  color: var(--c-amber);
+}
+
+.ss-doc__foot {
+  padding: var(--u5);
+  background: var(--c-ink);
+  color: var(--c-mist);
+  box-shadow: 0 calc(var(--u) * -1) 0 0 var(--c-slate);
+}
+
+.ss-doc__foot p {
+  max-width: calc(var(--fp) * 420);
+  margin: var(--u3) auto 0;
+}
+
+.ss-doc__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--u2) var(--u5);
+  max-width: calc(var(--fp) * 420);
+  margin: 0 auto;
+}
+
+/* The page being read is not underlined: it is where you are. */
+.ss-doc__links [aria-current="page"] {
+  color: var(--c-chalk);
+  text-decoration: none;
+}
+
+/* ---------- 31. The player's name and account: the top right corner (AccountCorner) -------- */
+
+/*
+ * The product owner, 2026-11-17: "in bottom left add the account name (which is clickable
+ * if they want to change it) and next to it it says sign in", then "actually move it top
+ * right of the screen". Fixed in the corner, the gap of the leaderboard's panel from the
+ * screen's edges.
+ */
+.ss-corner {
+  position: fixed;
+  top: var(--u2);
+  right: var(--u3);
+  z-index: 2;
+  display: flex;
+  pointer-events: auto;
+}
+
+.ss-corner.is-stowed:not([data-sliding]) {
+  visibility: hidden;
+}
+
+/*
+ * A monitor: in the captions' type (caption pixels), a row of them tall or a touch target
+ * if that is more. The name stands on the picture itself, the words and a pencil; SIGN IN
+ * is a plate, a card in look as the day plate is. Each is a button that tall.
+ */
+.ss-game[data-wide] .ss-corner {
+  --fp: var(--cp);
+  --ss-corner-h: max(var(--tap), calc(var(--cp) * 13 + var(--px) * 8));
+  --ss-corner-lh: calc(var(--cp) * 15);
+  --ss-corner-text: calc((var(--ss-corner-h) - var(--ss-corner-lh)) / 2);
+
+  gap: var(--u3);
+  height: var(--ss-corner-h);
+  font-size: calc(var(--cp) * 56 / 3);
+  line-height: var(--ss-corner-lh);
+  white-space: nowrap;
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-game[data-wide] .ss-corner {
+    --ss-corner-h: round(
+      up,
+      calc(
+        max(var(--tap), calc(var(--cp) * 13 + var(--px) * 8)) - var(--nudge)
+      ),
+      var(--px)
+    );
+    --ss-corner-text: round(
+      down,
+      calc((var(--ss-corner-h) - var(--ss-corner-lh)) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+.ss-corner > button:not(.ss-btn) {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: var(--u2);
+  height: 100%;
+  margin: 0;
+  padding: var(--ss-corner-text) var(--u3) 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+/*
+ * The name: no plate (the product owner, 2026-11-17: "the name shouldnt have a background
+ * and should have an underline instead and it goes yellow on hover"). Chalk words
+ * underlined in whole pixels, and the pencil after them in icon pixels on the capitals'
+ * middle, both in the button's colour, gold under the pointer. A font pixel of ink round
+ * them, as round the logo's letters, so they read on any sky.
+ */
+.ss-game[data-wide] .ss-corner > .ss-corner__name {
+  --ip: var(--ip-fit, var(--px));
+
+  padding-inline: var(--u);
+  color: var(--c-chalk);
+}
+
+.ss-corner__words {
+  text-decoration: underline;
+  text-decoration-thickness: var(--u);
+  text-underline-offset: var(--u);
+  text-shadow:
+    var(--fp) 0 0 var(--c-ink),
+    calc(var(--fp) * -1) 0 0 var(--c-ink),
+    0 var(--fp) 0 var(--c-ink),
+    0 calc(var(--fp) * -1) 0 var(--c-ink),
+    var(--fp) var(--fp) 0 var(--c-ink),
+    calc(var(--fp) * -1) var(--fp) 0 var(--c-ink),
+    var(--fp) calc(var(--fp) * -1) 0 var(--c-ink),
+    calc(var(--fp) * -1) calc(var(--fp) * -1) 0 var(--c-ink);
+}
+
+.ss-corner__name .ss-glyph {
+  flex: none;
+  margin-top: calc((var(--ss-corner-lh) - var(--ip) * 9) / 2);
+  color: inherit;
+  filter: drop-shadow(var(--fp) 0 0 var(--c-ink))
+    drop-shadow(calc(var(--fp) * -1) 0 0 var(--c-ink))
+    drop-shadow(0 var(--fp) 0 var(--c-ink))
+    drop-shadow(0 calc(var(--fp) * -1) 0 var(--c-ink));
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-corner__name .ss-glyph {
+    margin-top: round(
+      down,
+      calc((var(--ss-corner-lh) - var(--ip) * 9) / 2 + var(--nudge)),
+      var(--snap)
+    );
+  }
+}
+
+/* SIGN IN: the day's amber on a plate (the card's face, its top highlight, ink round it). */
+.ss-corner__go {
+  color: var(--c-amber);
+}
+
+.ss-game[data-wide] .ss-corner > .ss-corner__go {
+  background: var(--c-night);
+  box-shadow:
+    inset 0 var(--u) 0 0 var(--c-slate),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) var(--u) 0 var(--u) var(--c-ink);
+}
+
+@media (hover: hover) {
+  .ss-game[data-wide] .ss-corner > .ss-corner__name:hover {
+    color: var(--c-gold);
+  }
+
+  .ss-game[data-wide] .ss-corner > .ss-corner__go:hover {
+    background: var(--c-slate);
+    color: var(--c-gold-light);
+  }
+}
+
+.ss-corner > button:not(.ss-btn):focus {
+  outline: none;
+}
+
+.ss-corner > button:not(.ss-btn):focus-visible {
+  position: relative;
+  z-index: 2;
+  outline: var(--ring) solid var(--c-amber);
+  outline-offset: var(--u);
+}
+
+/* A phone: the one square button, a touch target in the corner, clear of the logo. */
+.ss-game:not([data-wide]) .ss-corner {
+  top: var(--u3);
+}
+
+/*
+ * The leaderboard's panel starts under the plate (section 26 places it): its top is at
+ * least the plate's foot and a gap. On a short monitor (under 820 px tall: 1366 x 768) that
+ * leaves no room for its seven days' strip above the captions, so the strip is left out
+ * there; the stats button in the captions still opens them.
+ */
+.ss-game[data-wide]:has(.ss-corner) .ss-lb--docked {
+  top: max(
+    var(--ss-lb-top),
+    calc(
+      var(--u2) + max(var(--tap), calc(var(--cp) * 13 + var(--px) * 8)) +
+        var(--u4)
+    )
+  );
+}
+
+@supports (width: round(down, 1.5px, 1px)) {
+  .ss-game[data-wide]:has(.ss-corner) .ss-lb--docked {
+    top: round(
+      down,
+      calc(
+        max(
+            var(--ss-lb-top),
+            calc(
+              var(--u2) +
+                max(var(--tap), calc(var(--cp) * 13 + var(--px) * 8)) +
+                var(--u4)
+            )
+          ) +
+          var(--nudge)
+      ),
+      var(--px)
+    );
+  }
+}
+
+@media (max-height: 51.25rem) {
+  .ss-game[data-wide]:has(.ss-corner) .ss-lb--docked .ss-lb__week {
+    display: none;
   }
 }

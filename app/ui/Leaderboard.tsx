@@ -96,23 +96,6 @@ export interface LeaderboardLabels {
   show: string;
   /** The link to the stats pop-up, at the strip's top right: "ALL STATS". */
   more?: string;
-  /** Read out before the player's nickname, on its line under the table: "Your name:". */
-  me?: string;
-  /** The link at the end of that line, to change the nickname: "CHANGE". */
-  change?: string;
-}
-
-/** The player's nickname, on a line of its own under the table, with a link to change it. */
-export interface LeaderboardMe {
-  /** "NutmegNina". */
-  name: string;
-  /** The link's name, read out in place of CHANGE: "Change your name, NutmegNina". */
-  changeSpoken: string;
-  /**
-   * CHANGE was pressed. `from` is where the focus goes back to once the name is done: the
-   * link on a monitor, the trophy on a phone (the sheet goes down first).
-   */
-  onChange(from: HTMLElement | null): void;
 }
 
 export interface LeaderboardProps {
@@ -128,8 +111,6 @@ export interface LeaderboardProps {
   stowed?: boolean;
   /** Open the player's stats (the link under the strip, `labels.more`). None: no link. */
   onStats?: () => void;
-  /** The player's nickname and the link to change it (`labels.me`, `labels.change`). */
-  me?: LeaderboardMe;
   className?: string;
 }
 
@@ -382,8 +363,6 @@ function Body({
   headingId,
   close,
   onStats,
-  me,
-  onRename,
 }: {
   boards: readonly LeaderboardBoard[];
   labels: LeaderboardLabels;
@@ -392,9 +371,6 @@ function Body({
   headingId: string;
   close?: { label: string; onClose(): void };
   onStats?: () => void;
-  me?: LeaderboardMe;
-  /** CHANGE was pressed, on this link. */
-  onRename?: (link: HTMLElement) => void;
 }) {
   const base = useId();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -522,25 +498,6 @@ function Body({
               )}
             </tbody>
           </table>
-          {me && (
-            <p className="ss-lb__me">
-              {labels.me && <span className="ss-sr">{labels.me} </span>}
-              <span className="ss-lb__me-name">
-                <Name text={me.name} />
-              </span>
-              {labels.change && onRename && (
-                <button
-                  type="button"
-                  className="ss-lb__more ss-lb__change"
-                  aria-label={me.changeSpoken}
-                  aria-haspopup="dialog"
-                  onClick={(e) => onRename(e.currentTarget)}
-                >
-                  {labels.change}
-                </button>
-              )}
-            </p>
-          )}
           <p className={cx("ss-lb__played", board.mine && "is-mine")}>
             {board.mine ?? board.played}
           </p>
@@ -592,7 +549,6 @@ export function Leaderboard({
   initialMode,
   stowed = false,
   onStats,
-  me,
   className,
 }: LeaderboardProps) {
   const wide = isWide(usePixelRootScale());
@@ -799,8 +755,6 @@ export function Leaderboard({
             onMode={setMode}
             headingId={headingId}
             onStats={onStats}
-            me={me}
-            onRename={me && ((link) => me.onChange(link))}
           />
         </div>
       </aside>
@@ -861,19 +815,6 @@ export function Leaderboard({
                 }
                 setOpen(false);
                 onStats();
-              })
-            }
-            me={me}
-            onRename={
-              me &&
-              (() => {
-                // the sheet goes, and the name comes up in its place; then back to the trophy
-                const dialog = dialogRef.current;
-                if (dialog?.open && typeof dialog.close === "function") {
-                  dialog.close();
-                }
-                setOpen(false);
-                me.onChange(openerRef.current);
               })
             }
           />

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   type CSSProperties,
   type KeyboardEvent,
   type MouseEvent,
@@ -13,6 +14,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Link } from "react-router";
 
 import { IconButton } from "./Button";
 import { cx } from "./cx";
@@ -40,6 +42,8 @@ export interface HowToPlayLabels {
   step: (tier: string, from: number) => string;
   /** Small print at the foot of the card: that the game is independent (`strings.legal`). */
   disclaimer?: string;
+  /** After it, links: the privacy notice and the terms. */
+  legal?: readonly { label: string; to: string }[];
 }
 
 export interface HowToPlayShot {
@@ -180,7 +184,19 @@ function Card({
           )}
         </section>
 
-        {labels.disclaimer && <p className="ss-legal">{labels.disclaimer}</p>}
+        {labels.disclaimer && (
+          <p className="ss-legal">
+            {labels.disclaimer}
+            {labels.legal?.map((link) => (
+              <Fragment key={link.to}>
+                {" "}
+                <Link className="ss-acct__link" to={link.to}>
+                  {link.label}
+                </Link>
+              </Fragment>
+            ))}
+          </p>
+        )}
       </div>
     </div>
   );

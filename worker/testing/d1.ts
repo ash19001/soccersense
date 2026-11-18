@@ -10,8 +10,8 @@ import type { D1, D1Result, D1Statement } from "../env";
 
 type Value = null | number | bigint | string | Uint8Array;
 
-/** A statement that reads rows, not one that changes them. */
-const READS = /^\s*(select|with|pragma|explain)\b/i;
+/** A statement that gives rows back: a read, or a change that says what it changed. */
+const READS = /^\s*(select|with|pragma|explain)\b|\breturning\b/i;
 
 export interface MemoryD1 extends D1 {
   /** Every statement run, in order: for a test to count the database's work. */

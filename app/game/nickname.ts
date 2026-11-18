@@ -71,6 +71,22 @@ export function checkNickname(text: string): NicknameCheck {
   return { ok: true, name };
 }
 
+/**
+ * Whether a name is a first nickname's: `soccerfan` and a number, in any capitals. Only the
+ * server's counter hands these out, so nobody can take the name the next player is due.
+ */
+export function isFanNickname(name: string): boolean {
+  return /^soccerfan\d+$/i.test(name.trim());
+}
+
+/**
+ * A nickname as names are told apart: lower case. Two accounts cannot have names that are
+ * the same here ("Nutmeg Nina" and "nutmeg nina" are one name).
+ */
+export function nicknameKey(name: string): string {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 /** The nickname kept on this device, or null if there is none (or it is not a good one). */
 export function loadNickname(storage?: StorageLike | null): string | null {
   try {

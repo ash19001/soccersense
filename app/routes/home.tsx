@@ -33,11 +33,13 @@ import { COFFEE_URL, IDEAS_URL, usableLink } from "~/data/links";
 import {
   MODES,
   type Mode,
+  type NicknameProblem,
   type PlayedGame,
   type Today,
   EPOCH_UTC,
   MS_PER_DAY,
   NICKNAME_MAX,
+  checkEmail,
   checkNickname,
   loadDay,
   loadHistory,
@@ -50,11 +52,12 @@ import { strings } from "~/i18n";
 import { MenuScene } from "~/scenes";
 import type { LockedMode } from "~/scenes/menu";
 import {
+  Account,
+  AccountCorner,
   GameLayout,
   HowToPlay,
   Leaderboard,
   type LeaderboardBoard,
-  type LeaderboardMe,
   MenuCaptions,
   Nickname,
   Panel,
@@ -73,6 +76,7 @@ import {
   usePixelScale,
 } from "~/ui";
 import type { Route } from "./+types/home";
+import { type AccountResult, accountStore } from "./account";
 import { planeFits } from "./home-plane";
 import { signMessages } from "./home-sign";
 import { howToPlayContent } from "./how-to-play-card";
@@ -326,6 +330,15 @@ function createMatchdayStore(): MatchdayStore {
         look();
         waitForMidnight();
       });
+      // A signed-in device has been given the account's games (./account.ts): the scores,
+      // the streak and the week may be others now.
+      let synced = accountStore.read().synced;
+      const stopAccount = accountStore.subscribe(() => {
+        const now = accountStore.read().synced;
+        if (now === synced) return;
+        synced = now;
+        look();
+      });
       document.addEventListener("visibilitychange", onVisibility);
       waitForMidnight();
       // The first value: React is told like any other change, and renders again with it.
@@ -333,6 +346,7 @@ function createMatchdayStore(): MatchdayStore {
       return () => {
         window.clearTimeout(timer);
         stopClock();
+        stopAccount();
         document.removeEventListener("visibilitychange", onVisibility);
       };
     },
@@ -545,7 +559,23 @@ export default function Home() {
     nicknameStore.server,
   );
   const [renaming, setRenaming] = useState(false);
+  /** Where the focus goes back to once the name's card has gone. */
   const renameButton = useRef<HTMLElement | null>(null);
+  /** The name and SIGN IN at the bottom left (on a phone, its one button). */
+  const nameButton = useRef<HTMLButtonElement | null>(null);
+  const accountButton = useRef<HTMLButtonElement | null>(null);
+  /**
+   * The player's account, if they have one (./account.ts), and its pop-up, up from the
+   * name's card. The server is asked who is signed in only where this device has a note
+   * that someone is: a player with no account is never asked about.
+   */
+  const account = useSyncExternalStore(
+    accountStore.subscribe,
+    accountStore.read,
+    accountStore.server,
+  );
+  const [accounting, setAccounting] = useState(false);
+  useEffect(() => accountStore.refreshIfSignedIn(), []);
   /**
    * A mode played today, again (its card's REVIEW or its patch on the ball open it), with
    * what it says (read from storage on opening), and its REVIEW button to give the focus
@@ -750,17 +780,12 @@ export default function Home() {
         : leaderboards(day, scores, week, nickname ?? ""),
     [day, scores, week, nickname],
   );
-  /** The nickname on its line under the leaderboard's table, and CHANGE. */
-  const me: LeaderboardMe | undefined = nickname
-    ? {
-        name: nickname,
-        changeSpoken: text.leaderboard.changeSpoken(nickname),
-        onChange: (from) => {
-          renameButton.current = from;
-          setRenaming(true);
-        },
-      }
-    : undefined;
+  /** The account's card, and who is signed in asked again as it comes up. */
+  const openAccount = () => {
+    setAccounting(true);
+    void accountStore.refresh();
+  };
+  const words = strings.account.menu;
   // The tab shown first: the mode played today, if only one was (the player wants to see
   // where they came), else HOME.
   const played = scores ? MODES.filter((mode) => scores[mode] !== null) : [];
@@ -872,6 +897,28 @@ export default function Home() {
         <p className="ss-sr" aria-live="polite">
           {review ? "" : shareStatus}
         </p>
+        {/* The player's name (a press changes it) and SIGN IN, in the top right corner. */}
+        {nickname && (
+          <AccountCorner
+            name={account.account?.nickname ?? nickname}
+            nameSpoken={words.nameSpoken(account.account?.nickname ?? nickname)}
+            onName={() => {
+              renameButton.current = nameButton.current;
+              setRenaming(true);
+            }}
+            action={account.account ? words.open : words.signIn}
+            actionSpoken={
+              account.account ? words.openSpoken : words.signInSpoken
+            }
+            onAction={openAccount}
+            phoneLabel={words.phone(account.account?.nickname ?? nickname)}
+            open={accounting}
+            naming={renaming}
+            stowed={stowed}
+            nameRef={nameButton}
+            actionRef={accountButton}
+          />
+        )}
         {/* Known once the day is: nothing of it is in the build-time page. */}
         {boards && (
           <Leaderboard
@@ -880,7 +927,6 @@ export default function Home() {
             initialMode={firstTab}
             stowed={stowed}
             onStats={openStats}
-            me={me}
           />
         )}
         {/* With no script there is no picture and no game: the page says what it is. */}
@@ -941,13 +987,91 @@ export default function Home() {
           name={nickname ?? ""}
           maxLength={NICKNAME_MAX}
           problem={nicknameProblem}
-          onSave={(name) => void nicknameStore.save(name)}
+          // An account's name is the server's to give (it may be taken); anyone else's
+          // is kept on the device.
+          onSave={(name) => {
+            if (!account.account) {
+              nicknameStore.save(name);
+              return;
+            }
+            return accountStore
+              .rename(name)
+              .then((done) => (done.ok ? null : renameProblem(done)));
+          }}
           onClose={() => setRenaming(false)}
           returnFocus={renameButton}
+        />
+        <Account
+          labels={strings.account}
+          open={accounting}
+          name={nickname ?? ""}
+          account={account.account}
+          ways={account.signIn}
+          status={
+            account.asked === "failed"
+              ? "failed"
+              : account.asked === "yes"
+                ? "ready"
+                : "asking"
+          }
+          googleHref={accountStore.googleUrl()}
+          termsHref="/terms"
+          privacyHref="/privacy"
+          // The name's card in this one's place; the focus then goes back to what opened it.
+          onChangeName={() => {
+            setAccounting(false);
+            renameButton.current = accountButton.current;
+            setRenaming(true);
+          }}
+          onSend={(email, check) => {
+            const checked = checkEmail(email);
+            if (!checked.ok) {
+              return Promise.resolve(strings.account.problems.bad_email);
+            }
+            return accountStore
+              .sendLink(checked.email, check)
+              .then((done) =>
+                done.ok ? null : strings.account.problems[done.problem],
+              );
+          }}
+          onDelete={() =>
+            accountStore
+              .remove()
+              .then((done) =>
+                done.ok ? null : strings.account.problems[done.problem],
+              )
+          }
+          onLeave={() =>
+            accountStore
+              .leave()
+              .then((done) =>
+                done.ok || done.problem === "signed_out"
+                  ? null
+                  : strings.account.problems[done.problem],
+              )
+          }
+          onRetry={() => void accountStore.refresh()}
+          onClose={() => setAccounting(false)}
+          returnFocus={accountButton}
         />
       </GameLayout>
     </main>
   );
+}
+
+/** Why the server would not change an account's name, in words. */
+function renameProblem(done: Extract<AccountResult, { ok: false }>): string {
+  const words = strings.nickname;
+  if (done.problem === "taken") return words.taken;
+  if (done.problem === "bad_name") {
+    const { detail } = done;
+    if (detail === "reserved") return words.reserved;
+    if (detail === "offensive") return words.offensive;
+    if (detail !== null && detail in words.problems) {
+      return words.problems[detail as NicknameProblem];
+    }
+  }
+  return strings.account.problems[done.problem];
 }
 
 /** Why a nickname as typed cannot be used, in words, or null if it can. */

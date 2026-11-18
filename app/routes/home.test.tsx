@@ -437,32 +437,44 @@ describe("home page: today's leaderboard", () => {
     expect(within(sheet).getByText(text.mine(rank, board.total))).toBeTruthy();
   });
 
-  test("a first visit is given soccerfan and a number, kept on the device, shown under the table", () => {
+  test("a first visit is given soccerfan and a number, kept on the device, at the bottom left", () => {
     expect(window.localStorage.getItem(NICKNAME_KEY)).toBeNull();
     const { unmount } = mount();
     const nickname = window.localStorage.getItem(NICKNAME_KEY) ?? "";
     expect(nickname).toMatch(/^soccerfan\d{4}$/);
     expect(checkNickname(nickname)).toEqual({ ok: true, name: nickname });
+    // A phone: one button, named for the name.
+    expect(
+      screen.getByRole("button", {
+        name: strings.account.menu.phone(nickname),
+      }),
+    ).toBeTruthy();
+    // The leaderboard no longer changes it (2026-11-17).
     fireEvent.click(screen.getByRole("button", { name: text.open }));
     const sheet = screen.getByRole("dialog");
-    expect(sheet.querySelector(".ss-lb__me")).toHaveTextContent(nickname);
-    expect(
-      within(sheet).getByRole("button", { name: text.changeSpoken(nickname) }),
-    ).toBeTruthy();
+    expect(within(sheet).queryByText("CHANGE")).toBeNull();
     // Back another time: the same name.
     unmount();
     mount();
     expect(window.localStorage.getItem(NICKNAME_KEY)).toBe(nickname);
   });
 
-  test("CHANGE opens the name; a new one is kept and named in the table", () => {
+  test("the name at the bottom left opens it; a new one is kept and named in the table", () => {
+    // Nobody signed in: the account's card asks the server, which is not there.
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("offline")));
     window.localStorage.setItem(NICKNAME_KEY, "HeaderWes1");
     saveGame(1, "away", [100, 100, 100, 100, 80, 0, 0]);
     mount();
     const trophy = screen.getByRole("button", { name: text.open });
-    fireEvent.click(trophy);
     fireEvent.click(
-      screen.getByRole("button", { name: text.changeSpoken("HeaderWes1") }),
+      screen.getByRole("button", {
+        name: strings.account.menu.phone("HeaderWes1"),
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: strings.account.changeSpoken("HeaderWes1"),
+      }),
     );
     const words = strings.nickname;
     const card = screen.getByRole("dialog", { name: words.heading });
@@ -478,7 +490,11 @@ describe("home page: today's leaderboard", () => {
     fireEvent.click(within(card).getByRole("button", { name: words.save }));
     expect(screen.queryByRole("dialog", { name: words.heading })).toBeNull();
     expect(window.localStorage.getItem(NICKNAME_KEY)).toBe("Top Bins");
-    expect(document.activeElement).toBe(trophy);
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", {
+        name: strings.account.menu.phone("Top Bins"),
+      }),
+    );
 
     fireEvent.click(trophy);
     const sheet = screen.getByRole("dialog");
@@ -487,7 +503,6 @@ describe("home page: today's leaderboard", () => {
       name: text.youSpoken(board.yourRank ?? 0, board.total),
     });
     expect(you.closest("tr")).toHaveTextContent("Top Bins");
-    expect(sheet.querySelector(".ss-lb__me")).toHaveTextContent("Top Bins");
   });
 
   test("has a tab for each of the four modes, and each has its own table", () => {

@@ -534,14 +534,30 @@ WAITING`); and how many have played today (`PLAYED TODAY / 1,136`). Since the er
 - **Nicknames** (the product owner, 2026-11-15: "everyone who joins gets a nickname assigned to
   them. They can change this. But this is what's used for leaderboard names"; then "make the
   names just soccerfan followed by numbers that increment so its always unique"). The first
-  visit gives the player **soccerfan** and a number ("soccerfan4821"), kept on the device. A
-  line under the leaderboard's table shows it with **CHANGE**, which opens **YOUR NAME**: a
-  field and **SAVE**. A name is 3 to 13 characters of letters, numbers, spaces, - and _, with a
+  visit gives the player **soccerfan** and a number ("soccerfan4821"), kept on the device. It
+  is in the top right corner of the home screen (since 2026-11-17; it was a line under the
+  leaderboard's table with CHANGE, and the leaderboard no longer changes it): on a monitor
+  the name and a pencil on a plate there, a press opening **YOUR NAME**: a field and
+  **SAVE**. A name is 3 to 13 characters of letters, numbers, spaces, - and _, with a
   letter (13: soccerfan and four digits). Numbers that go up one by one and never repeat need
   someone to count: until a backend does, the number is a random one from 1000 to 9999, and the
   backend will hand out the next in order (soccerfan1, soccerfan2, ...; docs/ARCHITECTURE.md
   section 8). Where the leaderboard's column is too short (the monitor's panel), a name ending
   in a number loses letters, never the number: "soccerf…4821".
+- **Accounts** (the product owner, 2026-11-17: "start the user accounts"). Optional: nobody
+  needs one to play. Beside the name in the top right corner is **SIGN IN** (on a phone,
+  one button with a head and shoulders in the corner, for both), which opens the sign-in card:
+  signing up is the same thing. The player's name and CHANGE, an email address and
+  **EMAIL ME A LINK** (the link in the email signs the player in: there is no password),
+  or **CONTINUE WITH GOOGLE**. An account keeps the player's name, games, streak and stats
+  on the server, the same on every device (the games the device had played before go with
+  it), and only accounts are on the leaderboards. A new account is the next soccerfan
+  (soccerfan1, soccerfan2, ...), and its name can be changed to any that is free. Signed
+  in, SIGN IN reads **ACCOUNT**, and its card says who, with **SIGN OUT** and **DELETE
+  ACCOUNT** (which asks first). Its foot links the **terms** and the **privacy notice**
+  (/terms, /privacy). There is no offer of an account after a game (the product owner,
+  2026-11-17). A player with no account has nothing stored about them (docs/ARCHITECTURE.md
+  section 8).
 
 ### 6.2 Game screen
 
@@ -734,8 +750,9 @@ with a `?day=` override ahead of the day shown is left out. Nothing leaves the d
 
 ## 7. What is deliberately not in this iteration
 
-Backend, accounts, real daily content, real leaderboards (the home screen's is mock data),
-payments, analytics, other languages, more categories. (Drag-to-spin on the ball and sound
+Real daily content, real leaderboards (the home screen's is mock data), payments,
+analytics, other languages, more categories. (The backend and accounts were on this list:
+they are being built a step at a time, docs/ARCHITECTURE.md section 8.) (Drag-to-spin on the ball and sound
 were on this list; the product owner asked for both on 2026-11-11 and they are built. So are
 streaks and stats, on 2026-11-12, kept on the device only: section 6.6.) The code should
 leave room for them but must not build them.

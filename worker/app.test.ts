@@ -55,6 +55,12 @@ describe("the Worker", () => {
     expect(response.headers.get("content-type")).toMatch(/^application\/json/);
     // never kept by a cache: it is the time
     expect(response.headers.get("cache-control")).toBe("no-store");
+    // not to be read as anything else, nor shown in a page or a frame
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+    expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get(SERVER_TIME_HEADER)).toBe(String(NOON));
     const today = (await response.json()) as TodayAnswer;
     expect(today).toEqual({

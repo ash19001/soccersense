@@ -4,12 +4,18 @@
  * changes it (an answer the judge knows, a pass, the clock running out, the next question).
  *
  * Only accounts' games are kept here (the product owner, 2026-11-17): a player with no
- * account keeps their own (./ticket.ts) and nothing about them is stored. There are no
- * accounts yet, so nothing writes here until there are; the Worker's tests play through it.
+ * account keeps their own (./ticket.ts) and nothing about them is stored.
+ *
+ * Two kinds of row (`origin`, migration 4): `server`, a game played through the server, and
+ * `device`, a finished game one of the account's devices had played before it signed in,
+ * sent up so that the account's streak and stats are whole (`importGames`). Only `server`
+ * games can stand on a leaderboard. Either way, a day and mode is played once: a `device`
+ * game of today's is today's game for the account too.
  * A game kept here cannot be answered twice or played twice in a day, which is what a
  * leaderboard needs: only accounts are on the leaderboards.
  */
 
+import type { HistoryGame } from "~/game/account";
 import type { ServedPhase } from "~/game/served";
 import type { Turn } from "~/game/session";
 import type { Mode } from "~/game/types";
@@ -97,17 +103,19 @@ export async function insertGame(db: D1, row: GameRow): Promise<boolean> {
 /**
  * The game after a move, written only if it still stands where the move found it (`was`).
  * False means another request moved it first (a second tab, a press sent twice): nothing
- * is written, and the caller reads the game again.
+ * is written, and the caller reads the game again. `prompts`, once the game is decided:
+ * what its questions asked, so another device can show it again.
  */
 export async function updateGame(
   db: D1,
   row: GameRow,
   was: { index: number; phase: ServedPhase },
+  prompts: readonly string[] | null = null,
 ): Promise<boolean> {
   const done = await db
     .prepare(
       `UPDATE games SET idx = ?, phase = ?, turns = ?, total = ?, started_at = ?,
-         deadline = ?, updated_at = ?, finished_at = ?
+         deadline = ?, updated_at = ?, finished_at = ?, prompts = COALESCE(?, prompts)
        WHERE player_id = ? AND day = ? AND mode = ? AND idx = ? AND phase = ?`,
     )
     .bind(
@@ -119,6 +127,7 @@ export async function updateGame(
       row.deadline === null ? null : Math.round(row.deadline),
       Math.round(row.updatedAt),
       row.finishedAt === null ? null : Math.round(row.finishedAt),
+      prompts === null ? null : JSON.stringify(prompts),
       row.playerId,
       row.day,
       row.mode,
@@ -127,6 +136,79 @@ export async function updateGame(
     )
     .run();
   return (done.meta.changes ?? 0) > 0;
+}
+
+/**
+ * An account's decided games from `fromDay` on, oldest first: every one whose last
+ * question has been decided, whether or not its full-time card has been shown.
+ */
+export async function finishedGames(
+  db: D1,
+  playerId: string,
+  fromDay: number,
+): Promise<HistoryGame[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT day, mode, total, turns, prompts FROM games
+       WHERE player_id = ? AND day >= ? AND finished_at IS NOT NULL
+       ORDER BY day, mode`,
+    )
+    .bind(playerId, fromDay)
+    .all<{
+      day: number;
+      mode: string;
+      total: number;
+      turns: string;
+      prompts: string | null;
+    }>();
+  return results.map((row) => ({
+    day: row.day,
+    mode: row.mode as Mode,
+    total: row.total,
+    turns: JSON.parse(row.turns) as Turn[],
+    prompts:
+      row.prompts === null ? null : (JSON.parse(row.prompts) as string[]),
+  }));
+}
+
+/**
+ * Takes in finished games one of an account's devices played before it signed in, as
+ * `device` games. A day and mode the account already has a game for keeps that game.
+ * Returns how many were kept.
+ */
+export async function importGames(
+  db: D1,
+  playerId: string,
+  games: readonly HistoryGame[],
+  now: number,
+): Promise<number> {
+  if (games.length === 0) return 0;
+  const at = Math.round(now);
+  const done = await db.batch(
+    games.map((game) =>
+      db
+        .prepare(
+          `INSERT OR IGNORE INTO games (player_id, day, mode, source, idx, phase, turns,
+             total, started_at, deadline, created_at, updated_at, finished_at, origin,
+             prompts)
+           VALUES (?, ?, ?, 'sample', ?, 'done', ?, ?, ?, NULL, ?, ?, ?, 'device', ?)`,
+        )
+        .bind(
+          playerId,
+          game.day,
+          game.mode,
+          game.turns.length - 1,
+          JSON.stringify(game.turns),
+          game.total,
+          at,
+          at,
+          at,
+          at,
+          game.prompts === null ? null : JSON.stringify(game.prompts),
+        ),
+    ),
+  );
+  return done.reduce((sum, result) => sum + (result.meta.changes ?? 0), 0);
 }
 
 /** Takes a game away: one that cannot be carried on (its questions have changed). */

@@ -46,6 +46,17 @@ export const nicknameStore = {
   /** At build time there is no nickname. */
   server: (): string | null => null,
   /**
+   * The name of the account this device is signed in to (./account.ts): the server has
+   * checked it, so it is the player's nickname from now on, here as well.
+   */
+  adopt(name: string): void {
+    saveNickname(name);
+    if (current !== name) {
+      current = name;
+      tell();
+    }
+  },
+  /**
    * Change the nickname. Returns the check: when it is fine, the tidied name is the
    * player's from now on (kept on the device where it can be; for this visit anyway).
    */

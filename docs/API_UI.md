@@ -768,23 +768,14 @@ card the badge, the score, the line. Screen readers get that order on both layou
 ### `Leaderboard`
 
 `boards: LeaderboardBoard[]` (HOME, AWAY, RETRO, NEXT-GEN), `labels: LeaderboardLabels`,
-`initialMode?`, `stowed?`, `onStats?()` (new 2026-11-13: the link to the player's stats),
-`me?: LeaderboardMe` (new 2026-11-15: the player's nickname)
+`initialMode?`, `stowed?`, `onStats?()` (new 2026-11-13: the link to the player's stats)
 
-**2026-11-15: the player's nickname** (the product owner: "everyone who joins gets a nickname
-assigned to them. They can change this. But this is what's used for leaderboard names"). The
-player's own row shows `entry.name`, their nickname (YOU only when it is empty). With `me`
-(`{ name, changeSpoken, onChange(from) }`), a line under the table holds the nickname on the
-chalk plate of the player's row and, at its right end, `labels.change` ("CHANGE", the link-like
-button of ALL STATS, named `changeSpoken`: "Change your name, soccerfan4821";
-`aria-haspopup`); `labels.me` ("Your name:") is read out before the name. A long name gives way
-before the link does. Every name in the panel is a `Name`: a name ending in a number has the
-number in a box of its own (`ss-lb__nm-tail`) that never shrinks, so where the column is short
-the letters end in the ellipsis and the number stays ("soccerf…4821": the monitor's panel fits
-about ten characters, a phone's sheet all thirteen). CHANGE calls `onChange(from)`, `from` the element the focus should go back
-to once the name is done: the link on a monitor; on a phone the sheet goes down first (as for
-ALL STATS) and `from` is the trophy. The line is one row of body text: at 1366 x 768 the panel
-still ends above the captions (checked).
+**2026-11-15: the player's nickname.** The player's own row shows `entry.name`, their
+nickname (YOU only when it is empty). Every name in the panel is a `Name`: a name ending in a
+number has the number in a box of its own (`ss-lb__nm-tail`) that never shrinks, so where the
+column is short the letters end in the ellipsis and the number stays ("soccerf…4821"). (Until
+2026-11-17 a line under the table held the nickname and CHANGE, `me`: the name is at the
+bottom left of the home screen now, and the leaderboard no longer changes it.)
 
 **2026-11-13: four modes, and the player's own days.** The tabs are two by two. Under the
 table, for the selected mode: `board.mine` in place of `played` when given (the player's own
@@ -812,7 +803,7 @@ above the two rows of captions; its top rises for that (`--ss-lb-top`, section 2
 - `LeaderboardLabels`: `heading`, `tabs` (the tab list's name), `rank`, `name`, `points` (the
   column headings), `you`, `gap`, `open` (the trophy button), `close` (the sheet's button),
   `toggle`, `hide`, `show` (the tab that slides the panel away on a monitor: its name and its
-  two tooltips), `more?` (ALL STATS), `me?` and `change?` (the nickname's line).
+  two tooltips), `more?` (ALL STATS).
 - Also exported: `TROPHY`, the 9 x 9 cup bitmap of the trophy button (a generic cup, not any
   real trophy); from `./Leaderboard` also `ARROW_RIGHT`, `ARROW_LEFT` and `LEADERBOARD_KEY`.
 
@@ -1213,6 +1204,78 @@ or gives the player one (`freshNickname()`: `fanNickname(fanNumber(Math.random()
 `~/game/nickname`). `problem` is `checkNickname` in
 words (`strings.nickname.problems`), `maxLength` `NICKNAME_MAX`, `onSave` `nicknameStore.save`.
 The leaderboard's rows and its `me` line read the store, so a saved name shows at once.
+
+**2026-11-17: an account's name.** `onSave` may return a promise of what went wrong, in
+words, or null (an account's name is the server's to give: it may be taken): the card waits
+with SAVE reading `labels.saving` and disabled, closes on null, and stays up with the words
+under the field otherwise. It is opened from the name in the top right corner (a monitor)
+or CHANGE on the account's card; the leaderboard no longer opens it.
+
+### `Account` (new 2026-11-17)
+
+`labels: AccountLabels` (`strings.account`), `open`, `name` (the player's name on this
+device), `account` (`{ nickname, email }` or null), `ways` (`{ email, google, check }`: the
+ways of signing in that are set up and the bot check's site key or null; null while that is
+not known), `status` (`"asking" | "ready" | "failed"`), `googleHref`, `termsHref`,
+`privacyHref`, `onChangeName()`, `onSend(email, check)`, `onLeave()` and `onDelete()` (each a
+promise of what went wrong, in words, or null), `onRetry()`, `onClose()`, `returnFocus?`.
+
+A `Popup`: "SIGN IN" (signing up is the same), or "YOUR ACCOUNT" once someone is signed in.
+The kit knows nothing of the server: the page hands it what is known and what to call. The
+player's name and CHANGE (`onChangeName`) are at the top whoever is signed in; the terms
+and the privacy notice are links in the small print at the foot.
+
+- **The bot check** (where `ways.check` is a site key): `BotCheck` under the field,
+  Cloudflare Turnstile's widget, rendered by hand from its script (loaded once per page,
+  only then), `appearance: "interaction-only"`: it takes no room unless Turnstile has to
+  ask something. Its token goes to `onSend`; after every send a fresh one is asked for
+  (`round`). A press before it has decided reads CHECKING and sends once it does, or after
+  `CHECK_PATIENCE_MS` (15 s) says it could not check; a script that does not load says so.
+- **Deleting**: DELETE ACCOUNT (ghost) under SIGN OUT asks first (the question in chalk,
+  DELETE FOR GOOD in HOME's red, KEEP MY ACCOUNT); while it is sent both wait. Done, the
+  card is the sign-in card with "Your account has been deleted." over it.
+
+- **Nobody signed in**: the line says what an account is for. **EMAIL** over the field
+  (`ss-input`, `type="email"`, described by the note under the button), **EMAIL ME A LINK**
+  (gold, the card's width, and Enter; "SENDING" and disabled while the request is out),
+  the note ("We'll email you a link that signs you in. No password."), and **CONTINUE WITH
+  GOOGLE**, a link in a steel button's skin to `googleHref` (a page load, not a request).
+  Each only where `ways` has it; with neither, one quiet line says signing in is not
+  switched on. What `onSend` turns down is put under the field in the referee's red, as
+  the name's card does.
+- **The link has gone**: where to, in the green of a thing done (`role="status"`), how long
+  it works, and USE ANOTHER EMAIL (a ghost button) back to the field.
+- **`ways` not known**: "Checking who is signed in." while `status` is `asking`; with
+  `failed`, that the game cannot be reached and TRY AGAIN (`onRetry`).
+- **Someone signed in**: SIGNED IN AS and the address, NAME and the nickname (a label over
+  each value; a long address breaks, never leaves the card), and **SIGN OUT** (steel;
+  "SIGNING OUT" and disabled while the request is out).
+
+The home page owns it (`app/routes/account.ts`, `accountStore` for `useSyncExternalStore`):
+opened from SIGN IN or ACCOUNT in the top right corner (the phone's one button), focus back to it.
+Checked in Chrome at 1920 x 930, 1366 x 768, 390 x 844 and 375 x 667.
+
+### `AccountCorner` (new 2026-11-17)
+
+The player's name and account in the top right corner of the home screen (the product
+owner: "actually move it top right of the screen"; it was at the bottom left for a round).
+`name`, `nameSpoken`, `onName()`, `action` (SIGN IN or ACCOUNT), `actionSpoken`,
+`onAction()`, `phoneLabel`, `open?`, `naming?`, `stowed?`, `nameRef?`, `actionRef?`.
+
+- **A monitor**: `.ss-corner`, fixed `--u2` from the top and `--u3` from the right (the
+  panel's gap), in the captions' type (caption pixels), a touch target tall. The name has
+  no plate (the product owner: "the name shouldnt have a background and should have an
+  underline instead and it goes yellow on hover"): chalk words underlined in whole pixels
+  and `PENCIL`, with a font pixel of ink round them so they read on any sky, gold under the
+  pointer (a button: `onName`, named `nameSpoken`). Then `action` in amber on a plate like
+  the day plate (`onAction`, named `actionSpoken`, which holds the words seen). The leaderboard's docked panel starts under
+  it (`.ss-game[data-wide]:has(.ss-corner) .ss-lb--docked`), and under 820 px tall leaves
+  out its seven days' strip.
+- **A phone**: `PERSON` (a head and shoulders) as a `PopupButton` in the corner
+  (`.ss-acct-btn`, named `phoneLabel`): `onAction`.
+- `stowed` (the kick-off): it slides up off the screen (a `Slider`, every frame, on whole
+  device pixels; instant under reduced motion), then is hidden and `inert`.
+- `PENCIL` and `PERSON` are in `app/ui/AccountIcons.ts`, 9 x 9 like the kit's others.
 
 ### `ClickBurst`
 
@@ -1759,6 +1822,8 @@ and no `/` in it (on Windows a colon writes to a stream of another file).
 | `/play/home`, `/play/away`      | `app/routes/play.tsx`        | the game, one page per mode (`app/routes/play/`)                                    |
 | `/play/retro`, `/play/next-gen` | `app/routes/play.tsx`        | the same, for RETRO and NEXT-GEN (2026-11-13; `/play/nextgen` plays NEXT-GEN too)   |
 | `/how-to-play`                  | `app/routes/how-to-play.tsx` | the rules for old links (the "?" button now opens them over the home screen)        |
+| `/enter`                        | `app/routes/enter.tsx`       | where a sign-in link and a trip to Google land (2026-11-17; not listed, noindex)    |
+| `/privacy`, `/terms`            | `app/routes/privacy.tsx` ... | the privacy notice and the terms (2026-11-17): `legal-page.tsx`, pages that scroll  |
 | any other                       | `app/root.tsx`               | the error page (`ErrorBoundary`), which is also the 404                             |
 | `/dev/ui`, `/dev/stage`         | `app/routes/dev-*.tsx`       | the gallery and the stage test card                                                 |
 | `/dev/sound`                    | `app/routes/dev-sound.tsx`   | the sound board: every sound and its level from `app/audio/mix.ts` (docs/AUDIO.md)  |

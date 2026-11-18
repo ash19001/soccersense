@@ -2,7 +2,7 @@
 // the referee, its requests) against the Worker's own (`handle`), with a real SQLite in
 // memory behind it. Only `fetch` is stood in for: it hands each request to the Worker.
 //
-// The player here has no account, as every player has until there are accounts: the server
+// The player here has no account (./served-account.test.tsx is one who has): the server
 // stores nothing about them, and the game is the ticket the page keeps on the device.
 
 import {

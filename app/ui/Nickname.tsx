@@ -15,6 +15,8 @@ export interface NicknameLabels {
   rules: string;
   /** Keeps the name and closes the card: "SAVE". */
   save: string;
+  /** On SAVE while the name is being kept somewhere that takes a moment: "SAVING". */
+  saving?: string;
 }
 
 export interface NicknameProps {
@@ -26,8 +28,13 @@ export interface NicknameProps {
   maxLength: number;
   /** What is wrong with a name as typed, in words, or null if it can be used. */
   problem(text: string): string | null;
-  /** SAVE with a name that can be used: keep it. The card then closes. */
-  onSave(text: string): void;
+  /**
+   * SAVE with a name that can be used: keep it. The card then closes. Where keeping it
+   * takes a moment and can fail (an account's name is the server's to give), return a
+   * promise of what went wrong, in words, or null: the card waits, and stays up with the
+   * words under the field if there are any.
+   */
+  onSave(text: string): void | Promise<string | null>;
   /** The close button, Escape, a press outside, or a save: called once the card has gone. */
   onClose(): void;
   /** Where the focus goes back to on closing: the link that opened it. */
@@ -59,6 +66,7 @@ function Card({
   const [error, setError] = useState<string | null>(null);
   const close = useRef<(() => void) | null>(null);
   const saved = useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -69,8 +77,23 @@ function Card({
       return;
     }
     saved.current = true;
-    onSave(value);
-    close.current?.();
+    const kept = onSave(value);
+    if (!kept) {
+      close.current?.();
+      return;
+    }
+    setSaving(true);
+    void kept
+      .catch(() => null)
+      .then((problem) => {
+        setSaving(false);
+        if (problem === null) {
+          close.current?.();
+        } else {
+          saved.current = false;
+          setError(problem);
+        }
+      });
   };
 
   return (
@@ -112,8 +135,14 @@ function Card({
         <p id={rulesId} className="ss-popup__note">
           {labels.rules}
         </p>
-        <Button variant="primary" type="submit" full className="ss-nick__save">
-          {labels.save}
+        <Button
+          variant="primary"
+          type="submit"
+          full
+          disabled={saving}
+          className="ss-nick__save"
+        >
+          {saving ? (labels.saving ?? labels.save) : labels.save}
         </Button>
       </form>
     </Popup>

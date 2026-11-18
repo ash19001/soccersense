@@ -84,6 +84,54 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    id: 4,
+    name: "accounts: who has one, the devices signed in, the sign-in links sent, their games' history",
+    sql: [
+      // A player who chose to have an account (worker/accounts/store.ts). No password:
+      // they sign in by a link sent to the address, or with Google. `nickname_key` is the
+      // name in lower case: no two accounts may have the same one.
+      `CREATE TABLE IF NOT EXISTS accounts (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        google_id TEXT,
+        nickname TEXT NOT NULL,
+        nickname_key TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS accounts_email ON accounts (email)`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS accounts_google ON accounts (google_id)
+        WHERE google_id IS NOT NULL`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS accounts_nickname ON accounts (nickname_key)`,
+      // A device signed in to an account. `id` is the hash of the token in its cookie.
+      `CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS sessions_account ON sessions (account_id)`,
+      // A sign-in link that was sent. `id` is the hash of its token. Kept for a day.
+      `CREATE TABLE IF NOT EXISTS sign_in_links (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        used_at INTEGER
+      )`,
+      `CREATE INDEX IF NOT EXISTS sign_in_links_email
+        ON sign_in_links (email, created_at)`,
+      // An account's games (worker/games/store.ts): where each came from (`server`, played
+      // through the server; `device`, played on one of its devices before it signed in,
+      // kept for its streak and stats and never for a leaderboard), and what its questions
+      // asked, so another device can show it again. (A column cannot be added "if not
+      // exists": an instance that meets this a second time has its whole migration rolled
+      // back, and carries on, as above.)
+      `ALTER TABLE games ADD COLUMN origin TEXT NOT NULL DEFAULT 'server'`,
+      `ALTER TABLE games ADD COLUMN prompts TEXT`,
+    ],
+  },
 ];
 
 /** The highest migration there is: what `migrate` brings a database to. */

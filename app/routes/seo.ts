@@ -51,6 +51,8 @@ export const PAGES: readonly string[] = Object.freeze([
   "/",
   ...MODES.map(playPath),
   "/how-to-play",
+  "/privacy",
+  "/terms",
 ]);
 
 /** A page, as it describes itself. */

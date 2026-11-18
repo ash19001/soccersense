@@ -300,8 +300,9 @@ uses them). The summary below is the original outline.
 It is being built a step at a time (the product owner, 2026-11-17: "how can we go about
 starting to build the cloudflare backend for user auth, leaderboard, etc."), in this order:
 the API and its database; the day's questions, drafted, approved and scheduled; games run by
-the server (built, below); the leaderboard (next); accounts; then membership and the rest of
-the plan below.
+the server (built, below); accounts (built, below: they came before the leaderboard, which
+now ranks only accounts); the leaderboard (next); then membership and the rest of the plan
+below.
 
 ### What is built (2026-11-17)
 
@@ -447,8 +448,8 @@ shipped in its code. Now the server runs the game, and the page shows it.
   - **An account's game is a row in the database** (`worker/games/store.ts`, the `games`
     table of migration 3): where the game is, the turns decided, the total, the current
     question's clock. It is written at the start and at each move that changes the game,
-    and only if the game still stands where the move found it. There are no accounts yet:
-    nothing writes there until there are, and the Worker's tests play through both.
+    and only if the game still stands where the move found it. It is the game of whoever
+    is signed in ("Accounts", below).
   - **What only a kept game can promise.** One game a day, and a move happening once
     however often it is sent. A ticket can be sent again, because the server does not
     remember it: someone who goes out of their way can answer a question twice or start
@@ -503,6 +504,206 @@ Known, and not in this step:
 - **Where a player with no account would have placed** is for the leaderboard step: their
   total against the accounts' totals of the day, said to them and not stored.
 
+### Accounts (2026-11-17)
+
+The product owner: "start the user accounts and let me know where you want me to input the
+keys". An account is optional. It keeps a player's games on the server, the same on every
+device and fit to stand on a leaderboard, and it holds their nickname. A player with no
+account is still never stored, given a cookie or asked about.
+
+- **Signing in has no passwords.** Two ways, each on only once its key is in Cloudflare:
+  - **A link sent by email.** The page asks for one (`POST /api/account/link`); the Worker
+    makes a random token, keeps its hash, and emails `/enter#<token>` through Resend
+    (`worker/accounts/mail.ts`). The link works once, for 15 minutes. What follows the "#"
+    is never sent to a server by a browser, so the token is in nobody's logs and a mail
+    scanner that fetches the address uses nothing up: only the page at `/enter`, running in
+    the player's browser, hands the token to the API (`POST /api/account/enter`). It does
+    so at once where the link was asked for from that same browser, and asks for a press
+    anywhere else.
+  - **Google** (`worker/accounts/google.ts`): `/api/account/google` sends the browser to
+    Google with a state and a PKCE challenge kept in a ten-minute cookie; Google sends it
+    back to `/api/account/google/callback`, where the state is checked and the code is
+    swapped, with the client's secret, for the person's id and verified email address.
+    Only `openid email` is asked for: no name, no picture.
+  - **Signing up is signing in**: there is no separate step. The card is "SIGN IN", and says
+    so ("New or back, it's the same").
+- **A bot check before a link is emailed** (the product owner, 2026-11-17: "should i use
+  cloudflare turnstile?": yes). The card shows Cloudflare Turnstile's widget
+  (`app/ui/BotCheck.tsx`), which mostly decides out of sight and asks for a click only
+  where it cannot tell (`appearance: "interaction-only"`); its script loads only when the
+  card is opened with the check on. Its token goes with the request, and the Worker asks
+  Turnstile's `siteverify` whether it is good before sending anything
+  (`worker/accounts/check.ts`). A token works once; the card asks for a fresh one after
+  every send, and a press made before the check has decided waits for it (15 seconds at
+  most). Turnstile not answering is a no. The site key is not a secret and is in
+  `wrangler.jsonc` (`TURNSTILE_SITE_KEY`); the check is off until the secret key is in
+  Cloudflare too (`TURNSTILE_SECRET_KEY`). `GET /api/account` gives the page the site key
+  (`signIn.check`), never the secret.
+- **An address is one account**, whichever way it is reached: both prove the address is the
+  person's. Signing in with an address that has no account makes one.
+- **A device is signed in by a cookie** (`worker/accounts/session.ts`): a random token, of
+  which the database holds only the hash (`sessions`), `HttpOnly`, `Secure`,
+  `SameSite=Lax`, named `__Host-ss` so a browser takes it from this exact site only. It
+  lasts 90 days and is renewed past halfway. Only accounts have one.
+- **The page keeps a note** of who the server last said is signed in (`loadAccount` in
+  `app/game/account.ts`; the cookie itself cannot be read by scripts). The note is how the
+  page knows to ask the server at all: with none, `/api/account` is never requested, and
+  when it is requested with no cookie the Worker answers without touching the database.
+- **The nickname.** A new account is `soccerfan` and the next number from the database's
+  counter (soccerfan1, soccerfan2, ...: the product owner's "always unique", 2026-11-15).
+  Changing it (`POST /api/account/name`) is the server's to allow: no two accounts share a
+  name whatever the capitals, `soccerfan` and a number cannot be chosen, nor a name that
+  passes for the game's staff, nor one with a slur or a swear word in it
+  (`worker/accounts/names.ts`: a short first net, not a moderation system). On the device
+  the account's name becomes the player's nickname.
+- **Games.** A request from a signed-in device plays the account's game, kept in the
+  database (`rowKeeper`, built with "Games run by the server"); any other request is a
+  player keeping their own ticket. The game page, where the device has the note, asks the
+  server for the day's game on arriving (`look`), so a game started on one device carries
+  on, or is full time, on another. A ticket left on the device from before signing in is
+  dropped. As each game is decided the server keeps what its questions asked with it
+  (`prompts`), so any device can show it again.
+- **The streak, the stats and the scores are the account's** (the product owner,
+  2026-11-17: "streaks, stats, etc. should be saved to database if the user is logged
+  in"). They are worked out from the finished games, as ever; for an account those are
+  kept by the server, and each time a signed-in page asks who is signed in it swaps games
+  with the server (`POST /api/account/history`, `sync` in `app/routes/account.ts`): it
+  says which games of the last year it has (day, mode, total), the server answers with the
+  account's games it lacks or holds with another total (the account's win), and which of
+  the device's the account lacks; the device sends those, 100 at a time. So the streak,
+  stats, scores, reviews and SHARE are the same on every device, and a device's games
+  from before it signed in join the account. The home screen looks again once games have
+  arrived.
+- **Two kinds of game in the account** (`games.origin`, migration 4): `server`, played
+  through the server, and `device`, a finished game a device sent up. A `device` game is
+  taken on the device's word (checked for shape: seven turns, a total that is their sum,
+  the last year, nothing longer than a game holds), counts for the streak and stats, and
+  is the account's game of that day and mode (once a day), but **never stands on a
+  leaderboard**: the leaderboard step ranks `origin = 'server'` only.
+- **Another site's page cannot act for a signed-in player.** Every request that changes
+  something must say it comes from this site (`fromThisSite`, the `Origin` header a
+  browser adds and a page cannot change), and the cookie is `SameSite=Lax`.
+- **An inbox cannot be filled from here.** Three links to an address in 15 minutes; five
+  requests a minute from one connection (Cloudflare's rate limit, `SIGN_IN_LIMIT` in
+  `wrangler.jsonc`: counted in memory, never kept); 2,000 links a day in all.
+- **Deleting an account**: DELETE ACCOUNT on the account's card, which asks first
+  ("Delete your account for good? ..."; DELETE FOR GOOD or KEEP MY ACCOUNT), then
+  `POST /api/account/delete` takes its games of both kinds, its sessions (every device is
+  signed out) and its links. The device keeps its own copy of the games and its name, as
+  any device with no account does.
+- **The API**: `GET /api/account` (`{ account, signIn: { email, google, check } }`: who is
+  signed in, and which ways of signing in are set up), and `link`, `enter`, `name`,
+  `leave`, `delete`, `history` under it (`worker/accounts/api.ts`). The tables are
+  migration 4: `accounts`, `sessions`, `sign_in_links`, and `origin` and `prompts` on
+  `games`.
+- **On the page** (the product owner, 2026-11-17: "in bottom left add the account name
+  (which is clickable if they want to change it) and next to it it says sign in which
+  opens the sign in/ sign up pop up", then "actually move it top right of the screen"):
+  - **A monitor**: in the top right corner (`AccountCorner` in `~/ui`): the player's
+    name, underlined on the picture with a pencil (yellow under the pointer; a press opens
+    YOUR NAME), beside **SIGN IN**, or **ACCOUNT** once signed in, on a small plate. The leaderboard's panel starts under it; on a monitor under
+    820 px tall (1366 x 768) the panel then leaves out its seven days' strip so that it
+    still ends above the captions (measured: 1366 x 768 ends 113 px above them, 960 x 457
+    49 px; 1440 x 900 and taller are unchanged). It slides up out of view at the kick-off.
+  - **A phone**: the logo leaves no room in the corner for words, so a button with a head
+    and shoulders there opens the account's card, which has the name and CHANGE.
+  - **The account's card** (`Account` in `~/ui`): SIGN IN while nobody is (the name and
+    CHANGE, an email field and EMAIL ME A LINK with the bot check, CONTINUE WITH GOOGLE,
+    each only where that way is set up), YOUR ACCOUNT once someone is (who, the name and
+    CHANGE, SIGN OUT, DELETE ACCOUNT); the terms and the privacy notice are linked at its
+    foot.
+  - **The leaderboard no longer changes the name** ("remove the ability to change it within
+    the leaderboard"): its line with the name and CHANGE is gone.
+  - `/enter` (`app/routes/enter.tsx`) is where a link and a trip to Google land.
+    `app/routes/account.ts` is the page's store.
+- **The privacy notice and the terms** (`/privacy`, `/terms`: `app/routes/privacy.tsx`,
+  `terms.tsx`, words in `strings.privacy` and `strings.terms`), linked from the account's
+  card and the rules' small print, and listed for search engines. Ordinary pages that scroll
+  (the product owner: "full scrollable pages, not a black page and a popup appearance"):
+  a bar along the top with the game's name and PLAY, held there as the page scrolls, the
+  words in a column about seventy characters wide, and a foot with the two pages' links
+  and the small print (`app/routes/legal-page.tsx`). They are drafts written
+  to match what the game does (no ads, no analytics, what an account keeps and for how
+  long, Cloudflare, Resend and Google as processors, the ICO), for the product owner to
+  have checked. They name `info@soccersense.io` (`strings.pages.contact`, the product owner's address,
+  2026-11-18) for questions, and do not yet name who runs the game.
+- **Written directly, not with Better Auth.** The plan named that library. Signing in here
+  is two small flows with no passwords, and the Worker is plain TypeScript on web
+  standards with its time handed in and its tests on a real SQLite: written directly it is
+  about 1,200 lines, comments and all, that those tests cover end to end, with nothing new to install. Say so
+  if the library is wanted after all.
+- **The secrets** are the product owner's to put in Cloudflare (the Worker's Settings,
+  "Variables and Secrets", type **Secret**: a plain variable set there is wiped by the next
+  deploy): `RESEND_API_KEY` (and the domain verified in Resend, for the sender in
+  `MAIL_FROM`), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (the client's redirect address:
+  `https://soccersense.io/api/account/google/callback`), `TURNSTILE_SECRET_KEY` (the
+  Turnstile widget for `soccersense.io`; its site key is not a secret and is in
+  `wrangler.jsonc`). Until a key is there its way of signing in, or the check, is off and
+  the card does not offer it.
+- **Locally**: with no email key, `pnpm api` writes the sign-in link to its own log in the
+  email's place, so signing in can be tried with nothing set up. A developer's own keys go
+  in `.dev.vars` (git ignores it). Google needs the Worker's own address
+  (`http://localhost:8787`) and that redirect address listed on the client.
+- **Tests.** `worker/accounts/api.test.ts` (every request, the email service, Google and
+  Turnstile stood in for), and the pages against the Worker's own code with a browser's
+  cookie jar (`worker/testing/site.ts`): `app/routes/account.test.ts`, `enter.test.tsx`,
+  `home-account.test.tsx`, `play/served-account.test.tsx`, `legal.test.tsx`; the kit's
+  `Account.test.tsx` (Turnstile stood in for) and `MenuAccount.test.tsx`.
+
+Known, and not in this step:
+
+- **No offer of an account after a first game** (the plan's "after a first game the page
+  offers an account"; the product owner, 2026-11-17: "no offer to sign up after first
+  game").
+- **The privacy notice and terms need a name**: who runs the game.
+- **Signing out leaves the device as it is**: its games (the account's among them, once
+  swapped) and its name stay, so the streak a shared computer shows is the last
+  account's until another signs in there.
+
+### Security (2026-11-17)
+
+The product owner: "ensure everything is secure so no jwt in headers or session cookies. no
+senstive secrets anywhere public". What is so, and how it was checked:
+
+- **No JWTs anywhere.** Nothing the game makes is a JWT. A signed-in device's cookie holds
+  a random 32-byte value (43 characters) that means nothing by itself; the database keeps
+  only its SHA-256, so even a copy of the database signs nobody in. The cookie is
+  `HttpOnly` (scripts on the page cannot read it: checked, `document.cookie` is empty in
+  Chrome), `Secure`, `SameSite=Lax`, `__Host-` (this exact site only), and only accounts
+  get one. Google's sign-in hands the Worker a JWT (its ID token) over a direct HTTPS
+  request; the Worker reads the address and id from it there and keeps nothing of it, and
+  it never reaches a browser. No token is put in a request header by the page: the only
+  `Authorization` header is the approval desk's, sent from the product owner's own
+  browser.
+- **No secret anywhere public.** The keys (`ADMIN_TOKEN`, `RESEND_API_KEY`,
+  `GOOGLE_CLIENT_SECRET`, `TURNSTILE_SECRET_KEY`, and the Google client's id kept with its
+  secret) live only in Cloudflare as secrets; `wrangler.jsonc` names them and holds none.
+  It does hold the Turnstile site key, which is public by design (every page that shows
+  the check has it). Checked by searching the working tree, every commit in the history and the
+  built site for key shapes (Resend, Google, Turnstile, JWTs, private keys) and for the
+  product owner's address: nothing. The built site ships no source maps and no server
+  code; the page reads no setting but where it is served from. A developer's own keys go in
+  `.dev.vars`, which git ignores. The game ticket's key is made by the Worker and kept in
+  the database. Tests hold the settings to this (`app/routes/hosting.test.ts`).
+- **Headers.** Every file the site serves carries `public/_headers`: a content security
+  policy (scripts, styles, pictures, sounds and requests from this site only, plus
+  Turnstile's script and frame from `challenges.cloudflare.com`; no plugins, no other base
+  address, no form posted elsewhere, no framing by another site), HSTS for a year,
+  `nosniff`, `X-Frame-Options: DENY`, a referrer cut to the site, no camera, microphone,
+  location or payments, and `Cross-Origin-Opener-Policy: same-origin`. Every API answer
+  carries `no-store`, `nosniff`, `default-src 'none'; frame-ancestors 'none'` and
+  `no-referrer` (`API_HEADERS`, `worker/http.ts`). Checked in Chrome against the built site
+  served by the Worker: the home screen, SHARE's picture, the sign-in card with the bot
+  check, signing in, a game and both pages, with nothing blocked; framed by another page,
+  the site refuses. The policy allows inline scripts, because the pages are built ahead of
+  time with their start-up script written into them.
+- **Requests.** Another site's page cannot act for a signed-in player (`fromThisSite`, the
+  `Origin` a browser adds), and no API answer can be read by another site's script (no
+  CORS headers). "A developer's own machine" (the link written to the log; any origin
+  taken) is plain HTTP to this machine's own address only, never the live site.
+- **Still to know:** commits carry the author's own email address, which a public GitHub
+  repository shows (GitHub can give a private `noreply` address instead).
+
 ### What still stands in for the backend
 
 These parts change as it arrives:
@@ -514,16 +715,16 @@ These parts change as it arrives:
   `...:live`, `app/routes/play/progress.ts`, now the server's ticket): clearing site data,
   a private window or another browser gives a fresh game. That is the product owner's
   choice (2026-11-17): nothing is stored about a player with no account. An account's game
-  is kept by the server, which gives the day's game back to a second start (built, waiting
-  for accounts).
+  is kept by the server, which gives the day's game back to a second start, on any device.
 - **Nicknames.** Each player's first nickname is `soccerfan` and a number, given and kept on the
   device (`app/game/nickname.ts`, `app/routes/nickname.ts`); the leaderboard shows it only on the
   player's own row. The product owner wants the numbers to go up one by one so that no two
   players share one (2026-11-15). A device cannot know which numbers others have, so for now it
-  picks a random one from 1000 to 9999 (`fanNumber`). The backend hands out the next number from
-  a counter (`fanNickname(n)` makes the name: soccerfan1, soccerfan2, ...), checks a changed name
-  is free, turns down offensive or impersonating ones (the device only checks length and
-  characters), and sends the real players' names in `leaderboardFor`'s place. A UUID is the
+  picks a random one from 1000 to 9999 (`fanNumber`). **For an account this is done**
+  ("Accounts", above): the server hands out the next number from a counter (`fanNickname(n)`
+  makes the name: soccerfan1, soccerfan2, ...), checks a changed name is free and turns down
+  offensive or impersonating ones (the device only checks length and characters). Still to
+  come: the real players' names in `leaderboardFor`'s place. A UUID is the
   right thing to identify a player behind the scenes (it is what anonymous sign-in gives), not
   to show: it is 36 characters.
 - **The questions and the answers: done** (above). They are in the Worker, not the page.
@@ -552,7 +753,10 @@ Nothing of this is built yet ("Don't build it yet, just tell me").
 - **Accounts:** optional. Everyone plays at once as `soccerfanNNNN`; after a first game the page
   offers an account to keep the streak, stats and name on every device, and the games already
   on the device go with it. Sign-in by emailed link and Google (no passwords), with Better Auth
-  on the Worker (not a hosted service: those charge per user). Email through Resend.
+  on the Worker (not a hosted service: those charge per user). Email through Resend. (Built
+  2026-11-17, "Accounts" above: on the Worker and not a hosted service, as agreed, but written
+  directly, not with that library; the offer after a first game, and the device's games
+  going with the account, are not built.)
 - **Leaderboards:** only accounts are on them (changed 2026-11-17, with games kept on the
   device for players with no account: it was "everyone on them, accounts or not"). A player
   with no account is told where their total would have placed, and is not put on the

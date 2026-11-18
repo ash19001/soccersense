@@ -72,6 +72,45 @@ describe("Nickname", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  test("a name the server has to give: the card waits, and closes once it is kept", async () => {
+    let answer: (problem: string | null) => void = () => {};
+    const onSave = vi.fn(
+      () => new Promise<string | null>((done) => (answer = done)),
+    );
+    const [, onClose] = card({ onSave });
+    fireEvent.change(field(), { target: { value: "TopBins" } });
+    fireEvent.click(screen.getByRole("button", { name: LABELS.save }));
+    expect(onSave).toHaveBeenCalledWith("TopBins");
+    // waiting: the button says so and cannot be pressed again
+    const waiting = screen.getByRole("button", { name: LABELS.saving });
+    expect(waiting).toBeDisabled();
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => answer(null));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  test("a name the server turns down says why, and can be tried again", async () => {
+    const onSave = vi
+      .fn<(text: string) => Promise<string | null>>()
+      .mockResolvedValueOnce("Somebody has that name.")
+      .mockResolvedValueOnce(null);
+    const [, onClose] = card({ onSave });
+    fireEvent.change(field(), { target: { value: "TopBins" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: LABELS.save }));
+    });
+    expect(screen.getByText("Somebody has that name.")).toBeInTheDocument();
+    expect(field()).toHaveAttribute("aria-invalid", "true");
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: LABELS.save })).toBeEnabled();
+    fireEvent.change(field(), { target: { value: "TopBins2" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: LABELS.save }));
+    });
+    expect(onSave).toHaveBeenLastCalledWith("TopBins2");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   test("closed, there is nothing; at build time it renders nothing either", () => {
     const html = renderToString(
       <Nickname

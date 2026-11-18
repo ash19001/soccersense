@@ -1,6 +1,11 @@
 // The interface kit: the DOM skin of the game. Presentational only (props in, events out).
 // Styles live in ui.css and tokens.css, loaded globally from app/app.css.
 
+export { Account } from "./Account";
+export type { AccountLabels, AccountProps } from "./Account";
+export { PENCIL, PERSON } from "./AccountIcons";
+export { AccountCorner } from "./AccountCorner";
+export type { AccountCornerProps } from "./AccountCorner";
 export { AnswerBar } from "./AnswerBar";
 export type { AnswerBarLabels, AnswerBarProps } from "./AnswerBar";
 export {
@@ -48,7 +53,6 @@ export type {
   LeaderboardBoard,
   LeaderboardEntry,
   LeaderboardLabels,
-  LeaderboardMe,
   LeaderboardProps,
 } from "./Leaderboard";
 export { Nickname } from "./Nickname";

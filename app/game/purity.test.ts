@@ -45,6 +45,7 @@ const FORBIDDEN: [RegExp, string][] = [
 describe("the source of app/game", () => {
   it("is the set of files this test knows about", () => {
     expect(SOURCES).toEqual([
+      "account.ts",
       "career.ts",
       "check.ts",
       "day.ts",

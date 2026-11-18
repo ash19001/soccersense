@@ -1,0 +1,20 @@
+# Security headers for every file the site serves (Cloudflare reads this file from the built
+# site: docs/ARCHITECTURE.md section 8, "Security"). The API's answers set their own
+# (worker/http.ts).
+#
+# - Content-Security-Policy: scripts, styles, pictures, sounds and requests come from this
+#   site only, and the bot check's script and frame from Cloudflare's challenges.cloudflare.com
+#   (Turnstile). No plugins, no other base address, no form posted anywhere else, and no other
+#   site may show these pages in a frame. 'unsafe-inline' is there because the pages are built
+#   ahead of time with their start-up script written into them.
+# - Strict-Transport-Security: browsers only ever come back over HTTPS (a year).
+# - The rest: no guessing of file types, no framing, the address sent onwards cut to the site
+#   alone, no camera, microphone, location or payments, and a window of its own.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self'; frame-src https://challenges.cloudflare.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Strict-Transport-Security: max-age=31536000
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin

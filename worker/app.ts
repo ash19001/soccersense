@@ -6,16 +6,27 @@
  *                     until the next day, and where the day's questions come from
  *   GET /api/health   whether the Worker and its database are up: for a look after a deploy
  *   /api/games/...    the games the server runs: questions out, answers judged (./games/play.ts)
+ *   /api/account/...  accounts: signing in and out, the nickname (./accounts/api.ts)
  *   /api/admin/...    the approval desk for the day's questions (./questions/admin.ts)
  *
  * `now` is handed in, so every answer is a pure function of the request, the settings, the
- * database and the time.
+ * database and the time. `outside` is how the Worker reaches other services (the email
+ * service, Google): `fetch`, unless a test hands in its own.
+ *
+ * A request that changes something must come from this site's own pages (`fromThisSite`):
+ * another site's page cannot play a signed-in player's game or sign them in or out.
  */
 
 import { dayKeyFor, dayNumber, msUntilNextDay } from "~/game/day";
 
+import { account, fromThisSite, signedIn } from "./accounts/api";
 import { SCHEMA_VERSION, database } from "./db/migrate";
-import { type Env, type QuestionSource, questionSource } from "./env";
+import {
+  type Env,
+  type Outside,
+  type QuestionSource,
+  questionSource,
+} from "./env";
 import { games } from "./games/play";
 import { failure, json, wrongMethod } from "./http";
 import { admin } from "./questions/admin";
@@ -83,6 +94,7 @@ export async function handle(
   request: Request,
   env: Env,
   now: number,
+  outside: Outside = (url, init) => fetch(url, init),
 ): Promise<Response> {
   const { pathname } = new URL(request.url);
   if (pathname !== "/api" && !pathname.startsWith("/api/")) {
@@ -90,6 +102,9 @@ export async function handle(
   }
   const route = pathname.slice(4).replace(/\/+$/, "");
   const head = request.method === "HEAD";
+  if (!READ.includes(request.method) && !fromThisSite(request)) {
+    return failure("forbidden", 403, now);
+  }
   try {
     if (route === "/today") {
       return (
@@ -101,7 +116,12 @@ export async function handle(
       return wrongMethod(request, READ, now) ?? (await health(env, now, head));
     }
     if (route === "/games" || route.startsWith("/games/")) {
-      return await games(request, env, now, route);
+      // An account's game is kept in the database; anyone else keeps their own.
+      const player = await signedIn(request, env, now);
+      return await games(request, env, now, route, player?.id ?? null);
+    }
+    if (route === "/account" || route.startsWith("/account/")) {
+      return await account(request, env, now, route, outside);
     }
     if (route === "/admin" || route.startsWith("/admin/")) {
       return await admin(request, env, now, route);

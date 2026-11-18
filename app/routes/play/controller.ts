@@ -47,6 +47,7 @@ import {
   dayKeyFor,
   dayNumber,
   isLastQuestion,
+  loadAccount,
   loadGame,
   loadHistory,
   nextMode,
@@ -218,6 +219,12 @@ export class GameController {
    * game, and where the server keeps the game itself (an account's).
    */
   private ticket: string | null = null;
+  /**
+   * This device has a note that someone is signed in (`loadAccount`): their game is kept
+   * by the server, which is asked for it whatever this device holds. If the note is out of
+   * date the server simply has no game of theirs, and the player keeps their own.
+   */
+  private readonly signedIn: boolean;
 
   constructor(options: GameOptions) {
     const { mode, today } = options;
@@ -259,7 +266,8 @@ export class GameController {
     if (this.server && session === null) {
       this.ticket = loadTicket(today.dayKey, mode, this.storage);
     }
-    const loading = this.ticket !== null;
+    this.signedIn = this.server !== null && loadAccount(this.storage) !== null;
+    const loading = session === null && (this.ticket !== null || this.signedIn);
     // A new game: the mode card first. Its clock is set again when the card goes.
     const fresh = session === null && !loading;
     session ??= createSession({
@@ -762,7 +770,11 @@ export class GameController {
    */
   private hold(reply: Reply): GameSnapshot {
     this.ticket = reply.ticket;
-    if (reply.ticket !== null && reply.game.phase !== "done") {
+    if (reply.ticket === null) {
+      // An account's game: the server keeps it. A ticket left on the device from before
+      // they signed in is nobody's game now.
+      clearLive(dayKeyFor(reply.game.day), reply.game.mode, this.storage);
+    } else if (reply.game.phase !== "done") {
       saveTicket(
         dayKeyFor(reply.game.day),
         reply.game.mode,
@@ -852,7 +864,9 @@ export class GameController {
   /**
    * Takes up the game left on this device: the server looks at its ticket and says where
    * it stands now (its clock has been running). With no ticket, or one the server will
-   * not take up, it is a new game and the mode card.
+   * not take up, it is a new game and the mode card. Where someone is signed in the
+   * server is asked with or without a ticket: it keeps their game, and may have one from
+   * another device.
    */
   private open(): void {
     const { server, ticket } = this;
@@ -861,7 +875,7 @@ export class GameController {
     this.clearPatience();
     this.stopClock();
     this.clearIntroTimer();
-    if (ticket === null) {
+    if (ticket === null && !this.signedIn) {
       this.newGame();
       return;
     }

@@ -22,6 +22,11 @@ function wrangler(): {
   compatibility_date: string;
   assets: Record<string, unknown>;
   d1_databases?: Record<string, string>[];
+  ratelimits?: {
+    name: string;
+    namespace_id: string;
+    simple: { limit: number; period: number };
+  }[];
   vars?: Record<string, string>;
 } {
   return JSON.parse(text("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
@@ -47,7 +52,36 @@ describe("hosting on Cloudflare", () => {
       { binding: "DB", database_name: "soccersense" },
     ]);
     // the game is in testing: real questions start only on this flag
-    expect(config.vars).toEqual({ QUESTIONS: "sample" });
+    expect(config.vars?.QUESTIONS).toBe("sample");
+  });
+
+  test("accounts: the settings are here, and the secrets are not", () => {
+    const config = wrangler();
+    // who the sign-in email is from (worker/accounts/mail.ts)
+    expect(config.vars?.MAIL_FROM).toMatch(
+      /^soccersense <[a-z]+@soccersense\.io>$/,
+    );
+    // how often one connection may ask for a sign-in link (worker/env.ts, SIGN_IN_LIMIT)
+    expect(config.ratelimits).toEqual([
+      {
+        name: "SIGN_IN_LIMIT",
+        namespace_id: expect.stringMatching(/^\d+$/),
+        simple: { limit: 5, period: 60 },
+      },
+    ]);
+    // nothing in the file but these settings: every key and token that is secret is a
+    // secret in Cloudflare, never in the repository. The bot check's site key is not
+    // secret (every page that shows the check has it).
+    expect(Object.keys(config.vars ?? {}).sort()).toEqual([
+      "MAIL_FROM",
+      "QUESTIONS",
+      "TURNSTILE_SITE_KEY",
+    ]);
+    expect(config.vars?.TURNSTILE_SITE_KEY).toMatch(
+      /^0x4[0-9A-Za-z_-]{16,24}$/,
+    );
+    // a developer's own secrets for `pnpm api` are in a file git ignores
+    expect(text(".gitignore")).toMatch(/^\.dev\.vars$/m);
   });
 
   test("a page is served at the address the game links to: no closing slash", () => {
@@ -97,6 +131,50 @@ describe("hosting on Cloudflare", () => {
     } finally {
       process.argv = argv;
       vi.resetModules();
+    }
+  });
+
+  test("every file the site serves carries its security headers (public/_headers)", () => {
+    const rules = text("public/_headers");
+    const header = (name: string) =>
+      new RegExp(`^  ${name}: (.+)$`, "m").exec(rules)?.[1] ?? "";
+    // one rule, for every path
+    expect(rules).toMatch(/^\/\*$/m);
+    const csp = header("Content-Security-Policy");
+    for (const part of [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com",
+      "connect-src 'self'",
+      "frame-src https://challenges.cloudflare.com",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ]) {
+      expect(csp).toContain(part);
+    }
+    // nothing but this site and the bot check's
+    for (const origin of csp.match(/https?:\/\/[^\s;]+/g) ?? []) {
+      expect(origin).toBe("https://challenges.cloudflare.com");
+    }
+    expect(header("Strict-Transport-Security")).toMatch(/^max-age=\d{8}/);
+    expect(header("X-Content-Type-Options")).toBe("nosniff");
+    expect(header("X-Frame-Options")).toBe("DENY");
+    expect(header("Referrer-Policy")).toBe("strict-origin-when-cross-origin");
+    expect(header("Cross-Origin-Opener-Policy")).toBe("same-origin");
+  });
+
+  test("no secret is in the repository's settings or the built site's words", () => {
+    const config = text("wrangler.jsonc");
+    for (const pattern of [
+      /re_[A-Za-z0-9]{16,}/,
+      /GOCSPX-/,
+      // a Turnstile secret key (a site key is shorter, and public)
+      /0x4AAAA[0-9A-Za-z_-]{25,}/,
+      /eyJ[A-Za-z0-9_-]{10,}\.eyJ/,
+    ]) {
+      expect(config).not.toMatch(pattern);
+      expect(text("public/_headers")).not.toMatch(pattern);
     }
   });
 

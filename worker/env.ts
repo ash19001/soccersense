@@ -36,6 +36,21 @@ export interface Assets {
   fetch(request: Request): Promise<Response>;
 }
 
+/**
+ * A request to somewhere that is not this site: the email service, Google. `fetch` on
+ * Cloudflare; the tests hand in their own, so nothing they do leaves the machine.
+ */
+export type Outside = (url: string, init: RequestInit) => Promise<Response>;
+
+/**
+ * One of Cloudflare's rate limits (`ratelimits` in wrangler.jsonc): it counts the requests
+ * made with a key over a short while, in memory where the Worker runs, and says whether
+ * this one is within the limit. Nothing it counts is kept.
+ */
+export interface RateLimit {
+  limit(options: { key: string }): Promise<{ success: boolean }>;
+}
+
 /** Where each day's questions come from (the `QUESTIONS` setting). */
 export type QuestionSource = "sample" | "scheduled";
 
@@ -55,6 +70,29 @@ export interface Env {
    * owner sets in Cloudflare, never in the repository. Unset, the desk is shut.
    */
   ADMIN_TOKEN?: string;
+  /**
+   * The email service's key (Resend; worker/accounts/mail.ts): a secret the product owner
+   * sets in Cloudflare. Unset, no sign-in link can be sent.
+   */
+  RESEND_API_KEY?: string;
+  /** Who the sign-in email is from: "soccersense <signin@soccersense.io>" (wrangler.jsonc). */
+  MAIL_FROM?: string;
+  /**
+   * The Google sign-in client's id and secret (worker/accounts/google.ts): secrets the
+   * product owner sets in Cloudflare. Without both, signing in with Google is off.
+   */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  /** How often one connection may ask for a sign-in link (wrangler.jsonc, `ratelimits`). */
+  SIGN_IN_LIMIT?: RateLimit;
+  /**
+   * The bot check on asking for a sign-in link (Cloudflare Turnstile; worker/accounts/
+   * check.ts): the widget's site key (not a secret: `vars` in wrangler.jsonc) and its
+   * secret key (a secret the product owner sets in Cloudflare). Without both, there is no
+   * check.
+   */
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string;
 }
 
 /** The setting as one of its two values: anything else is `sample`. */

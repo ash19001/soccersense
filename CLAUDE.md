@@ -28,8 +28,12 @@ The game is a static site with a small backend being built behind it, step by st
 Worker at https://soccersense.io (`wrangler.jsonc`): the built site as files, and `/api/*`
 answered by `worker/` with a D1 database. A push to `main` deploys it.
 
-- Build the backend in the agreed order, a step at a time; don't add auth, analytics or
+- Build the backend in the agreed order, a step at a time; don't add analytics or
   payments ahead of it.
+- Accounts are optional (`worker/accounts`): sign-in by an emailed link or Google, no
+  passwords, a cookie for accounts only. Their games, streak, stats and nickname are the
+  server's. A game a device sent up (`games.origin = 'device'`) never counts on a
+  leaderboard.
 - Question data is a built-in sample in `app/data`, and stays what the game plays until the
   `QUESTIONS` flag (`wrangler.jsonc`) is switched: the game is still in testing.
 - The server runs every game (`worker/games`): it sends a question as its clock starts,

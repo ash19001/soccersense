@@ -1,4 +1,16 @@
-/** The API's answers: JSON, never cached, and the server's time on every one. */
+/**
+ * The API's answers: JSON, never cached, and the server's time on every one. Each also says
+ * it is not to be read as anything but what it is, and not to be shown in a page or a frame
+ * (the site's own files carry their headers in public/_headers).
+ */
+
+/** The headers every answer of the API carries, besides its own. */
+export const API_HEADERS: Readonly<Record<string, string>> = {
+  "cache-control": "no-store",
+  "x-content-type-options": "nosniff",
+  "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+  "referrer-policy": "no-referrer",
+};
 
 /**
  * The header that carries the server's time in milliseconds since 1970. The game's clock
@@ -15,8 +27,8 @@ export function json(
   return new Response(init.head ? null : JSON.stringify(body), {
     status: init.status ?? 200,
     headers: {
+      ...API_HEADERS,
       "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
       [SERVER_TIME_HEADER]: String(Math.round(now)),
     },
   });

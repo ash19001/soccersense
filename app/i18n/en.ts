@@ -5,6 +5,7 @@
 // The voice is a cheerful matchday programme, in British English. Lines that carry a value
 // are functions.
 import type {
+  AccountProblem,
   AwayTitleId,
   Grade,
   HomeTitleId,
@@ -197,11 +198,6 @@ export const en = {
         return `You: ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
       },
       gap: "Rows left out",
-      /** Read out before the player's nickname, on its line under the table. */
-      me: "Your name:",
-      change: "CHANGE",
-      /** Read out for CHANGE. */
-      changeSpoken: (name: string) => `Change your name, ${name}`,
       played: (count: number) =>
         `${count.toLocaleString("en-GB")} played today`,
       open: "Today's top 10",
@@ -832,6 +828,12 @@ export const en = {
     field: "NAME",
     rules: "3 to 13 letters or numbers. Spaces, - and _ are fine too.",
     save: "SAVE",
+    /** On SAVE while an account's name is being changed on the server. */
+    saving: "SAVING",
+    /** Under the field when the server turns an account's name down. */
+    taken: "Somebody has that name. Try another.",
+    reserved: "That name is kept back. Try another.",
+    offensive: "That name is not allowed. Try another.",
     /** Under the field when a name cannot be used (`NicknameProblem` in ~/game). */
     problems: {
       short: "Too short: 3 characters at least.",
@@ -839,6 +841,117 @@ export const en = {
       characters: "Only letters, numbers, spaces, - and _.",
       letter: "It needs at least one letter.",
     } satisfies Record<NicknameProblem, string>,
+  },
+  /**
+   * The player's account: a pop-up over the home screen (Account in ~/ui), reached from the
+   * name's card. An account is optional: it keeps a player's name and games on the server,
+   * so they are the same on every device. Signing in is by a link sent to an email
+   * address, or with Google: there are no passwords.
+   */
+  account: {
+    /**
+     * In the top right corner of the home screen: the player's name (a press changes it)
+     * and SIGN IN, or ACCOUNT once signed in. On a phone one button opens the account's
+     * card, which has the name too.
+     */
+    menu: {
+      signIn: "SIGN IN",
+      open: "ACCOUNT",
+      /** Read out for the name, and its tooltip. */
+      nameSpoken: (name: string) => `Change your name, ${name}`,
+      /** Read out for SIGN IN or ACCOUNT. */
+      signInSpoken: "Sign in or make an account",
+      openSpoken: "Your account",
+      /** The phone's one button. */
+      phone: (name: string) => `Your name and account: ${name}`,
+    },
+    /** The card's heading: nobody signed in (it signs up too), and somebody. */
+    heading: "SIGN IN",
+    headingIn: "YOUR ACCOUNT",
+    close: "Close",
+    /** The one line under the heading, and the dialog's description: nobody signed in. */
+    intro:
+      "New or back, it's the same: sign in by email or with Google. An account keeps your name, streak and stats on every device. Only accounts are on the leaderboards.",
+    /** The same line once someone is signed in. */
+    introIn: "Your name, streak and stats are kept for you on every device.",
+    /** The player's name, at the top of the card, and the way to change it. */
+    yourName: "YOUR NAME",
+    change: "CHANGE",
+    changeSpoken: (name: string) => `Change your name, ${name}`,
+    email: "EMAIL",
+    send: "EMAIL ME A LINK",
+    sending: "SENDING",
+    emailNote: "We'll email you a link that signs you in. No password.",
+    google: "CONTINUE WITH GOOGLE",
+    /** Once the link has gone. */
+    sent: (email: string) => `Link sent to ${email}.`,
+    sentNote: "Open it to sign in. It works once, for 15 minutes.",
+    another: "USE ANOTHER EMAIL",
+    checking: "Checking who is signed in.",
+    retry: "TRY AGAIN",
+    unreachable: "Can't reach the game. Check your connection.",
+    none: "Signing in isn't switched on yet. Check back soon.",
+    signedInAs: "SIGNED IN AS",
+    leave: "SIGN OUT",
+    leaving: "SIGNING OUT",
+    /** The bot check (Cloudflare Turnstile), while it has not decided yet, and if it fails. */
+    checkWaiting: "CHECKING",
+    checkFailed:
+      "The check that you're not a robot didn't load. Try again, or continue with Google.",
+    /** Deleting the account: the button, the question, and the answer. */
+    remove: "DELETE ACCOUNT",
+    removeAsk:
+      "Delete your account for good? Your name, games, streak and stats go from our server, and you're signed out everywhere. This device keeps its own copy of your games.",
+    removeYes: "DELETE FOR GOOD",
+    removeNo: "KEEP MY ACCOUNT",
+    removing: "DELETING",
+    removed: "Your account has been deleted.",
+    /** At the foot of the card. */
+    agree: "Signing in means you accept our",
+    terms: "Terms",
+    privacy: "Privacy",
+    and: "and",
+    /** Why the server would not do what was asked (`AccountProblem` in ~/game). */
+    problems: {
+      bad_email: "That doesn't look like an email address.",
+      bot_check:
+        "We couldn't check you're not a robot. Wait a moment, then try again.",
+      too_many:
+        "We've just sent a few. Check your inbox, or try again in 15 minutes.",
+      not_set_up: "Signing in isn't switched on yet. Check back soon.",
+      bad_link: "That link has been used or has run out. Ask for a new one.",
+      signed_out: "You're signed out. Sign in again.",
+      bad_name: "That name can't be used.",
+      taken: "Somebody has that name. Try another.",
+      failed: "That didn't work. Try again in a moment.",
+    } satisfies Record<AccountProblem, string>,
+  },
+  /**
+   * The page a sign-in link opens, and where a trip to Google ends: /enter
+   * (app/routes/enter.tsx).
+   */
+  enter: {
+    /** The page's title in the browser's tab. */
+    title: "Sign in",
+    heading: "SIGN IN",
+    /** The way back to the menu, where the pop-ups have their close button. */
+    back: "Back to the menu",
+    /** While the link is being used. */
+    working: "Signing you in.",
+    /** A link opened in a browser that did not ask for it: a press signs in. */
+    confirm: "Press the button to sign in on this device.",
+    go: "SIGN IN",
+    /** Signed in: who as, and the way on. */
+    done: (email: string) => `You're in. Signed in as ${email}.`,
+    playingAs: (nickname: string) => `You play as ${nickname}.`,
+    play: "PLAY",
+    /** The link did not work, or Google did not sign anyone in. */
+    failed:
+      "That didn't sign you in. The link may have been used or have run out.",
+    googleFailed: "Google didn't sign you in. Try again from the menu.",
+    /** The page opened with no link at all. */
+    nothing: "Nothing to sign in with here. Ask for a link from the menu.",
+    home: "BACK TO THE MENU",
   },
   remind: {
     /** The button's name and tooltip. */
@@ -890,6 +1003,172 @@ export const en = {
   legal: {
     disclaimer:
       "soccersense is an independent fan game. It is not affiliated with, endorsed or sponsored by FIFA, UEFA or any league, club or player. All names and brands belong to their owners and are used for identification only.",
+    /** The two pages, linked from the small print. */
+    privacyLink: "Privacy",
+    termsLink: "Terms",
+  },
+
+  /**
+   * The privacy notice and the terms (/privacy, /terms: app/routes/privacy.tsx and
+   * terms.tsx). A draft written to match what the game does, for the product owner to have
+   * checked. `contact` is where questions go.
+   */
+  pages: {
+    back: "Back to the game",
+    /** The bar along the top: the game's name (a link home) and PLAY. */
+    home: "soccersense: back to the game",
+    play: "PLAY",
+    /** The foot's links, read out as a group. */
+    nav: "The site's pages",
+    updated: "Last updated 17 November 2026",
+    contact: "info@soccersense.io",
+  },
+  privacy: {
+    title: "Privacy",
+    description:
+      "What soccersense, the daily football trivia game, keeps about you, why and for how long. Play without an account and nothing is stored.",
+    heading: "PRIVACY",
+    sections: [
+      {
+        heading: "In short",
+        paragraphs: [
+          "You can play without telling us anything, and then nothing about you is kept on our server. If you make an account, we keep your email address, your name and your games so they're the same on every device. We don't sell data, show ads or track you.",
+        ],
+      },
+      {
+        heading: "Who we are",
+        paragraphs: [
+          "soccersense is a daily football trivia game at soccersense.io. For anything about your data, email info@soccersense.io.",
+        ],
+      },
+      {
+        heading: "Playing without an account",
+        paragraphs: [
+          "Your games, streak, stats, name and settings are kept in your browser's storage on your device, not on our server.",
+          "While you play, our server sends each question and checks each answer. It keeps nothing about you afterwards and sets no cookie: your game in progress is a sealed record that your own browser holds.",
+        ],
+      },
+      {
+        heading: "If you make an account",
+        paragraphs: ["We keep:"],
+        list: [
+          "your email address;",
+          "if you sign in with Google, Google's ID for you (we ask Google for your email address and that ID, not your name or picture);",
+          "the name the leaderboards show for you;",
+          "your games: your answers and scores, including the games your device had played before you signed in, for your streak and stats;",
+          "a record of each device you're signed in on;",
+          "the sign-in links we've emailed you.",
+        ],
+      },
+      {
+        heading: "Why",
+        paragraphs: [
+          "To sign you in, keep your games and stats on every device, and show your name and scores on the leaderboards. We rely on providing the game you've asked for, and on our legitimate interest in keeping it fair and free of abuse.",
+          "Other players see your name and your score on the leaderboards. They never see your email address.",
+        ],
+      },
+      {
+        heading: "Cookies and storage",
+        paragraphs: [
+          "Only accounts get a cookie: one that keeps you signed in, and a short-lived one while you sign in with Google. Both are needed to sign in, so we don't ask before setting them. There are no advertising or analytics cookies.",
+          "Your browser's storage holds your games and settings so the game works. Clearing your site data removes them from that device.",
+        ],
+      },
+      {
+        heading: "Who else handles it",
+        paragraphs: [
+          "These companies work on our behalf and only as we instruct them. Some may handle data outside the UK, with the safeguards UK data protection law requires.",
+        ],
+        list: [
+          "Cloudflare hosts the site and runs our server and database. When you ask for a sign-in link, its Turnstile check looks at your browser to tell people from bots.",
+          "Resend sends the sign-in emails.",
+          "Google, only if you choose to continue with Google.",
+        ],
+      },
+      {
+        heading: "How long we keep it",
+        list: [
+          "Your account and games: until you delete your account.",
+          "A signed-in device: 90 days after its last visit.",
+          "Sign-in links: one day.",
+        ],
+      },
+      {
+        heading: "Your rights",
+        paragraphs: [
+          "You can change your name at any time, and delete your account from Your account: that removes your name, games and sign-ins from our server straight away.",
+          "To get a copy of your data, correct it, or ask anything else, email info@soccersense.io. If you're unhappy with how we've handled your data, you can complain to the Information Commissioner's Office at ico.org.uk.",
+        ],
+      },
+      {
+        heading: "Children",
+        paragraphs: [
+          "Accounts are for people aged 13 and over. Anyone can play without one.",
+        ],
+      },
+      {
+        heading: "Changes",
+        paragraphs: [
+          "If this notice changes, we'll update this page and the date at the top.",
+        ],
+      },
+    ],
+  },
+  terms: {
+    title: "Terms",
+    description:
+      "The rules for playing soccersense, the daily football trivia game, and for having an account: play fair and pick a decent name.",
+    heading: "TERMS",
+    sections: [
+      {
+        heading: "The game",
+        paragraphs: [
+          "soccersense is a free daily football trivia game. We work to keep it running and the questions right, but it's provided as it is, and we can't promise it will always be available or free of mistakes.",
+        ],
+      },
+      {
+        heading: "Accounts",
+        paragraphs: [
+          "You don't need an account to play. To make one you must be 13 or over. Anyone who can open your sign-in emails can sign in as you, so keep your email account safe. You can delete your account at any time from Your account.",
+        ],
+      },
+      {
+        heading: "Your name",
+        paragraphs: [
+          "Your name is shown to other players. Don't pick one that is offensive, pretends to be someone else, or advertises anything. We may change a name that breaks this, or close the account.",
+        ],
+      },
+      {
+        heading: "Play fair",
+        paragraphs: [
+          "Don't use scripts, bots or other tricks to play, to get round the once-a-day rule, or to climb the leaderboards. We may remove scores or accounts that do, and limit or block traffic that harms the game.",
+        ],
+      },
+      {
+        heading: "Football names",
+        paragraphs: [
+          "soccersense is an independent fan game. It is not affiliated with, endorsed or sponsored by FIFA, UEFA or any league, club or player. All names and brands belong to their owners and are used for identification only.",
+        ],
+      },
+      {
+        heading: "Our responsibility",
+        paragraphs: [
+          "We're not responsible for any loss that comes from using the game, except where the law doesn't allow us to exclude it.",
+        ],
+      },
+      {
+        heading: "Changes",
+        paragraphs: [
+          "We may update these terms. The date at the top says when they last changed, and playing after a change means you accept the new terms.",
+        ],
+      },
+      {
+        heading: "The law",
+        paragraphs: [
+          "These terms are governed by the law of England and Wales. Questions: info@soccersense.io.",
+        ],
+      },
+    ],
   },
 
   /**

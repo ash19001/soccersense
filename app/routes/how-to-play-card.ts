@@ -28,6 +28,10 @@ export function howToPlayContent({
       career: text.career.heading,
       step: text.career.step,
       disclaimer: strings.legal.disclaimer,
+      legal: [
+        { label: strings.legal.privacyLink, to: "/privacy" },
+        { label: strings.legal.termsLink, to: "/terms" },
+      ],
     },
     shots: SHOT_ORDER.map((shot) => ({
       grade: shot,

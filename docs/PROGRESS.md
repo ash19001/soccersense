@@ -856,8 +856,74 @@ server", has the design).
 - For games finished before this deploy, kept on a device without their answers' names:
   the card, the review and the share picture show those answers as they were typed, and
   the picture's question lines are blank. Only that day's games.
-- Next in the order: the leaderboard. It ranks accounts' games, so it and accounts now
-  belong together: to be agreed with the product owner which comes first.
+- Next in the order: the leaderboard. It ranks accounts' games, so accounts came first
+  (below).
+- **Deployed and checked on the live site the same day** (the product owner: "commit and
+  push"): health `db: 3`; a whole game played through the live API by script (seven
+  reveals, 700, a forged ticket refused, no cookie); and in a real browser (Chrome): a
+  question answered, the page reloaded in the middle of the game and back at the reveal,
+  the ticket under `...:live`, no cookie, no page errors.
+
+## Accounts (2026-11-17)
+
+The product owner: "start the user accounts and let me know where you want me to input the
+keys". ARCHITECTURE.md section 8, "Accounts", has the design.
+
+- **Built.** Signing in by a link sent by email (Resend) and with Google, no passwords;
+  sessions by cookie, for accounts only; the nickname from the server's counter
+  (soccerfan1, soccerfan2, ...), unique, with reserved and offensive names turned down;
+  signing out; deleting an account (the API only). `worker/accounts`, migration 4.
+- **A signed-in player's games are the server's**: the same on every device, once a day.
+  A player with no account is exactly as before: no row, no cookie, no request about
+  accounts.
+- **On the page.** The name's card (CHANGE) has SIGN IN at its foot, which opens YOUR
+  ACCOUNT; `/enter` is where the emailed link and Google land.
+- **The keys** are the product owner's to put in Cloudflare as secrets: `RESEND_API_KEY`,
+  `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and for the bot check `TURNSTILE_SECRET_KEY`
+  (its site key, which is public, is in `wrangler.jsonc`). Until one is there, its way of signing in is
+  off and is not offered. **Nothing can be signed in to on the live site until then.**
+- **Checked:** `pnpm check` (the count is in the commit); the Worker's tests with the email
+  service and Google stood in for; the pages against the Worker's own code with a cookie
+  jar; and in a real browser (Chrome) against `wrangler dev` with the dev server in front,
+  at 1920 x 930 and 390 x 844: a bad address turned down, a link asked for, the link from
+  the Worker's log opened and signed in at once, the name changed, a game played and
+  reloaded as the account (no ticket on the device), signed out (no cookie, no note). No
+  page errors.
+- **Not checked:** a real email through Resend, and a real trip to Google: both need the
+  keys. First thing once they are in: sign in each way on the live site.
+- **Not done** (all in ARCHITECTURE.md): an offer of an account after a first game (not
+  wanted); the privacy notice's name and mailbox.
+- Written directly, not with Better Auth as the plan had it: an assumption put to the
+  product owner in the hand-over.
+- **The same day, the product owner's round on it** ("in bottom left add the account name
+  ... and next to it it says sign in"; "remove the ability to change it within the
+  leaderboard"; "streaks, stats, etc. should be saved to database if the user is logged
+  in"; "no offer to sign up after first game, but add the delete account and
+  privacy/terms page"; "should i use cloudflare turnstile?"):
+  - The name and SIGN IN (ACCOUNT once signed in) on a plate over the captions' left end on
+    a monitor; on a phone one button at the top of the bell's column (no room beside the
+    day for a touch target). The leaderboard's name line and CHANGE are gone, and so is
+    the name card's SIGN IN.
+  - The account's games, with its devices' games from before it signed in, swapped with
+    each signed-in device, so the streak, stats, scores and reviews are the account's
+    everywhere. Device games never count on a leaderboard (`games.origin`).
+  - DELETE ACCOUNT on the account's card, asking first.
+  - `/privacy` and `/terms`: drafts, linked from the card and the rules' small print, in
+    the sitemap.
+  - The bot check on asking for a link: Cloudflare Turnstile, off until its two keys are in
+    Cloudflare.
+  - Checked: `pnpm check` (the count is in the commit), and in Chrome (see the commit).
+- **Then** ("actually move it top right of the screen"; "the privacy and terms should be
+  full scrollable pages"; "ensure everything is secure so no jwt in headers or session
+  cookies. no senstive secrets anywhere public"):
+  - The name and SIGN IN in the top right corner (`AccountCorner`); the leaderboard starts
+    under it, and on a monitor under 820 px tall leaves out its seven days' strip.
+  - The privacy notice and the terms as ordinary pages that scroll.
+  - Security (ARCHITECTURE.md section 8, "Security"): no JWTs, nothing secret in the
+    repository, its history or the built site; security headers on every page and API
+    answer, checked in Chrome with nothing blocked.
+- Next in the order: the leaderboard (accounts only, `origin = 'server'` games only; a
+  player with no account is told where they would have placed).
 
 ## Known follow-ups
 

@@ -16,6 +16,8 @@ import routes from "../routes";
 import { meta as homeMeta } from "./home";
 import { meta as rulesMeta } from "./how-to-play";
 import { meta as playMeta } from "./play";
+import { meta as privacyMeta } from "./privacy";
+import { meta as termsMeta } from "./terms";
 import {
   PAGES,
   SITE_URL,
@@ -76,6 +78,8 @@ const PUBLIC: readonly { path: string; tags: MetaDescriptor[] }[] = [
     tags: tagsOf(playMeta, playPath(mode)),
   })),
   { path: "/how-to-play", tags: tagsOf(rulesMeta, "/how-to-play") },
+  { path: "/privacy", tags: tagsOf(privacyMeta, "/privacy") },
+  { path: "/terms", tags: tagsOf(termsMeta, "/terms") },
 ];
 
 describe("the site's address", () => {
@@ -196,7 +200,7 @@ describe("the pages players are sent to", () => {
     expect(playPath("nextgen")).toBe("/play/next-gen");
   });
 
-  it("are the pages listed for search engines: every route but the development pages, the approval desk and that second address", () => {
+  it("are the pages listed for search engines: every route but the development pages, the approval desk, the sign-in page and that second address", () => {
     const paths = routes.map((route) =>
       route.index ? "/" : `/${route.path ?? ""}`,
     );
@@ -204,11 +208,14 @@ describe("the pages players are sent to", () => {
     expect(paths.some((path) => path.startsWith("/dev/"))).toBe(true);
     // /admin is the product owner's desk: on the site, never listed
     expect(paths).toContain("/admin");
+    // /enter is where a sign-in link lands: nothing to find there without one
+    expect(paths).toContain("/enter");
     const listed = paths.filter(
       (path) =>
         !path.startsWith("/dev/") &&
         path !== "/play/nextgen" &&
-        path !== "/admin",
+        path !== "/admin" &&
+        path !== "/enter",
     );
     expect([...PAGES].sort()).toEqual([...listed].sort());
     expect(PAGES).toEqual(PUBLIC.map((page) => page.path));
