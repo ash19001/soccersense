@@ -8,7 +8,7 @@ import { SHOT_ORDER, isGoal, shotIndex, shotsFor } from "~/game/shots";
 import type { Answer, Mode, Question, Stadium } from "~/game/types";
 
 import { AWAY_QUESTIONS, HOME_QUESTIONS, STADIUMS, questionsFor } from ".";
-import { PLACES, placeLabel } from "./places";
+import { PLACES, asPlace, checkPlace, placeLabel } from "./places";
 
 /**
  * Structural checks on the demo content. They cannot tell whether a fact is right (that is
@@ -393,6 +393,62 @@ describe("the day's places (the daily pins)", () => {
     expect(
       STADIUMS.flatMap((s) => coordinateProblems(label(s), s.lat, s.lng)),
     ).toEqual([]);
+  });
+
+  // since 2026-11-19 the fallback for days with no place drafted and approved: held to the
+  // rules a drafted one is, which the page checks the server's place against too
+  it("each keeps the rules a drafted place is held to, unchanged", () => {
+    for (const place of PLACES) {
+      expect(checkPlace(place), place.id).toEqual({ place, problems: [] });
+    }
+  });
+
+  it("a drafted place is held to them: id, name and area the fonts draw, kind, coordinates", () => {
+    const good = {
+      id: "nou-camp",
+      name: "Camp Nou",
+      area: "Barcelona, Spain",
+      kind: "stadium",
+      lat: 41.380896,
+      lng: 2.12282,
+    };
+    // tidied: coordinates to 4 decimal places
+    expect(checkPlace(good)).toEqual({
+      place: { ...good, lat: 41.3809, lng: 2.1228 },
+      problems: [],
+    });
+    const problems = (raw: unknown) => checkPlace(raw).problems;
+    expect(problems(null)).toEqual(["the place is not an object"]);
+    expect(problems({ ...good, id: "Camp Nou" })[0]).toMatch(
+      /^id "Camp Nou" must be kebab-case/,
+    );
+    expect(problems({ ...good, name: "Стадион" })[0]).toMatch(/cannot draw/);
+    expect(problems({ ...good, name: "A".repeat(29) })[0]).toMatch(
+      /longer than 28/,
+    );
+    expect(problems({ ...good, area: "" })).toEqual(["area is missing"]);
+    expect(problems({ ...good, kind: "pub" })[0]).toMatch(
+      /^kind must be one of/,
+    );
+    expect(problems({ ...good, lat: 78.2232 })[0]).toMatch(/^lat must be/);
+    expect(problems({ ...good, lng: 0 })[0]).toMatch(/^lng must be/);
+    expect(problems({ ...good, lat: "41" })[0]).toMatch(/^lat must be/);
+  });
+
+  it("a pin that is a whole place is taken as it is; a bare one is looked up in the list", () => {
+    const drafted = {
+      id: "nou-camp",
+      name: "Camp Nou",
+      area: "Barcelona, Spain",
+      kind: "stadium" as const,
+      lat: 41.3809,
+      lng: 2.1228,
+    };
+    expect(asPlace(drafted)).toBe(drafted);
+    expect(asPlace({ id: "lagos", lat: 1, lng: 1 })).toBe(
+      PLACES.find((p) => p.id === "lagos"),
+    );
+    expect(asPlace({ id: "nowhere", lat: 1, lng: 1 })).toBeNull();
   });
 
   it("one day's is far from the next: 2,000 km or more, including the wrap", () => {

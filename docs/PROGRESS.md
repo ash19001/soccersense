@@ -798,6 +798,46 @@ account as a scheduled skill).
   (and the sites to check facts against) in a cloud environment and store the token there,
   and the skill to be pushed. Not yet run for real: no question has been drafted by it.
 
+## CLOSEST and FURTHEST drafted daily (2026-11-19)
+
+The product owner: "can you add these new gamemodes to the schedule so once i remove sample
+feature flag then these will also get generated and have new ones daily".
+
+- The store, the desk's API, the approval page's week and the server's scheduled games had
+  CLOSEST and FURTHEST already; the drafting did not. `pnpm questions todo` now lists
+  their places too (with the day's place each is measured from), and `check` takes them,
+  holding each to a full reveal from its day's place. The skill says how to choose a list
+  for a day's place (answers near it and on other continents).
+- The approval page shows a CLOSEST or FURTHEST question from its day's place: the place,
+  and each answer's distance and shot that day, best first (a distance mode's shots are
+  never filed, so the stored ones meant nothing).
+- A week is now 294 questions to approve (seven days, six modes, seven each); the first
+  run after this fills eight days, 336. The weekly routine needs no change: it drafts
+  whatever `todo` lists, from the repository as pushed.
+- With the `QUESTIONS` flag at `scheduled`, a day and mode that does not have all seven
+  approved plays the sample, as before, CLOSEST and FURTHEST included.
+
+## The day's place drafted daily (2026-11-19)
+
+The product owner: "i dont want fixed places because eventually questions will get
+repetitive so it should also be generated BUT will that cause issues with the animations of
+the answers or can that dynamically be calculated".
+
+- The animations: worked out from the coordinates alone. Tried at Reykjavik, Wellington,
+  Honolulu and Suva (over the date line): the globe, the pin, a shot's flight and distance,
+  CLOSEST's close-up and FURTHEST's space all drew right. The close-up's stadium is the
+  art's own, not the place's.
+- Each day's place is drafted by the weekly run, before that day's CLOSEST and FURTHEST,
+  and approved at the desk (a Place column; a card with a map link). Kept in `day_places`
+  (migration 8). Rules: `checkPlace`, and in the drafter's check 2,000 km from the days
+  either side, another kind, none twice in 90 days.
+- A CLOSEST or FURTHEST question is approved only after its day's place; a place changed
+  after approval sends them back to draft.
+- Played with `QUESTIONS` at `scheduled`: the approved place in the games and in
+  `/api/today`, which the pages now read (the play page waits up to 3 s for it); the fixed
+  30 stay the fallback, and are all that is played with the sample on.
+- 7 more approvals a week (301 in all).
+
 ## The weekly routine is created; its first trial stopped at the desk (2026-11-17)
 
 - Created with the product owner's answers: Sunday 3:17am UK time (`17 3 * * 0`, UTC),
@@ -1043,9 +1083,26 @@ GAME_DESIGN.md section 1 has the rules.
   out to hold it and coming home on the next question. Shots `map/*`.
 - **The career on the map** (2026-11-18, from image demos: "sure do it"; GAME_DESIGN.md
   section 5.3): CLOSEST closes in on the place a step a tier, its ground in a badge
-  (`~/art/ground-badge`) until the map shows the stadium; FURTHEST travels from stop to stop
-  (`app/scenes/map-journey.ts`, `app/data/cities.ts`) to the final on the far side of the
-  world. Tiers 6 and 7 at night.
+  (`~/art/ground-badge`) until the map shows the stadium. Tiers 6 and 7 at night.
+- **FURTHEST out into space** (2026-11-19: "for furthest, it should also start on the globe
+  level but instead of zooming in (like closest) it should zoom out to galaxy, universe,
+  etc."): it starts on the globe and pulls back a tier at a time to the Earth and the Moon,
+  the inner planets, the solar system, the nearest stars, the Milky Way, the Local Group and
+  the observable universe (`~/art/cosmos`, named from `en.play.space`), the ground in its
+  badge by the pin. A shot from space dives to the Earth before the kick. The journey from
+  city to city it replaced (`map-journey.ts`, `app/data/cities.ts`) is gone.
+- **Space dressed up** (2026-11-19: "even though it may not be realistic, can you add more
+  details to furthest game mode when it goes into outer space. just so it looks cool rather
+  than black with a couple dots and labels"): clouds of gas that stream past as the camera
+  pulls back, the Milky Way's band across the sky, more stars and far galaxies
+  (`~/art/cosmos-sky`); the Sun's corona, the planets lit with their markings and rings, the
+  asteroid and Kuiper belts and the Oort cloud (named), comets, the stars' glows, the Milky
+  Way's bar, knots and clusters, galaxy halos; and, alive, twinkling, shooting stars and
+  satellites round the Earth. Made quick again (the product owner: "its slightly laggy
+  now"): the Milky Way's band and the galaxies' glows kept, the clouds from a noise table
+  and filled a square at a time, only what is in the picture of rings, filaments and orbits,
+  and no whole redraw a row while the pin slides; a frame moving through space takes about
+  3 ms on average (it took 20 to 30).
 - **The ball**: CLOSEST and FURTHEST are open buttons on its back (the pin, the globe), with
   their words. Chosen (2026-11-18), CLOSEST's ball spins into the Earth, which comes closer
   and spins on, the whole globe in sight, as the screen closes (`~/art/globe`); FURTHEST's

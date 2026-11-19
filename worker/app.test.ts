@@ -5,6 +5,7 @@
  */
 import { describe, expect, test } from "vitest";
 
+import { PLACES } from "~/data/places";
 import { EPOCH_UTC, MS_PER_DAY } from "~/game/day";
 
 import { type HealthAnswer, type TodayAnswer, handle } from "./app";
@@ -70,6 +71,8 @@ describe("the Worker", () => {
       dayKey: "2026-11-17",
       nextDayIn: MS_PER_DAY / 2,
       questions: "sample",
+      // with the sample questions on, the fixed list's place for the day, in turn
+      place: PLACES[7],
     });
   });
 

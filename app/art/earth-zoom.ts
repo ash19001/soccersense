@@ -174,6 +174,11 @@ export interface EarthView {
    * sharpens). Space and its stars go in with the first band, the globe's rim with the last.
    */
   rows?: { from: number; to: number };
+  /**
+   * Space round a globe that does not fill the picture: black and its stars (true, the
+   * default), or false to leave what is there (FURTHEST's career: ./cosmos.ts drew the sky).
+   */
+  space?: boolean;
 }
 
 interface Tones {
@@ -642,7 +647,7 @@ export function drawEarthZoom(
   const from = Math.max(0, view.rows?.from ?? 0);
   const to = Math.min(h, view.rows?.to ?? h);
   // space round a globe that does not fill the picture
-  if (!planar && r < diag && from === 0) {
+  if (!planar && r < diag && from === 0 && view.space !== false) {
     s.clear(T.space);
     drawStars(s, seed);
   }

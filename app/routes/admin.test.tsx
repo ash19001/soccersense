@@ -14,7 +14,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { HOME_QUESTIONS } from "~/data";
+import { CLOSEST_QUESTIONS, HOME_QUESTIONS } from "~/data";
+import { PLACES, type Place, placeLabel } from "~/data/places";
+import { STADIUMS } from "~/data/stadiums";
+import { distanceKm, stadiumForDay } from "~/game";
 import { strings } from "~/i18n";
 
 import Admin from "./admin";
@@ -42,10 +45,18 @@ interface Player {
 }
 
 /**
- * The desk's API, in memory: day 8 has HOME's seven sample questions as drafts, and two
- * players have accounts.
+ * The desk's API, in memory: day 8 has HOME's seven sample questions as drafts (and
+ * CLOSEST's, if asked), and two players have accounts.
  */
-function server(options: { accept?: boolean; shut?: boolean } = {}) {
+function server(
+  options: {
+    accept?: boolean;
+    shut?: boolean;
+    closest?: boolean;
+    /** Day 8's place, drafted or approved. */
+    place?: { place: Place; status: string };
+  } = {},
+) {
   const calls: Call[] = [];
   const players: Player[] = [
     {
@@ -80,6 +91,34 @@ function server(options: { accept?: boolean; shut?: boolean } = {}) {
     source: "ai",
     updatedAt: 1000,
   }));
+  const places = options.place
+    ? [
+        {
+          day: 8,
+          status: options.place.status,
+          place: options.place.place,
+          note: "The ground's own site.",
+          review: "",
+          source: "ai",
+          updatedAt: 1000,
+        },
+      ]
+    : [];
+  if (options.closest) {
+    CLOSEST_QUESTIONS.forEach((question, slot) =>
+      slots.push({
+        day: 8,
+        mode: "closest",
+        slot,
+        status: "draft",
+        question,
+        note: "",
+        review: "",
+        source: "ai",
+        updatedAt: 1000,
+      }),
+    );
+  }
   const json = (body: unknown, status = 200) =>
     new Response(JSON.stringify(body), { status });
   const fetcher = vi.fn(
@@ -100,7 +139,19 @@ function server(options: { accept?: boolean; shut?: boolean } = {}) {
       if (options.shut) return json({ error: "admin_not_set_up" }, 503);
       if (options.accept === false) return json({ error: "unauthorized" }, 401);
       if (url.startsWith("/api/admin/questions?")) {
-        return json({ slots });
+        return json({ slots, places });
+      }
+      const placeOf = /^\/api\/admin\/places\/(\d+)$/.exec(url);
+      if (placeOf) {
+        const day = places.find((p) => p.day === Number(placeOf[1]));
+        if (!day) return json({ error: "not_found" }, 404);
+        const sent = body as { status?: string; review?: string };
+        if (sent.status) {
+          day.status = sent.status;
+          day.review = sent.review ?? "";
+        }
+        day.updatedAt += 1;
+        return json({ place: day });
       }
       const one = /^\/api\/admin\/questions\/(\d+)\/home\/(\d)$/.exec(url);
       if (one) {
@@ -163,7 +214,7 @@ function server(options: { accept?: boolean; shut?: boolean } = {}) {
     },
   );
   vi.stubGlobal("fetch", fetcher);
-  return { calls, slots, players };
+  return { calls, slots, players, places };
 }
 
 async function signIn(): Promise<void> {
@@ -266,6 +317,106 @@ describe("the approval desk", () => {
     await waitFor(() =>
       expect(screen.getByText(text.scheduled)).toBeInTheDocument(),
     );
+  });
+
+  // the product owner, 2026-11-19: CLOSEST and FURTHEST drafted daily like the rest
+  test("CLOSEST and FURTHEST are shown from the day's place: each answer's distance and its shot that day", async () => {
+    // day 8's place, drafted for it and approved: not the fixed list's
+    const place = PLACES.find((p) => p.id === "lagos") as Place;
+    server({ closest: true, place: { place, status: "approved" } });
+    render(<Admin />);
+    await signIn();
+    await waitFor(() => screen.getAllByText(text.counts(0, 7, 0)));
+    // HOME's day 8, then CLOSEST's, in the menu's order of modes
+    fireEvent.click(screen.getAllByText(text.counts(0, 7, 0))[1]);
+    const question = CLOSEST_QUESTIONS[0];
+    const card = screen
+      .getByText(new RegExp(question.prompt))
+      .closest("article") as HTMLElement;
+    expect(
+      within(card).getByText(text.fromPlace(placeLabel(place))),
+    ).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: text.show }));
+    expect(within(card).getByText(text.columns.distance)).toBeInTheDocument();
+    // nearest first: a worldie, with its kilometres
+    const nearest = [...question.answers].sort(
+      (a, b) => distanceKm(place, a) - distanceKm(place, b),
+    )[0];
+    const first = within(card).getAllByRole("row")[1];
+    expect(within(first).getByText(nearest.name)).toBeInTheDocument();
+    expect(
+      within(first).getByText(text.km(Math.round(distanceKm(place, nearest)))),
+    ).toBeInTheDocument();
+    expect(
+      within(first).getByText(strings.play.shots.worldie),
+    ).toBeInTheDocument();
+  });
+
+  // the product owner, 2026-11-19: "i dont want fixed places ... it should also be generated"
+  test("the day's place: in its column, looked at, approved; with none, the fixed list's is said", async () => {
+    const lagos = PLACES.find((p) => p.id === "lagos") as Place;
+    const { calls, places } = server({
+      closest: true,
+      place: { place: lagos, status: "draft" },
+    });
+    render(<Admin />);
+    await signIn();
+    // its column: the place and its state
+    const cell = await screen.findByRole("button", {
+      name: new RegExp(`^${placeLabel(lagos)}`),
+    });
+    expect(within(cell).getByText(text.status.draft)).toBeInTheDocument();
+
+    // a CLOSEST question before its place is approved says so
+    fireEvent.click(screen.getAllByText(text.counts(0, 7, 0))[1]);
+    const question = screen
+      .getByText(new RegExp(CLOSEST_QUESTIONS[0].prompt))
+      .closest("article") as HTMLElement;
+    expect(
+      within(question).getByText(text.fromDraftPlace(placeLabel(lagos))),
+    ).toBeInTheDocument();
+
+    // the place itself: where it is, a map, approve
+    fireEvent.click(cell);
+    const card = screen
+      .getByRole("heading", { name: placeLabel(lagos) })
+      .closest("article") as HTMLElement;
+    expect(within(card).getByText(/The ground's own site/)).toBeInTheDocument();
+    expect(
+      within(card).getByRole("link", { name: text.places.onMap }),
+    ).toHaveAttribute("href", expect.stringContaining(`mlat=${lagos.lat}`));
+    await act(async () => {
+      fireEvent.click(within(card).getByRole("button", { name: text.approve }));
+    });
+    expect(calls.find((c) => c.url === "/api/admin/places/8")).toMatchObject({
+      method: "POST",
+      token: TOKEN,
+      body: { status: "approved" },
+    });
+    expect(places[0].status).toBe("approved");
+    // the week is looked at again: the day's CLOSEST and FURTHEST may have gone back to draft
+    await waitFor(() =>
+      expect(
+        calls.filter((c) => c.url.startsWith("/api/admin/questions?")).length,
+      ).toBe(2),
+    );
+  });
+
+  test("a day with no place drafted says the fixed list's is played until one is approved", async () => {
+    server();
+    render(<Admin />);
+    await signIn();
+    await waitFor(() => screen.getByText(text.counts(0, 7, 0)));
+    // the place column of day 8: nothing drafted
+    const row = screen
+      .getByText(/\(day 8\), today/)
+      .closest("tr") as HTMLElement;
+    fireEvent.click(within(row).getAllByText(text.nothing)[0]);
+    expect(
+      screen.getByText(
+        text.places.none(placeLabel(stadiumForDay(8, STADIUMS) as Place)),
+      ),
+    ).toBeInTheDocument();
   });
 
   test("a question is rejected with its reason", async () => {

@@ -5,13 +5,13 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { cosmosSpots } from "~/art/cosmos";
 import { lightingFor } from "~/art/lighting";
 import { P } from "~/art/palette";
 import { formatDistance } from "~/game/geo";
 import { FONT_5x7, Surface, measureText } from "~/pixel";
 
 import { CLOSEST_ACROSS, MapScene, PIN_Y, plateLines } from "./map";
-import { journeyFor } from "./map-journey";
 
 const WEMBLEY = { lat: 51.556, lng: -0.2796, name: "Wembley" };
 
@@ -127,12 +127,14 @@ describe("the map's opening", () => {
   });
 });
 
-/** What the camera sees (private): its middle, km a pixel, and its middle's row. */
+/** What the camera sees (private): its middle, km a pixel, its middle's row, off the Earth. */
 interface Cam {
   lat: number;
   lng: number;
   kpp: number;
   ay: number;
+  sx: number;
+  sy: number;
 }
 const camOf = (map: MapScene): Cam => (map as unknown as { cam: Cam }).cam;
 const placed = (map: MapScene, p: { lat: number; lng: number }) =>
@@ -177,23 +179,71 @@ describe("the career on the map", () => {
     }
   });
 
-  it("FURTHEST holds home and the newest stop, each further away, on the picture", () => {
-    const map = career("furthest");
-    const stops = journeyFor(WEMBLEY);
-    for (let tier = 1; tier <= 5; tier++) {
+  // the product owner, 2026-11-19: "for furthest, it should also start on the globe level
+  // but instead of zooming in (like closest) it should zoom out to galaxy, universe, etc."
+  it("FURTHEST starts on the globe and pulls back into space a step a tier, all of it in the picture", () => {
+    const [w, h] = [480, 270];
+    const map = career("furthest", w, h);
+    const ceiling = Math.round(h * 0.16);
+    map.setCeiling(ceiling);
+    const closest = career("closest", w, h);
+    closest.setTotal(0);
+    let last = 0;
+    for (let tier = 0; tier < 8; tier++) {
       map.setTotal(tier * 90);
-      for (const p of [WEMBLEY, stops[tier]]) {
-        const q = placed(map, p);
-        expect(q.seen, `tier ${tier}`).toBe(true);
-        expect(q.x).toBeGreaterThan(0);
-        expect(q.x).toBeLessThan(480);
-        expect(q.y).toBeGreaterThan(0);
-        expect(q.y).toBeLessThan(270);
+      const cam = camOf(map);
+      if (tier === 0) expect(cam.kpp).toBeCloseTo(camOf(closest).kpp, 9);
+      expect(cam.kpp, `tier ${tier}`).toBeGreaterThan(last);
+      last = cam.kpp;
+      // the pin, under the board
+      const pin = placed(map, WEMBLEY);
+      expect(pin.seen, `tier ${tier}`).toBe(true);
+      expect(pin.x).toBeGreaterThan(0);
+      expect(pin.x).toBeLessThan(w);
+      expect(pin.y).toBeGreaterThan(ceiling);
+      expect(pin.y).toBeLessThan(h);
+      if (tier === 0) continue;
+      // what the tier shows: between the board and the foot of the picture
+      const ex = w / 2 - cam.sx / cam.kpp;
+      const ey = cam.ay + cam.sy / cam.kpp;
+      for (const p of cosmosSpots(tier)) {
+        const x = ex + p.x / cam.kpp;
+        const y = ey - p.y / cam.kpp;
+        expect(x, `tier ${tier}`).toBeGreaterThanOrEqual(0);
+        expect(x, `tier ${tier}`).toBeLessThanOrEqual(w);
+        expect(y, `tier ${tier}`).toBeGreaterThan(ceiling);
+        expect(y, `tier ${tier}`).toBeLessThanOrEqual(h);
       }
     }
-    // the final, on the far side of the world, in sight
-    map.setTotal(560);
-    expect(placed(map, stops[6]).seen).toBe(true);
+    // the observable universe is some 10^23 km across
+    expect(last * w).toBeGreaterThan(1e23);
+  });
+
+  it("dives from space to the Earth before the kick, and goes back out after", () => {
+    const map = career("furthest");
+    map.setTotal(640);
+    const home = { ...camOf(map) };
+    const kicks: number[] = [];
+    map.onSound = (cue) => {
+      if (cue.kind === "kick") kicks.push(camOf(map).kpp);
+    };
+    const madrid = { lat: 40.4531, lng: -3.6884 };
+    let done = 0;
+    map.playShot("golazo", () => done++, { ...madrid, km: 1264 });
+    // no kick yet: the camera is on its way in
+    expect(kicks).toHaveLength(0);
+    for (let i = 0; i < 600 && done === 0; i++) map.update(1 / 60);
+    expect(done).toBe(1);
+    // kicked once, with the camera down at the Earth, and the landing in sight
+    expect(kicks).toHaveLength(1);
+    expect(kicks[0]).toBeLessThan(home.kpp / 1e15);
+    expect(placed(map, madrid).seen).toBe(true);
+    map.ask();
+    for (let i = 0; i < 60; i++) map.update(1 / 60);
+    // the way back out takes longer than a move on the Earth (DECADE_S)
+    expect(camOf(map).kpp).toBeLessThan(home.kpp / 10);
+    for (let i = 0; i < 180; i++) map.update(1 / 60);
+    expect(camOf(map).kpp).toBeCloseTo(home.kpp, 0);
   });
 
   it("plays the final and the trophy at night, whatever the sky", () => {

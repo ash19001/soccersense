@@ -78,6 +78,7 @@ import {
   useFadeArrival,
   usePixelScale,
 } from "~/ui";
+import { dayPlace } from "~/ui/day-place";
 import type { Route } from "./+types/home";
 import { type AccountResult, accountStore } from "./account";
 import { watchFloor } from "./scene-edges";
@@ -294,6 +295,14 @@ function createMatchdayStore(): MatchdayStore {
         writeGoldenDay(dayKey);
         listener?.onGolden();
       };
+      // The day's place as the server has it (drafted for the day), when it answers;
+      // a place pinned by `?stadium=` stays.
+      if (!/[?&]stadium=/.test(search)) {
+        const made = scene;
+        void dayPlace(today.dayNumber).then((place) => {
+          if (place) made.setPlace(place);
+        });
+      }
     } else {
       scene.setFact(fact.text);
     }

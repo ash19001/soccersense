@@ -19,6 +19,30 @@ import type { ShotContext, ShotMap } from "~/pixel/shot";
 
 import { MapScene } from "./map";
 
+/** What space is called (en.play.space: the scenes do not read the words themselves). */
+const SPACE = {
+  moon: "THE MOON",
+  sun: "THE SUN",
+  mercury: "MERCURY",
+  venus: "VENUS",
+  mars: "MARS",
+  jupiter: "JUPITER",
+  saturn: "SATURN",
+  uranus: "URANUS",
+  neptune: "NEPTUNE",
+  alphaCentauri: "ALPHA CENTAURI",
+  barnard: "BARNARD'S STAR",
+  sirius: "SIRIUS",
+  milkyWay: "THE MILKY WAY",
+  andromeda: "ANDROMEDA",
+  triangulum: "TRIANGULUM",
+  magellanic: "MAGELLANIC CLOUDS",
+  universe: "THE OBSERVABLE UNIVERSE",
+  asteroidBelt: "ASTEROID BELT",
+  kuiperBelt: "KUIPER BELT",
+  oortCloud: "OORT CLOUD",
+};
+
 const WEMBLEY = { lat: 51.556, lng: -0.2796, name: "Wembley" };
 const SYDNEY = { lat: -33.8568, lng: 151.2153, name: "Sydney Opera House" };
 
@@ -35,6 +59,7 @@ function scene(mode: Mode, place: typeof WEMBLEY, ctx: ShotContext): MapScene {
     mode,
     place,
     distance: (km) => formatDistance(km, "en-GB"),
+    labels: SPACE,
   });
   map.resize(ctx.w, ctx.h);
   map.setLighting(lightingFor(ctx.sun));

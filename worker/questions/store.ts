@@ -116,7 +116,8 @@ export async function slotsBetween(
     .prepare(
       `SELECT * FROM question_slots WHERE day >= ? AND day <= ?
        ORDER BY day, CASE mode WHEN 'home' THEN 0 WHEN 'away' THEN 1
-         WHEN 'retro' THEN 2 ELSE 3 END, slot`,
+         WHEN 'retro' THEN 2 WHEN 'nextgen' THEN 3 WHEN 'closest' THEN 4
+         ELSE 5 END, slot`,
     )
     .bind(from, to)
     .all<Row>();
@@ -146,7 +147,8 @@ export async function briefBetween(
          json_array_length(question, '$.answers') AS answers
        FROM question_slots WHERE day >= ? AND day <= ?
        ORDER BY day, CASE mode WHEN 'home' THEN 0 WHEN 'away' THEN 1
-         WHEN 'retro' THEN 2 ELSE 3 END, slot`,
+         WHEN 'retro' THEN 2 WHEN 'nextgen' THEN 3 WHEN 'closest' THEN 4
+         ELSE 5 END, slot`,
     )
     .bind(from, to)
     .all<{

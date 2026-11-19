@@ -12,6 +12,15 @@
  *   POST /api/admin/questions/<day>/<mode>/<slot>  { status?, review?, question? }: approve,
  *                                                  reject, send back to draft, or put a
  *                                                  corrected question in its place
+ *   PUT  /api/admin/places                         send the days' places: { places: [{ day,
+ *                                                  place, note? }], source?, replace? }
+ *   POST /api/admin/places/<day>                   { status?, review?, place? }: the same
+ *                                                  for a day's place
+ *
+ * A look (GET) gives the days' places with their questions (`places`): each day has one,
+ * where its CLOSEST and FURTHEST measure from (./places.ts). A CLOSEST or FURTHEST question
+ * is approved only once its day's place is, and a place changed after it was approved sends
+ * that day's approved CLOSEST and FURTHEST questions back to draft.
  *
  * The same token opens moderation, `/api/admin/players` (../accounts/moderation.ts).
  *
@@ -23,13 +32,25 @@
  * nothing unfit is stored, and nothing is approved that would not play.
  */
 
+import { checkPlace } from "~/data/places";
 import { checkQuestion } from "~/game/check";
+import { isDistanceRule, ruleFor } from "~/game/scoring";
 import type { Mode } from "~/game/types";
 
 import { players } from "../accounts/moderation";
 import { database } from "../db/migrate";
-import type { Env } from "../env";
+import type { D1, Env } from "../env";
 import { failure, json, wrongMethod } from "../http";
+import {
+  approvedPlace,
+  isPlaceDay,
+  placeAt,
+  placeChanged,
+  placesBetween,
+  samePlaceElsewhere,
+  savePlace,
+  setPlaceStatus,
+} from "./places";
 import {
   SLOT_STATUSES,
   type SlotKey,
@@ -48,6 +69,8 @@ export const MIN_TOKEN = 24;
 /** The most a request may carry, and the most drafts in one. */
 export const MAX_BODY = 4_000_000;
 export const MAX_DRAFTS = 250;
+/** How many days either side a place may not be used again. */
+export const PLACE_AGAIN_DAYS = 90;
 /** The most days one look may span, whole and in brief. */
 export const MAX_DAYS = 31;
 export const MAX_BRIEF_DAYS = 120;
@@ -148,7 +171,8 @@ export async function admin(
       const slots = brief
         ? await briefBetween(db, from, to)
         : await slotsBetween(db, from, to);
-      return json({ from, to, slots }, now);
+      const places = await placesBetween(db, from, to);
+      return json({ from, to, slots, places }, now);
     }
 
     const sent = await body(request);
@@ -261,6 +285,15 @@ export async function admin(
             status: 422,
           });
         }
+        // measured from the day's place: passed against the one that will be played
+        if (
+          isDistanceRule(ruleFor(key.mode)) &&
+          !(await approvedPlace(db, key.day))
+        ) {
+          return json({ error: "unfit", problems: [PLACE_FIRST] }, now, {
+            status: 422,
+          });
+        }
       }
       const review =
         typeof sent.review === "string" ? sent.review.slice(0, 2000) : "";
@@ -270,5 +303,153 @@ export async function admin(
     return json({ slot }, now);
   }
 
+  if (route === "/admin/places") {
+    const wrong = wrongMethod(request, ["PUT"], now);
+    if (wrong) return wrong;
+    const sent = await body(request);
+    if (!isBag(sent) || !Array.isArray(sent.places)) {
+      return failure("bad_request", 400, now);
+    }
+    if (sent.places.length > MAX_DRAFTS) {
+      return failure("too_many_drafts", 400, now);
+    }
+    const source = sent.source === "hand" ? "hand" : "ai";
+    const results: PlaceResult[] = [];
+    for (const draft of sent.places) {
+      const bag = isBag(draft) ? draft : {};
+      const day = bag.day as number;
+      const result: PlaceResult = { day, outcome: "refused", problems: [] };
+      results.push(result);
+      if (!isPlaceDay(day)) {
+        result.problems.push("day must be a day number");
+        continue;
+      }
+      const checked = checkPlace(bag.place);
+      if (!checked.place) {
+        result.problems = checked.problems;
+        continue;
+      }
+      const again = await usedAgain(db, day, checked.place.id);
+      if (again) {
+        result.problems.push(again);
+        continue;
+      }
+      const was = await placeAt(db, day);
+      result.outcome = await savePlace(
+        db,
+        day,
+        {
+          place: checked.place,
+          note: typeof bag.note === "string" ? bag.note.slice(0, 4000) : "",
+          source,
+        },
+        now,
+        sent.replace === true,
+      );
+      if (result.outcome === "saved" && was?.status === "approved") {
+        await placeChanged(db, day, now);
+      }
+    }
+    return json({ results }, now);
+  }
+
+  const onePlace = /^\/admin\/places\/(\d+)$/.exec(route);
+  if (onePlace) {
+    const wrong = wrongMethod(request, ["POST"], now);
+    if (wrong) return wrong;
+    const day = Number(onePlace[1]);
+    if (!isPlaceDay(day)) return failure("not_found", 404, now);
+    const sent = await body(request);
+    if (!isBag(sent)) return failure("bad_request", 400, now);
+    const status = sent.status as SlotStatus | undefined;
+    if (status !== undefined && !SLOT_STATUSES.includes(status)) {
+      return failure("bad_status", 400, now);
+    }
+    let slot = await placeAt(db, day);
+    const wasApproved = slot?.status === "approved";
+
+    // a corrected place, put in the day's
+    if (sent.place !== undefined) {
+      const checked = checkPlace(sent.place);
+      if (!checked.place) {
+        return json({ error: "unfit", problems: checked.problems }, now, {
+          status: 422,
+        });
+      }
+      const again = await usedAgain(db, day, checked.place.id);
+      if (again) {
+        return json({ error: "unfit", problems: [again] }, now, {
+          status: 422,
+        });
+      }
+      await savePlace(
+        db,
+        day,
+        {
+          place: checked.place,
+          note: slot?.note ?? "",
+          source: slot?.source ?? "hand",
+        },
+        now,
+        true,
+      );
+      slot = await placeAt(db, day);
+    }
+    if (!slot) return failure("not_found", 404, now);
+
+    if (status !== undefined) {
+      if (status === "approved") {
+        const checked = checkPlace(slot.place);
+        if (!checked.place) {
+          return json({ error: "unfit", problems: checked.problems }, now, {
+            status: 422,
+          });
+        }
+      }
+      const review =
+        typeof sent.review === "string" ? sent.review.slice(0, 2000) : "";
+      await setPlaceStatus(db, day, status, review, now);
+      slot = await placeAt(db, day);
+    }
+    // no longer the place it was passed as: its distance questions are looked at again
+    if (
+      wasApproved &&
+      (slot?.status !== "approved" || sent.place !== undefined)
+    ) {
+      await placeChanged(db, day, now);
+    }
+    return json({ place: slot }, now);
+  }
+
   return failure("not_found", 404, now);
+}
+
+/** What became of one day's place that was sent. */
+export interface PlaceResult {
+  day: number;
+  /** `saved`; `kept` (an approved place is the day's); `refused` (see `problems`). */
+  outcome: "saved" | "kept" | "refused";
+  problems: string[];
+}
+
+/** Why a CLOSEST or FURTHEST question cannot be approved before its day's place. */
+export const PLACE_FIRST =
+  "the day's place is not approved yet: approve it first, since this question is measured from it";
+
+/** Why a place cannot be a day's: it is another's within PLACE_AGAIN_DAYS. Null if it can. */
+async function usedAgain(
+  db: D1,
+  day: number,
+  placeId: string,
+): Promise<string | null> {
+  const days = await samePlaceElsewhere(
+    db,
+    day,
+    placeId,
+    Math.max(1, day - PLACE_AGAIN_DAYS),
+    day + PLACE_AGAIN_DAYS,
+  );
+  return days.length > 0
+    ? `${placeId} is already the place of day ${days.join(", ")}: no place twice within ${PLACE_AGAIN_DAYS} days`
+    : null;
 }

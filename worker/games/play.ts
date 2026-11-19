@@ -49,8 +49,7 @@
  * answer: the turn keeps it, and nothing is scored again later.
  */
 
-import { STADIUMS } from "~/data";
-import { dayNumber, stadiumForDay } from "~/game/day";
+import { dayNumber } from "~/game/day";
 import {
   type GameSnapshot,
   type ServedPhase,
@@ -194,7 +193,7 @@ function hold(state: GameState, set: DayQuestions): Held | null {
     session: {
       mode: state.mode,
       dayNumber: state.day,
-      stadium: stadiumForDay(state.day, STADIUMS),
+      stadium: set.place,
       questions,
       index: Math.min(state.index, questions.length - 1),
       phase: state.phase,
@@ -430,7 +429,7 @@ export async function games(
       const session = createSession({
         mode,
         dayNumber: today,
-        stadium: stadiumForDay(today, STADIUMS),
+        stadium: set.place,
         questions: set.questions,
         now,
       });

@@ -65,7 +65,7 @@ import {
 } from "~/game";
 import { questionsFor } from "~/data";
 import { strings } from "~/i18n";
-import { placeById, placeLabel } from "~/data/places";
+import { asPlace, placeLabel } from "~/data/places";
 import { CareerScene } from "~/scenes/career";
 import type { GameScene, ShotLanding } from "~/scenes/game-scene";
 import { MapScene } from "~/scenes/map";
@@ -314,7 +314,8 @@ export class GameController {
     });
 
     if (isDistanceMode(mode)) {
-      const place = placeById(today.stadium.id);
+      // the day's place: drafted for the day (the server's), or the fixed list's
+      const place = asPlace(today.stadium);
       this.placeName = place?.name ?? strings.play.board.place.label;
       this.placeLabel = place ? placeLabel(place) : this.placeName;
       this.scene = new MapScene({
@@ -326,6 +327,7 @@ export class GameController {
           name: place?.name ?? strings.play.board.place.label,
         },
         distance: (km) => formatDistance(km, this.locale),
+        labels: strings.play.space,
       });
     } else {
       this.scene = new CareerScene({

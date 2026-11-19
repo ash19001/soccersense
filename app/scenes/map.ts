@@ -16,9 +16,12 @@
  *   neighbourhood, the ground, the pitch), the ground the footballer plays at growing beside
  *   the pin (~/art/ground-badge) until the map shows it itself, and then the final at night
  *   (flashes) and the trophy (fireworks, confetti, the cup on the centre spot). FURTHEST's
- *   is a journey away from it (./map-journey.ts): each tier a move to a bigger ground further
- *   from home, by coach, ferry, train or plane, the route drawn from stop to stop and the map
- *   pulled back to hold home and the newest stop; the final on the far side of the world.
+ *   pulls back from the globe a step a tier, out into space (~/art/cosmos; the product
+ *   owner, 2026-11-19: "it should also start on the globe level but instead of zooming in
+ *   (like closest) it should zoom out to galaxy, universe, etc."): the Earth and the Moon,
+ *   the inner planets, the solar system, the nearest stars, the Milky Way, the Local Group,
+ *   and the observable universe, the pin at its middle in fireworks (`spaceView` fits each
+ *   in the picture). Its ground is in the badge by the pin all the way.
  *   Tiers 6 and 7 are played at night, whatever the sky, as the career's are.
  * - **The pin** stands on the day's place, pulsing, its name on a plate above it, clear of
  *   the board (`setCeiling`). CLOSEST draws target rings round it (the nearer, the better);
@@ -27,11 +30,13 @@
  *   goes in) to hold the pin and the landing, the landing above where the reveal's sheet
  *   comes up; the ball flies the shortest way over the globe, high in the middle, leaving a
  *   dotted trail, and lands with a burst in its shot's colour, its distance counting up.
- *   The next question brings the camera home. A landing stays as a marker; off the picture,
- *   an arrow at its edge points the way to it.
+ *   The next question brings the camera home. From space the camera dives to the Earth
+ *   first and the ball waits for it; moves take longer the further they zoom (DECADE_S). A
+ *   landing stays as a marker; off the picture, an arrow at its edge points the way to it
+ *   (on a globe big enough to show them: DETAIL_PX).
  * - **No answer** (a pass, the clock): the pin shakes, and that is all.
- * - **A promotion**: CLOSEST's camera goes in a step and the new ground arrives; FURTHEST's
- *   footballer travels to his next stop ("NEXT STOP" over it), and arrives.
+ * - **A promotion**: the camera goes a step in (CLOSEST) or out (FURTHEST), and the new
+ *   ground arrives in the badge.
  * - **Full time**: the career's view for the tier reached.
  *
  * It answers what the game page asks of a scene (`GameScene`, ./game-scene.ts) as the
@@ -40,7 +45,14 @@
  */
 
 import { drawMatchBall } from "~/art/characters/props";
-import { EARTH_SAMPLES, drawEarthZoom, earthPoint } from "~/art/earth-zoom";
+import { type CosmosLabels, cosmosSpots, drawCosmos } from "~/art/cosmos";
+import { drawSpaceLife } from "~/art/cosmos-sky";
+import {
+  EARTH_SAMPLES,
+  drawEarthZoom,
+  earthIsFlat,
+  earthPoint,
+} from "~/art/earth-zoom";
 import { drawMapPin } from "~/art/globe";
 import { BADGE_H, BADGE_W, drawGroundBadge } from "~/art/ground-badge";
 import { type Lighting, lightingFor } from "~/art/lighting";
@@ -72,7 +84,6 @@ import {
 } from "~/pixel";
 
 import type { GameScene, ShotLanding } from "./game-scene";
-import { type Stop, type Travel, journeyFor } from "./map-journey";
 import type { Ambience, SoundCue } from "./scene";
 
 export interface MapSceneOptions {
@@ -84,6 +95,8 @@ export interface MapSceneOptions {
   place: GeoPoint & { name: string };
   /** A distance as the counter says it, in capitals: "1,204 MILES". */
   distance: (km: number) => string;
+  /** What FURTHEST's space names (en.play.space); nothing is named without. */
+  labels?: CosmosLabels;
 }
 
 /**
@@ -159,14 +172,6 @@ const PATH_SAMPLES = 64;
 export const CLOSEST_ACROSS: readonly number[] = [
   0, 4500, 1000, 150, 20, 2.6, 0.7, 0.34,
 ];
-/** FURTHEST's tier 0: the day's place close up (km across). */
-const HOME_ACROSS = 2.6;
-/**
- * FURTHEST's final (and trophy) is on the far side of the world: from this tier the camera
- * turns the globe this share of the way round from home to it.
- */
-const FAR_SIDE_FROM = 6;
-const FAR_SIDE_TURN = 0.8;
 /** CLOSEST shows its ground in a badge up to this tier; past it the map shows the ground. */
 const BADGE_UNTIL = 4;
 /** No view closer in than this (km across), for a flight that lands close. */
@@ -182,12 +187,19 @@ const FRAME_ROOM = 0.86;
 /** Camera moves (seconds): back to the career's view; a promotion's. */
 const RETURN_S = 1.0;
 const PROMOTE_CAM_S = 1.3;
-/** CLOSEST's promotion: the new ground arrives after the camera, and settles. */
+/** A move takes at least this long for every tenfold it zooms (from space, a long way). */
+const DECADE_S = 0.1;
+/**
+ * A shot from space (the Earth less than 1 / DIVE_FROM of the globe's size): the camera
+ * dives to the Earth first, DIVE_S at least and DIVE_DECADE_S a tenfold, and the ball waits.
+ */
+const DIVE_FROM = 2;
+const DIVE_S = 0.7;
+const DIVE_DECADE_S = 0.07;
+/** The rings, the markers and the arrows to them only on a globe this many pixels round. */
+const DETAIL_PX = 40;
+/** A promotion: the new ground arrives after the camera, and settles. */
 const UPGRADE_S = 0.8;
-/** FURTHEST's promotion: the move starts, travels, arrives and settles. */
-const TRAVEL_FROM = 0.3;
-const TRAVEL_S = 1.6;
-const ARRIVE_S = 0.8;
 /** Tiers 6 and 7: the final, at night whatever the sky (as the career's). */
 const FINAL_NIGHT = lightingFor({ elevation: -30, morning: false });
 /** A unit of the home town's plan on the ground (km): its pitch is 136 units, a real one 105 m. */
@@ -199,12 +211,18 @@ const TOWN_LIGHTS = 0.1;
 /** Tier 7's fireworks: one bursts every this many seconds. */
 const BURST_EVERY = 0.7;
 
-/** What the camera sees: its middle, km a pixel, and the row of the picture its middle is on. */
+/**
+ * What the camera sees: the Earth turned to `lat`, `lng`, km a pixel, and the row of the
+ * picture its middle is on; that middle `sx` km right and `sy` km up of the Earth's (0, 0
+ * but in space, where the Earth is off to one side of what it looks at).
+ */
 interface View {
   lat: number;
   lng: number;
   kpp: number;
   ay: number;
+  sx: number;
+  sy: number;
 }
 
 interface Move {
@@ -229,6 +247,9 @@ interface Flight {
   landing: Landing;
   /** After landing: seconds into the hold, or -1 while it flies. */
   held: number;
+  /** Seconds before the kick (while the camera dives from space), and its power. */
+  wait: number;
+  power: number;
   onDone?: () => void;
 }
 
@@ -237,9 +258,8 @@ interface Promotion {
   to: number;
   t: number;
   dur: number;
-  /** FURTHEST: the way travelled, stop to stop, and how. */
-  route: GeoPoint[];
-  by: Travel | null;
+  /** The camera's move to the new view (seconds), after which the new ground arrives. */
+  cam: number;
   arrived: boolean;
   onDone?: () => void;
 }
@@ -257,8 +277,7 @@ export class MapScene implements GameScene {
   private readonly rings: GeoPoint[][];
   /** Where the rings are centred. */
   private readonly ringCentre: GeoPoint;
-  /** FURTHEST's stops, by tier (CLOSEST's are all the day's place). */
-  private readonly stops: Stop[];
+  private readonly labels: CosmosLabels | undefined;
   /** The home town from above, built a slice a frame from the start. */
   private readonly town: TopTown;
   private tones: TopTones | null = null;
@@ -289,6 +308,9 @@ export class MapScene implements GameScene {
   private sharp: Surface | null = null;
   private sharpKey = "";
   private sharpRow = 0;
+  /** FURTHEST's space as last drawn (`drawCosmos`), and what it shows. */
+  private sky: Surface | null = null;
+  private skyKey = "";
 
   /** The pin's row now, and the row it is going to (PIN_Y, setCeiling). */
   private pinY = 0;
@@ -332,23 +354,21 @@ export class MapScene implements GameScene {
       }
       return points;
     });
-    this.stops =
-      this.mode === "furthest"
-        ? journeyFor(this.place)
-        : Array.from({ length: 8 }, () => ({
-            name: this.place.name,
-            lat: this.place.lat,
-            lng: this.place.lng,
-            km: 0,
-            by: null,
-          }));
+    this.labels = opts.labels;
     const scheme = schemeForDay(this.seed);
     this.town = new TopTown(
       this.seed,
       clubRaw(clubLight(this.light, scheme)),
       scheme,
     );
-    this.cam = { lat: this.place.lat, lng: this.place.lng, kpp: 1, ay: 0 };
+    this.cam = {
+      lat: this.place.lat,
+      lng: this.place.lng,
+      kpp: 1,
+      ay: 0,
+      sx: 0,
+      sy: 0,
+    };
   }
 
   // --- what the game page asks of a scene ------------------------------------------------
@@ -411,15 +431,27 @@ export class MapScene implements GameScene {
       dur: FLY_MIN_S + (FLY_MAX_S - FLY_MIN_S) * Math.sqrt(far),
       landing: { at: to, grade: shot, km },
       held: -1,
+      wait: 0,
+      power: 0.4 + 0.6 * far,
       onDone,
     };
     this.flight = flight;
     this.counter = null;
     // the camera goes only if it must: to a landing out of sight (or above the sheet's
-    // edge), or to one far too small to see from here
+    // edge), or to one far too small to see from here; from space it dives in first
     const view = this.frameView(this.place, to, true);
-    if (!this.inSight(to, view)) this.goTo(view, flight.dur * 0.85, true);
-    this.sound({ kind: "kick", power: 0.4 + 0.6 * far });
+    if (!this.inSight(to, view)) {
+      if (this.cam.kpp > this.globeKpp() * DIVE_FROM && !this.reduced) {
+        const decades = Math.abs(Math.log10(this.cam.kpp / view.kpp));
+        flight.wait = this.goTo(
+          view,
+          Math.max(DIVE_S, decades * DIVE_DECADE_S),
+          false,
+          false,
+        );
+      } else this.goTo(view, flight.dur * 0.85, true);
+    }
+    if (flight.wait <= 0) this.sound({ kind: "kick", power: flight.power });
     if (this.reduced) {
       flight.t = flight.dur;
       this.land(flight);
@@ -436,27 +468,16 @@ export class MapScene implements GameScene {
     const from = this.tier;
     const to = Math.max(from, tierFor(total));
     this.tier = to;
-    const route: GeoPoint[] = [];
-    for (let t = from; t <= to; t++) route.push(this.stops[t]);
-    const moves =
-      this.mode === "furthest" &&
-      this.stops[to].km !== this.stops[from].km &&
-      route.length > 1;
-    const dur =
-      this.mode === "furthest" && moves
-        ? TRAVEL_FROM + TRAVEL_S + ARRIVE_S
-        : PROMOTE_CAM_S + UPGRADE_S;
+    const cam = this.goTo(this.homeView(), PROMOTE_CAM_S, false);
     this.promo = {
       from,
       to,
       t: 0,
-      dur,
-      route: moves ? route : [],
-      by: moves ? (this.stops[to].by ?? "plane") : null,
+      cam,
+      dur: cam + UPGRADE_S,
       arrived: false,
       onDone,
     };
-    this.goTo(this.homeView(), PROMOTE_CAM_S, false);
     this.sound({ kind: "sweep" });
     if (this.reduced) this.finishPromotion();
   }
@@ -501,10 +522,15 @@ export class MapScene implements GameScene {
     this.ceiling = y === null || !Number.isFinite(y) ? null : Math.round(y);
     this.pinWant = this.pinRow();
     if (this.reduced || this.w === 0) this.pinY = this.pinWant;
-    // a still view of two places is framed again under the new board
+    // a still view of two places, or of space, is framed again under the new board
     if (this.w > 0 && !this.move && !this.flight && !this.promo) {
       if (!this.onPlace(this.cam)) this.cam = this.homeView();
-      else if (this.reduced) this.cam = { ...this.cam, ay: this.pinY };
+      else if (this.cam.sx !== 0 || this.cam.sy !== 0) {
+        this.cam = { ...this.homeView(), ay: this.cam.ay };
+      }
+      if (this.reduced && this.onPlace(this.cam)) {
+        this.cam = { ...this.cam, ay: this.pinY };
+      }
     }
   }
 
@@ -560,7 +586,11 @@ export class MapScene implements GameScene {
     }
     const f = this.flight;
     if (f) {
-      if (f.held < 0) {
+      if (f.held < 0 && f.wait > 0) {
+        // waiting for the camera to dive in from space, then the kick
+        f.wait -= d;
+        if (f.wait <= 0) this.sound({ kind: "kick", power: f.power });
+      } else if (f.held < 0) {
         f.t += d;
         if (f.t >= f.dur) this.land(f);
       } else {
@@ -579,13 +609,12 @@ export class MapScene implements GameScene {
     const p = this.promo;
     if (p) {
       p.t += d;
-      const travelled = p.t >= TRAVEL_FROM + TRAVEL_S;
-      const upgraded = p.t >= PROMOTE_CAM_S;
-      if (!p.arrived && (p.route.length > 1 ? travelled : upgraded)) {
+      if (!p.arrived && p.t >= p.cam) {
         p.arrived = true;
         this.sound({ kind: "cheer", size: 0.6 });
       }
-      if (p.route.length > 1 && !p.arrived && p.t > TRAVEL_FROM) {
+      // out into space: the wind of it
+      if (this.mode === "furthest" && !p.arrived) {
         this.sound({ kind: "wind", speed: 0.25 });
       }
       if (p.t >= p.dur) this.finishPromotion();
@@ -607,17 +636,20 @@ export class MapScene implements GameScene {
       return;
     }
     this.drawBack(s);
-    this.drawRings(s);
-    if (this.mode === "furthest") this.drawJourney(s);
-    for (const landing of this.landings) this.drawMarker(s, landing);
+    if (this.mode === "furthest") this.drawSpaceLife(s);
+    // the rings and the landings only on a globe big enough to show them
+    const detail = EARTH_KM / this.cam.kpp >= DETAIL_PX;
+    if (detail) {
+      this.drawRings(s);
+      for (const landing of this.landings) this.drawMarker(s, landing);
+    }
     if (this.mode === "closest") this.drawGround(s);
     this.drawPin(s);
-    if (this.mode === "closest") this.drawClosestBadge(s);
-    else this.drawStop(s);
+    this.drawCareerBadge(s);
     if (this.flight) this.drawFlight(s, this.flight);
     if (this.counter) this.drawCounter(s, this.counter.landing, this.counter.t);
     if (this.tier === 7) this.drawFireworks(s);
-    this.drawPointers(s);
+    if (detail) this.drawPointers(s);
     if (this.openT < OPEN_S) this.drawIris(s, this.openT / OPEN_S);
   }
 
@@ -628,36 +660,74 @@ export class MapScene implements GameScene {
     const w = this.w;
     const h = this.h;
     const ay = this.pinWant || h * PIN_Y;
-    if (this.mode === "closest" || this.tier === 0) {
-      const across =
-        this.mode === "closest" ? CLOSEST_ACROSS[this.tier] : HOME_ACROSS;
-      if (across > 0) {
-        return {
-          lat: this.place.lat,
-          lng: this.place.lng,
-          kpp: across / w,
-          ay,
-        };
-      }
-      // the whole globe, the place in its middle
-      const r = Math.min(w, h) * GLOBE_SIZE;
-      return {
-        lat: this.place.lat,
-        lng: this.place.lng,
-        kpp: EARTH_KM / r,
-        ay,
-      };
+    const { lat, lng } = this.place;
+    if (this.mode === "furthest" && this.tier > 0) {
+      return this.spaceView(this.tier, ay);
     }
-    const stop = this.stops[this.tier];
-    if (this.tier >= FAR_SIDE_FROM) {
-      // the far side of the world: the whole globe, round it to the final, the way there
-      // coming over the horizon; home is round the back (an arrow at the edge points to it)
-      const c = alongGreatCircle(this.place, stop, FAR_SIDE_TURN);
-      const r = Math.min(w, h) * GLOBE_SIZE;
-      return { lat: c.lat, lng: c.lng, kpp: EARTH_KM / r, ay };
+    const across = this.mode === "closest" ? CLOSEST_ACROSS[this.tier] : 0;
+    if (across > 0) return { lat, lng, kpp: across / w, ay, sx: 0, sy: 0 };
+    // the whole globe, the place in its middle
+    return { lat, lng, kpp: this.globeKpp(), ay, sx: 0, sy: 0 };
+  }
+
+  /** Km a pixel with the whole globe in view (GLOBE_SIZE). */
+  private globeKpp(): number {
+    return EARTH_KM / Math.max(1, Math.min(this.w, this.h) * GLOBE_SIZE);
+  }
+
+  /**
+   * FURTHEST's view of space at `tier` (1 to 7): as close as holds the Earth and what the
+   * tier shows (~/art/cosmos `cosmosSpots`) under the board and over the answer bar, the
+   * Earth on the pin's row if it can be (lower if it must) with room by it for the pin's
+   * plate and badge, and the whole in the middle across.
+   */
+  private spaceView(tier: number, ay: number): View {
+    const w = this.w;
+    const h = this.h;
+    const k = this.k;
+    const band = Math.max(h * SEEN_TOP, this.ceiling ?? 0) + 12 * k;
+    const low = Math.max(band + 20 * k, h * FLIGHT_BOTTOM - 8 * k);
+    const margin = Math.max(16, w * 0.08);
+    const pin = this.pinRoom();
+    const xs: Range[] = [
+      {
+        v: 0,
+        lo: Math.max(margin, pin.left),
+        hi: w - Math.max(margin, pin.right),
+      },
+    ];
+    const ys: Range[] = [{ v: 0, lo: ay, hi: low }];
+    for (const p of cosmosSpots(tier)) {
+      xs.push({ v: p.x, lo: margin, hi: w - margin });
+      ys.push({ v: -p.y, lo: band, hi: low });
     }
-    // FURTHEST: home and the newest stop
-    return this.frameView(this.place, stop, false);
+    const s = Math.min(mostScale(xs), mostScale(ys)) * FRAME_ROOM;
+    const across = offsets(xs, s);
+    const down = offsets(ys, s);
+    const ex = (across.lo + across.hi) / 2;
+    const ey = clamp(ay, down.lo, Math.max(down.lo, down.hi));
+    const kpp = 1 / s;
+    return {
+      lat: this.place.lat,
+      lng: this.place.lng,
+      kpp,
+      ay,
+      sx: (w / 2 - ex) * kpp,
+      sy: (ey - ay) * kpp,
+    };
+  }
+
+  /** The room the pin's plate needs left of its point, and its plate or badge right of it. */
+  private pinRoom(): { left: number; right: number } {
+    const k = this.k;
+    const tw = Math.max(
+      0,
+      ...this.lines.map((line) =>
+        measureText(line, { font: FONT_5x7, scale: k }),
+      ),
+    );
+    const half = (tw + 8 * k) / 2 + 2;
+    return { left: half, right: Math.max(half, 8 * k + BADGE_W * k + 2) };
   }
 
   /** Whether a view is centred on the day's place (and its middle on the pin's row). */
@@ -739,18 +809,32 @@ export class MapScene implements GameScene {
       hi: (band + low) / 2,
     };
     const ay = (span.lo + span.hi) / 2;
-    return { lat: mid.lat, lng: mid.lng, kpp: EARTH_KM / r, ay };
+    return {
+      lat: mid.lat,
+      lng: mid.lng,
+      kpp: EARTH_KM / r,
+      ay,
+      sx: 0,
+      sy: 0,
+    };
   }
 
-  private goTo(to: View, dur: number, quick: boolean): void {
-    if (this.w === 0) return;
+  /**
+   * The camera to `to`, in `dur` seconds or DECADE_S a tenfold it zooms if that is longer
+   * (`scaled`): from space, a long way. Returns how long it takes (0: there at once).
+   */
+  private goTo(to: View, dur: number, quick: boolean, scaled = true): number {
+    if (this.w === 0) return 0;
     // already there (a new question with the camera at home): no move, so no mosaic
     if (this.reduced || dur <= 0 || this.sameView(this.cam, to)) {
       this.move = null;
       this.cam = to;
-      return;
+      return 0;
     }
-    this.move = { from: this.cam, to, t: 0, dur, quick };
+    const decades = Math.abs(Math.log10(to.kpp / this.cam.kpp));
+    const time = scaled ? Math.max(dur, decades * DECADE_S) : dur;
+    this.move = { from: this.cam, to, t: 0, dur: time, quick };
+    return time;
   }
 
   /**
@@ -778,6 +862,8 @@ export class MapScene implements GameScene {
   private sameView(a: View, b: View): boolean {
     if (Math.abs(Math.log(a.kpp / b.kpp)) > 1e-4) return false;
     if (Math.abs(a.ay - b.ay) > 0.5) return false;
+    if (Math.abs(a.sx - b.sx) / a.kpp > 0.5) return false;
+    if (Math.abs(a.sy - b.sy) / a.kpp > 0.5) return false;
     return distanceKm(a, b) / a.kpp < 0.5;
   }
 
@@ -786,18 +872,19 @@ export class MapScene implements GameScene {
     return this.tier >= 6 ? FINAL_NIGHT : this.light;
   }
 
+  /** Where the Earth's middle is on the picture, from `v`. */
+  private earthAt(v: View): { x: number; y: number } {
+    return {
+      x: Math.round(this.w / 2 - v.sx / v.kpp),
+      y: Math.round(v.ay + v.sy / v.kpp),
+    };
+  }
+
   /** Where a place is on the picture, as the camera sees it now. */
   private project(p: GeoPoint): { x: number; y: number; seen: boolean } {
     const r = EARTH_KM / this.cam.kpp;
-    return earthPoint(
-      Math.round(this.w / 2),
-      Math.round(this.cam.ay),
-      r,
-      this.cam,
-      p,
-      this.w,
-      this.h,
-    );
+    const e = this.earthAt(this.cam);
+    return earthPoint(e.x, e.y, r, this.cam, p, this.w, this.h);
   }
 
   // --- moves -------------------------------------------------------------------------------
@@ -864,12 +951,15 @@ export class MapScene implements GameScene {
     const h = this.h;
     const cam = this.cam;
     const light = this.viewLight();
-    const coarse = Math.max(1, Math.ceil(Math.sqrt((w * h) / EARTH_SAMPLES)));
+    // the mosaic: as fine as keeps to EARTH_SAMPLES over the ground there is
+    const r = EARTH_KM / cam.kpp;
+    const area = earthIsFlat(r, w, h) ? w * h : Math.min(w * h, 4 * r * r);
+    const coarse = Math.max(1, Math.ceil(Math.sqrt(area / EARTH_SAMPLES)));
     if (this.move) {
       this.paint(s, coarse, null);
       return;
     }
-    const frame = `${w}x${h}|${cam.lat}|${cam.lng}|${cam.kpp}`;
+    const frame = `${w}x${h}|${cam.lat}|${cam.lng}|${cam.kpp}|${cam.sx}|${cam.sy}`;
     const ay = Math.round(cam.ay);
     const key = `${frame}|${ay}|${light.phase}|${light.sun.elevation}|${this.town.done}`;
     if (
@@ -886,7 +976,10 @@ export class MapScene implements GameScene {
       this.backAy = ay;
       this.backSharp = coarse === 1;
     }
-    if (this.backKey !== key || !this.backSharp) {
+    // sharpened once the pin has come to rest: in space, while it slides, the whole sky would
+    // be worked out again for every row it moves
+    const sliding = this.pinY !== this.pinWant && this.inSpace();
+    if (!sliding && (this.backKey !== key || !this.backSharp)) {
       if (
         this.sharpKey !== key ||
         !this.sharp ||
@@ -920,7 +1013,8 @@ export class MapScene implements GameScene {
     s.copy(this.back, 0, dy);
     // the rows it uncovers, in the mosaic (a strip, for a moment)
     const rows = dy > 0 ? { from: 0, to: dy } : { from: h + dy, to: h };
-    this.paint(s, coarse, rows);
+    // (sliding: worked out more coarsely; once at rest, the sky being sharpened is used)
+    this.paint(s, coarse, rows, sliding);
   }
 
   /** The ground for the camera now, in squares of `block` pixels, these rows or all. */
@@ -928,10 +1022,32 @@ export class MapScene implements GameScene {
     s: Surface,
     block: number,
     rows: { from: number; to: number } | null,
+    strip = false,
   ): void {
     const cam = this.cam;
     const light = this.viewLight();
     const r = EARTH_KM / cam.kpp;
+    const e = this.earthAt(cam);
+    // FURTHEST's space round a globe that does not fill the picture
+    const space = this.inSpace();
+    if (space) {
+      // its glows in squares of two at least while the camera moves, and in a strip the
+      // picture uncovers sliding (cheaper: both are gone in a moment)
+      const sky = this.skyFor(
+        e,
+        cam.kpp,
+        this.move || strip ? Math.max(block, 2) : block,
+      );
+      if (rows) {
+        const w = this.w;
+        s.data.set(
+          sky.data.subarray(rows.from * w, rows.to * w),
+          rows.from * w,
+        );
+      } else s.copy(sky);
+      // smaller than that, the Earth is space's own blue dot
+      if (r < 1.5) return;
+    }
     const town = this.town.done ? this.town : null;
     let near: ((east: number, north: number) => Color | undefined) | undefined;
     let suburb:
@@ -967,7 +1083,7 @@ export class MapScene implements GameScene {
         return idx < 0 ? undefined : lit(X, V, tones.color(idx));
       };
     }
-    drawEarthZoom(s, Math.round(this.w / 2), Math.round(cam.ay), r, cam, {
+    drawEarthZoom(s, e.x, e.y, r, cam, {
       place: this.place,
       seed: this.seed,
       light,
@@ -975,6 +1091,79 @@ export class MapScene implements GameScene {
       ...(near && { near }),
       ...(suburb && { town: suburb }),
       ...(rows && { rows }),
+      ...(space && { space: false }),
+    });
+  }
+
+  /** Whether the camera sees FURTHEST's space: round a globe that does not fill the picture. */
+  private inSpace(): boolean {
+    const r = EARTH_KM / this.cam.kpp;
+    return (
+      this.mode === "furthest" &&
+      !earthIsFlat(r, this.w, this.h) &&
+      r < Math.hypot(this.w, this.h)
+    );
+  }
+
+  /**
+   * FURTHEST's space with the Earth's middle at `e`, `kpp` km a pixel, its glows in
+   * squares of `block`: drawn again only when that changes. Its names keep clear of the
+   * pin's plate and badge.
+   */
+  private skyFor(
+    e: { x: number; y: number },
+    kpp: number,
+    block: number,
+  ): Surface {
+    const w = this.w;
+    const h = this.h;
+    const key = `${w}x${h}|${e.x}|${e.y}|${kpp}|${block}`;
+    if (this.sky && this.skyKey === key) return this.sky;
+    if (!this.sky || this.sky.w !== w || this.sky.h !== h) {
+      this.sky = new Surface(w, h);
+    }
+    const k = this.k;
+    const pin = this.pinRoom();
+    const top = e.y - plateAbove(this.lines, k);
+    drawCosmos(this.sky, {
+      ex: e.x,
+      ey: e.y,
+      kpp,
+      k,
+      seed: this.seed,
+      block,
+      ...(this.labels && { labels: this.labels }),
+      keep: {
+        x: e.x - pin.left,
+        y: top,
+        w: pin.left + pin.right,
+        // the badge goes under the plate, beside the pin's point
+        h: e.y + 2 + BADGE_H * k + 2 * k - top,
+      },
+    });
+    this.skyKey = key;
+    return this.sky;
+  }
+
+  /**
+   * FURTHEST's space, alive over its backdrop: stars twinkling and shooting, satellites
+   * going round the Earth (~/art/cosmos-sky).
+   */
+  private drawSpaceLife(s: Surface): void {
+    const cam = this.cam;
+    const r = EARTH_KM / cam.kpp;
+    if (earthIsFlat(r, this.w, this.h) || r >= Math.hypot(this.w, this.h)) {
+      return;
+    }
+    const e = this.earthAt(cam);
+    drawSpaceLife(s, {
+      ex: e.x,
+      ey: e.y,
+      kpp: cam.kpp,
+      k: this.k,
+      seed: this.seed,
+      t: this.t,
+      reduced: this.reduced,
     });
   }
 
@@ -1029,7 +1218,7 @@ export class MapScene implements GameScene {
       cx += Math.round(Math.sin(u * Math.PI * 6) * 3 * k * (1 - u));
     }
     const p = this.promo;
-    const gold = p !== null && this.mode === "closest";
+    const gold = p !== null;
     const base = gold ? P.gold : this.accent.base;
     const light = gold ? P.goldLight : this.accent.light;
     // the pulse round its point
@@ -1147,15 +1336,17 @@ export class MapScene implements GameScene {
     return { x: bx, y: by, w: bw, h: bh };
   }
 
-  /** CLOSEST: the ground in its badge by the pin, while the map is too far out to show it. */
-  private drawClosestBadge(s: Surface): void {
+  /**
+   * The ground in its badge by the pin: CLOSEST's while the map is too far out to show it,
+   * FURTHEST's all the way. A promotion's arrives once the camera is there.
+   */
+  private drawCareerBadge(s: Surface): void {
     const p = this.promo;
-    const shown = p && p.t < PROMOTE_CAM_S ? p.from : this.tier;
-    if (shown > BADGE_UNTIL) return;
+    const shown = p && p.t < p.cam ? p.from : this.tier;
+    if (this.mode === "closest" && shown > BADGE_UNTIL) return;
     const q = this.project(this.place);
     if (!q.seen) return;
-    const fresh =
-      p && p.t >= PROMOTE_CAM_S ? (p.t - PROMOTE_CAM_S) / UPGRADE_S : 0;
+    const fresh = p && p.t >= p.cam ? (p.t - p.cam) / UPGRADE_S : 0;
     this.drawBadge(s, q.x, q.y, shown, fresh);
   }
 
@@ -1205,160 +1396,6 @@ export class MapScene implements GameScene {
       s.rect(x - k, y, 3 * k, k, P.goldDark);
       s.px(x - k, y - 5 * k, P.goldLight);
     }
-  }
-
-  /** FURTHEST: the route so far, stop to stop, and the stops passed. */
-  private drawJourney(s: Surface): void {
-    const p = this.promo;
-    const last = this.tier;
-    const travelling = p && p.route.length > 1 && !p.arrived;
-    const upTo = travelling ? p.from : last;
-    for (let t = 1; t <= upTo; t++) {
-      const a = this.stops[t - 1];
-      const b = this.stops[t];
-      if (a.km === b.km) continue;
-      this.dottedLeg(s, a, b, 1, t === upTo ? this.accent.light : P.steelHi);
-    }
-    if (travelling) {
-      // the move under way: the way so far, leg by leg
-      const v = clamp((p.t - TRAVEL_FROM) / TRAVEL_S);
-      const legs = p.route.length - 1;
-      const at = easeInOutCubic(v) * legs;
-      for (let i = 0; i < legs; i++) {
-        const part = clamp(at - i);
-        if (part > 0)
-          this.dottedLeg(
-            s,
-            p.route[i],
-            p.route[i + 1],
-            part,
-            this.accent.light,
-          );
-      }
-    }
-    // the stops passed, small
-    for (let t = 1; t < upTo; t++) {
-      const q = this.project(this.stops[t]);
-      if (!q.seen) continue;
-      s.disc(Math.round(q.x), Math.round(q.y), 2 * this.k, P.ink);
-      s.disc(Math.round(q.x), Math.round(q.y), this.k, P.steelHi);
-    }
-  }
-
-  /** A leg of the journey, `part` of the way along it, in dots. */
-  private dottedLeg(
-    s: Surface,
-    a: GeoPoint,
-    b: GeoPoint,
-    part: number,
-    c: Color,
-  ): void {
-    let run = 0;
-    let last: { x: number; y: number } | null = null;
-    const n = 96;
-    const gap = 3 * this.k;
-    for (let i = 0; i <= Math.round(n * part); i++) {
-      const q = this.project(alongGreatCircle(a, b, i / n));
-      if (!q.seen) {
-        last = null;
-        continue;
-      }
-      if (last) run += Math.hypot(q.x - last.x, q.y - last.y);
-      last = q;
-      if (run >= gap || i === 0) {
-        run = 0;
-        const x = Math.round(q.x);
-        const y = Math.round(q.y);
-        s.rect(x - 1, y - 1, 2 * this.k + 1, 2 * this.k + 1, P.ink);
-        s.rect(x, y, this.k, this.k, c);
-      }
-    }
-  }
-
-  /**
-   * FURTHEST: where the footballer plays now: its pin and name (home's is the day's pin),
-   * the ground in its badge, and the move to the next one under way (NEXT STOP over it).
-   */
-  private drawStop(s: Surface): void {
-    const k = this.k;
-    const p = this.promo;
-    const travelling = p !== null && p.route.length > 1 && !p.arrived;
-    if (travelling) {
-      // the vehicle on its way, the next stop named where it is going
-      const v = clamp((p.t - TRAVEL_FROM) / TRAVEL_S);
-      const legs = p.route.length - 1;
-      const at = easeInOutCubic(v) * legs;
-      const i = Math.min(legs - 1, Math.floor(at));
-      const here = alongGreatCircle(p.route[i], p.route[i + 1], at - i);
-      const ahead = alongGreatCircle(
-        p.route[i],
-        p.route[i + 1],
-        Math.min(1, at - i + 0.02),
-      );
-      const q = this.project(here);
-      const qa = this.project(ahead);
-      const next = this.stops[p.to];
-      if (q.seen) {
-        drawVehicle(s, p.by ?? "plane", q.x, q.y, qa.x - q.x, k);
-        this.namePlate(
-          s,
-          q.x,
-          q.y + 7 * k,
-          `NEXT STOP: ${next.name.toUpperCase()}`,
-          P.goldLight,
-        );
-      }
-      return;
-    }
-    const stop = this.stops[this.tier];
-    const q = this.project(stop);
-    if (!q.seen) return;
-    const fresh =
-      p && p.arrived ? clamp((p.t - (p.dur - ARRIVE_S)) / ARRIVE_S) : 0;
-    if (this.tier > 0 && stop.km > 0) {
-      const base = fresh > 0 && fresh < 1 ? P.gold : this.accent.base;
-      drawMapPin(
-        s,
-        Math.round(q.x),
-        Math.round(q.y),
-        k,
-        base,
-        this.accent.light,
-      );
-    }
-    const box = this.drawBadge(s, q.x, q.y, this.tier, fresh);
-    if (this.tier > 0 && stop.km > 0) {
-      this.namePlate(
-        s,
-        box.x + box.w / 2,
-        box.y + box.h + 2 * k,
-        stop.name.toUpperCase(),
-        P.chalk,
-      );
-    }
-  }
-
-  /** A name on an ink plate, centred on x, its top at y, inside the picture. */
-  private namePlate(
-    s: Surface,
-    x: number,
-    y: number,
-    text: string,
-    c: Color,
-  ): void {
-    const k = this.k;
-    const opts = { font: FONT_5x7, scale: k } as const;
-    const tw = measureText(text, opts);
-    const pw = tw + 6 * k;
-    const ph = 11 * k;
-    const px = clamp(Math.round(x - pw / 2), 1, Math.max(1, this.w - pw - 1));
-    const py = clamp(
-      Math.round(y),
-      (this.ceiling ?? 0) + 1,
-      Math.max(1, this.h - ph - 1),
-    );
-    s.rect(px, py, pw, ph, P.ink);
-    drawText(s, text, px + 3 * k, py + 2 * k, c, opts);
   }
 
   private drawMarker(s: Surface, landing: Landing): void {
@@ -1537,8 +1574,7 @@ export class MapScene implements GameScene {
 
   /** Tier 7: fireworks over where the cup is lifted, and confetti falling. */
   private drawFireworks(s: Surface): void {
-    const where = this.mode === "closest" ? this.place : this.stops[7];
-    const q = this.project(where);
+    const q = this.project(this.place);
     if (!q.seen) return;
     const k = this.k;
     const cols = [
@@ -1622,7 +1658,48 @@ function between(a: View, b: View, e: number): View {
   else if (ratio < 0.8) p = (a.kpp - kpp) / (a.kpp - b.kpp);
   p = clamp(p);
   const c = alongGreatCircle(a, b, p);
-  return { lat: c.lat, lng: c.lng, kpp, ay: lerp(a.ay, b.ay, p) };
+  return {
+    lat: c.lat,
+    lng: c.lng,
+    kpp,
+    ay: lerp(a.ay, b.ay, p),
+    sx: lerp(a.sx, b.sx, p),
+    sy: lerp(a.sy, b.sy, p),
+  };
+}
+
+/** A spot's place along one axis: at `o + v * s` for a scale s, and within lo to hi. */
+interface Range {
+  v: number;
+  lo: number;
+  hi: number;
+}
+
+/** The biggest scale at which every range can hold its spot at once (Infinity: any). */
+function mostScale(ranges: readonly Range[]): number {
+  let most = Infinity;
+  for (const a of ranges) {
+    for (const b of ranges) {
+      // a as low as it may go and b as high: o + v s within both
+      if (b.v > a.v)
+        most = Math.min(most, Math.max(0, b.hi - a.lo) / (b.v - a.v));
+    }
+  }
+  return most;
+}
+
+/** Where `o` may be at scale `s` for every range to hold its spot. */
+function offsets(
+  ranges: readonly Range[],
+  s: number,
+): { lo: number; hi: number } {
+  let lo = -Infinity;
+  let hi = Infinity;
+  for (const r of ranges) {
+    lo = Math.max(lo, r.lo - r.v * s);
+    hi = Math.min(hi, r.hi - r.v * s);
+  }
+  return { lo, hi };
 }
 
 /** Where `p` is, seen straight on from over `centre`: east and north, on a globe of radius 1. */
@@ -1661,46 +1738,4 @@ function dottedCircle(
     const a = (i / steps) * Math.PI * 2;
     s.px(Math.round(cx + Math.cos(a) * r), Math.round(cy + Math.sin(a) * r), c);
   }
-}
-
-/** The footballer's transport on its way: a coach, a ferry, a train or a plane, facing `dx`. */
-function drawVehicle(
-  s: Surface,
-  by: Travel,
-  x: number,
-  y: number,
-  dx: number,
-  k: number,
-): void {
-  const cx = Math.round(x);
-  const cy = Math.round(y);
-  const face = dx < 0 ? -1 : 1;
-  const r = (px: number, py: number, w: number, h: number, c: Color) =>
-    s.rect(cx + px * k, cy + py * k, w * k, h * k, c);
-  if (by === "coach") {
-    r(-6, -3, 13, 6, P.ink);
-    r(-5, -2, 11, 4, P.away);
-    r(-4, -2, 9, 1, P.awayLight);
-    r(face > 0 ? 4 : -5, -1, 1, 2, P.ink);
-    return;
-  }
-  if (by === "ferry") {
-    r(-7, -3, 15, 6, P.ink);
-    r(-6, 0, 13, 2, P.white);
-    r(-3, -1, 6, 1, P.chalk);
-    r(face > 0 ? 1 : -3, -2, 2, 2, P.home);
-    return;
-  }
-  if (by === "train") {
-    r(-10, -2, 21, 5, P.ink);
-    for (let i = 0; i < 3; i++) r(-9 + i * 7, -1, 6, 3, P.gold);
-    r(face > 0 ? 9 : -10, -1, 1, 3, P.goldLight);
-    return;
-  }
-  // a plane, nose first
-  r(-6, -1, 13, 3, P.ink);
-  r(-5, 0, 11, 1, P.white);
-  r(-1, -4, 3, 9, P.ink);
-  r(0, -3, 1, 7, P.white);
-  r(face > 0 ? -5 : 5, -2, 1, 2, P.white);
 }

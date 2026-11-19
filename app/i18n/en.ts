@@ -894,6 +894,33 @@ export const en = {
       },
     },
 
+    /**
+     * What CLOSEST's and FURTHEST's map names in space (FURTHEST's career pulls back from the
+     * Earth to the universe, a step a tier). The pixel fonts are capitals.
+     */
+    space: {
+      moon: "THE MOON",
+      sun: "THE SUN",
+      mercury: "MERCURY",
+      venus: "VENUS",
+      mars: "MARS",
+      jupiter: "JUPITER",
+      saturn: "SATURN",
+      uranus: "URANUS",
+      neptune: "NEPTUNE",
+      alphaCentauri: "ALPHA CENTAURI",
+      barnard: "BARNARD'S STAR",
+      sirius: "SIRIUS",
+      milkyWay: "THE MILKY WAY",
+      andromeda: "ANDROMEDA",
+      triangulum: "TRIANGULUM",
+      magellanic: "MAGELLANIC CLOUDS",
+      universe: "THE OBSERVABLE UNIVERSE",
+      asteroidBelt: "ASTEROID BELT",
+      kuiperBelt: "KUIPER BELT",
+      oortCloud: "OORT CLOUD",
+    },
+
     /** The way back to the menu from the plain pages (the rules, the error page). */
     back: "BACK TO THE BALL",
   },
@@ -1413,11 +1440,33 @@ export const en = {
     note: "Drafter's note",
     review: "Reviewer's note",
     measured: (label: string) => `Measured by ${label}`,
+    /** CLOSEST and FURTHEST: the day's place their answers are measured from, and shot from. */
+    fromPlace: (label: string) =>
+      `From the day's place, ${label}: the shots as that day plays them`,
+    fromDraftPlace: (label: string) =>
+      `From the day's place, ${label}, not approved yet: approve it before these`,
+    fromFixedPlace: (label: string) =>
+      `No place drafted for the day: from the fixed list's, ${label}, for now`,
+    notApproved: "Not approved:",
+    /** The day's place: where CLOSEST and FURTHEST measure from (worker/questions/places.ts). */
+    places: {
+      column: "Place",
+      title: (day: string) => `The day's place: ${day}`,
+      none: (label: string) =>
+        `Nothing drafted for this day yet. Until a place is approved, the fixed list's is played: ${label}.`,
+      kinds: { stadium: "Stadium", city: "City", landmark: "Landmark" },
+      where: (lat: number, lng: number) => `${lat}, ${lng}`,
+      onMap: "See it on a map",
+      editHelp:
+        "The place as JSON: id, name, area, kind (stadium, city or landmark), lat and lng. Saving checks it and makes it a draft; if it was approved, the day's approved CLOSEST and FURTHEST go back to draft.",
+    },
+    km: (km: number) => `${km.toLocaleString("en-GB")} km`,
     columns: {
       name: "Answer",
       shot: "Shot",
       share: "Share",
       years: "Years",
+      distance: "Distance",
       aliases: "Also accepted",
       place: "Place",
     },

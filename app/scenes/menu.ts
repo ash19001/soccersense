@@ -2699,6 +2699,15 @@ export class MenuScene implements Scene {
   // For the page
   // -------------------------------------------------------------------------
 
+  /**
+   * The day's place, as the server has it (a place drafted for the day, not the fixed
+   * list's): where CLOSEST dives and FURTHEST leaves from next time one is chosen.
+   */
+  setPlace(place: { lat: number; lng: number }): void {
+    if (!Number.isFinite(place.lat) || !Number.isFinite(place.lng)) return;
+    this.place = { lat: place.lat, lng: place.lng };
+  }
+
   /** A new fact: on the plane's banner (and, with no messages, the sign). */
   setFact(text: string): void {
     if (text === this.fact) return;

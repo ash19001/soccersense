@@ -3,7 +3,8 @@
  * (wrangler.jsonc sends only `/api/*` to the Worker first; the rest never gets here).
  *
  *   GET /api/today    the day by the server: the time, the day's number and key, how long
- *                     until the next day, and where the day's questions come from
+ *                     until the next day, where the day's questions come from, and the
+ *                     day's place (where CLOSEST and FURTHEST measure from)
  *   GET /api/health   whether the Worker and its database are up: for a look after a deploy
  *   /api/games/...    the games the server runs: questions out, answers judged (./games/play.ts)
  *   /api/account/...  accounts: signing in and out, the nickname (./accounts/api.ts)
@@ -18,6 +19,7 @@
  * another site's page cannot play a signed-in player's game or sign them in or out.
  */
 
+import type { Place } from "~/data/places";
 import { dayKeyFor, dayNumber, msUntilNextDay } from "~/game/day";
 
 import { account, fromThisSite, newGuest, signedIn } from "./accounts/api";
@@ -30,6 +32,7 @@ import {
 } from "./env";
 import { leaderboard } from "./games/board";
 import { games } from "./games/play";
+import { fixedPlace, placeOn } from "./games/questions";
 import { failure, json, wrongMethod } from "./http";
 import { admin } from "./questions/admin";
 
@@ -43,11 +46,14 @@ export interface TodayAnswer {
   /** Milliseconds until the next day starts (midnight UTC). */
   nextDayIn: number;
   questions: QuestionSource;
+  /** The day's place as the games play it: approved for the day, or the fixed list's. */
+  place: Place;
 }
 
 export function todayAnswer(
   env: Pick<Env, "QUESTIONS">,
   now: number,
+  place?: Place,
 ): TodayAnswer {
   const date = new Date(now);
   const day = dayNumber(date);
@@ -57,7 +63,24 @@ export function todayAnswer(
     dayKey: dayKeyFor(day),
     nextDayIn: msUntilNextDay(date),
     questions: questionSource(env),
+    place: place ?? fixedPlace(day),
   };
+}
+
+/**
+ * The day's place for `/api/today`. Never in the way of the clock the same request reads:
+ * with the database failing, the fixed list's. With the sample questions on it is the fixed
+ * list's anyway, and the database is not touched (a look at the home screen asks it nothing).
+ */
+async function todaysPlace(env: Env, now: number): Promise<Place> {
+  const day = dayNumber(new Date(now));
+  if (questionSource(env) !== "scheduled") return fixedPlace(day);
+  try {
+    if (env.DB) await database(env.DB, now);
+    return await placeOn(env, env.DB, day, now);
+  } catch {
+    return fixedPlace(day);
+  }
 }
 
 /** What `/api/health` says. */
@@ -112,10 +135,11 @@ export async function handle(
   }
   try {
     if (route === "/today") {
-      return (
-        wrongMethod(request, READ, now) ??
-        json(todayAnswer(env, now), now, { head })
-      );
+      const wrong = wrongMethod(request, READ, now);
+      if (wrong) return wrong;
+      // a look at the clock alone (HEAD) does without the place
+      const place = head ? undefined : await todaysPlace(env, now);
+      return json(todayAnswer(env, now, place), now, { head });
     }
     if (route === "/health") {
       return wrongMethod(request, READ, now) ?? (await health(env, now, head));

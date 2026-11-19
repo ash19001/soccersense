@@ -1,14 +1,23 @@
 /**
- * questions: the drafter's tool for the day's questions (docs/ARCHITECTURE.md section 8;
- * the skill that uses it is .claude/skills/draft-questions).
+ * questions: the drafter's tool for the day's questions and the day's places
+ * (docs/ARCHITECTURE.md section 8; the skill that uses it is .claude/skills/draft-questions).
  *
- *   pnpm questions todo [--json]        which places need a question, and what is taken
+ *   pnpm questions todo [--json]        what needs drafting: the days' places, the questions,
+ *                                       and what has been used
  *   pnpm questions check <file> ...     check a file of drafts without sending it
  *   pnpm questions submit <file> ...    check it, then send it to the approval desk
  *
- * A file of drafts is JSON: `{ "drafts": [{ "day", "mode", "slot", "question", "note" }] }`,
+ * A file of questions is JSON: `{ "drafts": [{ "day", "mode", "slot", "question", "note" }] }`,
  * `question` being a question as app/game/types.ts has it, without `shot` (the game files
- * the shots itself).
+ * the shots itself). A file of the days' places is `{ "places": [{ "day", "place", "note" }] }`,
+ * `place` as app/data/places.ts has one: `{ id, name, area, kind, lat, lng }`.
+ *
+ * Every mode is drafted, CLOSEST and FURTHEST too (the product owner, 2026-11-19: "add these
+ * new gamemodes to the schedule so once i remove sample feature flag then these will also
+ * get generated and have new ones daily"), and so is every day's place, where those two
+ * measure from ("i dont want fixed places because eventually questions will get repetitive
+ * so it should also be generated"). A day's place is drafted before its CLOSEST and FURTHEST:
+ * their places to draft say which it is, and a draft for them is checked against it.
  *
  * The desk is the site's own API (`SOCCERSENSE_SITE`, the live site unless set). It wants
  * the admin token. Set `SOCCERSENSE_ADMIN_TOKEN` to send it from here; where a proxy adds
@@ -20,34 +29,90 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { type Place, checkPlace, placeLabel } from "~/data/places";
 import { checkQuestion } from "~/game/check";
 import { dayKeyFor } from "~/game/day";
+import { distanceKm } from "~/game/geo";
 import { normalise } from "~/game/judge";
+import { isDistanceRule, ruleFor, shotsOf } from "~/game/scoring";
+import { SHOT_ORDER, isGoal } from "~/game/shots";
 import type { Mode } from "~/game/types";
 
-const MODES: readonly Mode[] = ["home", "away", "retro", "nextgen"];
+/** Every mode with questions of its own each day (as worker/questions/store.ts has them). */
+const MODES: readonly Mode[] = [
+  "home",
+  "away",
+  "retro",
+  "nextgen",
+  "closest",
+  "furthest",
+];
 const SLOTS = 7;
 
 /** A run drafts from tomorrow to eight days on: the week ahead, and anything left over. */
 export const TODO_FROM = 1;
 export const TODO_TO = 8;
-/** How far back the prompts already used are listed, so no week repeats another. */
+/** How far back the prompts and places already used are listed, so no week repeats another. */
 export const USED_DAYS = 90;
+/** One day's place is at least this far from the day before's and the day after's. */
+export const APART_KM = 2000;
 /** Drafts sent in one request. */
 const BATCH = 28;
 
-/** A place as the desk lists it in brief (worker/questions/store.ts, `BriefSlot`). */
+type Status = "draft" | "approved" | "rejected";
+
+/** A question's place as the desk lists it in brief (worker/questions/store.ts, `BriefSlot`). */
 export interface BriefSlot {
   day: number;
   mode: Mode;
   slot: number;
-  status: "draft" | "approved" | "rejected";
+  status: Status;
   review: string;
   questionId: string;
   prompt: string;
 }
 
-/** A place that needs a question. */
+/** A day's place as the desk lists it (worker/questions/places.ts, `PlaceSlot`). */
+export interface DaySlot {
+  day: number;
+  status: Status;
+  place: Place;
+  review: string;
+}
+
+/** The day's place as the drafter is told it: where CLOSEST and FURTHEST measure from. */
+export interface DayPlace {
+  id: string;
+  /** How the game names it: "Wembley, London", "Lagos, Nigeria". */
+  label: string;
+  /** A stadium, a city or a landmark. */
+  kind: string;
+  lat: number;
+  lng: number;
+  /** `draft` until the reviewer approves it. */
+  status: "draft" | "approved";
+}
+
+const told = (slot: DaySlot): DayPlace => ({
+  id: slot.place.id,
+  label: placeLabel(slot.place),
+  kind: slot.place.kind,
+  lat: slot.place.lat,
+  lng: slot.place.lng,
+  status: slot.status === "approved" ? "approved" : "draft",
+});
+
+/** The day's place that stands: drafted or approved, not rejected. */
+function standing(
+  places: readonly DaySlot[],
+  day: number,
+): DaySlot | undefined {
+  return places.find((p) => p.day === day && p.status !== "rejected");
+}
+
+const measuredFromPlace = (mode: Mode) => isDistanceRule(ruleFor(mode));
+
+/** A question's place that needs a question. */
 export interface TodoPlace {
   day: number;
   /** The day's date, "2026-11-19". */
@@ -59,24 +124,38 @@ export interface TodoPlace {
   review?: string;
   /** The question that was rejected. */
   rejected?: { questionId: string; prompt: string };
+  /** CLOSEST and FURTHEST: the day's place, that the answers are measured from. */
+  place?: DayPlace;
+  /** CLOSEST and FURTHEST with no place for the day yet: draft and send that first. */
+  waitsForPlace?: true;
 }
 
 /**
- * The places to draft, given today's day number and what is in the places from tomorrow to
- * eight days on: every one that is empty or rejected, in order.
+ * The questions to draft, given today's day number and what is in the places from tomorrow
+ * to eight days on: every one that is empty or rejected, in order; CLOSEST's and FURTHEST's
+ * with the day's place (or waiting for one).
  */
 export function placesToDraft(
   today: number,
   slots: readonly BriefSlot[],
+  places: readonly DaySlot[] = [],
 ): TodoPlace[] {
   const todo: TodoPlace[] = [];
   for (let day = today + TODO_FROM; day <= today + TODO_TO; day++) {
+    const from = standing(places, day);
     for (const mode of MODES) {
       for (let slot = 0; slot < SLOTS; slot++) {
         const there = slots.find(
           (s) => s.day === day && s.mode === mode && s.slot === slot,
         );
-        const place = { day, date: dayKeyFor(day), mode, slot };
+        const place: Omit<TodoPlace, "why"> = {
+          day,
+          date: dayKeyFor(day),
+          mode,
+          slot,
+          ...(measuredFromPlace(mode) &&
+            (from ? { place: told(from) } : { waitsForPlace: true as const })),
+        };
         if (!there) {
           todo.push({ ...place, why: "empty" });
         } else if (there.status === "rejected") {
@@ -93,15 +172,60 @@ export function placesToDraft(
   return todo;
 }
 
+/** A day that needs its place drafted. */
+export interface TodoDay {
+  day: number;
+  date: string;
+  why: "empty" | "rejected";
+  review?: string;
+  /** The place that was rejected. */
+  rejected?: { id: string; label: string };
+  /** The days either side's places, where there are any: it must be far from both, and of another kind. */
+  before?: DayPlace;
+  after?: DayPlace;
+}
+
+/** The days from tomorrow to eight days on whose place is empty or rejected, in order. */
+export function daysToPlace(
+  today: number,
+  places: readonly DaySlot[],
+): TodoDay[] {
+  const todo: TodoDay[] = [];
+  for (let day = today + TODO_FROM; day <= today + TODO_TO; day++) {
+    const there = places.find((p) => p.day === day);
+    if (there && there.status !== "rejected") continue;
+    const before = standing(places, day - 1);
+    const after = standing(places, day + 1);
+    todo.push({
+      day,
+      date: dayKeyFor(day),
+      why: there ? "rejected" : "empty",
+      ...(there && {
+        review: there.review,
+        rejected: { id: there.place.id, label: placeLabel(there.place) },
+      }),
+      ...(before && { before: told(before) }),
+      ...(after && { after: told(after) }),
+    });
+  }
+  return todo;
+}
+
 const isBag = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * What is wrong with a file of drafts, one line each (empty: it is fit to send). Every
- * question is checked as the desk will check it, and the file as a whole: no place filled
- * twice, no question twice in a game, and no prompt asked twice anywhere in the file.
+ * What is wrong with a file of question drafts, one line each (empty: it is fit to send).
+ * Every question is checked as the desk will check it, and the file as a whole: no place
+ * filled twice, no question twice in a game, and no prompt asked twice anywhere in the file.
+ * A CLOSEST or FURTHEST question is played from its day's place (`placeFor`, the desk's):
+ * there must be one, and from it, as for every other mode, some answer must be each of the
+ * five shots that score.
  */
-export function checkDrafts(file: unknown): string[] {
+export function checkDrafts(
+  file: unknown,
+  placeFor: (day: number) => DayPlace | null = () => null,
+): string[] {
   if (!isBag(file) || !Array.isArray(file.drafts)) {
     return ['the file is not { "drafts": [...] }'];
   }
@@ -138,6 +262,24 @@ export function checkDrafts(file: unknown): string[] {
     for (const problem of checked.problems) problems.push(`${at}: ${problem}`);
     const question = checked.question;
     if (!question) return;
+    if (measuredFromPlace(mode as Mode)) {
+      const from = placeFor(day as number);
+      if (!from) {
+        problems.push(
+          `${at}: day ${String(day)} has no place yet: draft and send the day's place first (it is measured from it)`,
+        );
+      } else {
+        const shots = new Set(shotsOf(question, from, ruleFor(mode as Mode)));
+        const empty = SHOT_ORDER.filter(
+          (shot) => isGoal(shot) && !shots.has(shot),
+        );
+        if (empty.length > 0) {
+          problems.push(
+            `${at}: measured from day ${String(day)}'s place, ${from.label}, no answer would be a ${empty.join(" or a ")} (the reveal shows one for each of the five shots that score: the distances from it are too uneven: most bunched together, or one far from the rest. Pick answers spread nearer to it and further from it, or another list)`,
+          );
+        }
+      }
+    }
     const game = `${String(day)} ${String(mode)} ${question.id}`;
     if (inGame.has(game)) {
       problems.push(`${at}: ${question.id} is in that day and mode twice`);
@@ -151,6 +293,88 @@ export function checkDrafts(file: unknown): string[] {
       prompts.set(asked, at);
     }
   });
+  return problems;
+}
+
+/**
+ * What is wrong with a file of the days' places, one line each (empty: fit to send). Each
+ * place is checked as the desk will (`checkPlace`), and against its neighbours: the days
+ * either side, in the file or on the desk (`around`), must be another kind of place and at
+ * least APART_KM away; and no place twice in the file, nor one of `used` (the desk's last
+ * USED_DAYS days and the days ahead).
+ */
+export function checkPlaces(
+  file: unknown,
+  around: (day: number) => DayPlace | null = () => null,
+  used: readonly { day: number; id: string }[] = [],
+): string[] {
+  if (!isBag(file) || !Array.isArray(file.places)) {
+    return ['the file is not { "places": [...] }'];
+  }
+  const problems: string[] = [];
+  const mine = new Map<number, Place>();
+  const ids = new Map<string, number>();
+  file.places.forEach((sent, i) => {
+    if (!isBag(sent)) {
+      problems.push(`place ${i + 1}: not an object`);
+      return;
+    }
+    const day = sent.day;
+    const at = `day ${String(day)}`;
+    if (!Number.isInteger(day) || (day as number) < 1) {
+      problems.push(`place ${i + 1}: day must be a day number`);
+      return;
+    }
+    if (mine.has(day as number))
+      problems.push(`${at}: the day is placed twice`);
+    if (sent.note !== undefined && typeof sent.note !== "string") {
+      problems.push(`${at}: note is not text`);
+    }
+    const checked = checkPlace(sent.place);
+    for (const problem of checked.problems) problems.push(`${at}: ${problem}`);
+    const place = checked.place;
+    if (!place) return;
+    mine.set(day as number, place);
+    const twice = ids.get(place.id);
+    if (twice !== undefined) {
+      problems.push(`${at}: ${place.id} is also day ${twice}'s in this file`);
+    }
+    ids.set(place.id, day as number);
+    const before = used.find(
+      (u) => u.id === place.id && u.day !== (day as number),
+    );
+    if (before) {
+      problems.push(
+        `${at}: ${place.id} is already day ${before.day}'s place: no place twice within ${USED_DAYS} days`,
+      );
+    }
+  });
+  // its neighbours: in the file, or on the desk
+  const near = (
+    day: number,
+  ): { label: string; kind: string; lat: number; lng: number } | null => {
+    const own = mine.get(day);
+    return own ? { ...own, label: placeLabel(own) } : around(day);
+  };
+  for (const [day, place] of mine) {
+    for (const other of [day - 1, day + 1]) {
+      // each pair in the file once: the earlier day says it
+      if (other < day && mine.has(other)) continue;
+      const next = near(other);
+      if (!next) continue;
+      const km = Math.round(distanceKm(place, next));
+      if (km < APART_KM) {
+        problems.push(
+          `day ${day}: ${placeLabel(place)} is ${km} km from day ${other}'s, ${next.label}: a day's place is ${APART_KM} km or more from the next`,
+        );
+      }
+      if (next.kind === place.kind) {
+        problems.push(
+          `day ${day}: a ${place.kind}, as day ${other}'s is: no two days running of one kind`,
+        );
+      }
+    }
+  }
   return problems;
 }
 
@@ -194,14 +418,32 @@ async function desk(route: string, init: RequestInit = {}): Promise<Response> {
   return response;
 }
 
-async function todo(json: boolean): Promise<number> {
-  const today = ((await (await desk("/today")).json()) as { day: number }).day;
-  const from = Math.max(1, today + TODO_TO - USED_DAYS);
-  const to = today + TODO_TO;
-  const response = await desk(`/admin/questions?from=${from}&to=${to}&brief=1`);
+/** What the desk has from day `from` to day `to`: the questions in brief, and the places. */
+async function look(
+  from: number,
+  to: number,
+): Promise<{ slots: BriefSlot[]; places: DaySlot[] }> {
+  const response = await desk(
+    `/admin/questions?from=${Math.max(1, from)}&to=${to}&brief=1`,
+  );
   if (!response.ok) throw new Error(`the desk answered ${response.status}`);
-  const slots = ((await response.json()) as { slots: BriefSlot[] }).slots;
-  const places = placesToDraft(today, slots);
+  const data = (await response.json()) as {
+    slots: BriefSlot[];
+    places?: DaySlot[];
+  };
+  return { slots: data.slots, places: data.places ?? [] };
+}
+
+async function today(): Promise<number> {
+  return ((await (await desk("/today")).json()) as { day: number }).day;
+}
+
+async function todo(json: boolean): Promise<number> {
+  const day = await today();
+  const to = day + TODO_TO;
+  const { slots, places } = await look(to - USED_DAYS, to);
+  const days = daysToPlace(day, places);
+  const questions = placesToDraft(day, slots, places);
   const used = slots
     .filter((s) => s.status !== "rejected")
     .map((s) => ({
@@ -210,10 +452,21 @@ async function todo(json: boolean): Promise<number> {
       prompt: s.prompt,
       id: s.questionId,
     }));
+  const usedPlaces = places
+    .filter((p) => p.status !== "rejected")
+    .map((p) => ({ day: p.day, id: p.place.id, label: placeLabel(p.place) }));
   if (json) {
     console.log(
       JSON.stringify(
-        { site: site(), today, todayDate: dayKeyFor(today), places, used },
+        {
+          site: site(),
+          today: day,
+          todayDate: dayKeyFor(day),
+          days,
+          places: questions,
+          used,
+          usedPlaces,
+        },
         null,
         2,
       ),
@@ -221,19 +474,30 @@ async function todo(json: boolean): Promise<number> {
     return 0;
   }
   console.log(
-    `${site()}: today is day ${today} (${dayKeyFor(today)}). ` +
-      `${places.length} place${places.length === 1 ? "" : "s"} to draft from day ${today + TODO_FROM} to day ${to}.`,
+    `${site()}: today is day ${day} (${dayKeyFor(day)}). From day ${day + TODO_FROM} to day ${to}: ` +
+      `${days.length} day${days.length === 1 ? "" : "s"} to place, ` +
+      `${questions.length} question${questions.length === 1 ? "" : "s"} to draft.`,
   );
-  for (const place of places) {
+  for (const d of days) {
+    console.log(
+      `  day ${d.day} (${d.date}) place: ${d.why}` +
+        (d.why === "rejected"
+          ? ` (${d.rejected?.label}: ${d.review || "no reason given"})`
+          : ""),
+    );
+  }
+  for (const place of questions) {
     console.log(
       `  day ${place.day} (${place.date}) ${place.mode} ${place.slot}: ${place.why}` +
+        (place.place ? ` (from ${place.place.label})` : "") +
+        (place.waitsForPlace ? " (waits for the day's place)" : "") +
         (place.why === "rejected"
           ? ` ("${place.rejected?.prompt}": ${place.review || "no reason given"})`
           : ""),
     );
   }
   console.log(
-    `${used.length} questions are taken in the last ${USED_DAYS} days.`,
+    `${used.length} questions and ${usedPlaces.length} places are taken in the last ${USED_DAYS} days and the days ahead.`,
   );
   return 0;
 }
@@ -242,14 +506,62 @@ function read(file: string): unknown {
   return JSON.parse(readFileSync(path.resolve(file), "utf8")) as unknown;
 }
 
-function check(files: string[]): number {
+const daysIn = (file: unknown, key: "drafts" | "places"): number[] =>
+  isBag(file) && Array.isArray(file[key])
+    ? (file[key] as unknown[])
+        .map((item) => (isBag(item) ? item.day : undefined))
+        .filter((day): day is number => Number.isInteger(day))
+    : [];
+
+/** What is wrong with a file, of questions or of places, with what the desk has around it. */
+async function problemsIn(file: unknown): Promise<string[]> {
+  if (isBag(file) && Array.isArray(file.places)) {
+    const days = daysIn(file, "places");
+    if (days.length === 0) return checkPlaces(file);
+    const { places } = await look(
+      Math.min(...days) - USED_DAYS,
+      Math.max(...days) + USED_DAYS,
+    );
+    const around = (day: number) => {
+      const there = standing(places, day);
+      return there ? told(there) : null;
+    };
+    const used = places
+      .filter((p) => p.status !== "rejected")
+      .map((p) => ({ day: p.day, id: p.place.id }));
+    return checkPlaces(file, around, used);
+  }
+  const days = daysIn(file, "drafts");
+  const distance =
+    isBag(file) &&
+    Array.isArray(file.drafts) &&
+    (file.drafts as unknown[]).some(
+      (d) =>
+        isBag(d) &&
+        MODES.includes(d.mode as Mode) &&
+        measuredFromPlace(d.mode as Mode),
+    );
+  if (!distance || days.length === 0) return checkDrafts(file);
+  // CLOSEST and FURTHEST: the days' places, as the desk has them
+  const { places } = await look(Math.min(...days), Math.max(...days));
+  return checkDrafts(file, (day) => {
+    const there = standing(places, day);
+    return there ? told(there) : null;
+  });
+}
+
+async function check(files: string[]): Promise<number> {
   let wrong = 0;
   for (const file of files) {
     let problems: string[];
     try {
-      problems = checkDrafts(read(file));
+      problems = await problemsIn(read(file));
     } catch (error) {
-      problems = [`cannot be read as JSON: ${(error as Error).message}`];
+      problems = [
+        error instanceof SyntaxError
+          ? `cannot be read as JSON: ${error.message}`
+          : (error as Error).message,
+      ];
     }
     if (problems.length === 0) {
       console.log(`${file}: fit to send`);
@@ -265,41 +577,47 @@ function check(files: string[]): number {
 }
 
 async function submit(files: string[]): Promise<number> {
-  if (check(files) !== 0) {
+  if ((await check(files)) !== 0) {
     console.log("Nothing was sent: put the problems right first.");
     return 1;
   }
   let refused = 0;
   for (const file of files) {
-    const drafts = (read(file) as { drafts: unknown[] }).drafts;
-    for (let i = 0; i < drafts.length; i += BATCH) {
-      const response = await desk("/admin/questions", {
-        method: "PUT",
-        body: JSON.stringify({
-          drafts: drafts.slice(i, i + BATCH),
-          source: "ai",
-        }),
-      });
+    const sent = read(file) as { drafts?: unknown[]; places?: unknown[] };
+    const kind = sent.places ? "places" : "drafts";
+    const items = (sent.places ?? sent.drafts ?? []) as unknown[];
+    for (let i = 0; i < items.length; i += BATCH) {
+      const response = await desk(
+        kind === "places" ? "/admin/places" : "/admin/questions",
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            [kind]: items.slice(i, i + BATCH),
+            source: "ai",
+          }),
+        },
+      );
       if (!response.ok) throw new Error(`the desk answered ${response.status}`);
       const { results } = (await response.json()) as {
         results: {
           day: number;
-          mode: string;
-          slot: number;
+          mode?: string;
+          slot?: number;
           outcome: string;
           problems: string[];
         }[];
       };
       for (const result of results) {
-        const at = `day ${result.day} ${result.mode} ${result.slot}`;
+        const at =
+          kind === "places"
+            ? `day ${result.day} place`
+            : `day ${result.day} ${result.mode} ${result.slot}`;
         if (result.outcome === "refused") {
           refused++;
           console.log(`${at}: refused`);
           for (const problem of result.problems) console.log(`  ${problem}`);
         } else if (result.outcome === "kept") {
-          console.log(
-            `${at}: left alone (an approved question is in the place)`,
-          );
+          console.log(`${at}: left alone (an approved one is there)`);
         } else {
           console.log(`${at}: saved as a draft`);
         }

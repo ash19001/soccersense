@@ -15,6 +15,7 @@ import {
 } from "react";
 import { useLocation, useNavigate } from "react-router";
 
+import type { Place } from "~/data/places";
 import { STADIUMS } from "~/data/stadiums";
 import {
   type Grade,
@@ -67,6 +68,7 @@ import {
 } from "./controller";
 import { FirstGameCheck } from "../first-check";
 import { watchCeiling } from "../scene-edges";
+import { dayPlace } from "~/ui/day-place";
 import { gameServer } from "./server";
 
 const text = strings.play;
@@ -108,7 +110,9 @@ export function serverRuns(
 /**
  * Makes the game once React subscribes, which is after mounting, and ends it on the way out.
  * It waits for the game's clock (the server's time, `gameClock`): the day is the server's,
- * whatever the device's clock says, and so is every question's time.
+ * whatever the device's clock says, and so is every question's time. CLOSEST and FURTHEST
+ * wait for the day's place too, where the server runs them: it is drafted for the day
+ * (`dayPlace`), and the fixed list's only if the server gives none.
  */
 interface GameStore {
   subscribe(onChange: () => void): () => void;
@@ -121,25 +125,38 @@ function createGameStore(mode: Mode): GameStore {
     subscribe(onChange) {
       const clock = gameClock();
       let made: GameController | null = null;
+      let waiting = false;
+      let gone = false;
       const begin = () => {
         const now = clock.now();
-        if (made || now === null) return;
+        if (made || waiting || now === null) return;
         const search = gameSearch(window.location.search);
         const today = resolveToday(new Date(now), search, STADIUMS);
-        made = new GameController({
-          mode,
-          today,
-          locale: locale(),
-          clock: () => clock.now() ?? now,
-          server: serverRuns(clock.api(), search) ? gameServer() : null,
-        });
-        current = made;
-        made.start();
-        onChange();
+        const server = serverRuns(clock.api(), search);
+        const go = (place: Place | null) => {
+          if (made || gone) return;
+          made = new GameController({
+            mode,
+            today: place ? { ...today, stadium: place } : today,
+            locale: locale(),
+            clock: () => clock.now() ?? now,
+            server: server ? gameServer() : null,
+          });
+          current = made;
+          made.start();
+          onChange();
+        };
+        if (server && isDistanceMode(mode)) {
+          waiting = true;
+          void dayPlace(today.dayNumber).then(go);
+          return;
+        }
+        go(null);
       };
       const stop = clock.subscribe(begin);
       begin();
       return () => {
+        gone = true;
         stop();
         made?.dispose();
         if (current === made) current = null;

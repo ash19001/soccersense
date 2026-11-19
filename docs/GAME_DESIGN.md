@@ -41,8 +41,12 @@ gold (a sepia-warmed brass), NEXT-GEN electric magenta, CLOSEST green, FURTHEST 
 similar to home and away except in the transition title screen it should also say what the
 location/stadium etc is. this should also be clearly and obviously visible within the game so
 they can always see it"). Each day has a **place** on the map: a stadium, a city or a landmark
-(the product owner's choice: "Stadiums, cities and landmarks"), 30 of them in turn, never two
-days running of one kind (`app/data/places.ts`; sources in `docs/data-notes/places.md`).
+(the product owner's choice: "Stadiums, cities and landmarks"), never two days running of one
+kind, each at least 2,000 km from the next. Since 2026-11-19 each day's is drafted with the
+week's questions and approved like them (the product owner: "i dont want fixed places because
+eventually questions will get repetitive so it should also be generated"); a day with none
+approved, or with the sample questions on, has its turn of a fixed 30 (`app/data/places.ts`;
+sources in `docs/data-notes/places.md`).
 Every valid answer has a place of its own, and the question says which ("Measured by where the
 player was born": a player's or a manager's birthplace, a club's ground, a stadium, a country's
 capital). In **CLOSEST** the answer whose place is nearest the day's place wins; in
@@ -85,7 +89,8 @@ seven questions, the clock, the six shots, the career, titles of their own.
   The stadium in the home screen's picture is the art's own, in club colours picked by the
   day's number. No screen, share, picture or read-out says which stadium a day's is, and
   nothing in the data or the interface text holds a stadium's name, city or country.
-- One pin per day, shared by every mode: the day's place (`app/data/places.ts`, which
+- One pin per day, shared by every mode: the day's place, approved for the day
+  (`worker/questions/places.ts`), or else the fixed list's (`app/data/places.ts`, which
   `app/data/stadiums.ts` hands on as `STADIUMS`), index `(dayNumber - 1) mod count`. It
   does not score HOME, AWAY, RETRO or NEXT-GEN; it is the scoring pin of CLOSEST and FURTHEST
   (every answer keeps a place on the map for them: where a player was born, a club's ground, a
@@ -352,15 +357,31 @@ above) until the map is close enough to show it itself.
 | 6    | the ground from above, at night    | the final: flashes in the crowd                 |
 | 7    | the pitch from above, at night     | the cup on the centre spot, fireworks, confetti |
 
-**FURTHEST: the globetrotter.** Every promotion is a move to a bigger ground further from the
-day's place: a stop a tier from a list of football cities (`app/data/cities.ts`), each
-further from home than the last, the first up the road (about 70 km), then across a border
-or the sea (600), across the continent (2,200), another continent (6,000), further round the
-world (11,000), and the final and the trophy in the city furthest from home of all, on the
-far side of the world. He travels by coach, then ferry or train, then plane; "NEXT STOP" and
-the city's name go with him. The map holds home and the newest stop, the route dotted from
-stop to stop, the stop's ground in its panel and its name under it; from tier 6 it shows the
-whole globe turned to the far side.
+**FURTHEST: further than anyone.** It starts on the same globe as CLOSEST and pulls back a
+step a tier, out into space (the product owner, 2026-11-19: "for furthest, it should also
+start on the globe level but instead of zooming in (like closest) it should zoom out to
+galaxy, universe, etc."). The pin stays on the day's place, its ground growing in the panel
+beside it as CLOSEST's does. Distances and sizes are real (what is too small to see is drawn a
+few pixels big), the directions made up so that each tier fits the picture.
+
+| tier | the map                                                       | the ground                                     |
+| ---- | ------------------------------------------------------------- | ---------------------------------------------- |
+| 0    | the whole globe                                               | a park: jumpers for goalposts                  |
+| 1    | the Earth and the Moon                                        | a pitch, little goals, a changing hut          |
+| 2    | the Sun and the inner planets on their orbits                 | one covered stand, floodlight poles            |
+| 3    | the whole solar system, out to Neptune                        | stands on three sides, a terrace, a scoreboard |
+| 4    | the nearest stars (Alpha Centauri, Barnard's Star, Sirius)    | a full stadium                                 |
+| 5    | the Milky Way, the pin 26,000 light years out from its middle | the stadium with flags                         |
+| 6    | the Local Group: Andromeda, Triangulum, the Magellanic Clouds | the final, at night                            |
+| 7    | the observable universe, the pin at its middle, fireworks     | the trophy                                     |
+
+An answer from out in space dives back down to the Earth before the ball is kicked, and the
+next question goes back out.
+
+Space is dressed up to look the part rather than to be exact (the product owner, 2026-11-19):
+clouds of coloured gas stream past as it pulls back, the Milky Way's band crosses the sky,
+the planets have their bands, spots and rings, the belts and comets are there, satellites
+circle the Earth, stars twinkle and now and then one shoots.
 
 ## 6. Screens
 

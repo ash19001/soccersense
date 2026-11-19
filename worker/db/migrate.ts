@@ -216,6 +216,26 @@ export const MIGRATIONS: readonly Migration[] = [
         WHERE email IS NULL`,
     ],
   },
+  {
+    id: 8,
+    name: "day_places: the day's place, drafted with the week's questions and approved",
+    sql: [
+      // One row a day: where its CLOSEST and FURTHEST measure from (../questions/places.ts;
+      // the product owner, 2026-11-19: "i dont want fixed places ... it should also be
+      // generated"). The place itself is JSON, as a question is.
+      `CREATE TABLE IF NOT EXISTS day_places (
+        day INTEGER PRIMARY KEY,
+        status TEXT NOT NULL,
+        place_id TEXT NOT NULL,
+        place TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        review TEXT NOT NULL DEFAULT '',
+        source TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`,
+    ],
+  },
 ];
 
 /** The highest migration there is: what `migrate` brings a database to. */

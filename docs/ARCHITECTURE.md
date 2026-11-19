@@ -247,8 +247,8 @@ with each shot, where the answer came down and how far that is (`ShotLanding`). 
 is Natural Earth's (public domain) rasterised at half a degree by `tools/world-map.ts` into
 `app/art/world-map-data.ts`; `app/art/world-map.ts` reads it and works out great circles. The
 map draws the ground at any scale with `app/art/earth-zoom.ts` and the home town from above
-with `app/art/stadium-top.ts`; its career is a camera closing in (CLOSEST) or a journey through
-`app/data/cities.ts` (FURTHEST, `app/scenes/map-journey.ts`).
+with `app/art/stadium-top.ts`; its career is a camera closing in (CLOSEST) or pulling back
+into space, drawn by `app/art/cosmos.ts` (FURTHEST).
 
 ## 5. Game rules (`app/game`)
 
@@ -325,8 +325,10 @@ rest of the plan below.
   Cloudflare types it uses (the database, the files) rather than generating them. It
   imports the game's pure rules (`~/game/day` for the day's number), the same code the
   page runs.
-- **`GET /api/today`**: `{ now, day, dayKey, nextDayIn, questions }`, the day by the
-  server, never cached. Every answer of the API carries `x-server-time`, the server's
+- **`GET /api/today`**: `{ now, day, dayKey, nextDayIn, questions, place }`, the day by the
+  server, never cached. `place` is the day's place as the games play it (below); a HEAD
+  (the clock) does without it, and with the sample questions on it is the fixed list's and
+  the database is not asked. Every answer of the API carries `x-server-time`, the server's
   clock in milliseconds.
 - **The game's clock reads it.** `app/ui/game-clock.ts` asks `/api/today` (a HEAD
   request) and takes `x-server-time`, to the millisecond. Where no API answers (the dev
@@ -356,8 +358,10 @@ rest of the plan below.
 
 The product owner: "Make a way to draft and schedule them. they will be coming from ai
 after approval and scheduling. preferably generate them all once a week with approval for
-the subsequent days to be scheduled." A week is 196 questions (seven days, four modes,
-seven each), and they will approve them all. The drafting is to be done by a scheduled
+the subsequent days to be scheduled." A week was 196 questions (seven days, four modes,
+seven each), and they will approve them all; since 2026-11-19 it is 294, CLOSEST and
+FURTHEST drafted too ("add these new gamemodes to the schedule so once i remove sample
+feature flag then these will also get generated and have new ones daily"). The drafting is to be done by a scheduled
 Claude routine on the product owner's own Claude account, **not** through the Claude API
 ("the weekly draft will use my claude account so just creating a scheduled skill").
 
@@ -405,6 +409,34 @@ Built:
     turned down, and a run that stopped early is picked up by the next.
   - `check <file>` holds a file of drafts to `checkQuestion` and to the file as a whole
     (no place twice, no prompt twice); `submit <file>` checks, then sends them as drafts.
+  - Every mode is drafted, CLOSEST and FURTHEST too, and **every day's place** (2026-11-19,
+    "i dont want fixed places because eventually questions will get repetitive so it should
+    also be generated"). The places are kept in `day_places` (migration 8,
+    `worker/questions/places.ts`), one a day, drafted, approved or rejected like a question,
+    checked by `checkPlace` (`app/data/places.ts`: an id, a name and area the pixel font
+    draws, a kind, coordinates not by the poles). The desk's API sends them with the week's
+    questions (`places`), takes them (`PUT /api/admin/places`, no place twice within 90
+    days) and changes one (`POST /api/admin/places/<day>`). A CLOSEST or FURTHEST question
+    is approved only once its day's place is; a place changed once approved sends that day's
+    approved CLOSEST and FURTHEST back to draft.
+  - `todo` lists the days to place (with the days either side's) and gives CLOSEST's and
+    FURTHEST's places the day's drafted place (or `waitsForPlace`); `check` holds a file of
+    places to `checkPlace` and to their neighbours (2,000 km apart, another kind, nothing
+    used), and works a distance question's shots out from its day's place on the desk
+    (`shotsOf`), wanting each of the five that score. The skill drafts the places first.
+  - **Played**: with `QUESTIONS` at `scheduled`, a day's games and `/api/today` take its
+    approved place (`questionsOn`, `placeOn` in `worker/games/questions.ts`, remembered a
+    minute), else the fixed list's; CLOSEST's and FURTHEST's scheduled questions play only
+    with their approved place. The page asks `/api/today` for it (`app/ui/day-place.ts`):
+    the play page waits for it before a CLOSEST or FURTHEST game (3 s at most, then the
+    fixed list's), the home picture's dives take it when it comes. Nothing on the map is
+    made for a place: the globe, the pin, the flights and the space career work from its
+    coordinates alone.
+  - The approval page has a Place column (the day's place and its state); a place's card
+    shows where it is, a link to a map, approve, reject, back to draft, or a correction as
+    JSON. A CLOSEST or FURTHEST question is shown from its day's place (drafted, approved,
+    or the fixed list's while there is none): each answer's distance and its shot that day,
+    nearest (or furthest) first.
   - The admin API's `brief=1` look (the prompt and state, no answers, up to 120 days) is
     what `todo` reads.
   - **The token never reaches the routine.** In the cloud environment the product owner

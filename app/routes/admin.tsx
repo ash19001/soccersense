@@ -19,7 +19,21 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { MODES, type Mode, type Question, SHOT_ORDER, dayKeyFor } from "~/game";
+import { type Place, placeLabel } from "~/data/places";
+import { STADIUMS } from "~/data/stadiums";
+import {
+  type LatLng,
+  MODES,
+  type Mode,
+  type Question,
+  SHOT_ORDER,
+  type Shot,
+  dayKeyFor,
+  distanceKm,
+  ruleFor,
+  shotsOf,
+  stadiumForDay,
+} from "~/game";
 import { strings } from "~/i18n";
 import type { Route } from "./+types/admin";
 import { Players } from "./admin-players";
@@ -83,6 +97,20 @@ interface Slot {
   updatedAt: number;
 }
 
+/** A day's place as the API sends it (worker/questions/places.ts, `PlaceSlot`). */
+interface DaySlot {
+  day: number;
+  status: Status;
+  place: Place;
+  note: string;
+  review: string;
+  source: string;
+  updatedAt: number;
+}
+
+/** What is picked: a day and mode's questions, or a day's place. */
+type Picked = { day: number; mode: Mode | "place" };
+
 const STATUS_STYLE: Record<Status, string> = {
   draft: "bg-amber-100 text-amber-900",
   approved: "bg-emerald-100 text-emerald-900",
@@ -102,12 +130,42 @@ function dayLabel(day: number, today: number | null): string {
 }
 
 /** The answers in the order the mode scores them: the best shot first. */
-function ranked(question: Question) {
-  return [...question.answers].sort(
-    (a, b) =>
-      SHOT_ORDER.indexOf(a.shot) - SHOT_ORDER.indexOf(b.shot) ||
-      b.popularity - a.popularity,
-  );
+/** A question's answers as the desk lists them: each with its shot, and its distance in km. */
+interface Row {
+  answer: Question["answers"][number];
+  shot: Shot;
+  km: number | null;
+}
+
+function ranked(question: Question): Row[] {
+  return [...question.answers]
+    .sort(
+      (a, b) =>
+        SHOT_ORDER.indexOf(a.shot) - SHOT_ORDER.indexOf(b.shot) ||
+        b.popularity - a.popularity,
+    )
+    .map((answer) => ({ answer, shot: answer.shot, km: null }));
+}
+
+/**
+ * CLOSEST's and FURTHEST's answers as their day plays them: their shots are not filed but
+ * worked out from the day's place, so each with its shot and its distance from there, best
+ * first.
+ */
+function fromPlace(question: Question, place: LatLng, mode: Mode): Row[] {
+  const shots = shotsOf(question, place, ruleFor(mode));
+  const nearer = mode === "closest" ? 1 : -1;
+  return question.answers
+    .map((answer, i) => ({
+      answer,
+      shot: shots[i],
+      km: Math.round(distanceKm(place, answer)),
+    }))
+    .sort(
+      (a, b) =>
+        SHOT_ORDER.indexOf(a.shot) - SHOT_ORDER.indexOf(b.shot) ||
+        (a.km - b.km) * nearer,
+    );
 }
 
 export default function Admin() {
@@ -118,15 +176,15 @@ export default function Admin() {
   const [today, setToday] = useState<number | null>(null);
   const [from, setFrom] = useState<number | null>(null);
   const [slots, setSlots] = useState<Slot[]>([]);
-  const [picked, setPicked] = useState<{ day: number; mode: Mode } | null>(
-    null,
-  );
+  const [places, setPlaces] = useState<DaySlot[]>([]);
+  const [picked, setPicked] = useState<Picked | null>(null);
   const [view, setView] = useState<"questions" | "players">("questions");
   const failed = useCallback(() => setMessage(text.failed), []);
 
   const signOut = useCallback((why = "") => {
     writeToken(null);
     setSlots([]);
+    setPlaces([]);
     setPicked(null);
     setMessage(why);
   }, []);
@@ -168,8 +226,12 @@ export default function Admin() {
         `/questions?from=${start}&to=${start + DAYS - 1}`,
       );
       if (response?.ok) {
-        const data = (await response.json()) as { slots: Slot[] };
+        const data = (await response.json()) as {
+          slots: Slot[];
+          places?: DaySlot[];
+        };
         setSlots(data.slots);
+        setPlaces(data.places ?? []);
         setFrom(start);
         setMessage("");
       } else if (response) {
@@ -242,6 +304,33 @@ export default function Admin() {
       return [];
     },
     [ask],
+  );
+
+  /** Changes a day's place (approve, reject, send back, or a corrected place). */
+  const changePlace = useCallback(
+    async (
+      day: number,
+      body: Record<string, unknown>,
+    ): Promise<string[] | null> => {
+      setBusy(true);
+      const response = await ask(`/places/${day}`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setBusy(false);
+      if (!response) return null;
+      if (response.status === 422) {
+        return ((await response.json()) as { problems: string[] }).problems;
+      }
+      if (!response.ok) {
+        setMessage(text.failed);
+        return null;
+      }
+      // its CLOSEST and FURTHEST may have gone back to draft: the week as it is now
+      if (from !== null) await load(from);
+      return [];
+    },
+    [ask, from, load],
   );
 
   const game = useMemo(
@@ -356,6 +445,9 @@ export default function Admin() {
                     <th className="border border-slate-200 p-2">
                       {text.dayColumn}
                     </th>
+                    <th className="border border-slate-200 p-2">
+                      {text.places.column}
+                    </th>
                     {MODES.map((mode) => (
                       <th key={mode} className="border border-slate-200 p-2">
                         {strings.home.modes[mode].label}
@@ -370,6 +462,40 @@ export default function Admin() {
                         <th className="border border-slate-200 p-2 text-left font-medium">
                           {dayLabel(day, today)}
                         </th>
+                        <td className="border border-slate-200 p-0">
+                          {(() => {
+                            const mine = places.find((p) => p.day === day);
+                            const on =
+                              picked?.day === day && picked.mode === "place";
+                            return (
+                              <button
+                                type="button"
+                                aria-pressed={on}
+                                onClick={() =>
+                                  setPicked({ day, mode: "place" })
+                                }
+                                className={`block w-full p-2 text-left hover:bg-slate-100 ${on ? "bg-sky-100" : ""}`}
+                              >
+                                {mine ? (
+                                  <>
+                                    <span className="font-medium">
+                                      {placeLabel(mine.place)}
+                                    </span>{" "}
+                                    <span
+                                      className={`rounded px-1 text-xs ${STATUS_STYLE[mine.status]}`}
+                                    >
+                                      {text.status[mine.status]}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="text-slate-400">
+                                    {text.nothing}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })()}
+                        </td>
                         {MODES.map((mode) => {
                           const mine = slots.filter(
                             (s) => s.day === day && s.mode === mode,
@@ -427,6 +553,31 @@ export default function Admin() {
               from !== null && (
                 <p className="text-sm text-slate-600">{text.pick}</p>
               )
+            ) : picked.mode === "place" ? (
+              <section className="space-y-3">
+                <h2 className="text-xl font-semibold">
+                  {text.places.title(dayLabel(picked.day, today))}
+                </h2>
+                {(() => {
+                  const mine = places.find((p) => p.day === picked.day);
+                  return mine ? (
+                    <DayPlace
+                      key={`${mine.day}-${mine.updatedAt}`}
+                      slot={mine}
+                      busy={busy}
+                      change={changePlace}
+                    />
+                  ) : (
+                    <article className="rounded border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500">
+                      {text.places.none(
+                        placeLabel(
+                          stadiumForDay(picked.day, STADIUMS) as Place,
+                        ),
+                      )}
+                    </article>
+                  );
+                })()}
+              </section>
             ) : (
               <section className="space-y-3">
                 <div className="flex flex-wrap items-center gap-2">
@@ -443,7 +594,13 @@ export default function Admin() {
                     onClick={async () => {
                       for (const slot of game) {
                         if (slot.status === "draft") {
-                          await change(slot, { status: "approved" });
+                          const wrong = await change(slot, {
+                            status: "approved",
+                          });
+                          if (wrong && wrong.length > 0) {
+                            setMessage(wrong[0]);
+                            return;
+                          }
                         }
                       }
                     }}
@@ -459,6 +616,11 @@ export default function Admin() {
                       slot={slot}
                       busy={busy}
                       change={change}
+                      dayPlace={
+                        places.find(
+                          (p) => p.day === slot.day && p.status !== "rejected",
+                        ) ?? null
+                      }
                     />
                   ) : (
                     <article
@@ -483,6 +645,7 @@ function Place({
   slot,
   busy,
   change,
+  dayPlace,
 }: {
   slot: Slot;
   busy: boolean;
@@ -490,6 +653,8 @@ function Place({
     slot: Pick<Slot, "day" | "mode" | "slot">,
     body: Record<string, unknown>,
   ) => Promise<string[] | null>;
+  /** The day's place drafted or approved (not rejected), if there is one. */
+  dayPlace: DaySlot | null;
 }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -498,6 +663,20 @@ function Place({
   const [reason, setReason] = useState(slot.review);
   const question = slot.question;
   const era = slot.mode === "retro" || slot.mode === "nextgen";
+  // CLOSEST and FURTHEST: measured from the day's place (the one drafted for the day, or
+  // the fixed list's while there is none)
+  const distance = slot.mode === "closest" || slot.mode === "furthest";
+  const from = !distance
+    ? null
+    : (dayPlace?.place ?? (stadiumForDay(slot.day, STADIUMS) as Place));
+  const fromWords = !from
+    ? ""
+    : !dayPlace
+      ? text.fromFixedPlace(placeLabel(from))
+      : dayPlace.status === "approved"
+        ? text.fromPlace(placeLabel(from))
+        : text.fromDraftPlace(placeLabel(from));
+  const rows = from ? fromPlace(question, from, slot.mode) : ranked(question);
 
   const save = async () => {
     let parsed: unknown;
@@ -529,6 +708,9 @@ function Place({
       <p className="mt-1 text-xs text-slate-500">
         {text.measured(question.measureLabel)} · {question.id} · {question.asOf}
       </p>
+      {from && (
+        <p className="mt-1 text-sm font-medium text-slate-700">{fromWords}</p>
+      )}
       {slot.note && (
         <p className="mt-2 text-sm whitespace-pre-wrap text-slate-700">
           <strong>{text.note}:</strong> {slot.note}
@@ -545,7 +727,10 @@ function Place({
           type="button"
           className={primary}
           disabled={busy || slot.status === "approved"}
-          onClick={() => void change(slot, { status: "approved" })}
+          onClick={async () => {
+            const wrong = await change(slot, { status: "approved" });
+            if (wrong && wrong.length > 0) setProblems(wrong);
+          }}
         >
           {text.approve}
         </button>
@@ -597,6 +782,17 @@ function Place({
         </button>
       </div>
 
+      {!editing && problems.length > 0 && (
+        <div role="alert" className="mt-2 text-sm text-rose-700">
+          <p className="font-semibold">{text.notApproved}</p>
+          <ul className="list-disc pl-5">
+            {problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {editing && (
         <div className="mt-3 space-y-2">
           <p className="text-xs text-slate-500">{text.editHelp}</p>
@@ -640,7 +836,11 @@ function Place({
                   {text.columns.shot}
                 </th>
                 <th className="border border-slate-200 p-1.5">
-                  {era ? text.columns.years : text.columns.share}
+                  {era
+                    ? text.columns.years
+                    : from
+                      ? text.columns.distance
+                      : text.columns.share}
                 </th>
                 <th className="border border-slate-200 p-1.5">
                   {text.columns.aliases}
@@ -651,18 +851,20 @@ function Place({
               </tr>
             </thead>
             <tbody>
-              {ranked(question).map((answer) => (
+              {rows.map(({ answer, shot, km }) => (
                 <tr key={answer.id}>
                   <td className="border border-slate-200 p-1.5 font-medium">
                     {answer.name}
                   </td>
                   <td className="border border-slate-200 p-1.5">
-                    {strings.play.shots[answer.shot]}
+                    {strings.play.shots[shot]}
                   </td>
                   <td className="border border-slate-200 p-1.5">
                     {era
                       ? (answer.years ?? []).join(", ")
-                      : `${answer.popularity}%`}
+                      : km !== null
+                        ? text.km(km)
+                        : `${answer.popularity}%`}
                   </td>
                   <td className="border border-slate-200 p-1.5 text-slate-600">
                     {answer.aliases.join(", ")}
@@ -674,6 +876,161 @@ function Place({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </article>
+  );
+}
+
+/**
+ * A day's place at the desk: where it is, the drafter's note, a link to see it on a map,
+ * and approve, reject with a reason, send back to draft, or correct it as JSON. Approving it
+ * lets the day's CLOSEST and FURTHEST be approved; changing it once approved sends them back.
+ */
+function DayPlace({
+  slot,
+  busy,
+  change,
+}: {
+  slot: DaySlot;
+  busy: boolean;
+  change: (
+    day: number,
+    body: Record<string, unknown>,
+  ) => Promise<string[] | null>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [problems, setProblems] = useState<string[]>([]);
+  const [reason, setReason] = useState(slot.review);
+  const place = slot.place;
+  const map = `https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lng}#map=15/${place.lat}/${place.lng}`;
+
+  const act = async (body: Record<string, unknown>) => {
+    const wrong = await change(slot.day, body);
+    if (wrong && wrong.length > 0) setProblems(wrong);
+  };
+  const save = async () => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(draft);
+    } catch {
+      setProblems([text.badJson]);
+      return;
+    }
+    await act({ place: parsed });
+  };
+
+  return (
+    <article className="rounded border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span
+          className={`rounded px-2 py-0.5 text-xs font-semibold ${STATUS_STYLE[slot.status]}`}
+        >
+          {text.status[slot.status]}
+        </span>
+        <h3 className="mr-auto font-semibold">{placeLabel(place)}</h3>
+        <span className="text-xs text-slate-500">
+          {text.places.kinds[place.kind]}
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-slate-500">
+        {text.places.where(place.lat, place.lng)} · {place.id} ·{" "}
+        <a
+          href={map}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sky-700 underline"
+        >
+          {text.places.onMap}
+        </a>
+      </p>
+      {slot.note && (
+        <p className="mt-2 text-sm whitespace-pre-wrap text-slate-700">
+          <strong>{text.note}:</strong> {slot.note}
+        </p>
+      )}
+      {slot.review && (
+        <p className="mt-2 text-sm whitespace-pre-wrap text-rose-800">
+          <strong>{text.review}:</strong> {slot.review}
+        </p>
+      )}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className={primary}
+          disabled={busy || slot.status === "approved"}
+          onClick={() => void act({ status: "approved" })}
+        >
+          {text.approve}
+        </button>
+        <input
+          aria-label={text.reason}
+          placeholder={text.reason}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          className="min-w-48 flex-1 rounded border border-slate-300 px-2 py-1.5 text-sm"
+        />
+        <button
+          type="button"
+          className={button}
+          disabled={busy}
+          onClick={() =>
+            void act({ status: "rejected", review: reason.trim() })
+          }
+        >
+          {text.reject}
+        </button>
+        {slot.status !== "draft" && (
+          <button
+            type="button"
+            className={button}
+            disabled={busy}
+            onClick={() => void act({ status: "draft" })}
+          >
+            {text.toDraft}
+          </button>
+        )}
+        <button
+          type="button"
+          className={button}
+          onClick={() => {
+            setDraft(JSON.stringify(place, null, 2));
+            setProblems([]);
+            setEditing(!editing);
+          }}
+        >
+          {editing ? text.cancel : text.edit}
+        </button>
+      </div>
+      {problems.length > 0 && (
+        <div role="alert" className="mt-2 text-sm text-rose-700">
+          <p className="font-semibold">{text.notSaved}</p>
+          <ul className="list-disc pl-5">
+            {problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {editing && (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-slate-500">{text.places.editHelp}</p>
+          <textarea
+            aria-label={text.edit}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            spellCheck={false}
+            className="h-48 w-full rounded border border-slate-300 p-2 font-mono text-xs"
+          />
+          <button
+            type="button"
+            className={primary}
+            disabled={busy}
+            onClick={() => void save()}
+          >
+            {text.save}
+          </button>
         </div>
       )}
     </article>

@@ -876,6 +876,7 @@ class MapScene implements GameScene {
     mode: Mode; // "closest" or "furthest"
     place: { lat: number; lng: number; name: string }; // the day's place: the pin, and its plate
     distance: (km: number) => string; // the counter's words (formatDistance in the player's unit)
+    labels?: CosmosLabels; // what FURTHEST's space names (en.play.space); unnamed without
   });
 }
 ```
@@ -885,7 +886,14 @@ class MapScene implements GameScene {
   slice a frame from the start), its streets repeated, then the town, its fields and roads, the
   country, the globe among stars; coasts from Natural Earth's land (`app/art/world-map.ts`).
   Tiers 6 and 7 are at night whatever the sky (`ambience().night`), as the career's are.
-- **The camera**: a middle, km a pixel and the row of the picture its middle is on. It eases
+  FURTHEST's globe out in space is drawn over `~/art/cosmos`'s sky (`drawCosmos`, drawn again
+  only when the view changes, its glows in squares of two at least while the camera moves),
+  `drawEarthZoom` with `space: false`; over it each frame, under the pin, space's life
+  (`drawSpaceLife`: twinkling, shooting stars, satellites). While the pin slides under the
+  board in space, the picture slides with it, the rows it uncovers in squares of two, and it
+  is sharpened once the pin is at rest (rather than all of space worked out again a row).
+- **The camera**: a middle, km a pixel and the row of the picture its middle is on, and in
+  space how far that middle is off the Earth's (`sx`, `sy`, km). It eases
   between views (the scale even in proportion, the pan following the view's width, so that
   going out it waits until both ends fit and going in it is over while the view is wide).
   Moving, the ground is drawn in a mosaic of a few pixels; still, it is drawn sharp a band of
@@ -898,11 +906,15 @@ class MapScene implements GameScene {
   it"): CLOSEST closes in on the place a step a tier (`CLOSEST_ACROSS`, km across: the globe,
   4,500, 1,000, 150, 20, 2.6, 0.7, 0.34), the ground beside the pin in a badge
   (`~/art/ground-badge`) to tier 4; from tier 5 the map shows it, with flags in the streets
-  (5), flashes in the crowd (6), the cup on the centre spot and fireworks (7). FURTHEST is a
-  journey (`./map-journey.ts`, `journeyFor`): tier 0 the place close up, then home and each
-  tier's stop framed together, the route dotted stop to stop, the stop's pin, its badge and
-  its name; from tier 6 the whole globe turned most of the way to the final on the far side,
-  home round the back (an arrow at the edge points to it).
+  (5), flashes in the crowd (6), the cup on the centre spot and fireworks (7). FURTHEST
+  starts on the same globe and pulls back into space a step a tier (the product owner,
+  2026-11-19: "for furthest, it should also start on the globe level but instead of zooming
+  in (like closest) it should zoom out to galaxy, universe, etc."): the Earth and the Moon,
+  the inner planets, the solar system, the nearest stars, the Milky Way, the Local Group, the
+  observable universe with the pin at its middle (fireworks there at tier 7). `spaceView` fits
+  each tier's things (`cosmosSpots`) between the board and the answer bar, the Earth on the
+  pin's row if it can be, with room by it for the pin's plate and badge; the badge is by the
+  pin at every tier. The rings, markers and arrows only on a globe 40 pixels round or more.
 - **The pin** stands on the day's place with its name on a plate over it, clear of the board;
   rings at 500, 1,500, 3,000 and 6,000 km round it in CLOSEST, round its antipode (an X) in
   FURTHEST.
@@ -914,12 +926,15 @@ class MapScene implements GameScene {
   the pin along the great circle (a trail of dots), lands with a ring, its distance counting up
   beside it; a marker in the shot's colour stays. The next question (`ask`) brings the camera
   home in 1 s. A landing off the picture has an arrow at its edge. No answer: the pin shakes.
-- **A promotion**: CLOSEST's camera goes in to the next tier's view (1.3 s), the pin gold, then
-  the new ground arrives in its badge (0.8 s); FURTHEST's footballer travels (coach, ferry,
-  train or plane, 1.6 s from 0.3 s) with "NEXT STOP" under him while the camera reframes, and
-  arrives (0.8 s). `onDone` then; at once with reduced motion. `showFullTime` goes to the tier
-  reached. Sounds: the sweep, the wind on the way, a cheer on arrival, fireworks at tier 7, and
-  the career's kick, landing, score and whistle cues.
+  From space (the Earth less than half the globe's size) the camera dives to that view first
+  (0.07 s a tenfold, 0.7 s at least: about 1.4 s from the universe) and the ball waits for it,
+  the kick's sound with the kick; any move takes at least 0.1 s a tenfold it zooms
+  (`DECADE_S`), so the way back out from the universe takes about 2 s.
+- **A promotion**: the camera goes to the next tier's view, in (CLOSEST) or out (FURTHEST)
+  (1.3 s, or longer for a long zoom), the pin gold, then the new ground arrives in its badge
+  (0.8 s). `onDone` then; at once with reduced motion. `showFullTime` goes to the tier
+  reached. Sounds: the sweep, FURTHEST's wind on the way out, a cheer on arrival, fireworks
+  at tier 7, and the career's kick, landing, score and whistle cues.
 - **The opening**: an iris opens on the pin, by itself from the first frame as the career's
   arrival does, unless the page holds it first (`holdOpening`, behind the mode card); a game
   the page carries on with is not held (2026-11-18: it was left on ink until then).

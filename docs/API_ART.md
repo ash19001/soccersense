@@ -33,9 +33,10 @@ on its point (MapScene draws it too), giving its top row.
 ## The Earth from the street to space (`~/art/earth-zoom`, 2026-11-18)
 
 FURTHEST's pull back on the home screen. `drawEarthZoom(s, cx, cy, r, centre, { place, seed,
-light, near?, town?, block? })`: the ground round the day's place from `EARTH_KM / r` km a pixel, an Earth of
+light, near?, town?, block?, rows?, space? })`: the ground round the day's place from `EARTH_KM / r` km a pixel, an Earth of
 radius `r` at (`cx`, `cy`) with `centre` in its middle; big, it fills the picture, flat; small,
-it is a globe among stars with its rim. Fills every pixel. The stages, by the size of a
+it is a globe among stars with its rim. Fills every pixel, but with `space: false` it leaves
+what is round a small globe (the map's FURTHEST career draws `~/art/cosmos` there first). The stages, by the size of a
 sample on the ground (what would be smaller than a few samples is drawn as the next stage):
 
 - the town's streets (a side street missing here and there), two buildings a block with a
@@ -58,6 +59,72 @@ street lights and windows keep theirs. Sampled in blocks (no more than 20,000 a 
 640 x 310. `near(east, north)` gives ground something else knows better (FURTHEST: the town
 from above); `town(east, north)` draws the towns in its look instead of this module's (their
 parks stay parks).
+
+## Space (`~/art/cosmos`, 2026-11-19)
+
+FURTHEST's career on the map, out from the Earth: `drawCosmos(s, { ex, ey, kpp, k, seed,
+labels?, keep?, block? })` draws space with the Earth's middle at (`ex`, `ey`), `kpp` km a
+pixel, filling every pixel: black, the stars far off (`~/art/globe`'s), and whatever is to be
+seen at that scale. Everything sits on a flat sky in km from the Earth: the Moon; the Sun with
+the planets on dotted orbits (Saturn in its rings); the nearest stars round the Sun; the Milky
+Way, the Sun 26,000 light years out from its middle, a dithered glow with arms of stars wound
+out from a gold middle; Andromeda, Triangulum, the Magellanic Clouds and two dozen dwarf
+galaxies; the cosmic web (clusters joined by filaments) out to the edge of the observable
+universe, 46.5 billion light years round, a dotted ring with the first light glowing inside
+it. Distances and sizes are real and directions made up, laid out wider than tall; small
+things are drawn a few pixels big (galaxies up to twice their size), each only at the scales
+it can be seen at, and the Earth is a blue dot once it is smaller than one. Names
+(`CosmosLabels`, `en.play.space`, the 3 x 5 font at `k`) go beside their things, right or
+left, never over `keep` (the pin's plate and badge). `block` works the glows out in squares
+(cheaper while the camera moves). `cosmosSpots(tier)`: what tier 1 to 7 must show.
+
+Dressed up to look the part, realistic or not (the product owner, 2026-11-19: "even though it
+may not be realistic, can you add more details to furthest game mode when it goes into outer
+space. just so it looks cool rather than black with a couple dots and labels"): the Sun white
+hot in a stepped corona with eight rays; the planets lit from the Sun (night side, shade, day
+side, a glint) with their markings: Mercury's craters, Venus's swirls, Mars's ice cap, Jupiter's
+bands and Great Red Spot, Saturn's bands and its rings with their gap (the far half behind it,
+the near half in front), Uranus's ring on end, Neptune's dark spot; drawn bigger the closer in
+the picture is (`size` an AU on the picture, up to `most` pixels); the Moon lit and cratered;
+the asteroid belt, the Kuiper belt (each a faint band of rocks, named) and the Oort cloud round
+the nearest stars; two comets, their dust tails gold and curving, their gas tails blue, away
+from the Sun; the satellites' ring round a small Earth; the near stars in glows of their
+colour, Proxima beside Alpha Centauri; the Milky Way's bar, pink knots where stars are born
+along its arms and a dozen old star clusters round it; every galaxy in a faint halo; the cosmic
+web's big clusters glowing; the young universe's gas inside its edge.
+
+### Space's backdrop and life (`~/art/cosmos-sky`, 2026-11-19)
+
+`drawSpaceBackdrop(s, { ex, ey, kpp, seed, block?, within? })`, what `drawCosmos` draws first:
+black; clouds of gas in four banded colours (dithered only at their edges), a layer a tenfold
+of scale fixed to the sky, so that as the camera pulls back they close in on the Earth while
+the next tenfold's come in; each colour covers the same share of the sky every day and at
+every scale (`COVER`: the faintest about 45%, the brightest about 2%), only inside `within`
+(the universe's edge) if given; the Milky Way's band across the sky with its dust lane while
+the picture is inside the galaxy (gone by 30,000 light years); the far stars fixed to the
+picture, some coloured, a few big (`sparkles`); and nearer things fixed to the sky a layer a
+tenfold, drawn in towards the Earth as it pulls back: dust in the solar system, stars out to a
+galaxy's size, far galaxies (smudges, lenses, little spirals) beyond.
+
+It is drawn again whenever the view changes, every frame while the camera moves, so it is
+kept cheap (2026-11-19, "its slightly laggy now"; about 12 ms a whole picture of 960 x 540
+still, 4 ms moving): the clouds are worked out every 4 pixels (every 4 x `block` while
+moving), from a table of noise rather than a hash, a square filled whole where it is all one
+colour and otherwise pixel by pixel from its corners; a layer of cloud all but gone is left
+out; their shares (`COVER`) are told from every third point. The Milky Way's band is worked
+out once for a picture's size and kept (it dissolves by dither as the picture leaves the
+galaxy). In `~/art/cosmos`, a galaxy's glow is kept while it stays one size (still: only
+worked out again when the picture slides), worked out in bigger squares while it is far
+bigger than the picture, and straight onto the picture while moving; the belts' glows and the
+universe's edge go over only their rings' pixels; the web's filaments only the stretch of
+each in the picture; a big orbit only its arc there.
+
+`drawSpaceLife(s, { ex, ey, kpp, k, seed, t, reduced })`, over the picture each frame (the
+map draws it under its pin): the big stars' arms grow now and then (twinkling); a star shoots
+across about every 6 seconds; both only over the backdrop, never over a name, a planet or the
+pin; satellites go round the Earth: two in low orbit round a big globe (behind it on its far
+side), a ring of eight standing over the equator and six GPS ones round a small one. With
+reduced motion, no shooting stars and everything a quarter as fast.
 
 ## The town from above (`~/art/stadium-top`, 2026-11-18)
 

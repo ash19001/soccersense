@@ -15,8 +15,19 @@ import type { Stadium } from "~/game/types";
  * a city's is the conventional centre point; 4 decimal places (about 11 m). Sources are in
  * docs/data-notes/places.md. Consecutive days are on different continents, so one day's
  * place is far from the next.
+ *
+ * Since 2026-11-19 these are the fallback: each day's place is drafted with the week's
+ * questions and approved at the desk (worker/questions/places.ts), and played once the
+ * real questions are (the product owner: "i dont want fixed places because eventually
+ * questions will get repetitive so it should also be generated"). A day with no approved
+ * place, or with the sample questions on, takes this list's in turn.
  */
 export type PlaceKind = "stadium" | "city" | "landmark";
+export const PLACE_KINDS: readonly PlaceKind[] = [
+  "stadium",
+  "city",
+  "landmark",
+];
 
 export interface Place extends Stadium {
   /** As it is shown, with its accents: "Wembley", "Lagos", "Eiffel Tower". */
@@ -302,6 +313,103 @@ export const PLACES: Place[] = [
 /** A place by its id, or null. */
 export function placeById(id: string): Place | null {
   return PLACES.find((place) => place.id === id) ?? null;
+}
+
+/** A pin that is a whole place (with its name, where it is and its kind), or null. */
+export function asPlace(pin: Stadium): Place | null {
+  const p = pin as Partial<Place> & Stadium;
+  if (
+    typeof p.name === "string" &&
+    typeof p.area === "string" &&
+    PLACE_KINDS.includes(p.kind as PlaceKind)
+  ) {
+    return p as Place;
+  }
+  return placeById(pin.id);
+}
+
+/** The longest a place's name and its area may be: the map's plate shows the name. */
+export const PLACE_NAME_MAX = 28;
+export const PLACE_AREA_MAX = 40;
+/** Not nearer the poles than this: the map's globe and its flights are made for the rest. */
+export const PLACE_LAT_MAX = 70;
+/** Letters the pixel font draws (accents are folded away), digits, spaces, a few marks. */
+const PLACE_TEXT = /^[\p{Script=Latin}0-9 '’.,&()-]+$/u;
+const PLACE_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * A drafted place held to the rules every place keeps: a kebab-case id; a name and an area
+ * (its town and country, or a city's country) in letters the game's fonts draw, short enough
+ * for the map's plate; a kind; coordinates in range, never exactly 0, not by the poles,
+ * rounded to 4 decimal places. Gives back the place, tidied, or every problem in words.
+ */
+export function checkPlace(raw: unknown): {
+  place: Place | null;
+  problems: string[];
+} {
+  const problems: string[] = [];
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return { place: null, problems: ["the place is not an object"] };
+  }
+  const bag = raw as Record<string, unknown>;
+  const text = (key: string) =>
+    typeof bag[key] === "string" ? (bag[key] as string).trim() : "";
+  const id = text("id");
+  const name = text("name");
+  const area = text("area");
+  if (!PLACE_ID.test(id) || id.length > 60) {
+    problems.push(`id "${id}" must be kebab-case: a to z, digits and hyphens`);
+  }
+  for (const [label, value, max] of [
+    ["name", name, PLACE_NAME_MAX],
+    ["area", area, PLACE_AREA_MAX],
+  ] as const) {
+    if (value === "") problems.push(`${label} is missing`);
+    else if (value.length > max) {
+      problems.push(`${label} "${value}" is longer than ${max} characters`);
+    } else if (!PLACE_TEXT.test(value)) {
+      problems.push(
+        `${label} "${value}" has characters the game cannot draw: Latin letters, digits, spaces and . , ' & ( ) - only`,
+      );
+    }
+  }
+  const kind = bag.kind as PlaceKind;
+  if (!PLACE_KINDS.includes(kind)) {
+    problems.push(`kind must be one of ${PLACE_KINDS.join(", ")}`);
+  }
+  const lat = bag.lat;
+  const lng = bag.lng;
+  if (
+    typeof lat !== "number" ||
+    !Number.isFinite(lat) ||
+    Math.abs(lat) > PLACE_LAT_MAX ||
+    lat === 0
+  ) {
+    problems.push(
+      `lat must be a number from -${PLACE_LAT_MAX} to ${PLACE_LAT_MAX}, not 0`,
+    );
+  }
+  if (
+    typeof lng !== "number" ||
+    !Number.isFinite(lng) ||
+    Math.abs(lng) > 180 ||
+    lng === 0
+  ) {
+    problems.push("lng must be a number from -180 to 180, not 0");
+  }
+  if (problems.length > 0) return { place: null, problems };
+  const round = (v: number) => Math.round(v * 1e4) / 1e4;
+  return {
+    place: {
+      id,
+      name,
+      area,
+      kind,
+      lat: round(lat as number),
+      lng: round(lng as number),
+    },
+    problems,
+  };
 }
 
 /**
