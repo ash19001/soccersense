@@ -1,9 +1,9 @@
 // The privacy notice and the terms (/privacy, /terms), and the links to them.
 
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { createRoutesStub } from "react-router";
-import { beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { strings } from "~/i18n";
 import { resetArrivalFocus } from "~/ui/useArrivalFocus";
@@ -113,4 +113,66 @@ test("the rules' small print links both", () => {
   expect(
     within(small).getByRole("link", { name: strings.legal.termsLink }),
   ).toHaveAttribute("href", "/terms");
+});
+
+// the product owner, 2026-11-19: "yes update the privacy. also do we need to add a cookie
+// consent banner?" (Google's own consent message is the banner; the site links back to it)
+describe("the ads, in the privacy notice and at the foot", () => {
+  afterEach(() => {
+    delete (window as unknown as { googlefc?: unknown }).googlefc;
+  });
+
+  test("the notice says the game shows Google's ads, with its cookies and the consent asked", () => {
+    page("/privacy");
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/no ads|don't .*show ads|no advertising/i);
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Ads" }),
+    ).toBeInTheDocument();
+    expect(text).toContain("Google AdSense");
+    expect(text).toMatch(/asks for your consent/);
+    expect(
+      screen.getByRole("link", {
+        name: "policies.google.com/technologies/partner-sites",
+      }),
+    ).toHaveAttribute(
+      "href",
+      "https://policies.google.com/technologies/partner-sites",
+    );
+    expect(
+      screen.getByRole("link", { name: "myadcenter.google.com" }),
+    ).toHaveAttribute("href", "https://myadcenter.google.com");
+  });
+
+  test.each(["/privacy", "/terms"] as const)(
+    "%s: Privacy and cookie settings reopens Google's consent message",
+    (path) => {
+      const shown = vi.fn();
+      const queue: unknown[] = [];
+      (window as unknown as { googlefc: unknown }).googlefc = {
+        callbackQueue: queue,
+        showRevocationMessage: shown,
+      };
+      page(path);
+      const foot = screen.getByRole("navigation", { name: strings.pages.nav });
+      fireEvent.click(
+        within(foot).getByRole("button", { name: strings.pages.adChoices }),
+      );
+      // the one call Google supports: the function, through its queue
+      expect(queue).toEqual([shown]);
+      expect(screen.queryByRole("status")).toBeNull();
+    },
+  );
+
+  test("where Google's message is not on the page, it says so, and where to go instead", () => {
+    page("/privacy");
+    fireEvent.click(
+      screen.getByRole("button", { name: strings.pages.adChoices }),
+    );
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent(/There's nothing to set here/);
+    expect(
+      within(status).getByRole("link", { name: "myadcenter.google.com" }),
+    ).toHaveAttribute("href", "https://myadcenter.google.com");
+  });
 });

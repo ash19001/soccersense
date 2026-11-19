@@ -6,6 +6,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
 } from "react-router";
 
 // The Jersey family, self-hosted: each index.css declares the latin and latin-ext faces
@@ -46,6 +47,23 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+/**
+ * Google AdSense, the site's ads (the product owner, 2026-11-19: "i want to have ads"), as
+ * AdSense gives it to go in every page's head. Not on the approval desk (`/admin`): ads on
+ * the owner's own page are only there to be clicked by mistake, which AdSense forbids. The
+ * security headers let its scripts, frames and requests through (public/_headers), and
+ * public/ads.txt names the account.
+ */
+export const ADSENSE_CLIENT = "ca-pub-4492876763866232";
+export const ADSENSE_SCRIPT = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`;
+
+/** AdSense's script, for the head of every page but the approval desk. */
+export function AdSense() {
+  const { pathname } = useLocation();
+  if (/^\/admin(\/|$)/.test(pathname)) return null;
+  return <script async src={ADSENSE_SCRIPT} crossOrigin="anonymous" />;
+}
+
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
@@ -56,6 +74,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
         <meta name="theme-color" content="#0f1220" />
+        <AdSense />
         <Meta />
         <Links />
       </head>

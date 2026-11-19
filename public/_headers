@@ -6,14 +6,18 @@
 #   site only, the bot check's script and frame from Cloudflare's challenges.cloudflare.com
 #   (Turnstile), and Cloudflare Web Analytics' script and its count of the visit
 #   (static.cloudflareinsights.com, cloudflareinsights.com: the product owner keeps it on,
-#   2026-11-18). No plugins, no other base address, no form posted anywhere else, and no other
+#   2026-11-18), and Google AdSense's ads (the product owner, 2026-11-19: "i want to have
+#   ads"): its scripts, its ads' frames and pictures, and its requests, from Google's ad
+#   domains (googlesyndication.com, doubleclick.net, google.com, gstatic.com,
+#   adtrafficquality.google, googletagservices.com, googleadservices.com) and its consent
+#   message's fonts (fonts.googleapis.com, fonts.gstatic.com). No plugins, no other base address, no form posted anywhere else, and no other
 #   site may show these pages in a frame. 'unsafe-inline' is there because the pages are built
 #   ahead of time with their start-up script written into them.
 # - Strict-Transport-Security: browsers only ever come back over HTTPS (a year).
 # - The rest: no guessing of file types, no framing, the address sent onwards cut to the site
 #   alone, no camera, microphone, location or payments, and a window of its own.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'self' https://cloudflareinsights.com; frame-src https://challenges.cloudflare.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com https://static.cloudflareinsights.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google https://*.googletagservices.com https://*.googleadservices.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google https://*.gstatic.com; font-src 'self' data: https://fonts.gstatic.com; media-src 'self' data: blob:; connect-src 'self' https://cloudflareinsights.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google; frame-src https://challenges.cloudflare.com https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   Strict-Transport-Security: max-age=31536000
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY

@@ -838,6 +838,26 @@ the answers or can that dynamically be calculated".
   30 stay the fallback, and are all that is played with the sample on.
 - 7 more approvals a week (301 in all).
 
+## Ads: Google AdSense's script (2026-11-19)
+
+The product owner: "i want to have ads and was told i need to add this code to the head
+tags of the site".
+
+- AdSense's script in the head of every page but `/admin` (`app/root.tsx`), `ads.txt`
+  for the account, and the security headers opened to Google's ad domains (scripts, ad
+  frames, pictures, requests; the consent message's fonts). Checked on the built site under
+  Cloudflare's runtime: it loads, its frames follow, nothing blocked.
+- The privacy notice (the product owner: "yes update the privacy"): an Ads section
+  (Google AdSense on its own account, its cookies, the consent asked in the UK, the EEA and
+  Switzerland, Google's pages), and "no ads" and "no advertising cookies" gone; dated
+  19 November 2026.
+- The consent banner (the product owner: "do we need to add a cookie consent banner?"):
+  Google's own, from AdSense's Privacy & messaging, which the product owner turns on in
+  AdSense; the site has "Privacy and cookie settings" at the foot of the privacy and terms
+  pages to reopen it (`app/ui/ad-consent.ts`).
+- For the product owner in AdSense: the consent message for the UK and Europe, and where
+  ads may show (auto ads can be kept off the game's pages).
+
 ## The weekly routine is created; its first trial stopped at the desk (2026-11-17)
 
 - Created with the product owner's answers: Sunday 3:17am UK time (`17 3 * * 0`, UTC),

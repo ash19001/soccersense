@@ -3,10 +3,13 @@
 // should be full scrollable pages, not a black page and a popup appearance"). A bar along
 // the top with the game's name and PLAY, the page's words in a column wide enough to read
 // comfortably, and a foot with the small print and the two pages' links. Every word is in
-// app/i18n (`strings.privacy`, `strings.terms`, `strings.pages`); the contact address and
-// the regulator's site in them are links.
+// app/i18n (`strings.privacy`, `strings.terms`, `strings.pages`); the contact address, the
+// regulator's site and Google's pages about its ads in them are links. The foot also has
+// "Privacy and cookie settings", the way back to Google's consent message for the ads
+// (app/ui/ad-consent.ts; the product owner, 2026-11-19: "do we need to add a cookie consent
+// banner?": Google's own message is the banner, set up in AdSense).
 
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import { Link, NavLink } from "react-router";
 
 import { strings } from "~/i18n";
@@ -17,6 +20,7 @@ import {
   useArrivalFocus,
   usePixelRootScale,
 } from "~/ui";
+import { openAdChoices } from "~/ui/ad-consent";
 
 export interface LegalSection {
   heading: string;
@@ -24,10 +28,15 @@ export interface LegalSection {
   list?: readonly string[];
 }
 
-/** The two things in the text that are links: the contact address, and the regulator. */
+/** The things in the text that are links: the contact address, the regulator, Google's ads. */
 const LINKS: readonly { text: string; href: string }[] = [
   { text: strings.pages.contact, href: `mailto:${strings.pages.contact}` },
   { text: "ico.org.uk", href: "https://ico.org.uk" },
+  {
+    text: "policies.google.com/technologies/partner-sites",
+    href: "https://policies.google.com/technologies/partner-sites",
+  },
+  { text: "myadcenter.google.com", href: "https://myadcenter.google.com" },
 ];
 
 /** A line of text with its links made links. */
@@ -68,6 +77,8 @@ function Page({
   const wide = isWide(usePixelRootScale());
   const headingRef = useArrivalFocus<HTMLHeadingElement>();
   const text = strings.pages;
+  // Google's consent message could not be opened (not asked where the player is)
+  const [noChoices, setNoChoices] = useState(false);
   return (
     <div className="ss-doc__page" data-wide={wide ? "" : undefined}>
       <header className="ss-doc__bar">
@@ -109,7 +120,15 @@ function Page({
           <Link className="ss-acct__link" to="/">
             {text.back}
           </Link>
+          <button
+            type="button"
+            className="ss-acct__link"
+            onClick={() => setNoChoices(!openAdChoices())}
+          >
+            {text.adChoices}
+          </button>
         </nav>
+        {noChoices && <p role="status">{linked(text.adChoicesNone)}</p>}
         <p>{strings.legal.disclaimer}</p>
       </footer>
     </div>

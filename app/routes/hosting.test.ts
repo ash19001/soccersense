@@ -175,14 +175,35 @@ describe("hosting on Cloudflare", () => {
     ]) {
       expect(csp).toContain(part);
     }
-    // nothing but this site, the bot check's and Cloudflare Web Analytics'
+    // nothing but this site, the bot check's, Cloudflare Web Analytics' and Google
+    // AdSense's ads (the product owner, 2026-11-19: "i want to have ads")
     for (const origin of csp.match(/https?:\/\/[^\s;]+/g) ?? []) {
       expect([
         "https://challenges.cloudflare.com",
         "https://static.cloudflareinsights.com",
         "https://cloudflareinsights.com",
+        "https://*.googlesyndication.com",
+        "https://*.doubleclick.net",
+        "https://*.google.com",
+        "https://*.adtrafficquality.google",
+        "https://*.googletagservices.com",
+        "https://*.googleadservices.com",
+        "https://*.gstatic.com",
+        "https://fonts.googleapis.com",
+        "https://fonts.gstatic.com",
       ]).toContain(origin);
     }
+    // the ads: their script, frames, pictures and requests
+    const directive = (name: string) =>
+      new RegExp(`(?:^|; )${name} ([^;]+)`).exec(csp)?.[1] ?? "";
+    for (const name of ["script-src", "frame-src", "img-src", "connect-src"]) {
+      expect(directive(name), name).toContain(
+        "https://*.googlesyndication.com",
+      );
+      expect(directive(name), name).toContain("https://*.doubleclick.net");
+    }
+    // still no frame from just anywhere
+    expect(directive("frame-src")).not.toMatch(/(^| )(https:|\*)( |$)/);
     expect(header("Strict-Transport-Security")).toMatch(/^max-age=\d{8}/);
     expect(header("X-Content-Type-Options")).toBe("nosniff");
     expect(header("X-Frame-Options")).toBe("DENY");

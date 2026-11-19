@@ -669,7 +669,8 @@ account is still never stored, given a cookie or asked about.
   a bar along the top with the game's name and PLAY, held there as the page scrolls, the
   words in a column about seventy characters wide, and a foot with the two pages' links
   and the small print (`app/routes/legal-page.tsx`). They are drafts written
-  to match what the game does (no ads, cookie-free Cloudflare Web Analytics only, what an
+  to match what the game does (Google's ads and their consent since 2026-11-19, cookie-free
+  Cloudflare Web Analytics, what an
   account keeps and for how long, Cloudflare, Resend and Google as processors, the ICO), for
   the product owner to have checked. They name `info@soccersense.io`
   (`strings.pages.contact`, the product owner's address, 2026-11-18) for questions, and
@@ -836,6 +837,25 @@ token, and an API beside the desk's (`worker/accounts/moderation.ts`):
 - Checked by `worker/accounts/moderation.test.ts`, `app/routes/admin.test.tsx`, and on
   Cloudflare's own engine through `wrangler dev`.
 
+### Ads (2026-11-19)
+
+The product owner: "i want to have ads and was told i need to add this code to the head
+tags of the site". Google AdSense's script (`ADSENSE_CLIENT`, `AdSense` in
+`app/root.tsx`) is in the head of every page but the approval desk (ads on the owner's own
+page are only there to be clicked by mistake, which AdSense forbids); `public/ads.txt`
+names the account; `public/_headers` lets its scripts, frames, pictures and requests
+through. Checked with the built site served by Cloudflare's runtime (`pnpm api`): the
+script loads, its ad code and frames follow, and the policy blocks nothing. Where ads show
+(auto ads, or units placed by hand), and the consent message UK and EU players must be
+shown first, are set in AdSense itself (the product owner asked, "do we need to add a cookie
+consent banner?": yes, Google's own, from Privacy & messaging, which Google requires there
+and which the script on the page shows by itself). The site's part: "Privacy and cookie
+settings" at the foot of the privacy and terms pages, which reopens Google's message
+(`openAdChoices`, `app/ui/ad-consent.ts`, the one call Google supports), or says there is
+nothing to set where it is not on the page. The privacy notice says what the ads do: an Ads
+section (Google AdSense on its own account, its cookies, the consent, Google's pages), and
+"no ads" gone from everywhere it was.
+
 ### Security (2026-11-17)
 
 The product owner: "ensure everything is secure so no jwt in headers or session cookies. no
@@ -864,7 +884,9 @@ senstive secrets anywhere public". What is so, and how it was checked:
 - **Headers.** Every file the site serves carries `public/_headers`: a content security
   policy (scripts, styles, pictures, sounds and requests from this site only, plus
   Turnstile's script and frame from `challenges.cloudflare.com` and Cloudflare Web
-  Analytics' script and its count, which the product owner keeps on (2026-11-18); no plugins, no other base
+  Analytics' script and its count, which the product owner keeps on (2026-11-18), and
+  Google AdSense's scripts, ad frames, pictures and requests from Google's ad domains (the
+  product owner, 2026-11-19: "i want to have ads"; see "Ads" below); no plugins, no other base
   address, no form posted elsewhere, no framing by another site), HSTS for a year,
   `nosniff`, `X-Frame-Options: DENY`, a referrer cut to the site, no camera, microphone,
   location or payments, and `Cross-Origin-Opener-Policy: same-origin`. Every API answer

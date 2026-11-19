@@ -1223,19 +1223,27 @@ export const en = {
     play: "PLAY",
     /** The foot's links, read out as a group. */
     nav: "The site's pages",
-    updated: "Last updated 18 November 2026",
+    updated: "Last updated 19 November 2026",
     contact: "info@soccersense.io",
+    /**
+     * The way back to Google's consent message for the ads, at the foot of these pages: the
+     * words Google asks for (app/ui/ad-consent.ts).
+     */
+    adChoices: "Privacy and cookie settings",
+    /** Where Google's consent message is not on the page. */
+    adChoicesNone:
+      "There's nothing to set here: Google only asks about ads in the UK, Europe and Switzerland, or its settings didn't load. You can manage the ads Google shows you at myadcenter.google.com.",
   },
   privacy: {
     title: "Privacy",
     description:
-      "What soccersense, the daily football trivia game, keeps about you, why and for how long. No ads, no tracking, and no email address needed to play.",
+      "What soccersense, the daily football trivia game, keeps about you, why and for how long, and how its ads work. No email address needed to play.",
     heading: "PRIVACY",
     sections: [
       {
         heading: "In short",
         paragraphs: [
-          "You can play without telling us anything. Once you play, we keep a name for you and your games, so you're on the leaderboards: nothing that says who you are. If you make an account, we also keep your email address, so your name, streak and stats are the same on every device. We don't sell data, show ads or track you across the web.",
+          "You can play without telling us anything. Once you play, we keep a name for you and your games, so you're on the leaderboards: nothing that says who you are. If you make an account, we also keep your email address, so your name, streak and stats are the same on every device. We don't sell your data. The game is free and shows ads from Google, which uses cookies to choose and count them, and in the UK and Europe asks for your consent first.",
         ],
       },
       {
@@ -1249,7 +1257,7 @@ export const en = {
         paragraphs: [
           "When you play your first game, or pick a name, our server gives your browser a cookie holding a random code, and keeps a name for you (soccerfan and a number, or the one you chose) and your games: your answers and scores. That's what puts you on the leaderboards. It doesn't keep an email address, your IP address or anything else that says who you are.",
           "Your streak, stats and settings stay in your browser's storage, on your device.",
-          "Before your first game, nothing about you is kept and no cookie is set.",
+          "Before your first game, our server keeps nothing about you and sets no cookie. Google's ads may set cookies of their own: see Ads.",
         ],
       },
       {
@@ -1276,9 +1284,19 @@ export const en = {
       {
         heading: "Cookies and storage",
         paragraphs: [
-          "Once you've played, your browser has one cookie that tells our server which player you are and, with an account, keeps you signed in. While you sign in with Google there's a short-lived second one. Both are needed for the game to work, so we don't ask before setting them. There are no advertising or analytics cookies.",
+          "Once you've played, your browser has one cookie that tells our server which player you are and, with an account, keeps you signed in. While you sign in with Google there's a short-lived second one. Both are needed for the game to work, so we don't ask before setting them. Google's ads use cookies of their own: see Ads.",
           "To see how many people visit and which pages they use, we use Cloudflare Web Analytics. It counts page visits without cookies and without recognising you from one visit to the next.",
           "Your browser's storage holds your games and settings so the game works. Clearing your site data removes them from that device.",
+        ],
+      },
+      {
+        heading: "Ads",
+        paragraphs: [
+          "soccersense is free, and ads help pay for it. Google AdSense picks the ads, shows them and counts them. To do that, Google and the advertising companies it works with use cookies and similar technology, and receive information from your browser, such as your IP address, the page you're on and whether you see or click an ad.",
+          "Google decides how it uses that information, under its own privacy policy, not on our instructions. Google explains how at policies.google.com/technologies/partner-sites.",
+          "In the UK, the European Economic Area and Switzerland, Google asks for your consent before it uses cookies for ads. You can agree, refuse, or choose what it may do; if you refuse, you may still see ads, but not ones picked from what Google knows about you. To change your choice at any time, use Privacy and cookie settings at the foot of this page.",
+          "Wherever you are, you can see and change how Google personalises your ads at myadcenter.google.com.",
+          "We never give Google your name, your email address or your games, and nothing our server keeps about you is used for ads.",
         ],
       },
       {
@@ -1290,6 +1308,7 @@ export const en = {
           "Cloudflare hosts the site, runs our server and database, and counts visits (Web Analytics). Before your first game, and when you ask for a sign-in link, its Turnstile check looks at your browser to tell people from bots.",
           "Resend sends the sign-in emails.",
           "Google, only if you choose to continue with Google.",
+          "Google also shows the ads (Google AdSense), but for those it acts on its own account, not on our behalf: see Ads.",
         ],
       },
       {
@@ -1304,7 +1323,7 @@ export const en = {
       {
         heading: "Your rights",
         paragraphs: [
-          "You can change your name at any time. With an account, delete it from Your account; without one, use DELETE MY GAMES in the sign-in card. Either removes your name, games and sign-ins from our server straight away.",
+          "You can change your name at any time. With an account, delete it from Your account; without one, use DELETE MY GAMES in the sign-in card. Either removes your name, games and sign-ins from our server straight away. To change your choices about ads, use Privacy and cookie settings at the foot of this page.",
           "To get a copy of your data, correct it, or ask anything else, email info@soccersense.io. If you're unhappy with how we've handled your data, you can complain to the Information Commissioner's Office at ico.org.uk.",
         ],
       },
