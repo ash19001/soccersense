@@ -972,7 +972,12 @@ const PULL_FROM = TOP_TILT + TOP_HOLD;
 const MOSAIC = 5;
 /** A unit of the town's plan on the ground (km): its pitch is 136 units long, a real one 105 m. */
 const KM_A_UNIT = 0.105 / 136;
-/** FURTHEST's town from above is built a slice a frame once the menu has hovered this long. */
+/**
+ * FURTHEST's town from above is built a slice a frame once the menu has hovered this long.
+ * (Tried on 2026-11-19: not until 10 s in, to spare the first seconds' frames a slice each.
+ * A FURTHEST chosen before then, as most are after a game, had most of the town left to
+ * build in the strike's frame: half a second of standstill on a slow phone. Put back.)
+ */
 const TOP_BUILD_AFTER = 1.5;
 /** By night this share of a pixelated town's squares is lit. */
 const TOP_LIGHTS = 0.1;
@@ -2014,6 +2019,16 @@ export class MenuScene implements Scene {
     this.backdrop.setLighting(light);
   }
 
+  /**
+   * The Scene contract's `prepareStep`: the stadium's picture a step at a time (hundreds of
+   * milliseconds in all on a large screen), which the first `draw` would otherwise paint
+   * in one go.
+   */
+  prepareStep(): boolean {
+    if (!this.sized) return false;
+    return this.backdrop.prepareStep(this.clock);
+  }
+
   update(dt: number): void {
     const d = dt > 0 ? Math.min(dt, MAX_DT) : 0;
     this.realT += d;
@@ -2100,14 +2115,14 @@ export class MenuScene implements Scene {
     const hovering = this.state === "intro" || this.state === "idle";
     this.backdrop.setFloating(this.floatOn && hovering);
     this.backdrop.draw(s, this.clock);
-    // FURTHEST's town from above, a slice a frame while the ball hovers (or while FURTHEST's
-    // kick-off waits for its strike), so that it is ready when it is wanted
-    if (
-      (hovering && this.clock > TOP_BUILD_AFTER) ||
-      (kick && this.mode === "furthest")
-    ) {
-      // (faster once FURTHEST is chosen: it is wanted at the strike)
-      for (let i = kick ? 4 : 1; i > 0; i--) this.topTown().step();
+    // FURTHEST's town from above, a slice a frame while the ball hovers, so that it is
+    // ready when it is wanted; and faster once FURTHEST is chosen (while the ball turns to
+    // show it, and while its kick-off waits for its strike): it is wanted at the strike
+    const far =
+      (kick && this.mode === "furthest") ||
+      (hovering && this.queued === "furthest");
+    if (far || (hovering && this.clock > TOP_BUILD_AFTER)) {
+      for (let i = far ? 4 : 1; i > 0; i--) this.topTown().step();
     }
     // the backdrop has now built whatever the last change made stale: ask again
     if (this.aimStale) this.aim();
@@ -2783,7 +2798,10 @@ export class MenuScene implements Scene {
       this.logo.tagline = labels.tagline;
     }
     this.goldWords = labels.golden ?? null;
-    this.layoutLogo();
+    // Only once the scene has a size: `resize` always lays the wordmark out. From the
+    // constructor (no size yet) this built both of its arts for a width of nothing, 16 to
+    // 24 ms in the middle of the page starting up, to be thrown away at the first `resize`.
+    if (this.sized) this.layoutLogo();
   }
 
   /** Today's result per mode, shown as that patch's badge. `null` takes it off again. */

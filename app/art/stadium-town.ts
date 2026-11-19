@@ -167,8 +167,9 @@ const BOWL_V = -58;
  * depth painted (by comparing the rows it can reach before and after). A pixel only the
  * slice's shadows darkened is still bare ground (`log`): a tree's shadow on the road
  * must not hide a car driving through it, nor a van's shadow the queue at its hatch.
- * A generator: it pauses after every `slice` items or so (a few milliseconds), and the
- * caller sets the shadows' surface and log around each run (stadium-life.ts `castOn`).
+ * A generator: it pauses after every `slice` items or so (a millisecond or two), part way
+ * through a long group too, and the caller sets the shadows' surface and log around each
+ * run (stadium-life.ts `castOn`).
  */
 function* drawItems(
   c: Ctx,
@@ -183,7 +184,7 @@ function* drawItems(
   const depth = town.depth;
   const prev = new Uint32Array(w * h);
   // a pause every few items, or every few groups (each compares a band of rows)
-  const slice = Math.max(40, Math.ceil(items.length / 10));
+  const slice = Math.max(16, Math.ceil(items.length / 25));
   let drawn = 0;
   let groups = 0;
   let i = 0;
@@ -227,7 +228,10 @@ function* drawItems(
     const y1 = Math.max(y0, Math.min(h, Math.ceil(rowAt(view, lo - 9)) + 5));
     prev.set(data.subarray(y0 * w, y1 * w), y0 * w);
     log.now++;
-    for (let n = i; n < j; n++) items[n].draw();
+    for (let n = i; n < j; n++) {
+      if (n > i && (n - i) % slice === 0) yield;
+      items[n].draw();
+    }
     for (let p = y0 * w; p < y1 * w; p++) {
       if (data[p] !== prev[p] && !log.onlyShadow(p, prev[p])) depth[p] = lo;
     }
@@ -258,12 +262,20 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
   ) {
     // its own bowl, so filling it in later touches no other town
     const town: Town = { ...last.town, bowl: { ...last.town.bowl } };
-    // the first slice waits a frame: the frame of the change repaints the rest of the picture
+    // the first slice waits a frame: the frame of the change repaints the rest of the
+    // picture. Then RELIGHT_SLICES of them a frame: they are cut finer than a frame needs,
+    // for a first picture built between the page's other work (`paintTownSteps`).
     pending.set(
       town,
       (function* () {
         yield;
-        return yield* steps;
+        for (;;) {
+          for (let i = 0; i < RELIGHT_SLICES; i++) {
+            const r = steps.next();
+            if (r.done) return r.value;
+          }
+          yield;
+        }
       })(),
     );
     lastTown = { key, base: townKey(view, seed), town, view };
@@ -273,6 +285,26 @@ export function paintTown(view: View, light: Lighting, seed: number): Town {
   while (!r.done) r = steps.next();
   lastTown = { key, base: townKey(view, seed), town: r.value, view };
   return r.value;
+}
+
+/**
+ * `paintTown` for a caller that builds a first picture a step at a time
+ * (`MenuBackdrop.prepare`): the same town by the same steps, each `next()` a few
+ * milliseconds of work. A view painted before is `paintTown`'s own business (the last
+ * picture at once, the new one a slice a frame): that is returned with no step at all.
+ */
+export function* paintTownSteps(
+  view: View,
+  light: Lighting,
+  seed: number,
+): Generator<void, Town, void> {
+  const base = townKey(view, seed);
+  if (lastTown !== null && lastTown.view === view && lastTown.base === base) {
+    return paintTown(view, light, seed);
+  }
+  const town = yield* townSteps(view, light, seed);
+  lastTown = { key: `${base}:${light.lightsOn}`, base, town, view };
+  return town;
 }
 
 /**
@@ -298,6 +330,8 @@ export function townPending(town: Town): boolean {
 }
 
 const pending = new WeakMap<Town, Generator<void, Town, void>>();
+/** How many of `townSteps`'s slices a frame a change of light takes (`advanceTown`). */
+const RELIGHT_SLICES = 3;
 let lastTown: {
   key: string;
   base: string;
@@ -374,11 +408,15 @@ function* townSteps(
   yield;
 
   farTown(c, town);
+  yield;
   northStrip(c);
   westSide(c);
+  yield;
   eastSide(c);
+  yield;
   southWest(c, town);
   southEast(c);
+  yield;
   concourse(c, town);
   lamps(c);
   yield;
@@ -391,7 +429,7 @@ function* townSteps(
     town.depth = knownDepth.depth;
     const items = c.items;
     items.sort((a, b) => b.V - a.V);
-    const slice = Math.max(40, Math.ceil(items.length / 10));
+    const slice = Math.max(16, Math.ceil(items.length / 25));
     for (let i = 0; i < items.length; i += slice) {
       castOn(s);
       try {
@@ -460,7 +498,7 @@ interface GroundPlan {
 const LIT_BIT = 0x8000;
 const groundPlans: GroundPlan[] = [];
 
-function groundPlan(c: Ctx): GroundPlan {
+function* groundPlan(c: Ctx): Generator<void, GroundPlan, void> {
   const { view, seed } = c;
   const { w, h, hy, cx, k } = view;
   const key = `${w}x${h}:${k}:${cx}:${view.yc}:${hy}:${seed}`;
@@ -471,7 +509,10 @@ function groundPlan(c: Ctx): GroundPlan {
   const stepOf = new Uint8Array(n);
   const colors: number[] = [];
   const index = new Map<number, number>();
+  // about 6,000 pixels a slice (each asks the plan what is there: a few milliseconds)
+  const slice = Math.max(1, Math.floor(6000 / w));
   for (let y = hy; y < h; y++) {
+    if (y > hy && (y - hy) % slice === 0) yield;
     const V = depthAtRow(view, y + 0.5);
     const sc = (k * ZC) / (ZC + V);
     const e = hazeAt(view, V) * 8;
@@ -506,7 +547,7 @@ function* paintGround(c: Ctx): Generator<void, void, void> {
   const waterHi = mix(sky.bands[5], light.env(P.skyLow), 0.3);
   const waterLo = mix(sky.bands[1], light.env(P.skyTop), 0.4);
   const data = s.data;
-  const plan = groundPlan(c);
+  const plan = yield* groundPlan(c);
   const { idx, step, colors } = plan;
   // this light's colour for each (plan colour, haze step), and lit, made as they are met
   const STEPS = 10;

@@ -105,6 +105,15 @@ export interface Scene {
   update(dt: number): void;
   /** Paint the frame. Must cover every pixel of `s`. */
   draw(s: Surface): void;
+  /**
+   * A little of what the next `draw` would otherwise have to build in one go (the picture
+   * for this size and light): true while there is more of it. A host with a clock calls it
+   * after `resize` and `setLighting`, in short tasks, before a scene's first frame, so
+   * that building the picture never holds the page up. It moves no time and changes
+   * nothing that is drawn: a scene drawn without it (the snap tool, tests, a host that
+   * does not know of it) builds everything in that `draw`, as ever.
+   */
+  prepareStep?(): boolean;
   /** Pointer input, already converted to logical pixels. */
   pointer?(p: PointerInfo): void;
   /**

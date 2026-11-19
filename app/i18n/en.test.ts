@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { SHOT_ORDER, TITLES } from "~/game";
-import { en } from "./en";
+import { en, grouped } from "./en";
 
 /** Every string a player can see or hear: the values, and what the functions say. */
 function words(value: unknown, path = "en"): { path: string; text: string }[] {
@@ -97,5 +97,44 @@ describe("the interface text", () => {
       expect(en.play.fullTime.other[mode]).toBe(en.home.modes[mode].label);
     }
     expect(en.play.fullTime.otherSpoken("RETRO")).toBe("Play RETRO");
+  });
+});
+
+describe("a count of players", () => {
+  it("is written as British English writes a whole number, without asking the browser", () => {
+    for (const count of [
+      0,
+      1,
+      9,
+      10,
+      99,
+      100,
+      999,
+      1000,
+      1001,
+      1284,
+      9999,
+      10_000,
+      99_999,
+      100_000,
+      999_999,
+      1_000_000,
+      1_234_567,
+      12_345_678,
+      123_456_789,
+      1_234_567_890,
+      Number.MAX_SAFE_INTEGER,
+    ]) {
+      expect(grouped(count), String(count)).toBe(count.toLocaleString("en-GB"));
+    }
+    expect(grouped(1284)).toBe("1,284");
+    expect(en.home.sign.count(1136)).toBe("1,136");
+    expect(en.home.sign.rank(37, 1284)).toBe("37 OF 1,284");
+  });
+
+  it("leaves anything that is not a whole count to the browser", () => {
+    for (const odd of [-1, -1234, 1.5, 1234.25, Number.NaN, 1e21]) {
+      expect(grouped(odd), String(odd)).toBe(odd.toLocaleString("en-GB"));
+    }
   });
 });

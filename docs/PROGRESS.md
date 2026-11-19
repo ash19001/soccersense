@@ -1152,6 +1152,75 @@ GAME_DESIGN.md section 1 has the rules.
   has seven approved ones of a mode, the server plays that mode's sample, so these two always
   do for now); their scenery has no sounds of its own (it borrows the career's).
 
+## PageSpeed: the page no longer jumps, and starts in short tasks (2026-11-19)
+
+The product owner sent Google PageSpeed's report for the home page (phone 70, desktop 62;
+layout shift 1.015 and 1.006) and asked for every fix that could be made. Measured here with
+the same Lighthouse (13.6), each build in turn, medians of four runs:
+
+| home page                                          | before | after |
+| -------------------------------------------------- | ------ | ----- |
+| phone                                              | 77     | 86    |
+| phone, the stylesheet slow (what Google's run met) | 44     | 85    |
+| desktop                                            | 76     | 97    |
+| desktop, the stylesheet slow                       | 56     | 85    |
+
+(Phone, stylesheet slow: layout shift 1.015 to 0, first paint 3.2 s to 1.1 s, blocked time 636
+to 451 ms. Some 300 ms of what is left on the phone is the sound engine's AudioContext as
+this machine makes it, counted four times over; Google's own run, on its own machine, never
+counted it. Google's figures only show after a deploy and a new run of the report.)
+
+Other pages, two runs each: the rules 90 to 100 on the phone and 93 to 100 on a desktop; a
+mode page on a desktop 77 to 96; AWAY's page on the phone 70 to 84, HOME's 45 to 61. HOME's
+page on a phone is held back by its largest paint: the board's instruction line is a little
+larger than the mode card's name, and the board only comes when the card has had its 2.4 s
+(on the other modes' pages the card's name is the largest thing, and it is up at once).
+
+- **The big jump** (1.0): the ads' script measures the page as soon as it runs, and on
+  Google's machine it ran before the stylesheet had arrived, so the browser laid the page out
+  bare and everything "moved" when the styles landed; the first paint was counted as waiting
+  for the ad scripts as well. Now the home screen's page and the mode pages carry their
+  styles (`tools/inline-css.ts`, ARCHITECTURE.md "Hosting"). The pages of words keep
+  theirs as a file: painted before their fonts, all their text moved when the fonts landed.
+- **The second jump** (0.015 on Google's phone, 0.36 to 0.40 on a desktop): the build-time
+  HTML is laid out for a default phone and the real sizes came with the page's code. Now a
+  small script in the HTML sets them before the first paint (`~/ui/scale-boot`, API_UI.md
+  "The scale before the page's code has loaded"); the rules, the legal pages and the sign-in
+  page mark themselves wide the same way (`~/ui/wide-mark`), and the game layout's empty
+  slots no longer count as moving (0.30 on a mode page as the board arrived).
+- **The main thread at start-up.** The stadium's first picture was one task of 0.2 to 0.6 s
+  (a second on a slow phone): it is built in tasks of 4 ms (`Scene.prepareStep`,
+  ARCHITECTURE.md section 4), the same pixels. The sound engine gets ready at the first move
+  of a pointer or two seconds after it is made, not in the middle of the ball's entrance
+  (AUDIO.md). The time zone is read without `Intl` where the browser can (`~/lib/where`),
+  the board's counts are written without it (`grouped` in `en.ts`), and the wordmark is
+  laid out once, when the scene has a size.
+- **Frames.** The ball's rasteriser does about half the work a frame (1.7 ms to 0.9 in a
+  bench at a phone's size; its entrance 274 ms to 112 over its 52 frames) and the sky's
+  bands are copied, the same pixels.
+- **Requests.** A page asked `/api/today` twice and the boards twice as it opened: once
+  each now (`~/ui/game-clock`, `~/ui/day-place`, `app/routes/board.ts`). The build's hashed
+  files are kept by the browser for thirty days (`public/_headers`).
+- **The mode pages.** A mode page's largest paint, the mode card, waited for all the page's
+  code and the server's clock (5.2 s on PageSpeed's phone). On a device that has never
+  played the card is now up from the first paint (`EARLY_CARD`, API_UI.md `ModeIntro`).
+- **Held to it**: `app/routes/takeover.test.tsx` loads every page as the build renders it,
+  runs its scripts and has React take it over on a phone and a monitor; the menu scene's
+  frames were compared with the last commit's, pixel for pixel, over 69,000 frames (the
+  same, but that after a change of light the town's new picture now comes in a few frames
+  sooner; the kit is in `.snaps/perf`, not in the repository). Five reviewers then went
+  over the whole change, each finding checked by a second.
+- **Tried and taken back the same day**, after that review: FURTHEST's town from above built
+  only from 10 s in (smoother first seconds, but a FURTHEST chosen before then stood still
+  at its strike for half a second on a slow phone); the sound engine got ready five seconds
+  after the page's `load` (it helped this machine's Lighthouse run only, and would have put
+  0.3 s into most phones' first tap).
+- **Left, and why**: the ads' own scripts (about a fifth of a second of the phone's blocked
+  time, and most of what is left of the desktop's largest paint: loading the tag after the
+  first paint is the next step, and the product owner's call while AdSense reviews the
+  site); the bot check starting later (nothing in the score); the sign-in page's card
+  growing as it reads the link (0.01).
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to
@@ -1165,6 +1234,12 @@ GAME_DESIGN.md section 1 has the rules.
   `app/i18n`.
 - Sound: if the idle juggling still sounds too present, lower
   `JUGGLE_TOUCH` in `app/scenes/career.ts` from 0.15 to 0.08 (about 5.5 dB quieter).
+- A mode page opened in a tab nobody is looking at (a search result opened in a new tab)
+  counts the mode card's 2.4 s there and starts the game: question 1's clock runs out
+  unseen, in a game played once a day. Found on 2026-11-19 while the PageSpeed changes were
+  reviewed; older than they are. `app/routes/play/controller.ts` arms the card's timer
+  whatever `document.visibilityState` is: it should wait for the page to be seen (in the
+  timer's path only, never in the press's: a press must always send the card off).
 
 ## Working notes
 

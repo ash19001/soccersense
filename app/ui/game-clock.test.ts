@@ -6,6 +6,7 @@ import {
   CLOCK_SLACK_MS,
   CLOCK_TIMEOUT_MS,
   SERVER_TIME_HEADER,
+  clockRequests,
   deviceClock,
   gameSearch,
   serverClock,
@@ -243,6 +244,72 @@ describe("serverClock", () => {
     await settle();
     expect(h.clock.status()).toBe("ready");
     expect(h.clock.now()).toBe(NOON + 3 * 86_400_000);
+  });
+});
+
+describe("the page's clock's requests", () => {
+  /** A site that answers `/api/today`, and what it was asked. */
+  function site(body: unknown, status = 200) {
+    const asked: { url: string; method: string }[] = [];
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      asked.push({ url: String(input), method });
+      return new Response(method === "HEAD" ? null : JSON.stringify(body), {
+        status,
+        headers: { "x-server-time": String(NOON) },
+      });
+    }) as typeof fetch;
+    return { asked, fetcher };
+  }
+  const signal = () => new AbortController().signal;
+
+  test("the first look is a GET, and its body is kept: the day and its place come with the time", async () => {
+    const { asked, fetcher } = site({ day: 8, place: { id: "lagos" } });
+    const asks = clockRequests(fetcher);
+    // nothing to say before the clock has asked
+    expect(asks.today()).toBeNull();
+    const heard = await asks.request(
+      "https://example.test/api/today",
+      signal(),
+    );
+    // the clock still reads the time from the same answer
+    expect(serverTimeOf(heard, 0, 0)).toBe(NOON);
+    expect(asked).toEqual([
+      { url: "https://example.test/api/today", method: "GET" },
+    ]);
+    expect(await asks.today()).toEqual({ day: 8, place: { id: "lagos" } });
+  });
+
+  test("every later look is a HEAD: the time alone, and the kept body stays the first one", async () => {
+    const { asked, fetcher } = site({ day: 8 });
+    const asks = clockRequests(fetcher);
+    await asks.request("https://example.test/api/today", signal());
+    await asks.request("https://example.test/api/today", signal());
+    await asks.request("https://example.test/api/today", signal());
+    expect(asked.map((ask) => ask.method)).toEqual(["GET", "HEAD", "HEAD"]);
+    expect(await asks.today()).toEqual({ day: 8 });
+  });
+
+  test("an answer that is not the API's, or a request that fails, keeps nothing", async () => {
+    const refused = clockRequests(site({ error: "not_found" }, 404).fetcher);
+    await refused.request("https://example.test/api/today", signal());
+    expect(await refused.today()).toBeNull();
+
+    // no API behind the page: the host's own page comes back
+    const page = clockRequests(
+      (async () =>
+        new Response("<!doctype html>", { status: 200 })) as typeof fetch,
+    );
+    await page.request("https://example.test/api/today", signal());
+    expect(await page.today()).toBeNull();
+
+    const offline = clockRequests((async () => {
+      throw new TypeError("offline");
+    }) as typeof fetch);
+    await expect(
+      offline.request("https://example.test/api/today", signal()),
+    ).rejects.toThrow("offline");
+    expect(await offline.today()).toBeNull();
   });
 });
 

@@ -6,7 +6,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import { PLACES } from "~/data/places";
 
-import { dayPlace, forgetDayPlaces } from "./day-place";
+import { PLACE_TIMEOUT_MS, dayPlace, forgetDayPlaces } from "./day-place";
 
 const LAGOS = PLACES.find((p) => p.id === "lagos");
 
@@ -54,5 +54,51 @@ describe("the day's place by the server", () => {
       throw new TypeError("offline");
     }) as unknown as typeof fetch;
     expect(await dayPlace(8, fetcher)).toBeNull();
+  });
+});
+
+describe("the page's clock has asked the same address already", () => {
+  test("its answer says the place: the server is not asked a second time", async () => {
+    const { calls, fetcher } = server({ day: 8, place: LAGOS });
+    const told = () => Promise.resolve({ day: 8, place: LAGOS });
+    expect(await dayPlace(8, fetcher, told)).toEqual(LAGOS);
+    expect(calls).toEqual([]);
+  });
+
+  test("an answer with no place that can be used is nothing, and still not asked again", async () => {
+    const { calls, fetcher } = server({ day: 8, place: LAGOS });
+    const told = () => Promise.resolve({ day: 8, place: { name: "nowhere" } });
+    expect(await dayPlace(8, fetcher, told)).toBeNull();
+    expect(calls).toEqual([]);
+  });
+
+  test("where the clock's answer is no use, the server is asked as before", async () => {
+    for (const heard of [
+      // the clock has not asked (the tests' clock, say)
+      null,
+      // its request failed, or was not the API's
+      Promise.resolve(null),
+      Promise.resolve("<!doctype html>"),
+      // the page has been open since yesterday: the clock's first answer is another day's
+      Promise.resolve({ day: 7, place: LAGOS }),
+    ]) {
+      forgetDayPlaces();
+      const { calls, fetcher } = server({ day: 8, place: LAGOS });
+      expect(await dayPlace(8, fetcher, () => heard)).toEqual(LAGOS);
+      expect(calls).toHaveLength(1);
+    }
+  });
+
+  test("a clock still waiting for its answer does not hold the game up for longer than before", async () => {
+    vi.useFakeTimers();
+    try {
+      const { calls, fetcher } = server({ day: 8, place: LAGOS });
+      const place = dayPlace(8, fetcher, () => new Promise(() => {}));
+      await vi.advanceTimersByTimeAsync(PLACE_TIMEOUT_MS);
+      expect(await place).toBeNull();
+      expect(calls).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

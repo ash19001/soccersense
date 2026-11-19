@@ -232,8 +232,8 @@ function* bowlShape(
     return HF + sRho * (HS - HF);
   };
 
-  // about 8,000 pixels a slice (each one a few searches along the line of sight)
-  const rows = Math.max(1, Math.floor(8000 / w));
+  // about 3,000 pixels a slice (each one a few searches along the line of sight)
+  const rows = Math.max(1, Math.floor(3000 / w));
   for (let j = 0; j < h; j++) {
     if (j > 0 && j % rows === 0) yield;
     const sy = top + j;
@@ -391,8 +391,8 @@ export function* paintBowlSteps(
     return o;
   };
 
-  // about 20,000 pixels a slice
-  const slice = Math.max(1, Math.floor(20000 / w));
+  // about 6,000 pixels a slice
+  const slice = Math.max(1, Math.floor(6000 / w));
   for (let j = 0; j < h; j++) {
     if (j > 0 && j % slice === 0) yield;
     for (let i = 0; i < w; i++) {

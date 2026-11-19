@@ -454,6 +454,13 @@ let edgeBuf = new Uint8Array(0);
 let seamBuf = new Uint8Array(0);
 const OUTSIDE = -1;
 const OUTLINE = -2;
+/**
+ * The last rasterisation's rows: the first and last column of each row's run of pixels in
+ * the disc, at the row's number plus one (`rasterise`). After a whole rasterisation, every
+ * row of the disc.
+ */
+let runA = new Int16Array(0);
+let runB = new Int16Array(0);
 
 interface Disc {
   /** Left and top of the box. */
@@ -557,10 +564,34 @@ function orientTo(state: BallState): void {
   orient(finite(state.yaw), finite(state.pitch), finite(state.roll));
 }
 
+/**
+ * A point that scores this much for a panel is that panel's, whichever way the ball is
+ * turned: it is nearer that panel's centre than half way to any other's (a hair less, for
+ * the rounding), so no other panel can score more. `panelAt` then has nowhere to walk to and
+ * says so without looking, which is most of the ball's pixels. (The scores are cosines only
+ * while the pentagons are not scaled: with any other PENTAGON_DEPTH there is no such
+ * score, and every point is walked.)
+ */
+const SURE = ((): number => {
+  if (PENTAGON_DEPTH !== 1) return Infinity;
+  let nearest = -1;
+  for (let a = 0; a < FACES; a++) {
+    for (let b = a + 1; b < FACES; b++) {
+      const dot =
+        CENTRE[a * 3] * CENTRE[b * 3] +
+        CENTRE[a * 3 + 1] * CENTRE[b * 3 + 1] +
+        CENTRE[a * 3 + 2] * CENTRE[b * 3 + 2];
+      if (dot > nearest) nearest = dot;
+    }
+  }
+  return Math.cos(Math.acos(nearest) / 2) + 1e-6;
+})();
+
 /** The panel under a view-space point, walking uphill from a guess. */
 function panelAt(x: number, y: number, z: number, guess: number): number {
   let f = guess;
   let best = x * SCORE[f * 3] + y * SCORE[f * 3 + 1] + z * SCORE[f * 3 + 2];
+  if (best >= SURE) return f;
   for (;;) {
     let moved = false;
     const base = f * 6;
@@ -612,65 +643,80 @@ function rasterise(from = 0, to = disc.d, c0 = 0, c1 = disc.d): void {
     );
   const i0 = Math.max(0, c0);
   const i1 = Math.min(d, c1);
+  if (runA.length < d + 2) {
+    runA = new Int16Array(d + 2);
+    runB = new Int16Array(d + 2);
+  }
+  // Each row's run of pixels in the disc (and in the window): its first and last column,
+  // kept at the row's number plus one. A row with none, and the rows just outside the
+  // window, have a first column past every last one.
+  const noRun = (j: number): void => {
+    runA[j + 1] = d;
+    runB[j + 1] = -1;
+  };
+  if (j0 <= j1) {
+    noRun(j0 - 1);
+    noRun(j1);
+  }
 
   let rowGuess = 0;
   for (let j = j0; j < j1; j++) {
     const dy = j - half;
+    // the columns with dx * dx + dy * dy <= rad2: from the square root, then put right by
+    // the test itself, so it is exactly the pixels that test takes
+    const reach = Math.sqrt(Math.max(0, rad2 - dy * dy));
+    let a = Math.max(0, Math.ceil(half - reach) - 1);
+    let b = Math.min(d - 1, Math.floor(half + reach) + 1);
+    while (a <= b && (a - half) * (a - half) + dy * dy > rad2) a++;
+    while (b >= a && (b - half) * (b - half) + dy * dy > rad2) b--;
+    if (a < i0) a = i0;
+    if (b > i1 - 1) b = i1 - 1;
+    if (a > b) {
+      noRun(j);
+      continue;
+    }
+    runA[j + 1] = a;
+    runB[j + 1] = b;
     let guess = rowGuess;
-    let first = true;
     const row = (j + 1) * stride + 1;
-    for (let i = i0; i < i1; i++) {
-      const dx = i - half;
-      const q = dx * dx + dy * dy;
-      if (q > rad2) continue;
-      const nx = dx * inv;
-      const ny = dy * inv;
+    const ny = dy * inv;
+    for (let i = a; i <= b; i++) {
+      const nx = (i - half) * inv;
       const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
       guess = panelAt(nx, ny, nz, guess);
-      if (first) {
-        rowGuess = guess;
-        first = false;
-      }
+      if (i === a) rowGuess = guess;
       faceBuf[row + i] = guess;
     }
   }
 
-  // The outline is the engine's circle: the disc's pixels that touch the outside.
-  // Marked in a second sweep so the test reads the untouched panel ids.
+  // The outline is the engine's circle: the disc's pixels that touch the outside. On a row
+  // those are its run's two ends, and what of it the rows above and below do not reach.
   for (let j = j0; j < j1; j++) {
+    const a = runA[j + 1];
+    const b = runB[j + 1];
+    if (a > b) continue;
     const row = (j + 1) * stride + 1;
-    for (let i = i0; i < i1; i++) {
-      const k = row + i;
-      edgeBuf[k] =
-        faceBuf[k] !== OUTSIDE &&
-        (faceBuf[k - 1] === OUTSIDE ||
-          faceBuf[k + 1] === OUTSIDE ||
-          faceBuf[k - stride] === OUTSIDE ||
-          faceBuf[k + stride] === OUTSIDE)
-          ? 1
-          : 0;
-    }
-  }
-  for (let j = j0; j < j1; j++) {
-    const row = (j + 1) * stride + 1;
-    for (let i = i0; i < i1; i++) {
-      if (edgeBuf[row + i] === 1) faceBuf[row + i] = OUTLINE;
-    }
+    // the last column not covered on the left, the first not covered on the right
+    const left = Math.min(b, Math.max(a, Math.max(runA[j], runA[j + 2]) - 1));
+    const right = Math.max(a, Math.min(b, Math.min(runB[j], runB[j + 2]) + 1));
+    for (let i = a; i <= left; i++) faceBuf[row + i] = OUTLINE;
+    for (let i = right; i <= b; i++) faceBuf[row + i] = OUTLINE;
   }
 
   // Distance to the nearest other panel, city-block, capped: two chamfer sweeps. The
   // first also marks the seams. A seam is drawn on one side only, in the panel with the
-  // lower number, so it is a single pixel wide whichever way it runs.
+  // lower number, so it is a single pixel wide whichever way it runs. (Nothing outside the
+  // disc or on its outline is a seam or has a distance: those rows are emptied first.)
+  if (j1 > j0) {
+    seamBuf.fill(0, (j0 + 1) * stride, (j1 + 1) * stride);
+    edgeBuf.fill(0, (j0 + 1) * stride, (j1 + 1) * stride);
+  }
   for (let j = j0; j < j1; j++) {
     const row = (j + 1) * stride + 1;
-    for (let i = i0; i < i1; i++) {
+    for (let i = runA[j + 1], last = runB[j + 1]; i <= last; i++) {
       const k = row + i;
       const f = faceBuf[k];
-      seamBuf[k] = 0;
-      if (f < 0) {
-        edgeBuf[k] = 0;
-        continue;
-      }
+      if (f < 0) continue;
       const a = faceBuf[k - 1];
       const b = faceBuf[k + 1];
       const c = faceBuf[k - stride];
@@ -691,7 +737,7 @@ function rasterise(from = 0, to = disc.d, c0 = 0, c1 = disc.d): void {
   }
   for (let j = j1 - 1; j >= j0; j--) {
     const row = (j + 1) * stride + 1;
-    for (let i = i1 - 1; i >= i0; i--) {
+    for (let i = runB[j + 1], first = runA[j + 1]; i >= first; i--) {
       const k = row + i;
       if (faceBuf[k] < 0) continue;
       const a = edgeBuf[k + 1];
@@ -1033,6 +1079,8 @@ const ROOM_SQUASHED = 8;
 /** The picture row and word of the top or bottom patch, shown straight on. */
 const ROOM_MARK_FRONT = 9;
 const ROOM_WORD_FRONT = 10;
+/** In their places until they are measured (`frontRoomFor`): no room is less than none. */
+const UNMEASURED = -1;
 /** The side room again, the text moved down 2, 4, ... SHIFT_MAX rows (`roomAt`). */
 const ROOM_SHIFTED = 11;
 /** A played side patch's score in its picture's place, over its word (`roomScoreAt`). */
@@ -1254,46 +1302,69 @@ function roomFor(): Int16Array {
     room[ROOM_MARK] = mark;
     room[ROOM_WORD] = word;
     room[ROOM_SQUASHED] = Math.max(0, squashed);
-    // NEXT-GEN, RETRO, GUESS WHO and SHOOTOUT shown straight on (`ballShowPose`), rocked
-    // and nodding. (Turned a quarter round, the hover's nod is a roll of GUESS WHO and
-    // SHOOTOUT: they are measured rolled as well.)
-    let frontMark = 1 << 14;
-    let frontWord = 1 << 14;
-    for (const slot of FRONT_SLOTS) {
-      const f = SLOT_FACE[SLOT_INDEX[slot]];
-      const pose = ballShowPose(slot);
-      const rolls = pose.yaw === 0 ? [0] : [-SQUASH_NOD, SQUASH_NOD];
-      for (const yaw of [-ROCK, ROCK]) {
-        for (const nod of [-SQUASH_NOD, SQUASH_NOD]) {
-          for (const roll of rolls) {
-            orient(pose.yaw + yaw, pose.pitch + nod, roll);
-            const [px, py] = markOf(f);
-            const top = lockedTop(py);
-            rasteriseRows(
-              top,
-              lockedRow + lockedGap + rowsS,
-              f,
-              px,
-              lockedEdge,
-            );
-            frontMark = Math.min(
-              frontMark,
-              freeRun(f, px, top, lockedRow, lockedEdge),
-            );
-            frontWord = Math.min(
-              frontWord,
-              freeRun(f, px, top + lockedRow + lockedGap, rowsS, lockedEdge),
-            );
-          }
-        }
-      }
-    }
-    room[ROOM_MARK_FRONT] = frontMark;
-    room[ROOM_WORD_FRONT] = frontWord;
+    // (the top, bottom and rim patches shown straight on: `frontRoomFor`, when one is)
+    room[ROOM_MARK_FRONT] = UNMEASURED;
+    room[ROOM_WORD_FRONT] = UNMEASURED;
   }
   if (roomCache.size > 400) roomCache.clear();
   roomCache.set(key, room);
   return room;
+}
+
+/**
+ * The rest of a room table: the room of NEXT-GEN, RETRO, GUESS WHO and SHOOTOUT shown
+ * straight on (`ballShowPose`), rocked and nodding. (Turned a quarter round, the hover's
+ * nod is a roll of GUESS WHO and SHOOTOUT: they are measured rolled as well.) Measured the
+ * first time one of them is shown so at this size (`showsFront`), not with the rest: in
+ * the menu's own pose none is, and in the entrance, where the ball has a new size every
+ * frame, it was two thirds of each frame's measuring and never read. Like `roomFor` it
+ * turns the ball about: before the frame's own `orient` and `rasterise`.
+ */
+function frontRoomFor(room: Int16Array): void {
+  if (room[ROOM_MARK_FRONT] !== UNMEASURED) return;
+  const rowsS = 10;
+  const lockedRow = LOCKED_ROW * 2;
+  const lockedGap = LOCKED_GAP * 2;
+  const lockedEdge = minE(LOCKED_EDGE);
+  let frontMark = 1 << 14;
+  let frontWord = 1 << 14;
+  for (const slot of FRONT_SLOTS) {
+    const f = SLOT_FACE[SLOT_INDEX[slot]];
+    const pose = ballShowPose(slot);
+    const rolls = pose.yaw === 0 ? [0] : [-SQUASH_NOD, SQUASH_NOD];
+    for (const yaw of [-ROCK, ROCK]) {
+      for (const nod of [-SQUASH_NOD, SQUASH_NOD]) {
+        for (const roll of rolls) {
+          orient(pose.yaw + yaw, pose.pitch + nod, roll);
+          const [px, py] = markOf(f);
+          const top = lockedTop(py);
+          rasteriseRows(top, lockedRow + lockedGap + rowsS, f, px, lockedEdge);
+          frontMark = Math.min(
+            frontMark,
+            freeRun(f, px, top, lockedRow, lockedEdge),
+          );
+          frontWord = Math.min(
+            frontWord,
+            freeRun(f, px, top + lockedRow + lockedGap, rowsS, lockedEdge),
+          );
+        }
+      }
+    }
+  }
+  room[ROOM_MARK_FRONT] = frontMark;
+  room[ROOM_WORD_FRONT] = frontWord;
+}
+
+/**
+ * Whether a top, bottom or rim patch faces the viewer enough, as the ball is turned now,
+ * to be laid out straight on (`drawLocked` and `drawFront`: `facingUs`).
+ */
+function showsFront(patches: BallPatches): boolean {
+  for (const slot of FRONT_SLOTS) {
+    if (!patches[slot]) continue;
+    if (VIEW[SLOT_FACE[SLOT_INDEX[slot]] * 3 + 2] >= FACING_LABEL) return true;
+  }
+  return false;
 }
 
 interface LabelFonts {
@@ -1508,6 +1579,92 @@ function pickWords(
 // ---------------------------------------------------------------------------
 
 /**
+ * What of a pixel's shading is a matter of where it is on the disc alone, never of how the
+ * ball is turned: how it faces the light (`lightBuf`), and whether it is on the floodlit
+ * rim, in the glint (its halo, its core) or in the grass's bounce (`placeBuf`). Kept at
+ * the same places as `faceBuf`, for one size and one floodlight (`placeShading`): the
+ * hovering ball is one size for as long as it hovers.
+ */
+let lightBuf = new Float64Array(0);
+let placeBuf = new Uint8Array(0);
+/** The size and the floodlight they are for. */
+let placedD = 0;
+let placedFlood = Number.NaN;
+const ON_RIM = 1;
+const IN_HALO = 2;
+const IN_CORE = 4;
+const IN_BOUNCE = 8;
+
+/**
+ * Fill `lightBuf` and `placeBuf` for the current disc under floodlights `flood` (0 off,
+ * 1 full), unless they are for it already. After a whole `rasterise`: it reads its rows.
+ */
+function placeShading(flood: number): void {
+  const d = disc.d;
+  if (placedD === d && placedFlood === flood) return;
+  const stride = d + 2;
+  if (lightBuf.length < stride * stride) {
+    lightBuf = new Float64Array(stride * stride);
+    placeBuf = new Uint8Array(stride * stride);
+  }
+  const rad = disc.rad;
+  const inv = 1 / rad;
+  const half = (d - 1) / 2;
+  // Detail comes in with size (`drawBall`).
+  const r1 = rs();
+  const glintDot = r1 >= 30 ? GLINT_DOT : 2;
+  const glintFlood = flood > 0.6 && r1 >= 20 ? GLINT_FLOOD : 2;
+  // The grass's bounce light: the outer 2 px of the darkest band.
+  const bounce = r1 >= 20 ? Math.sqrt(1 - (1 - 4.4 / rad) ** 2) : 0;
+  // Floodlights behind the ball catch its far edge: a crisp rim just inside the outline,
+  // one to three pixels wide as the lights come up and the ball gets bigger.
+  const rimW =
+    flood <= 0.25
+      ? 0
+      : ((flood < 0.6 ? 1 : 2) + (r1 >= 40 ? 1 : 0) - (r1 < 20 ? 1 : 0)) * 2;
+  const rimIn = rimW > 0 ? (rad - 1 - rimW) * inv : 2;
+  const rimIn2 = rimIn * rimIn;
+  for (let j = 0; j < d; j++) {
+    const dy = j - half;
+    const ny = dy * inv;
+    const row = (j + 1) * stride + 1;
+    for (let i = runA[j + 1], last = runB[j + 1]; i <= last; i++) {
+      const dx = i - half;
+      const nx = dx * inv;
+      const q = nx * nx + ny * ny;
+      const nz = Math.sqrt(Math.max(0, 1 - q));
+      const flat = nx * LX + ny * LY + nz * LZ;
+      let place = 0;
+      // The rim is a crescent: it tapers to a point at each end.
+      if (
+        q > rimIn2 &&
+        flat < RIM_SIDE &&
+        (1 - Math.sqrt(q)) * rad - 1 <
+          rimW * Math.min(1, 0.34 + (RIM_SIDE - flat) * 2.2)
+      ) {
+        place |= ON_RIM;
+      }
+      const spec = nx * HX + ny * HY + nz * HZ;
+      if (spec >= GLINT_CORE) place |= IN_CORE | IN_HALO;
+      else if (
+        spec >= GLINT_HALO ||
+        (ny < 0 &&
+          (nx * GX + ny * GY + nz * GZ >= GLINT_TAIL ||
+            nx * DX + ny * DY + nz * DZ >= glintDot ||
+            nx * FX + ny * FY + nz * FZ >= glintFlood))
+      ) {
+        place |= IN_HALO;
+      }
+      if (nz < bounce) place |= IN_BOUNCE;
+      lightBuf[row + i] = flat;
+      placeBuf[row + i] = place;
+    }
+  }
+  placedD = d;
+  placedFlood = flood;
+}
+
+/**
  * Draw the ball. `patches` says what each slot's pentagon carries. Colours go through
  * `light.lit`. Works for any radius from about 6 up, any rotation, and partly off-screen.
  */
@@ -1529,16 +1686,19 @@ export function drawBall(
   ) {
     return;
   }
-  chooseLayout(patches, roomFor());
+  const room = roomFor();
+  chooseLayout(patches, room);
   orientTo(state);
+  if (room[ROOM_MARK_FRONT] === UNMEASURED && showsFront(patches)) {
+    frontRoomFor(room);
+    orientTo(state);
+  }
   rasterise();
   const tones = tonesFor(light, state.gold === true);
   prepareSlots(state, patches, light, tones);
 
   const stride = d + 2;
   const rad = disc.rad;
-  const inv = 1 / rad;
-  const half = (d - 1) / 2;
   const data = s.data;
   const sw = s.w;
   const iMin = Math.max(0, s.clipX0 - x0);
@@ -1558,17 +1718,9 @@ export function drawBall(
   const dome = r1 >= 20 ? DOME : 0.25;
   const stitched = r1 >= 30;
   const bevel = r1 >= 30;
-  const glintDot = r1 >= 30 ? GLINT_DOT : 2;
-  const glintFlood = tones.flood > 0.6 && r1 >= 20 ? GLINT_FLOOD : 2;
-  // The grass's bounce light: the outer 2 px of the darkest band.
-  const bounce = r1 >= 20 ? Math.sqrt(1 - (1 - 4.4 / rad) ** 2) : 0;
-  // Floodlights behind the ball catch its far edge: a crisp rim just inside the outline,
-  // one to three pixels wide as the lights come up and the ball gets bigger.
-  const flood = tones.flood;
-  const rimW =
-    flood <= 0.25
-      ? 0
-      : ((flood < 0.6 ? 1 : 2) + (r1 >= 40 ? 1 : 0) - (r1 < 20 ? 1 : 0)) * 2;
+  // how each pixel faces the light, the glint, the floodlit rim and the grass's bounce: a
+  // matter of place alone, kept for the size
+  placeShading(tones.flood);
   // The seams are grooves one pixel fine, and the stitches on them are dashes two pixels
   // long.
   const stitchEvery = STITCH_EVERY * 2;
@@ -1576,8 +1728,6 @@ export function drawBall(
   // The bar of light that crosses an idle button: its half-width and its core's.
   const shineHalf = 4;
   const shineCore = 2;
-  const rimIn = rimW > 0 ? (rad - 1 - rimW) * inv : 2;
-  const rimIn2 = rimIn * rimIn;
   // A patch is banded on the diagonal through its centre: clean 45 degree steps.
   const bandHalf = Math.max(2, Math.round(rad * 0.13));
   const fillLight = Math.round(rad * 0.29);
@@ -1586,43 +1736,25 @@ export function drawBall(
   const border = borderW;
 
   for (let j = jMin; j < jMax; j++) {
-    const dy = j - half;
-    const ny = dy * inv;
     const row = (j + 1) * stride + 1;
     const py = y0 + j;
     const out = py * sw + x0;
-    for (let i = iMin; i < iMax; i++) {
+    // (only the row's pixels in the disc: nothing else is drawn)
+    const iFirst = Math.max(iMin, runA[j + 1]);
+    const iLast = Math.min(iMax - 1, runB[j + 1]);
+    for (let i = iFirst; i <= iLast; i++) {
       const k = row + i;
       const f = faceBuf[k];
-      if (f === OUTSIDE) continue;
       if (f === OUTLINE) {
         data[out + i] = tones.ink;
         continue;
       }
-      const dx = i - half;
-      const nx = dx * inv;
-      const q = nx * nx + ny * ny;
-      const nz = Math.sqrt(Math.max(0, 1 - q));
-      const flat = nx * LX + ny * LY + nz * LZ;
-      // The rim is a crescent: it tapers to a point at each end.
-      const onRim =
-        q > rimIn2 &&
-        flat < RIM_SIDE &&
-        (1 - Math.sqrt(q)) * rad - 1 <
-          rimW * Math.min(1, 0.34 + (RIM_SIDE - flat) * 2.2);
+      const flat = lightBuf[k];
+      const place = placeBuf[k];
+      const onRim = (place & ON_RIM) !== 0;
       // (A panel that faces away shows only its near edge: it must not glow for that.)
       const fl = FACE_LIGHT[f];
       const l = flat * (1 + dome) - dome * (fl > 0 ? fl : 0);
-      let spec = nx * HX + ny * HY + nz * HZ;
-      if (
-        spec < GLINT_HALO &&
-        ny < 0 &&
-        (nx * GX + ny * GY + nz * GZ >= GLINT_TAIL ||
-          nx * DX + ny * DY + nz * DZ >= glintDot ||
-          nx * FX + ny * FY + nz * FZ >= glintFlood)
-      ) {
-        spec = GLINT_HALO;
-      }
       const px = x0 + i;
       let c: Color;
 
@@ -1633,13 +1765,13 @@ export function drawBall(
           continue;
         }
         let band: number;
-        if (spec >= GLINT_HALO) band = 0;
+        if (place & IN_HALO) band = 0;
         else if (l >= LEATHER_STEPS[0]) band = 1;
         else if (l >= LEATHER_STEPS[1]) band = 2;
         else if (l >= LEATHER_STEPS[2]) band = 3;
         else band = 4;
         // By day the grass throws a little light back up into the darkest edge.
-        if (band === 4 && nz < bounce) band = 3;
+        if (band === 4 && place & IN_BOUNCE) band = 3;
         if (seamBuf[k] === 1) {
           c = seam[band];
           if (stitched) {
@@ -1703,8 +1835,8 @@ export function drawBall(
             if (diag < -bandHalf) tone -= 1;
           }
           c = black[tone];
-          if (spec >= GLINT_CORE) c = blackGlint[1];
-          else if (spec >= GLINT_HALO) c = blackGlint[0];
+          if (place & IN_CORE) c = blackGlint[1];
+          else if (place & IN_HALO) c = blackGlint[0];
           if (mode === NORMAL) {
             const o = si * 5;
             const diag = px - panelX[f] + (py - panelY[f]);

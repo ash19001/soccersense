@@ -18,6 +18,20 @@ import type {
   TierId,
 } from "~/game";
 
+/**
+ * A count of players as British English writes it, "1,284". For a whole number this is
+ * what `count.toLocaleString("en-GB")` gives, without the browser loading its language
+ * data for it: a page's first use of that costs about 20 ms (100 ms on a slow phone), and
+ * the leaderboard's count was it, as the home screen came up (2026-11-19). Anything else
+ * (never a count) is left to the browser.
+ */
+export function grouped(count: number): string {
+  if (!Number.isSafeInteger(count) || count < 0) {
+    return count.toLocaleString("en-GB");
+  }
+  return String(count).replace(/\B(?=(\d{3})+$)/g, ",");
+}
+
 export const en = {
   siteName: "soccersense",
 
@@ -112,8 +126,7 @@ export const en = {
        * it would not.
        */
       points: (points: number) => `${points} PTS`,
-      rank: (rank: number, count: number) =>
-        `${rank} OF ${count.toLocaleString("en-GB")}`,
+      rank: (rank: number, count: number) => `${rank} OF ${grouped(count)}`,
       /** "DAILY STREAK" over "4 DAYS". */
       streak: "DAILY STREAK",
       days: (days: number) => (days === 1 ? "1 DAY" : `${days} DAYS`),
@@ -121,7 +134,7 @@ export const en = {
       isWaiting: "IS WAITING",
       /** "PLAYED TODAY" over "1,136". */
       crowd: "ON THE BOARD",
-      count: (count: number) => count.toLocaleString("en-GB"),
+      count: (count: number) => grouped(count),
     },
     /**
      * The daily streak by the day plate: a flame and the days in a row with a finished game.
@@ -218,12 +231,11 @@ export const en = {
           tens >= 11 && tens <= 13
             ? "th"
             : (["th", "st", "nd", "rd"][rank % 10] ?? "th");
-        return `You: ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
+        return `You: ${rank}${suffix} of ${grouped(count)}`;
       },
       gap: "Rows left out",
       /** Everyone the server keeps is on the boards (since 2026-11-18). */
-      played: (count: number) =>
-        `${count.toLocaleString("en-GB")} on today's board`,
+      played: (count: number) => `${grouped(count)} on today's board`,
       /** In the table while nobody is on it yet. */
       empty: "Nobody on today's board yet.",
       open: "Today's top 10",
@@ -242,7 +254,7 @@ export const en = {
           tens >= 11 && tens <= 13
             ? "th"
             : (["th", "st", "nd", "rd"][rank % 10] ?? "th");
-        return `You're ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
+        return `You're ${rank}${suffix} of ${grouped(count)}`;
       },
       /**
        * ...or, played but not on the board (no account, or a game from before signing in),
@@ -254,13 +266,13 @@ export const en = {
           tens >= 11 && tens <= 13
             ? "th"
             : (["th", "st", "nd", "rd"][rank % 10] ?? "th");
-        return `You'd be ${rank}${suffix} of ${count.toLocaleString("en-GB")}`;
+        return `You'd be ${rank}${suffix} of ${grouped(count)}`;
       },
       /** ...or, not played yet, a nudge (short: the monitor's panel shows one line). */
       nudge: (count: number) =>
         count === 0
           ? "Nobody yet. You?"
-          : `${count.toLocaleString("en-GB")} on the board. You?`,
+          : `${grouped(count)} on the board. You?`,
       /** Over the strip of the player's last seven days in the mode. */
       week: "LAST 7 DAYS",
       /** The days under the bars, Sunday first (`Date.getUTCDay`). */

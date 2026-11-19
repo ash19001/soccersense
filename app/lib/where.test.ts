@@ -9,8 +9,13 @@ import {
   withLocalTime,
 } from "./where";
 
-/** Makes the device report a time zone name and an offset (minutes east of UTC). */
+/**
+ * Makes the device report a time zone name and an offset (minutes east of UTC). The name is
+ * read the old way, through `Intl`: there is no `Temporal` on this device (the tests of
+ * `deviceLocationGuess` below give it one).
+ */
 function fakeDevice(timeZone: string | undefined, utcOffsetMinutes: number) {
+  vi.stubGlobal("Temporal", undefined);
   vi.spyOn(Intl, "DateTimeFormat").mockImplementation(
     () =>
       ({
@@ -25,6 +30,7 @@ function fakeDevice(timeZone: string | undefined, utcOffsetMinutes: number) {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("guessLocation", () => {
@@ -84,7 +90,33 @@ describe("deviceLocationGuess", () => {
     expect(deviceLocationGuess()).toEqual({ lat: 40, lng: -45 });
   });
 
+  it("asks Temporal for the zone where there is one, and builds no date formatter", () => {
+    vi.stubGlobal("Temporal", { Now: { timeZoneId: () => "Asia/Tokyo" } });
+    const formatter = vi.spyOn(Intl, "DateTimeFormat");
+    const at = deviceLocationGuess();
+    expect(at.lat).toBeCloseTo(35.7, 1);
+    expect(at.lng).toBeCloseTo(139.7, 1);
+    expect(formatter).not.toHaveBeenCalled();
+  });
+
+  it("goes the old way when Temporal gives no name, or throws", () => {
+    fakeDevice("Australia/Sydney", 660);
+    vi.stubGlobal("Temporal", { Now: { timeZoneId: () => undefined } });
+    expect(deviceLocationGuess().lng).toBeCloseTo(151.2, 1);
+    vi.stubGlobal("Temporal", {
+      Now: {
+        timeZoneId: () => {
+          throw new Error("no Temporal here");
+        },
+      },
+    });
+    expect(deviceLocationGuess().lng).toBeCloseTo(151.2, 1);
+    vi.stubGlobal("Temporal", {});
+    expect(deviceLocationGuess().lng).toBeCloseTo(151.2, 1);
+  });
+
   it("never throws when Intl is broken", () => {
+    vi.stubGlobal("Temporal", undefined);
     vi.spyOn(Intl, "DateTimeFormat").mockImplementation(() => {
       throw new Error("no Intl here");
     });
@@ -93,6 +125,7 @@ describe("deviceLocationGuess", () => {
   });
 
   it("never throws when the clock is broken too", () => {
+    vi.stubGlobal("Temporal", undefined);
     vi.spyOn(Intl, "DateTimeFormat").mockImplementation(() => {
       throw new Error("no Intl here");
     });

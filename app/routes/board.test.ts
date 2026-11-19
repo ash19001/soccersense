@@ -158,4 +158,84 @@ describe("the day's boards", () => {
     expect(boardStore.read()).toEqual({ day: 5, answer: mockBoards(5) });
     expect(boardCalls()).toEqual([]);
   });
+
+  /** A clock whose listeners the test calls: the server's time arriving. */
+  function heardClock(api: () => boolean) {
+    const heard = new Set<() => void>();
+    setGameClock({
+      ...deviceClock(),
+      api,
+      subscribe: (onChange) => {
+        heard.add(onChange);
+        return () => {
+          heard.delete(onChange);
+        };
+      },
+    });
+    return () => {
+      for (const tell of [...heard]) tell();
+    };
+  }
+
+  test("the clock's answer does not ask a second time where the server was asked already", async () => {
+    // every visit: the boards are asked for as the screen opens, and the server's time
+    // arrives a moment later (it was a second request for the same boards, 2026-11-19)
+    const answer = heardClock(() => true);
+    stop = boardStore.watch(TODAY);
+    await settle();
+    answer();
+    await settle();
+    expect(boardCalls()).toEqual(["GET /api/leaderboard"]);
+  });
+
+  test("in development the made-up boards give way once the clock has found the API", async () => {
+    let api = false;
+    const answer = heardClock(() => api);
+    stop = boardStore.watch(TODAY);
+    expect(boardStore.read().answer).toEqual(mockBoards(TODAY));
+    expect(boardCalls()).toEqual([]);
+    api = true;
+    answer();
+    await settle();
+    expect(boardCalls()).toEqual(["GET /api/leaderboard"]);
+    expect(boardStore.read().answer?.day).toBe(TODAY);
+    // and from then on the clock's answers ask nothing more
+    answer();
+    await settle();
+    expect(boardCalls()).toEqual(["GET /api/leaderboard"]);
+  });
+
+  test("the clock's answer while the boards are still on their way asks nothing more", async () => {
+    // the usual order on a visit: the clock's small answer lands before the boards'
+    const answer = heardClock(() => true);
+    stop = boardStore.watch(TODAY);
+    answer();
+    await settle();
+    expect(boardCalls()).toEqual(["GET /api/leaderboard"]);
+    expect(boardStore.read().answer?.day).toBe(TODAY);
+  });
+
+  test("a first ask that came to nothing is made again as soon as the clock hears from the server", async () => {
+    // the connection drops for a moment as the page opens: the boards' request fails
+    let down = true;
+    vi.stubGlobal("fetch", (...args: Parameters<typeof fetch>) =>
+      down ? Promise.reject(new TypeError("offline")) : site.fetch(...args),
+    );
+    const answer = heardClock(() => true);
+    stop = boardStore.watch(TODAY);
+    await settle();
+    expect(boardStore.read()).toEqual({ day: TODAY, answer: null });
+    expect(boardCalls()).toEqual([]);
+    // back: the clock's retry is answered, and the boards are asked for at once, not at
+    // the next minute's turn
+    down = false;
+    answer();
+    await settle();
+    expect(boardCalls()).toEqual(["GET /api/leaderboard"]);
+    expect(boardStore.read().answer?.day).toBe(TODAY);
+    // with the boards in hand, the clock's later answers ask nothing
+    answer();
+    await settle();
+    expect(boardCalls()).toEqual(["GET /api/leaderboard"]);
+  });
 });

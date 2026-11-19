@@ -112,12 +112,23 @@ SoundToggle ── mute ────┘   (and, the other way, engine ── sta
   buttons do not click. The canvas is not a button: its presses are the scenes' business.
 - **The engine** (`app/audio/engine.ts`) starts one `AudioContext` on the first user gesture
   (a press, a key, a tap: browsers keep a page silent until one). It makes it beforehand, in
-  idle moments after the page loads (`prepareStep`, one step an idle callback: the context,
-  then its graph and room, then the three noise buffers, then the bed), held suspended, so the
-  gesture only resumes it. Making a context alone holds Chrome's main thread for 15 to 160 ms,
-  and done inside the first press it was one long frame in whatever the press set moving (the
+  idle moments (`prepareStep`, one step an idle callback: the context, then its graph and
+  room, then the three noise buffers, then the bed), held suspended, so the gesture only
+  resumes it. Making a context alone holds Chrome's main thread for 15 to 160 ms, and done
+  inside the first press it was one long frame in whatever the press set moving (the
   leaderboard's slide, the kick-off); now the first press's frames are all under 20 ms.
-  Muted, or pressed before the idle steps are done, the gesture builds what is left, as before.
+  The idle steps begin when a pointer first moves (whoever moves one is about to press), or
+  two seconds after the engine is made (`PREPARE_AFTER_MS`, `app/audio/index.ts`,
+  2026-11-19): begun at once, as they were, they fell in the middle of the ball's entrance.
+  Not later than that: a finger gives no sign before it presses, and a press before the
+  steps are done builds what is left inside the press (about 0.3 s on a slow phone, in the
+  visit's first tap). Five seconds after the page's `load` was tried the same day and taken
+  back: it took about 300 ms of blocked time out of this machine's Lighthouse phone run, but
+  Google's own run never counted that work (no task of it reaches 50 ms there), and most
+  first taps on a phone would have paid for it. A tab that is out of view when a step is
+  due (the engine makes nothing there) begins again, the same way, when it is shown.
+  Muted, or pressed before the idle steps are done, the gesture builds what is left, as
+  before.
   A cue that comes before the gesture, while muted or while the tab is hidden is dropped,
   never queued: a sound late is worse than none. The first press is heard (a cue in the moment
   the context's start is under way is scheduled into it). Each cue becomes a voice that is

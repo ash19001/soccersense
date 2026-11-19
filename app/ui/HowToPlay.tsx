@@ -20,6 +20,7 @@ import { IconButton } from "./Button";
 import { cx } from "./cx";
 import { isWide, usePixelRootScale } from "./scale";
 import { type Slider, createSlider } from "./slide";
+import { WideMarkScript, useWideMark } from "./wide-mark";
 import type { UiGrade } from "./types";
 
 export interface HowToPlayLabels {
@@ -111,12 +112,20 @@ function Card({
   bodyFocusable?: boolean;
 }) {
   const wide = isWide(usePixelRootScale());
+  // On the rules page (built ahead of time) a monitor's size is there from the first paint.
+  const mark = useWideMark(wide);
   const Heading = headingLevel === 1 ? "h1" : "h2";
   const Section = headingLevel === 1 ? "h2" : "h3";
   const first = tiers[0];
   const last = tiers.at(-1);
   return (
-    <div className={cx("ss-help", className)} data-wide={wide ? "" : undefined}>
+    <div
+      ref={mark}
+      className={cx("ss-help", className)}
+      data-wide={wide ? "" : undefined}
+      suppressHydrationWarning
+    >
+      <WideMarkScript />
       <div className="ss-help__head">
         <Heading
           ref={headingRef}

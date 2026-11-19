@@ -87,6 +87,39 @@ from `.nvmrc` and pnpm from `packageManager` in `package.json`. Only `/api/*` ru
   the app loads and shows the Offside! page. (Cloudflare's other setting,
   `single-page-application`, serves `/index.html`, which here is the home page already
   rendered, not a shell.)
+- **The game's pages carry their own styles** (2026-11-19). After React Router's build,
+  the build runs `tools/inline-css.ts`: it writes the stylesheet (`assets/root-….css`)
+  into the home screen's page and each mode page, in a `<style>` just before the
+  stylesheet's link, and switches the link off (`disabled`: the browser does not fetch the
+  file as well). The link has to stay: React renders the whole document and looks for it by
+  `rel` and `href`; without it the page fails to be taken over (error 418) and is rendered
+  again. Why: a page that waits for its stylesheet can be measured before the styles are
+  in, and the ads' script does that (it lays the page out and asks what is at a point). On
+  PageSpeed's run of 2026-11-19 everything "moved" when the styles landed (a layout shift of
+  1.0 on the phone) and the first paint was counted as waiting for the ad scripts too.
+  **Not the other pages** (the rules, the privacy notice, the terms, the sign-in page, the
+  desk, the shell and `404.html`): a page that no longer waits for its stylesheet is
+  painted before its fonts have come on any slow connection, in a stand-in face, and laid
+  out again when they land. On a game page that moves a few short captions (a layout shift
+  under 0.01); on a page of words it moved all the text (0.03 to 0.18 measured). Those
+  keep the stylesheet as a file: the fonts are asked for first and are in by the first
+  paint, and nothing of theirs is laid out bare meanwhile, because the scale's script, the
+  first thing in their body, waits for a stylesheet that is still on its way.
+  `tools/inline-css.test.ts` holds the tool, `app/inlined-styles.test.tsx` holds React to
+  taking such a page over, and `hosting.test.ts` the order of the build. The site has one
+  stylesheet; the tool stops the build if a game page links two, links one in a way it does
+  not know, or if no game page ends up with its styles. `pnpm check` does not run the
+  build, so such a stop is first seen as a failed deploy: build once by hand after changing
+  how the pages' head is rendered.
+- **How long a browser keeps a file** (`public/_headers`, 2026-11-19). Everything under
+  `/assets` (the scripts, the stylesheet, the fonts: each with its contents' hash in its
+  name) is kept for thirty days without being asked about; a returning player downloads
+  none of it. Not the usual "a year, immutable": Cloudflare puts a rule's headers on a
+  "404 Not Found" for a matching address too, and a browser that met one while a deploy
+  was spreading would keep it that long. The pages, the sounds, the favicon and the link
+  preview's picture have no rule and are asked about on every visit (Cloudflare's own
+  `max-age=0, must-revalidate`), so a deploy shows at once. Only one matching rule may set
+  `Cache-Control` (a second is joined to the first with a comma).
 - The game clock's HEAD request to `/favicon.svg` (the server's time) works as on any
   static host.
 - Wrangler is a development dependency (since the API, 2026-11-17): the deploy uses the
@@ -224,6 +257,7 @@ export interface Scene {
   pointer?(p: PointerInfo): void;
   setReducedMotion?(on: boolean): void;
   cursor?(): "default" | "pointer" | "grab" | "grabbing";
+  prepareStep?(): boolean; // a little of the first picture's building; true while there is more
   // and sound (onSound, ambience) and a floating sprite (setFloating, floating): API_SCENES.md
 }
 ```
@@ -231,6 +265,14 @@ export interface Scene {
 The host's frame is always `resize` (if the size changed), `setLighting` (if the light changed),
 `update(dt)`, `draw(surface)`. Time only moves in `update`, so a scene renders the same in the
 browser and in the snap tool.
+
+A scene whose first picture takes long to build may offer `prepareStep` (2026-11-19; the menu
+does: its stadium was one task of 0.2 to 0.6 s). The canvas host calls it after `resize` and
+`setLighting`, a few milliseconds at a time in tasks of its own, before the scene's first
+frame, so the page can paint and hear the player meanwhile. It moves no time and changes
+nothing that is drawn: a `draw` that comes first (the snap tool, a test, a press that needs
+the picture) builds whatever is left in one go, and the pixels are the same either way
+(`app/scenes/menu-prepare.test.ts`).
 
 Scenes own animation state and expose plain methods and callbacks for the interface to drive
 (for example `menu.onSelect`, `career.playShot(grade)`), never React.

@@ -37,6 +37,8 @@ const NONE: BoardState = { day: null, answer: null };
 
 let state: BoardState = NONE;
 let asking = 0;
+/** Requests for the boards that are still on their way. */
+let pulling = 0;
 const listeners = new Set<() => void>();
 
 function set(next: BoardState): void {
@@ -57,6 +59,7 @@ async function pull(day: number): Promise<void> {
     return;
   }
   const token = ++asking;
+  pulling++;
   const stop = new AbortController();
   const timer = setTimeout(() => stop.abort(), BOARD_TIMEOUT_MS);
   try {
@@ -75,6 +78,7 @@ async function pull(day: number): Promise<void> {
     // Not reached: the same.
   } finally {
     clearTimeout(timer);
+    pulling--;
   }
 }
 
@@ -91,19 +95,35 @@ export const boardStore = {
 
   /**
    * Shows `day`'s boards and keeps them fresh until the returned function is called: now,
-   * every minute while the tab is in view, when it comes back into view, when the game's
-   * clock first answers (in development: whether there is an API at all), and when who is
-   * signed in changes.
+   * every minute while the tab is in view, when it comes back into view, and when who is
+   * signed in changes. Also when the game's clock hears from the server while there are
+   * still no boards and none on their way (the first ask failed), and, in development, when
+   * the clock finds there is an API after all (the boards shown until then were made up).
    */
   watch(day: number): () => void {
     if (state.day !== day) set({ day, answer: null });
     const again = () => {
       if (document.visibilityState !== "hidden") void pull(day);
     };
+    // The boards are made up while the game's clock has not said there is an API
+    // (development only): when it answers, the real ones are asked for. Where the server
+    // was asked already (always, on the built site), the clock's answer brings nothing
+    // new, and asking again then was a second request on every visit (2026-11-19). A new
+    // day comes as another `watch`.
+    let madeUp = MOCK_BOARDS && !gameClock().api();
     void pull(day);
     const timer = window.setInterval(again, BOARD_REFRESH_MS);
     document.addEventListener("visibilitychange", again);
-    const stopClock = gameClock().subscribe(again);
+    const stopClock = gameClock().subscribe(() => {
+      if (madeUp) {
+        madeUp = !gameClock().api();
+        again();
+      } else if (state.day === day && state.answer === null && pulling === 0) {
+        // The first ask came to nothing (the connection, or the server, for a moment) and
+        // the clock has just heard from the server: now, not at the next minute.
+        again();
+      }
+    });
     let signedIn = accountStore.read().account?.email ?? null;
     let synced = accountStore.read().synced;
     const stopAccount = accountStore.subscribe(() => {

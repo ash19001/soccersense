@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import { cx } from "./cx";
+import { useLive } from "./live";
 import type { UiMode } from "./types";
 
 export interface ModeIntroProps {
@@ -26,6 +27,14 @@ export interface ModeIntroProps {
    * called for a key held down from the page before. Without it the card listens to nothing.
    */
   onSkip?: () => void;
+  /**
+   * The card is put in the page before the game is known (a mode page's build-time HTML):
+   * it is out of sight (`data-pending`, ui.css section 30), and this script is the first
+   * thing inside it in that HTML. The browser runs it as it reads the page, and it may take
+   * `data-pending` off: the card is then up from the first paint, long before the page's
+   * own code has loaded. Leave it out once the game is known.
+   */
+  early?: string;
   className?: string;
 }
 
@@ -50,8 +59,11 @@ export function ModeIntro({
   place,
   leaving = false,
   onSkip,
+  early,
   className,
 }: ModeIntroProps) {
+  // The build-time HTML and the first render over it carry `early`'s script; nothing after.
+  const live = useLive();
   // The listener is added once; it calls whatever `onSkip` is now.
   const skip = useRef(onSkip);
   useEffect(() => {
@@ -85,8 +97,14 @@ export function ModeIntro({
       className={cx("ss-intro", className)}
       data-mode={mode}
       data-leaving={leaving ? "" : undefined}
+      data-pending={early !== undefined ? "" : undefined}
       aria-hidden="true"
+      // `early`'s script may have taken `data-pending` off by the time React arrives.
+      suppressHydrationWarning
     >
+      {early !== undefined && !live && (
+        <script dangerouslySetInnerHTML={{ __html: early }} />
+      )}
       <div className="ss-intro__card">
         <span className="ss-intro__rule" />
         <div className="ss-intro__words">

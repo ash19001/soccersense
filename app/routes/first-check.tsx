@@ -36,7 +36,15 @@ export interface FirstCheckState {
   unavailable: boolean;
 }
 
-let state: FirstCheckState = { round: 0, unavailable: false };
+/**
+ * As a page starts, and at build time. One object for both: React asks for the build-time
+ * state again and again while it takes a page over, and a new object each time reads as
+ * a change (it said so in development: "getServerSnapshot should be cached"), so the
+ * check was rendered a second time on every page for nothing.
+ */
+const NONE: FirstCheckState = { round: 0, unavailable: false };
+
+let state: FirstCheckState = NONE;
 let token: { value: string; at: number } | null = null;
 const listeners = new Set<() => void>();
 
@@ -59,7 +67,7 @@ export const firstCheck = {
     };
   },
   read: (): FirstCheckState => state,
-  server: (): FirstCheckState => ({ round: 0, unavailable: false }),
+  server: (): FirstCheckState => NONE,
 
   /** The widget's token (the check passed), or null: none yet, or run out. */
   put(value: string | null): void {
@@ -120,7 +128,7 @@ export const firstCheck = {
 
 /** For the tests: as if the page had just been opened. */
 export function resetFirstCheck(): void {
-  state = { round: 0, unavailable: false };
+  state = NONE;
   token = null;
   listeners.clear();
 }

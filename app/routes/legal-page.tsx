@@ -16,9 +16,11 @@ import { strings } from "~/i18n";
 import {
   Button,
   PixelRoot,
+  WideMarkScript,
   isWide,
   useArrivalFocus,
   usePixelRootScale,
+  useWideMark,
 } from "~/ui";
 import { openAdChoices } from "~/ui/ad-consent";
 
@@ -75,12 +77,20 @@ function Page({
 }) {
   // On a monitor the type is in caption pixels, as the home screen's words are.
   const wide = isWide(usePixelRootScale());
+  // On a monitor it is set that way from the first paint (`useWideMark`).
+  const mark = useWideMark(wide);
   const headingRef = useArrivalFocus<HTMLHeadingElement>();
   const text = strings.pages;
   // Google's consent message could not be opened (not asked where the player is)
   const [noChoices, setNoChoices] = useState(false);
   return (
-    <div className="ss-doc__page" data-wide={wide ? "" : undefined}>
+    <div
+      ref={mark}
+      className="ss-doc__page"
+      data-wide={wide ? "" : undefined}
+      suppressHydrationWarning
+    >
+      <WideMarkScript />
       <header className="ss-doc__bar">
         <Link to="/" className="ss-doc__brand" aria-label={text.home}>
           {strings.siteName}

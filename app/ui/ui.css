@@ -2654,14 +2654,26 @@ button.ss-menu__card:active {
 }
 
 /*
- * Before the page's script has measured the screen, the build-time HTML is laid out for a
- * phone. On a landscape screen that would show the captions in the phone's layout for a
- * moment and then move them: they are held back until GameLayout is live instead.
+ * Before the page is live, the build-time HTML has the real screen's units (PixelRoot's
+ * inline script, scale-boot.ts) but still a phone's markup. On a landscape screen that would
+ * show the captions in the phone's arrangement for a moment and then move them: they are
+ * held back until GameLayout is live instead.
  */
 @media (orientation: landscape) {
   .ss-game:not([data-live]) .ss-menu {
     visibility: hidden;
   }
+}
+
+/*
+ * And where the script marked the layout wide, whatever the window is by now: a phone on
+ * its side that is turned upright before the page is live is no longer "landscape", but it
+ * still has the wide mark and the wide units the script gave it (nothing listens for the
+ * window until the page is live), and the phone's captions laid out by the monitor's rules
+ * were a squeezed, cut-off row for that moment.
+ */
+.ss-game[data-wide]:not([data-live]) .ss-menu {
+  visibility: hidden;
 }
 
 /* ---------- 16. Game layout -------------------------------------------------------------------- */
@@ -2814,6 +2826,27 @@ button.ss-menu__card:active {
 .ss-game__mid > *,
 .ss-game__bottom > * {
   pointer-events: auto;
+}
+
+/*
+ * The column and its three slots only arrange things: nothing of theirs is drawn. They are
+ * `visibility: hidden`, and what is put in them is visible again. A browser counts a box
+ * that moves as the page jumping about (layout shift) whether or not anything shows in it,
+ * unless the box is hidden: the free space in the middle dropped by a third of the screen
+ * when the board and the answer bar arrived on a game page, with nothing in it to see, and
+ * Google PageSpeed's measure took it for the worst jump of the game (0.30, 2026-11-19).
+ * What a player can see move still counts, as it should. (`:where` so that this never
+ * outranks a part's own rule that hides it: `.ss-menu.is-stowed` and the like.)
+ */
+.ss-game__col,
+.ss-game__top,
+.ss-game__mid,
+.ss-game__bottom {
+  visibility: hidden;
+}
+
+:where(.ss-game__top, .ss-game__mid, .ss-game__bottom) > * {
+  visibility: visible;
 }
 
 /*
@@ -6211,6 +6244,15 @@ html:has(.ss-help-dialog[open]) {
     left: var(--ss-mid);
     translate: var(--ss-back) 0;
   }
+}
+
+/*
+ * Before the game is known: a mode page's build-time HTML has the card, out of sight. Its
+ * own script shows it at once on a device that has never played (ModeIntro's `early`); on
+ * any other the page shows it, or takes it away, when it knows.
+ */
+.ss-intro[data-pending] {
+  display: none;
 }
 
 /* On the way out: hidden, but for as long as its animation shows it. */

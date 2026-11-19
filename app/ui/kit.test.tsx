@@ -1225,14 +1225,31 @@ describe("GameLayout and LedNumber", () => {
       cleanup();
       // The same window, rendered the way the build does: no ratio, no width, no promises.
       const html = renderToString(<GameLayout bottom={<p>captions</p>} />);
-      expect(html).not.toContain("data-live");
-      expect(html).not.toContain("data-wide");
+      // The root's own tag: the script inside it (./scale-boot, which puts the real
+      // screen's units and its wide mark on before the first paint) names the attribute.
+      const tag = html.slice(0, html.indexOf(">") + 1);
+      expect(tag).not.toContain("data-live");
+      expect(tag).not.toContain("data-wide");
       expect(html).toContain("--px:3px");
       expect(html).toContain("--snap:1px");
       expect(html).toContain('data-orientation="portrait"');
+      // The column and its slots only arrange things: they are hidden boxes with visible
+      // contents, so a slot that moves with nothing to show in it is not counted as the
+      // page jumping (and the rule never outranks a part's own that hides it).
+      expect(css).toContain(
+        ".ss-game__col,\n.ss-game__top,\n.ss-game__mid,\n.ss-game__bottom {\n  visibility: hidden;\n}",
+      );
+      expect(css).toContain(
+        ":where(.ss-game__top, .ss-game__mid, .ss-game__bottom) > * {\n  visibility: visible;\n}",
+      );
       // The stylesheet holds the menu captions back on a landscape screen until then.
       expect(css).toMatch(
         /@media \(orientation: landscape\) \{\s*\.ss-game:not\(\[data-live\]\) \.ss-menu \{\s*visibility: hidden;/,
+      );
+      // And wherever the page's own script marked the layout wide, whatever the window is
+      // by then (a phone turned upright before the page is live keeps the wide mark).
+      expect(css).toContain(
+        ".ss-game[data-wide]:not([data-live]) .ss-menu {\n  visibility: hidden;\n}",
       );
     });
 

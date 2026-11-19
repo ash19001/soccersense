@@ -2,9 +2,12 @@
  * The game's clock: the time by the site's own server, not by the device, so turning the
  * phone's clock on (or back) does not open another day's game.
  *
- * One HEAD request to the site's own API, `/api/today`, reads it: the Worker answers with
- * its clock to the millisecond in an `x-server-time` header (worker/http.ts). Where there
- * is no API to answer (the dev server alone, any static host), the answer still carries a
+ * One request to the site's own API, `/api/today`, reads it: the Worker answers with
+ * its clock to the millisecond in an `x-server-time` header (worker/http.ts). The page's
+ * first look is a GET, whose body (the day, and the day's place) is kept for whoever wants
+ * it (`clockToday`, ./day-place.ts), so opening a page asks that address once, not twice;
+ * every later look is a HEAD, which the server answers without looking the place up. Where
+ * there is no API to answer (the dev server alone, any static host), the answer still carries a
  * `Date` header, as every HTTP response does: the server's clock to the second, and that is
  * read instead. From then on the time runs on `performance.now()`, which counts the same
  * whatever the device's clock is set to. It is read again whenever the tab comes back into view (a
@@ -108,6 +111,46 @@ function freshUrl(): string {
 
 function headRequest(url: string, signal: AbortSignal): Promise<Answer> {
   return fetch(url, { method: "HEAD", cache: "no-store", signal });
+}
+
+/**
+ * The page's own clock's requests. The first is a GET: the same answer that carries the
+ * time says the day and the day's place in its body, which is kept (`today`) for the page
+ * that would otherwise ask the same address again as it opens (./day-place.ts). Every
+ * later look at the clock is a HEAD, as before: the time alone.
+ *
+ * To know before `QUESTIONS` (wrangler.jsonc) is switched to "scheduled": the server then
+ * looks the day's place up in the database for a GET (worker/app.ts, `todaysPlace`), so
+ * the clock's first answer waits for that lookup on every page, HOME's, AWAY's, RETRO's and
+ * NEXT-GEN's too, which never show the place (about one database round trip; the clock
+ * then reads half of it behind, inside its slack). If that is ever felt, make the first
+ * look a HEAD on the pages that do not want the place: `dayPlace` already asks by itself
+ * where the clock kept nothing.
+ */
+export function clockRequests(
+  fetcher: typeof fetch = (input, init) => fetch(input, init),
+): {
+  request(url: string, signal: AbortSignal): Promise<Answer>;
+  /** What the first answer's body said, or null: not asked yet, or not usable. */
+  today(): Promise<unknown> | null;
+} {
+  let first = true;
+  let today: Promise<unknown> | null = null;
+  return {
+    request(url, signal) {
+      if (!first) {
+        return fetcher(url, { method: "HEAD", cache: "no-store", signal });
+      }
+      first = false;
+      const answer = fetcher(url, { cache: "no-store", signal });
+      // The clock reads only the headers: the body is read from a copy.
+      today = answer
+        .then((response) => (response.ok ? response.clone().json() : null))
+        .catch(() => null);
+      return answer;
+    },
+    today: () => today,
+  };
 }
 
 /** The clock by the server's `Date` (see the top of this file). */
@@ -230,6 +273,17 @@ export function deviceClock(
 }
 
 let shared: GameClock | null = null;
+/** The body of the page's clock's first answer (`clockRequests`), once it has asked. */
+let sharedToday: (() => Promise<unknown> | null) | null = null;
+
+/**
+ * What `/api/today` said when the page's clock first asked it: `{ day, place, ... }`
+ * (worker/app.ts, `TodayAnswer`), unchecked. Null where the clock has not asked (or is not
+ * the server's: the tests), and resolving to null where the answer was no use.
+ */
+export function clockToday(): Promise<unknown> | null {
+  return sharedToday?.() ?? null;
+}
 
 /**
  * The page's one clock, made (and first asked) on first use. It asks again whenever the tab
@@ -237,8 +291,10 @@ let shared: GameClock | null = null;
  */
 export function gameClock(): GameClock {
   if (shared) return shared;
-  const clock = serverClock();
+  const asks = clockRequests();
+  const clock = serverClock({ request: asks.request });
   shared = clock;
+  sharedToday = asks.today;
   const again = () => {
     if (document.visibilityState !== "hidden") clock.check();
   };
@@ -251,6 +307,7 @@ export function gameClock(): GameClock {
 /** Use this clock from now on (the tests' device clock). Null goes back to the server's. */
 export function setGameClock(clock: GameClock | null): void {
   shared = clock;
+  sharedToday = null;
 }
 
 /** The query switches that change the game itself: the day, the stadium, the timer. */

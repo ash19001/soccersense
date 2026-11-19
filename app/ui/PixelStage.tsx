@@ -18,6 +18,8 @@ import {
 } from "~/scenes/scene";
 
 import { cx } from "./cx";
+import { arrivingThroughFade } from "./fade";
+import { useLive } from "./live";
 import {
   deviceToCss,
   noticeDevicePixelRatio,
@@ -47,6 +49,15 @@ const MAX_DT = 0.1;
  * would turn the whole menu (and the kick-off the page waits for) into slow motion.
  */
 const LONG_FRAME_MS = 34;
+/**
+ * How long one task of getting a scene's first picture ready runs (ms) before the page
+ * gets its turn again (`Scene.prepareStep`). The scene's steps are a few milliseconds each, so
+ * a task is about this long: short enough that a phone four times slower than the machine
+ * it was measured on has next to no task of 50 ms. (Three of the stadium's steps are not
+ * cut up and are longer: the life of the town, the mascot's place and the landings, 10 to
+ * 30 ms each on that machine.)
+ */
+const PREPARE_SLICE_MS = 4;
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 /** How often the scene's ambience is asked for (ms). The engine crossfades changes. */
 const AMBIENCE_POLL_MS = 1000;
@@ -97,6 +108,16 @@ interface Stage {
    */
   blank: boolean;
 
+  /** The scene whose last frame is on the canvas: only that one hears the pointer. */
+  shown: Scene | null;
+  /**
+   * The scene whose first picture is ready: taken through `Scene.prepareStep` to the end, or
+   * drawn. Any other scene that has a `prepareStep` is taken through it before its first frame.
+   */
+  ready: Scene | null;
+  /** A task of `Scene.prepareStep` is waiting its turn: the loop has no frame pending meanwhile. */
+  preparing: boolean;
+
   /** The pending animation frame, or 0 while the loop is stopped. */
   raf: number;
   /** True until the first frame after a start: that frame has dt 0. */
@@ -141,10 +162,28 @@ function newStage(): Stage {
     toldLight: null,
     toldReduced: null,
     blank: false,
+    shown: null,
+    ready: null,
+    preparing: false,
     raf: 0,
     fresh: true,
     last: 0,
   };
+}
+
+/** The browser's own way to post a task with a priority, where it has one. */
+interface TaskScheduler {
+  postTask(
+    task: () => void,
+    options: { priority: "user-blocking" | "user-visible" | "background" },
+  ): Promise<unknown>;
+}
+
+function taskScheduler(): TaskScheduler | null {
+  const found = (window as { scheduler?: Partial<TaskScheduler> }).scheduler;
+  return typeof found?.postTask === "function"
+    ? (found as TaskScheduler)
+    : null;
 }
 
 /** The 2D context, or null where there is none (old browsers, the test environment). */
@@ -172,11 +211,15 @@ function floatsOff(): boolean {
   }
 }
 
-/** True when drawing a frame now would tell the scene something new. */
+/**
+ * True when drawing a frame now would show something new: the scene has something to be
+ * told, or has been told it all (while its first picture was got ready) but never drawn.
+ */
 function stale(st: Stage): boolean {
   return (
     st.blank ||
     st.told !== st.scene ||
+    st.shown !== st.scene ||
     st.toldW !== st.w ||
     st.toldH !== st.h ||
     st.toldLight !== st.light ||
@@ -185,22 +228,20 @@ function stale(st: Stage): boolean {
 }
 
 /**
- * One frame, always in this order: `resize` (new scene or new size),
- * `setLighting` (new scene or new light), `setReducedMotion` (new scene or a change),
- * `update(dt)`, `draw(surface)`, then the surface goes to the canvas. A scene's first frame
- * has `dt` 0.
+ * Tells the scene whatever is new to it, always in this order: `setFloating` (a new
+ * scene), `resize` (new scene or new size), `setLighting` (new scene or new light),
+ * `setReducedMotion` (new scene or a change). True if the scene itself was new.
  */
-function renderFrame(st: Stage, dt: number): void {
-  const { ctx, scene, light, w, h } = st;
-  if (!ctx || !scene || !light) return;
+function tell(st: Stage, scene: Scene, light: Lighting): boolean {
+  const { w, h } = st;
+  let fresh = false;
   if (st.told !== scene) {
     st.told = scene;
     st.toldW = 0;
     st.toldH = 0;
     st.toldLight = null;
     st.toldReduced = null;
-    // The time since the last frame belongs to the scene that was up then, not this one.
-    dt = 0;
+    fresh = true;
     scene.setFloating?.(st.floats.length > 0);
   }
   if (st.toldW !== w || st.toldH !== h) {
@@ -216,6 +257,18 @@ function renderFrame(st: Stage, dt: number): void {
     st.toldReduced = st.reduced;
     scene.setReducedMotion?.(st.reduced);
   }
+  return fresh;
+}
+
+/**
+ * One frame, always in this order: what is new to the scene (`tell`), `update(dt)`,
+ * `draw(surface)`, then the surface goes to the canvas. A scene's first frame has `dt` 0.
+ */
+function renderFrame(st: Stage, dt: number): void {
+  const { ctx, scene, light, w, h } = st;
+  if (!ctx || !scene || !light) return;
+  // The time since the last frame belongs to the scene that was up then, not a new one.
+  if (tell(st, scene, light)) dt = 0;
 
   scene.update(dt);
 
@@ -237,6 +290,8 @@ function renderFrame(st: Stage, dt: number): void {
     showFloating(st, st.floats[i], sprites?.[i] ?? null);
   }
   st.blank = false;
+  st.shown = scene;
+  st.ready = scene;
 }
 
 /**
@@ -365,6 +420,7 @@ export function PixelStage({
     canvasW: logicalW,
     canvasH: logicalH,
   } = usePixelRootScale();
+  const live = useLive();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const floatRefs = useRef<(HTMLCanvasElement | null)[]>([]);
   const stageRef = useRef<Stage | null>(null);
@@ -408,13 +464,14 @@ export function PixelStage({
     const onMotion = (event: MediaQueryListEvent) => {
       st.reduced = event.matches;
       // A running loop tells the scene on its next frame. A held one is repainted now.
-      if (st.raf === 0 && !hidden() && stale(st)) repaint(st);
+      // (A scene still getting its first picture ready is told with its first frame.)
+      if (st.raf === 0 && !st.preparing && !hidden() && stale(st)) repaint(st);
     };
     media?.addEventListener?.("change", onMotion);
 
     // A restored context comes back empty, and a held loop would leave it that way.
     const onRestored = () => {
-      if (st.raf === 0 && !hidden()) repaint(st);
+      if (st.raf === 0 && !st.preparing && !hidden()) repaint(st);
     };
     canvas.addEventListener("contextrestored", onRestored);
 
@@ -458,6 +515,8 @@ export function PixelStage({
       st.ctx.clearRect(0, 0, logicalW, logicalH);
       for (const slot of st.floats) showFloating(st, slot, null);
       st.told = null;
+      st.shown = null;
+      st.ready = null;
       st.blank = false;
       return;
     }
@@ -488,6 +547,7 @@ export function PixelStage({
         : Math.min(MAX_DT, Math.max(0, (now - st.last) / 1000));
       st.fresh = false;
       st.last = now;
+      // (a scene's first frame after `prepareStep` too: `stale` counts a scene not drawn yet)
       const rebuilding = stale(st);
       const began = performance.now();
       renderFrame(st, real * st.timeScale);
@@ -506,14 +566,82 @@ export function PixelStage({
       }
       if (wanted && st.raf === 0) st.raf = window.requestAnimationFrame(tick);
     };
+    // A scene that can paint its first picture in steps (`Scene.prepareStep`: the menu's is
+    // hundreds of milliseconds of work on a large screen) is taken through them before
+    // its first frame is asked for, in tasks of PREPARE_SLICE_MS, one after another: the
+    // page hears the player in between and paints what it has (its captions, the
+    // leaderboard), instead of standing still until the picture is up. (With the priority
+    // below, Chromium lets a frame through about every tenth of a second while the tasks
+    // run, not after each one: measured 2026-11-19, 4 frames in a build of a third of a
+    // second.) The canvas shows nothing
+    // meanwhile, as it did while the one long frame was drawn. Not when the page is
+    // arrived at through the fade: the screen is ink then, and the ink goes two frames
+    // after the page says its picture is up (fade.ts), so the first frame paints it whole.
+    let posted = false;
+    let channel: MessageChannel | null = null;
+    const prepare = () => {
+      posted = false;
+      // stopped meanwhile (hidden, or this effect cleaned up): `start` begins again
+      if (!wanted) return;
+      st.preparing = false;
+      const { scene, light } = st;
+      let more = false;
+      if (scene?.prepareStep && light && st.ready !== scene) {
+        const began = performance.now();
+        try {
+          tell(st, scene, light);
+          do {
+            more = scene.prepareStep();
+          } while (more && performance.now() - began < PREPARE_SLICE_MS);
+        } catch {
+          // Its first frame builds the picture again from the start (the scene drops a
+          // build that threw) and meets the same error, which is reported as the loop's are.
+          more = false;
+        }
+        if (!more) st.ready = scene;
+      }
+      if (more) later();
+      else if (st.raf === 0) st.raf = window.requestAnimationFrame(tick);
+    };
+    /**
+     * The next task of `prepare`, with no delay. Where the browser takes a priority it goes
+     * ahead of the page's ordinary tasks (a script that has just arrived, an answer from
+     * the server): those waited for the picture when it was one long frame, and still do.
+     * Without it, on a slow phone the ads' scripts got in first and the picture came half
+     * a second later than it used to. A press is not an ordinary task and gets in between;
+     * the painting of a frame waits its turn, a tenth of a second at most (Chromium's own
+     * limit), which nobody sees: nothing on the page moves until the picture is up.
+     */
+    const later = () => {
+      posted = true;
+      st.preparing = true;
+      const tasks = taskScheduler();
+      if (tasks) {
+        tasks.postTask(prepare, { priority: "user-blocking" }).catch(() => {});
+      } else if (typeof MessageChannel === "function") {
+        if (!channel) {
+          channel = new MessageChannel();
+          channel.port1.onmessage = prepare;
+        }
+        channel.port2.postMessage(null);
+      } else {
+        window.setTimeout(prepare, 0);
+      }
+    };
     const start = () => {
       wanted = true;
-      if (st.raf !== 0) return;
+      if (st.raf !== 0 || posted) return;
       st.fresh = true;
-      st.raf = window.requestAnimationFrame(tick);
+      const scene = st.scene;
+      if (scene?.prepareStep && st.ready !== scene && !arrivingThroughFade()) {
+        later();
+      } else {
+        st.raf = window.requestAnimationFrame(tick);
+      }
     };
     const stop = () => {
       wanted = false;
+      st.preparing = false;
       if (st.raf === 0) return;
       window.cancelAnimationFrame(st.raf);
       st.raf = 0;
@@ -528,6 +656,7 @@ export function PixelStage({
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       stop();
+      channel?.port1.close();
     };
   }, [running]);
 
@@ -558,8 +687,9 @@ export function PixelStage({
 
     const st = stageRef.current;
     const target = st?.scene;
-    // A scene hears nothing until it has been through a frame: it has no size before that.
-    if (!st || !target || st.told !== target) return;
+    // A scene hears nothing until it has been through a frame: it has no size before
+    // that, or (while its first picture is got ready) no picture to be pointed at.
+    if (!st || !target || st.shown !== target) return;
 
     if (target.pointer) {
       const rect = canvas.getBoundingClientRect();
@@ -584,12 +714,17 @@ export function PixelStage({
   // rounding of `px` is not multiplied with it.
   const cssW = `${deviceToCss(logicalW * dp, dpr)}px`;
   const cssH = `${deviceToCss(logicalH * dp, dpr)}px`;
+  // In the build-time HTML the canvas is the size of a phone nobody has measured (the
+  // default scale), and empty. It is kept out of sight until the page is live, when it gets
+  // its real size and its first picture in one go: an empty canvas that is seen to change
+  // size counts as the page jumping about (layout shift), although nothing shows.
   const style = {
     width: cssW,
     height: cssH,
     "--ss-stage-w": cssW,
     "--ss-stage-h": cssH,
     "--ss-stage-px": `${px}px`,
+    visibility: live ? undefined : "hidden",
   } as CSSProperties;
   // The floating sprite's canvas takes the same top left (ui.css, from the same variables);
   // its size, its place and whether it shows are set as it is painted.

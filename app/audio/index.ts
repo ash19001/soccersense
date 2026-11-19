@@ -64,6 +64,7 @@ declare global {
 let shared: SoundEngine | null = null;
 let unsubscribe: (() => void) | null = null;
 let uninstallClicks: (() => void) | null = null;
+let stopPreparing: (() => void) | null = null;
 
 /**
  * The page's sound engine, made on first use in the browser. Null at build time and where
@@ -95,7 +96,7 @@ export function soundEngine(): SoundEngine | null {
   unsubscribe = subscribeSoundMuted(() => engine.setMuted(isSoundMuted()));
   shared = engine;
   uninstallClicks = installClickSounds(document, (cue) => engine.play(cue));
-  prepareWhenIdle(engine);
+  stopPreparing = prepareWhenIdle(engine);
   if (import.meta.env.DEV && import.meta.env.MODE !== "test") {
     void import("./offline").then(
       ({ renderCue, renderMoment, renderAmbience, renderAmbientEvent }) => {
@@ -114,11 +115,30 @@ export function soundEngine(): SoundEngine | null {
 }
 
 /**
+ * The engine starts getting ready by itself this long after it is made (ms), if no pointer
+ * has moved before: about when the ball has made its entrance. Getting ready holds the
+ * main thread for a tenth of a second and more in all (the context alone 15 to 160 ms, in
+ * one piece; about three times that on a slow phone). Begun at once, as it was until
+ * 2026-11-19, that fell in the middle of the entrance. Much later is worse: a finger gives
+ * no sign before it presses, and a press that comes before the engine is ready makes the
+ * context in the press, about 0.3 s of the visit's first tap on a slow phone. (Five
+ * seconds after the page had loaded was tried the same day: it took the work out of this
+ * machine's Lighthouse run, but Google's own run never counted it, no task of it reaches
+ * 50 ms there, and most first taps on a phone would have paid for it.)
+ */
+export const PREPARE_AFTER_MS = 2000;
+/** A sign that somebody is there, before any press: the first one may not be far off. */
+const PREPARE_SIGNS = ["pointermove", "wheel"] as const;
+
+/**
  * Gets the engine ready (its context, graph and bed) one step per idle moment, so that the
  * first gesture only has to resume the context (see `SoundEngine.prepareStep`). Each step
- * waits for the browser to be idle, or at most two seconds.
+ * waits for the browser to be idle, or at most two seconds. It starts at the first sign of
+ * somebody there (a pointer moving), or PREPARE_AFTER_MS after the engine is made. A tab
+ * that is out of view when a step is due (the engine makes nothing there) starts again,
+ * the same way, when it is shown. Returns the undo.
  */
-function prepareWhenIdle(engine: SoundEngine): void {
+function prepareWhenIdle(engine: SoundEngine): () => void {
   const later = (fn: () => void) => {
     if (typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(fn, { timeout: 2000 });
@@ -126,10 +146,40 @@ function prepareWhenIdle(engine: SoundEngine): void {
       window.setTimeout(fn, 200);
     }
   };
-  const step = () => {
-    if (shared === engine && engine.prepareStep()) later(step);
-  };
-  later(step);
+  let timer = 0;
+  function disarm(): void {
+    window.clearTimeout(timer);
+    for (const sign of PREPARE_SIGNS) {
+      window.removeEventListener(sign, begin, { capture: true });
+    }
+    document.removeEventListener("visibilitychange", shown);
+  }
+  function arm(): void {
+    for (const sign of PREPARE_SIGNS) {
+      window.addEventListener(sign, begin, { capture: true, passive: true });
+    }
+    timer = window.setTimeout(begin, PREPARE_AFTER_MS);
+  }
+  function begin(): void {
+    disarm();
+    later(step);
+  }
+  function step(): void {
+    if (shared !== engine) return;
+    if (document.visibilityState === "hidden") {
+      // Nobody is looking: wait for the tab to be shown (its picture starts then, too).
+      document.addEventListener("visibilitychange", shown);
+      return;
+    }
+    if (engine.prepareStep()) later(step);
+  }
+  function shown(): void {
+    if (document.visibilityState === "hidden") return;
+    document.removeEventListener("visibilitychange", shown);
+    arm();
+  }
+  arm();
+  return disarm;
 }
 
 /**
@@ -188,6 +238,8 @@ export function resetSoundEngineForTests(): void {
   unsubscribe = null;
   uninstallClicks?.();
   uninstallClicks = null;
+  stopPreparing?.();
+  stopPreparing = null;
   shared?.dispose();
   shared = null;
 }

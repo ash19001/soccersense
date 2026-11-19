@@ -3,6 +3,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useSyncExternalStore,
 } from "react";
@@ -89,9 +90,11 @@ const atBuildTime = () => false;
  * captions at every size.
  *
  * The root carries `data-live` once the page is running in a browser. The build-time HTML
- * does not have it: that HTML is laid out for a phone (the screen is not known yet), and
- * ui.css holds the menu captions back on a landscape screen until the real scale is in,
- * instead of showing them in the phone's layout for a moment.
+ * does not have it: that HTML is written for a phone (the screen is not known yet). Its
+ * units, its orientation and its wide mark are put right before the first paint by the
+ * PixelRoot's inline script (`./scale-boot`), but its markup is still a phone's, so ui.css
+ * holds the menu captions back on a landscape screen until the page is live, instead of
+ * showing them in the phone's arrangement for a moment.
  */
 export function GameLayout({
   canvas,
@@ -108,6 +111,14 @@ export function GameLayout({
   // The same store as the PixelRoot below, so the two always agree.
   const wide = isWide(usePixelScale()) && !contained;
   const live = useSyncExternalStore(subscribeToNothing, inBrowser, atBuildTime);
+
+  // The build-time HTML's own script (./scale-boot, run by the PixelRoot below) marks a wide
+  // layout before React is there, so the column is in its place from the first paint. React
+  // only takes off what it put on itself: if the window is not wide after all by the time
+  // the page is live (turned or resized in between), the mark is taken off here.
+  useLayoutEffect(() => {
+    if (live && !wide) rootRef.current?.removeAttribute("data-wide");
+  }, [live, wide]);
 
   useEffect(() => {
     const root = rootRef.current;

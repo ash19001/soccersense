@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import type { SoundCue } from "~/scenes/scene";
 
 import {
+  PREPARE_AFTER_MS,
   SOUND_KEY,
   installClickSounds,
   playCue,
@@ -154,5 +155,129 @@ describe("the click of the buttons", () => {
     press(button);
     expect(engine?.isMuted).toBe(false);
     expect(engine?.debug().played.click).toBe(1);
+  });
+});
+
+describe("the engine getting ready ahead of the first press", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /** The tab goes out of view, or comes back: the browser says so on the document. */
+  function setHidden(hidden: boolean): void {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue(
+      hidden ? "hidden" : "visible",
+    );
+    document.dispatchEvent(new Event("visibilitychange"));
+  }
+
+  test("not as the page starts: two seconds after the engine is made, a step an idle moment", () => {
+    vi.useFakeTimers();
+    expect(soundEngine()).not.toBeNull();
+    // the picture is built and the ball makes its entrance: nothing is made meanwhile
+    vi.advanceTimersByTime(PREPARE_AFTER_MS - 1);
+    expect(FakeAudioContext.made).toHaveLength(0);
+    vi.advanceTimersByTime(1);
+    // then the context, in an idle moment of its own, and silent until a gesture
+    vi.advanceTimersByTime(2000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+    expect(FakeAudioContext.made[0].suspends).toBe(1);
+    // the steps after it make no second one
+    vi.advanceTimersByTime(20_000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+  });
+
+  test("it does not wait for the page's load: a slow third party must not keep the first tap waiting", () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "readyState", "get").mockReturnValue("loading");
+    soundEngine();
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 2000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+  });
+
+  test("a pointer that moves starts it sooner: whoever moves one is about to press", () => {
+    vi.useFakeTimers();
+    soundEngine();
+    window.dispatchEvent(new Event("pointermove"));
+    // not in the move itself: in the next idle moment
+    expect(FakeAudioContext.made).toHaveLength(0);
+    vi.advanceTimersByTime(2000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+    // once: neither another move nor the wait begins it again
+    window.dispatchEvent(new Event("pointermove"));
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 20_000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+  });
+
+  test("a press before then makes the context in the press, once", () => {
+    vi.useFakeTimers();
+    soundEngine();
+    window.dispatchEvent(new Event("pointerdown"));
+    expect(FakeAudioContext.made).toHaveLength(1);
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 20_000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+  });
+
+  test("a tab that is out of view when its turn comes is got ready when it is shown", () => {
+    vi.useFakeTimers();
+    soundEngine();
+    // the player turns to another tab before the wait is over
+    vi.advanceTimersByTime(500);
+    setHidden(true);
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 60_000);
+    // nothing is made out of view
+    expect(FakeAudioContext.made).toHaveLength(0);
+    // back: the same wait again (the picture starts again too), then the steps
+    setHidden(false);
+    vi.advanceTimersByTime(PREPARE_AFTER_MS - 1);
+    expect(FakeAudioContext.made).toHaveLength(0);
+    vi.advanceTimersByTime(1 + 2000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+    vi.advanceTimersByTime(60_000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+  });
+
+  test("a pointer that crosses the page on its way to another tab does not use the chance up", () => {
+    vi.useFakeTimers();
+    soundEngine();
+    window.dispatchEvent(new Event("pointermove"));
+    // gone before the idle moment the move asked for
+    setHidden(true);
+    vi.advanceTimersByTime(60_000);
+    expect(FakeAudioContext.made).toHaveLength(0);
+    // back, and a pointer moves again: the next idle moment
+    setHidden(false);
+    window.dispatchEvent(new Event("pointermove"));
+    vi.advanceTimersByTime(2000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+  });
+
+  test("a tab opened out of view waits to be seen", () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    soundEngine();
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 60_000);
+    expect(FakeAudioContext.made).toHaveLength(0);
+    setHidden(false);
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 2000);
+    expect(FakeAudioContext.made).toHaveLength(1);
+  });
+
+  test("an engine that is put away takes its waiting with it", () => {
+    vi.useFakeTimers();
+    soundEngine();
+    resetSoundEngineForTests();
+    window.dispatchEvent(new Event("pointermove"));
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 20_000);
+    expect(FakeAudioContext.made).toHaveLength(0);
+    // and one put away while it waited for its tab to be shown
+    soundEngine();
+    setHidden(true);
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 2000);
+    resetSoundEngineForTests();
+    setHidden(false);
+    vi.advanceTimersByTime(PREPARE_AFTER_MS + 20_000);
+    expect(FakeAudioContext.made).toHaveLength(0);
   });
 });

@@ -66,7 +66,7 @@ import {
   type ClubScheme,
 } from "~/art/stadium-club";
 import { FIREWORKS, makeLife, type Life } from "~/art/stadium-life";
-import { MATCH_PERIOD, matchGoalNear } from "~/art/stadium-match";
+import { MATCH_PERIOD, matchGoalNear, matchSteps } from "~/art/stadium-match";
 import {
   MascotPokes,
   drawMascot,
@@ -90,7 +90,7 @@ import {
   planeBallSpot,
   type PlaneCrash,
 } from "~/art/stadium-plane-fall";
-import { paintTown, type Town } from "~/art/stadium-town";
+import { paintTownSteps, type Town } from "~/art/stadium-town";
 import { makeView, project, type View } from "~/art/stadium-view";
 
 /** What the airship's sign says: a short header over the fact of the day. */
@@ -125,9 +125,14 @@ function signText(sign: MenuSign): SignText {
  * Where the people on foot walk, on screen: their feet every half second over three minutes,
  * which traces every way they take. The mascot keeps off them.
  */
-function trodden(view: View, life: Life): { x: number; y: number }[] {
+function* trodden(
+  view: View,
+  life: Life,
+): Generator<void, { x: number; y: number }[], void> {
   const out: { x: number; y: number }[] = [];
   for (let t = 0; t < 180; t += 0.5) {
+    // half a minute of them a step
+    if (t > 0 && t % 30 === 0) yield;
     life.people(
       t,
       (X, V) => {
@@ -189,6 +194,10 @@ export class MenuBackdrop {
   private spot: { x: number; y: number } | null = null;
   private readonly spots = new Map<string, { x: number; y: number } | null>();
   private readonly mascot = new MascotPokes();
+  /** The picture being built a step at a time (`prepareStep`); null when none is. */
+  private building: Generator<void, void, void> | null = null;
+  /** The scene time the picture being built will first be drawn at (`prepareStep`). */
+  private firstAt = 0;
   /** The last point airshipAt found on the airship: a poke at the same moment dents it there. */
   private hit = { x: 0, y: 0, t: Number.NaN };
   /**
@@ -230,6 +239,7 @@ export class MenuBackdrop {
     this.view = makeView(W, H);
     this.dirty = true;
     this.relit = 0;
+    this.building = null;
   }
 
   setLighting(light: Lighting): void {
@@ -240,6 +250,7 @@ export class MenuBackdrop {
     // no one frame pays for the whole step
     if (!this.dirty && this.town) this.relit = 2;
     this.dirty = true;
+    this.building = null;
   }
 
   /**
@@ -251,6 +262,7 @@ export class MenuBackdrop {
     if (scheme === this.scheme) return;
     this.scheme = scheme;
     this.dirty = true;
+    this.building = null;
   }
 
   /** The id of the colours it wears. */
@@ -479,6 +491,125 @@ export class MenuBackdrop {
     return { x: d.dx + (pose?.dx ?? 0), y: d.dy + (pose?.dy ?? 0) };
   }
 
+  /** Whether the picture for this size and light has still to be painted. */
+  private unpainted(): boolean {
+    const held =
+      this.relit > 0 &&
+      !!this.town &&
+      !!this.life &&
+      !!this.ship &&
+      !!this.work &&
+      !!this.kit &&
+      !!this.site;
+    return (
+      (this.dirty && !held) ||
+      !this.town ||
+      !this.life ||
+      !this.ship ||
+      !this.work ||
+      !this.kit ||
+      !this.site
+    );
+  }
+
+  /**
+   * Paints the picture for this size and light, a step at a time: each `next()` is a few
+   * milliseconds of work (tens, for the largest steps on the largest screens), and the
+   * picture counts as painted only when the last is done. Run to its end in one go it is
+   * what `paint` always did, in the same order.
+   */
+  private *build(): Generator<void, void, void> {
+    const light = this.clubbed();
+    const view = this.view;
+    const town = yield* paintTownSteps(view, light, this.seed);
+    yield;
+    const ship = paintAirship(signPlace(view), light);
+    yield;
+    // the goal's fireworks keep clear of the airship (it drifts and lurches a little)
+    const life = makeLife(
+      view,
+      light,
+      this.seed,
+      town,
+      [
+        {
+          x: ship.x - 8,
+          y: ship.y - 8,
+          w: ship.layer.w + 16,
+          h: ship.layer.h + 16,
+        },
+      ],
+      this.matchSeed,
+    );
+    yield;
+    const work = new Surface(ship.layer.w, ship.layer.h);
+    const kit = buildFallKit(ship);
+    yield;
+    // chosen once per size, so a change of light never moves a wreck or the mascot
+    const key = `${this.w}x${this.h}`;
+    if (!this.spots.has(key)) {
+      const walked = yield* trodden(view, life);
+      yield;
+      if (this.spots.size > 8) this.spots.clear();
+      this.spots.set(
+        key,
+        findMascotSpot(
+          view,
+          town.depth,
+          this.seed,
+          [{ x: ship.x, y: ship.y, w: ship.layer.w, h: ship.layer.h }],
+          walked,
+        ),
+      );
+      yield;
+    }
+    const spot = this.spots.get(key) ?? null;
+    let sites = this.sites.get(key);
+    if (!sites) {
+      sites = this.landings(town, ship, spot);
+      if (this.sites.size > 8) this.sites.clear();
+      this.sites.set(key, sites);
+      yield;
+    }
+    // the match on the pitch: the runs of the play that is on when it is first drawn
+    yield* matchSteps(this.firstAt, this.matchSeed);
+    this.town = town;
+    this.ship = ship;
+    this.life = life;
+    this.work = work;
+    this.kit = kit;
+    this.spot = spot;
+    this.site = sites.ship;
+    this.planeSite = sites.plane;
+    this.dirty = false;
+  }
+
+  /**
+   * One step of painting the picture for this size and light, for a host that would
+   * rather not have `draw` paint it in one go (hundreds of milliseconds on a large
+   * screen): true while there is more to do. `t` is the scene time it will first be
+   * drawn at. Nothing to do (false) once it is painted, before it has a size, and while a
+   * change of light is being taken a slice a frame over the last picture (`setLighting`).
+   * A `draw` that comes before the last step paints the rest itself.
+   */
+  prepareStep(t = 0): boolean {
+    if (this.w === 0 || this.h === 0 || !this.unpainted()) return false;
+    if (!this.building) {
+      this.firstAt = Number.isFinite(t) ? t : 0;
+      this.building = this.build();
+    }
+    try {
+      if (!this.building.next().done) return true;
+    } catch (error) {
+      // a build that has thrown is over: the next step, or the first `draw`, begins again
+      // (and meets the same fault, if it is still there, under its own name)
+      this.building = null;
+      throw error;
+    }
+    this.building = null;
+    return false;
+  }
+
   /** The cached picture for this size and light, painted if need be. */
   private paint(): {
     town: Town;
@@ -489,79 +620,24 @@ export class MenuBackdrop {
     site: CrashSite;
     planeSite: CrashSite;
   } {
-    const held =
-      this.relit > 0 &&
-      !!this.town &&
-      !!this.life &&
-      !!this.ship &&
-      !!this.work &&
-      !!this.kit &&
-      !!this.site;
-    if (
-      (this.dirty && !held) ||
-      !this.town ||
-      !this.life ||
-      !this.ship ||
-      !this.work ||
-      !this.kit ||
-      !this.site
-    ) {
-      const light = this.clubbed();
-      this.town = paintTown(this.view, light, this.seed);
-      this.ship = paintAirship(signPlace(this.view), light);
-      // the goal's fireworks keep clear of the airship (it drifts and lurches a little)
-      const ship = this.ship;
-      this.life = makeLife(
-        this.view,
-        light,
-        this.seed,
-        this.town,
-        [
-          {
-            x: ship.x - 8,
-            y: ship.y - 8,
-            w: ship.layer.w + 16,
-            h: ship.layer.h + 16,
-          },
-        ],
-        this.matchSeed,
-      );
-      this.work = new Surface(this.ship.layer.w, this.ship.layer.h);
-      this.kit = buildFallKit(this.ship);
-      // chosen once per size, so a change of light never moves a wreck or the mascot
-      const key = `${this.w}x${this.h}`;
-      if (!this.spots.has(key)) {
-        if (this.spots.size > 8) this.spots.clear();
-        this.spots.set(
-          key,
-          findMascotSpot(
-            this.view,
-            this.town.depth,
-            this.seed,
-            [{ x: ship.x, y: ship.y, w: ship.layer.w, h: ship.layer.h }],
-            trodden(this.view, this.life),
-          ),
-        );
-      }
-      this.spot = this.spots.get(key) ?? null;
-      let sites = this.sites.get(key);
-      if (!sites) {
-        sites = this.landings(this.town, this.ship);
-        if (this.sites.size > 8) this.sites.clear();
-        this.sites.set(key, sites);
-      }
-      this.site = sites.ship;
-      this.planeSite = sites.plane;
-      this.dirty = false;
+    if (this.unpainted()) {
+      // whatever of it `prepareStep` has painted already is kept: the rest is painted now
+      const steps = this.building ?? this.build();
+      this.building = null;
+      while (!steps.next().done);
+    }
+    const { town, life, ship, work, kit, site } = this;
+    if (!town || !life || !ship || !work || !kit || !site) {
+      throw new Error("MenuBackdrop: the picture was not painted");
     }
     return {
-      town: this.town,
-      life: this.life,
-      ship: this.ship,
-      work: this.work,
-      kit: this.kit,
-      site: this.site,
-      planeSite: this.planeSite ?? this.site,
+      town,
+      life,
+      ship,
+      work,
+      kit,
+      site,
+      planeSite: this.planeSite ?? site,
     };
   }
 
@@ -583,7 +659,11 @@ export class MenuBackdrop {
    * With no mascot (a phone: no lawn, and no plane either) the airship's is found as it
    * always was, and the plane's clear of it.
    */
-  private landings(town: Town, ship: Airship): Landings {
+  private landings(
+    town: Town,
+    ship: Airship,
+    spot: { x: number; y: number } | null,
+  ): Landings {
     const find = (
       x: number,
       avoid: readonly Zone[],
@@ -606,14 +686,14 @@ export class MenuBackdrop {
     ];
     const shipX = ship.x + ship.centre.x;
     const planeX = Math.round(this.w * PLANE_MEETS);
-    if (!this.spot) {
+    if (!spot) {
       const ships = find(shipX, []);
       return { ship: ships, plane: find(planeX, taken(ships)) };
     }
-    const mascot = mascotZone(this.spot);
+    const mascot = mascotZone(spot);
     const plane = find(planeX, [mascot]);
     return {
-      ship: find(shipX, [mascot, ...taken(plane)], this.spot),
+      ship: find(shipX, [mascot, ...taken(plane)], spot),
       plane,
     };
   }

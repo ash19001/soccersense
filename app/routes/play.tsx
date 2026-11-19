@@ -9,7 +9,14 @@
 //
 // Debug: ?day=<n>, ?stadium=<id>, ?time=HH:MM and ?notimer=1, as on the home page.
 
-import { type MetaFunction, useLocation } from "react-router";
+import {
+  type LinksFunction,
+  type MetaFunction,
+  useLocation,
+} from "react-router";
+
+import jersey20Latin from "@fontsource/jersey-20/files/jersey-20-latin-400-normal.woff2?url";
+import jersey25Latin from "@fontsource/jersey-25/files/jersey-25-latin-400-normal.woff2?url";
 
 import { type Mode, modeOfPath, playPath } from "~/game";
 import { strings } from "~/i18n";
@@ -30,6 +37,35 @@ export const meta: MetaFunction = ({ location }) => {
     description: strings.play.description[mode],
   });
 };
+
+/**
+ * The mode card's own face, fetched with the page: the card is the first thing a mode page
+ * shows, and its name is set in Jersey 20 on a phone and Jersey 25 on a monitor (ui.css,
+ * section 30), neither of which the site preloads. Without this the name shows in the
+ * fallback face until the face has come, then changes size. The larger face is only asked
+ * for where the card can be a monitor's (about `isWide`: a landscape window at least 600
+ * px wide); a guess that is wrong costs one face fetched early, or late as before.
+ */
+export const links: LinksFunction = () => [
+  {
+    rel: "preload",
+    href: jersey20Latin,
+    as: "font",
+    type: "font/woff2",
+    crossOrigin: "anonymous",
+    // ("not all and ...": the old way to write "not (...)", which Safari before 16.4 and
+    // Chrome before 104 cannot read and take for "never")
+    media: "not all and (orientation: landscape) and (min-width: 600px)",
+  },
+  {
+    rel: "preload",
+    href: jersey25Latin,
+    as: "font",
+    type: "font/woff2",
+    crossOrigin: "anonymous",
+    media: "(orientation: landscape) and (min-width: 600px)",
+  },
+];
 
 export default function Play() {
   const mode = modeFor(useLocation().pathname);

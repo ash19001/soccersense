@@ -28,9 +28,11 @@ import {
   Button,
   IconButton,
   PixelRoot,
+  WideMarkScript,
   isWide,
   useArrivalFocus,
   usePixelRootScale,
+  useWideMark,
 } from "~/ui";
 import type { Route } from "./+types/enter";
 import { accountStore } from "./account";
@@ -123,11 +125,16 @@ function arrival() {
  */
 function Card({ children }: { children: ReactNode }) {
   const wide = isWide(usePixelRootScale());
+  // On a monitor it is that size from the first paint (`useWideMark`).
+  const mark = useWideMark<HTMLElement>(wide);
   return (
     <section
+      ref={mark}
       className="ss-help ss-popup ss-enter"
       data-wide={wide ? "" : undefined}
+      suppressHydrationWarning
     >
+      <WideMarkScript />
       {children}
     </section>
   );

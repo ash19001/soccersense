@@ -156,6 +156,7 @@ export {
   snapToDevice,
 } from "./slide";
 export { useArrivalFocus } from "./useArrivalFocus";
+export { WideMarkScript, useWideMark } from "./wide-mark";
 export {
   ARRIVAL_PATIENCE_MS,
   FADE_MS,

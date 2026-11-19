@@ -12,7 +12,8 @@
 #   adtrafficquality.google, googletagservices.com, googleadservices.com) and its consent
 #   message's fonts (fonts.googleapis.com, fonts.gstatic.com). No plugins, no other base address, no form posted anywhere else, and no other
 #   site may show these pages in a frame. 'unsafe-inline' is there because the pages are built
-#   ahead of time with their start-up script written into them.
+#   ahead of time with their start-up scripts and their styles written into them
+#   (tools/inline-css.ts).
 # - Strict-Transport-Security: browsers only ever come back over HTTPS (a year).
 # - The rest: no guessing of file types, no framing, the address sent onwards cut to the site
 #   alone, no camera, microphone, location or payments, and a window of its own.
@@ -24,3 +25,26 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
   Cross-Origin-Opener-Policy: same-origin
+
+# How long a browser may keep a file (docs/ARCHITECTURE.md, "Hosting"). Without a rule
+# Cloudflare sends "public, max-age=0, must-revalidate": kept, but asked about on every
+# visit. Everything the build writes under /assets (the scripts, the stylesheet, the fonts)
+# has its contents' hash in its name, so a name never means other contents: kept for thirty
+# days and not asked about meanwhile. A returning player downloads none of it.
+#
+# Thirty days and not the usual "a year, immutable", because Cloudflare puts a rule's headers
+# on every answer for a matching address, a "404 Not Found" too. While a deploy spreads, a
+# page of the new build can ask a server still on the old one for a file the old one has not
+# got, and the browser would keep that "not found" for as long as this says, for a file
+# that then exists. A month bounds that; a player who comes every day is served from their
+# own copy either way, and PageSpeed's "efficient cache lifetimes" asks for thirty days.
+#
+# Nothing else has a rule, on purpose. The pages (the HTML) must be asked about every visit,
+# or a deploy would not show. The files whose names stay the same when their contents change
+# (/sounds/*, the favicon, the link preview's picture) are asked about too: a "not changed"
+# costs a few hundred bytes, after the page is up, and a new recording plays at once.
+#
+# Only ONE rule that matches an address may set Cache-Control: a second is joined to the
+# first with a comma (the rule for every path, above, sets none).
+/assets/*
+  Cache-Control: public, max-age=2592000

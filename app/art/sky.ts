@@ -145,7 +145,8 @@ export function drawSky(s: Surface, opts: SkyOptions): void {
   const moonOut = spec.moonVisibility > 0;
 
   s.pushClip(0, 0, w, horizonY);
-  s.blit(backdrop(spec, w, horizonY, sun.x), 0, 0);
+  // (the bands cover every pixel down to the horizon: copied, not looked through)
+  s.copy(backdrop(spec, w, horizonY, sun.x), 0, 0);
   if (spec.stars > 0) {
     drawStars(s, spec, t, seed, horizonY, moonOut ? moon : undefined);
     if (spec.stars > 0.7) drawShootingStar(s, spec, t, seed, horizonY);

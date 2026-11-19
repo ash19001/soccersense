@@ -249,9 +249,14 @@ lie down in it (see "On a wide screen" below).
   the reveal sheet and the full-time card ("On a wide screen" below). It is the hook for giving
   any other part a monitor layout: `.ss-game[data-wide] .your-part { ... }`.
 - The root carries `data-live` once the page runs in a browser. The build-time HTML does not: it
-  is laid out for a 390 x 844 phone at ratio 1, because the screen is not known yet. Anything
-  that would visibly jump when the real scale arrives can wait for it in CSS; the menu captions
-  do, on a landscape screen (`.ss-game:not([data-live]) .ss-menu`).
+  is written for a 390 x 844 phone at ratio 1, because the screen is not known yet. A script in
+  that HTML puts the real screen's units, its orientation and its wide mark on the root before
+  the first paint (see `PixelRoot`), so the column and everything in it is laid out once, where
+  it stays. What still differs before the page is live is the markup itself (the menu captions
+  are a phone's): anything that would visibly jump for that reason can wait in CSS; the menu
+  captions do, on a landscape screen (`.ss-game:not([data-live]) .ss-menu`). The canvas waits
+  too (`PixelStage` keeps it `visibility: hidden` until the page is live): it is empty and the
+  size of the default phone until then.
 
 What it covers on a 390 x 844 phone (measured, outlines included): board while asking 30% with a
 three-line question (27% with two lines), compact board 19%, answer bar 9%, reveal sheet up to
@@ -315,6 +320,24 @@ it for a page that shows kit components without `GameLayout`. A page with no `Pi
 (`ss-page` on its own) gets the CSS fallback, which knows nothing of the device pixel ratio: its
 type is exact at ratios 1, 2 and 3 and slightly soft at 125% or 150%. No page of the site is
 like that any more: the rules page and the error page are each a `PixelRoot` (see "The pages").
+
+**The scale before the page's code has loaded** (`app/ui/scale-boot.ts`, 2026-11-19). The
+build-time HTML is written with `DEFAULT_SCALE`, and React's first render over it must say the
+same. Left at that, every screen that is not a 390 x 844 phone at a whole ratio showed the
+default layout until React arrived and then moved (a third of the way across a monitor: Google
+PageSpeed counted 0.36 of layout shift on a desktop, 0.18 on a tablet). So in the build-time HTML
+(and only there) a `PixelRoot` has a small inline script as its first child, `SCALE_BOOT`. The
+browser runs it as it reads the page, before laying out what follows, and it writes on the
+root what React will write a moment later: the seven units, `data-orientation`, and
+`data-wide` on a `GameLayout` that is wide. It is `readScale`, `pixelScale`, `pixelVariables`
+and `isWide` written out again in plain old JavaScript, because nothing else has loaded;
+`scale-boot.test.tsx` runs it against them over a grid of windows and ratios, so **change
+scale.ts and scale-boot.ts together**. Once the page is live the script is gone from the
+markup, `PixelRoot` says every unit again (React only writes the ones it believes changed) and
+`GameLayout` takes off a wide mark the window no longer earns. A root first rendered in the
+browser (a pop-up, a page reached by a link in the game) has no script: it knows the scale
+from its first render. `useLive()` (`app/ui/live.ts`) is the flag behind "live": false in the
+build-time HTML and the first render over it, true from then on.
 
 ### `Board`
 
@@ -502,7 +525,20 @@ The mode card: what the mode is, on the ink a game page arrives on, before a new
 mode's light colour; left out or not in the line, the line is one colour), `place?` (new
 2026-11-18: CLOSEST's and FURTHEST's day's place, "WEMBLEY, LONDON", a third line in the mode's
 light colour, in the heading face under `line`, which then ends "NEAREST TO" or "FURTHEST
-FROM"), `leaving?`, `onSkip?`, `className?`.
+FROM"), `leaving?`, `onSkip?`, `early?`, `className?`.
+
+- **The card before the page's code has loaded** (`early`, 2026-11-19). A mode page's
+  build-time HTML used to be ink: the card came once all the page's code had run and the
+  server had said what day it is (the page's largest paint: 5.2 s on PageSpeed's phone). Now
+  HOME's, AWAY's, RETRO's and NEXT-GEN's pages render the card before the game is known
+  (`Game.tsx`), out of sight (`data-pending`, `display: none`), with `early`'s script first
+  inside it in the build-time HTML (`EARLY_CARD`): on a device that has never played (no
+  player, no account, no game kept: the keys of `~/game`'s storage) the script shows the
+  card as the browser reads the page, and the game then opens with that same element. On any
+  other device it stays out of sight until the page knows the player's game (also while the
+  server is asked what a kept player's game is: the element stays as it was). The card's face
+  is preloaded with a mode page (`links` in `app/routes/play.tsx`). CLOSEST's and FURTHEST's
+  cards name the day's place and come with the game, as before.
 
 - It goes in `GameLayout`'s children with nothing in `top` or `bottom`: it fills the free
   space and stands in the middle of the screen, a rule in the mode's colour above the words
@@ -1468,6 +1504,20 @@ first `update`, and that first `update` has `dt` 0.
 - The loop runs on `requestAnimationFrame`. It stops while the document is hidden, while
   `paused` is true and while `scene` or `light` is `null`. There is never more than one loop,
   strict mode included.
+- **A first picture built in short tasks** (2026-11-19). When the loop starts on a scene that
+  has `prepareStep` and has not been drawn, the stage tells it its size and light and then
+  calls `prepareStep` in tasks of about 4 ms (`PREPARE_SLICE_MS`), one after another
+  (`scheduler.postTask` at "user-blocking" where the browser has it, so that scripts arriving
+  meanwhile do not get in ahead of the picture; a `MessageChannel` otherwise), and only asks
+  for the first frame when the scene says it is ready. The page hears the player in between
+  and paints what it has (with the priority, Chromium lets a frame through about every
+  tenth of a second while the tasks run, not after each one); before, the home screen's
+  stadium was one task of 0.2 to 0.6 s (a second on a slow phone) in which nothing else
+  could happen. The canvas shows nothing meanwhile, and the scene hears no pointer until its
+  first frame is up. A stage that is `paused` while the picture is being got ready paints
+  it at once, as any change does while paused. Not when the page was arrived at
+  through the fade (`arrivingThroughFade`): the ink lifts two frames after the page says it
+  is ready, so that first frame builds the picture whole. `app/ui/PixelStage-prepare.test.tsx`.
 - While the loop is `paused`, a change of scene, light, size or reduced motion still paints one
   frame with `dt` 0, so what is on screen is never out of date. That is also why a stage that
   is `paused` from the start shows a still frame and not an empty canvas.
@@ -1912,6 +1962,13 @@ sentAt, receivedAt)`, the middle of that second, half the round trip ago. From t
   time runs on `performance.now()`, which no change to the device's clock moves. It asks again
   when the tab comes back into view or the connection comes back; a reading within
   `CLOCK_SLACK_MS` (2 s) of the running time leaves it alone.
+- On the site the request goes to the API's `/api/today` (its `x-server-time` header). The
+  page's first look is a GET, and its body (the day and the day's place) is kept for
+  `dayPlace` (`app/ui/day-place.ts`, through `clockToday()`), so opening a page asks that
+  address once, not twice (2026-11-19); every later look is a HEAD. The home screen's boards
+  are likewise asked for once as it opens (`boardStore.watch`): the clock's answer asks
+  again only where there are still no boards and none on their way (the first ask failed),
+  and in development, where the boards shown until then were made up.
 - `GameClock`: `now()` (ms since 1970, or null until the server has answered), `status()`
   (`"checking"`, `"ready"`, `"failing"`: no answer yet and the last request failed or took over
   `CLOCK_TIMEOUT_MS`, 5 s; it asks again after `CLOCK_RETRY_MS`, 1 s up to 15 s), `subscribe`,

@@ -18,13 +18,16 @@ import { useLocation, useNavigate } from "react-router";
 import type { Place } from "~/data/places";
 import { STADIUMS } from "~/data/stadiums";
 import {
+  ACCOUNT_KEY,
   type Grade,
   MAX_TOTAL,
   type Mode,
+  PLAYER_KEY,
   type RankedAnswer,
   type RevealRow,
   type RevealView,
   QUESTION_MS,
+  STORAGE_PREFIX,
   clockView,
   formatDistanceShort,
   formatShare,
@@ -75,6 +78,35 @@ const text = strings.play;
 
 /** Under this share of players, an answer is a lonely one: the reveal says so. */
 export const LONELY_SHARE = 2;
+
+/**
+ * The mode card, before the page's code has loaded.
+ *
+ * A mode page's build-time HTML is ink: the card only came once all the page's code had
+ * run and the server had said what day it is, seconds later on a phone (Lighthouse's phone,
+ * 2026-11-19: the card, the page's largest paint, at 5.2 s). But a device that has never
+ * played is always shown the card first, whatever the day, so the build-time HTML carries
+ * the card out of sight (`ModeIntro`'s `early`) and this script, first inside it, shows it
+ * at once on such a device: one with no player and no account noted and no game kept, of
+ * any day or mode (the keys of ~/game's storage). That is never more than the referee's own
+ * test for a new game (controller.ts, `fresh`), so the card it shows is the card the game
+ * then opens with: the same element, which stays up until the game takes it away. On any
+ * other device the card stays out of sight until the page knows what the player's game is.
+ * A device whose storage cannot be read has nothing kept either, and is shown the card.
+ */
+export const EARLY_CARD = [
+  "(function(){",
+  "var e=document.currentScript,s,i,k;",
+  "if(!e||!(e=e.parentElement))return;",
+  "try{",
+  "s=localStorage;",
+  `if(s.getItem(${JSON.stringify(PLAYER_KEY)})!==null||s.getItem(${JSON.stringify(ACCOUNT_KEY)})!==null)return;`,
+  // a game kept: `soccersense:v1:<YYYY-MM-DD>:<mode>`, finished or in progress
+  `for(i=0;i<s.length;i++){k=s.key(i)||"";if(k.indexOf(${JSON.stringify(`${STORAGE_PREFIX}:`)})===0&&k.charCodeAt(${STORAGE_PREFIX.length + 1})<58)return}`,
+  "}catch(x){}",
+  'e.removeAttribute("data-pending")',
+  "})()",
+].join("");
 
 /** The player's language, for miles or kilometres. Browser only. */
 function locale(): string {
@@ -385,9 +417,28 @@ export function Game({ mode }: { mode: Mode }) {
     </Panel>
   ) : null;
 
+  // The game is not known yet (the build-time HTML, until the server's clock has answered,
+  // and while the server is asked what the player's game is): the mode card, out of sight
+  // but for a device that has never played, which its own script shows it to at once
+  // (`EARLY_CARD`). The same element is the card a new game then opens with, so it is never
+  // drawn twice. (CLOSEST's and FURTHEST's card names the day's place, which is not known
+  // here: theirs comes with the game.)
+  const early = isDistanceMode(mode) ? null : (
+    <ModeIntro
+      mode={mode}
+      name={strings.home.modes[mode].label}
+      line={text.intro.line[mode]}
+      emphasis={text.intro.key[mode]}
+      early={EARLY_CARD}
+    />
+  );
+
   if (game && view && session && view.loading) {
     // The server is being asked what the player's game is: ink, and nothing of a game yet.
+    // (The card stays as it was, shown or out of sight: a device with nothing kept but a
+    // player the server still knows has been shown it, and a new game opens with it.)
     bottom = lost;
+    card = early;
   } else if (game && view && session && view.intro) {
     bottom = lost;
     // A new game: the mode card first, on the ink, and nothing else. The scene waits behind
@@ -589,6 +640,8 @@ export function Game({ mode }: { mode: Mode }) {
         {text.clock.failing}
       </Panel>
     );
+  } else if (!game) {
+    card = early;
   }
 
   return (

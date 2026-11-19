@@ -448,6 +448,8 @@ interface Play extends Script {
   of: readonly (readonly Beat[])[];
   /** Its runs, worked out when first asked for. */
   table: Track | null;
+  /** The same, part made: worked out a slice at a time (`matchSteps`). */
+  making: Generator<void, Track, void> | null;
 }
 
 function compile(s: Script): Play {
@@ -458,6 +460,7 @@ function compile(s: Script): Play {
       s.beats.filter((b) => b.p === p).sort((x, y) => x.t0 - y.t0),
     ),
     table: null,
+    making: null,
   };
 }
 
@@ -825,6 +828,15 @@ interface Track {
  */
 function track(play: Play): Track {
   if (play.table) return play.table;
+  // whatever `matchSteps` has worked out of it already is kept: the rest is done now
+  const steps = play.making ?? trackSteps(play);
+  let r = steps.next();
+  while (!r.done) r = steps.next();
+  return r.value;
+}
+
+/** `track`'s work, in slices of a few milliseconds. */
+function* trackSteps(play: Play): Generator<void, Track, void> {
   const rows = MATCH_PERIOD * SAMPLES;
   const dt = 1 / (SAMPLES * SUB);
   const x = new Float64Array(PLAYERS);
@@ -841,6 +853,8 @@ function track(play: Play): Track {
   const outX = new Float32Array((rows + 1) * PLAYERS);
   const outV = new Float32Array((rows + 1) * PLAYERS);
   for (let r = 0; r < rows; r++) {
+    // a second of the play a slice
+    if (r > 0 && r % SAMPLES === 0) yield;
     for (let p = 0; p < PLAYERS; p++) {
       outX[r * PLAYERS + p] = x[p];
       outV[r * PLAYERS + p] = v[p];
@@ -900,6 +914,7 @@ function track(play: Play): Track {
       }
     }
   }
+  yield;
   // the play ends a hair from the next line-up: spread the difference over it
   const endX = new Float64Array(PLAYERS);
   const endV = new Float64Array(PLAYERS);
@@ -931,8 +946,10 @@ function track(play: Play): Track {
     const pairs = Math.max(1, Math.round(sum / (2 * STRIDE)));
     strideOf[p] = sum > 0 ? sum / (2 * pairs) : STRIDE;
   }
-  play.table = { x: outX, v: outV, d, stride: strideOf };
-  return play.table;
+  const table: Track = { x: outX, v: outV, d, stride: strideOf };
+  play.table = table;
+  play.making = null;
+  return table;
 }
 
 /**
@@ -1026,6 +1043,23 @@ export function matchAt(state: MatchState, time: number, seed = 0): MatchState {
   const T = Number.isFinite(time) && time > 0 ? time : 0;
   const k = Math.floor(T / MATCH_PERIOD);
   return fill(state, playOf(seed, k), T - k * MATCH_PERIOD);
+}
+
+/**
+ * The runs of the play on at `time`, worked out a slice at a time (each `next()` a few
+ * milliseconds) ahead of the first `matchAt` that needs them, which otherwise works them
+ * out in one go: tens of milliseconds, once a play. `matchAt` gives the same either way.
+ */
+export function* matchSteps(
+  time: number,
+  seed = 0,
+): Generator<void, void, void> {
+  const T = Number.isFinite(time) && time > 0 ? time : 0;
+  const play = playOf(seed, Math.floor(T / MATCH_PERIOD));
+  if (play.table) return;
+  play.making ??= trackSteps(play);
+  const steps = play.making;
+  while (!steps.next().done) yield;
 }
 
 /**

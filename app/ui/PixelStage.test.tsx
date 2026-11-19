@@ -344,6 +344,14 @@ describe("PixelStage: the canvas", () => {
     expect(html).toContain('width="130"');
     expect(html).toContain('height="282"');
     expect(html).toContain("width:390px");
+    // Empty, and the size of a phone nobody has measured: out of sight until the page is
+    // live (an empty canvas seen to change size counts as layout shift).
+    expect(html).toMatch(
+      /<canvas class="ss-stage__canvas" [^>]*style="[^"]*visibility:hidden"/,
+    );
+    const { container } = render(stage({ scene: new Recorder(), light: DAY }));
+    const canvas = container.querySelector("canvas") as HTMLCanvasElement;
+    expect(canvas.style.visibility).toBe("");
   });
 });
 
