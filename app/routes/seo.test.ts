@@ -169,7 +169,7 @@ describe("the pages players are sent to", () => {
     }
   });
 
-  it("say what the game is on the home page: daily football trivia, and the four ways to play", () => {
+  it("say what the game is on the home page: daily football trivia, and the six ways to play", () => {
     const home = PUBLIC[0].tags;
     expect(title(home)).toMatch(/daily football trivia/i);
     const d = content(home, "description") ?? "";
@@ -178,6 +178,8 @@ describe("the pages players are sent to", () => {
     expect(d).toMatch(/most uncommon/);
     expect(d).toMatch(/oldest/);
     expect(d).toMatch(/most recent/);
+    expect(d).toMatch(/nearest/);
+    expect(d).toMatch(/furthest/);
   });
 
   it("are each what `pageMeta` makes of their own address", () => {

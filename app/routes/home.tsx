@@ -56,6 +56,7 @@ import type { LockedMode } from "~/scenes/menu";
 import {
   Account,
   AccountCorner,
+  AllModes,
   GameLayout,
   HowToPlay,
   Leaderboard,
@@ -79,6 +80,7 @@ import {
 } from "~/ui";
 import type { Route } from "./+types/home";
 import { type AccountResult, accountStore } from "./account";
+import { watchFloor } from "./scene-edges";
 import { FirstGameCheck, firstCheck } from "./first-check";
 import { boardStore } from "./board";
 import { planeFits } from "./home-plane";
@@ -101,6 +103,11 @@ export const meta: Route.MetaFunction = () => [
   ...siteData(),
 ];
 
+/**
+ * The modes with a card under the ball: the first four (the product owner, 2026-11-18). The
+ * others (CLOSEST, FURTHEST) are on the ball and in "All modes" (AllModes).
+ */
+const CARD_MODES: readonly Mode[] = ["home", "away", "retro", "nextgen"];
 /** How long the "coming soon" plate for a locked mode stays up. */
 const NOTICE_MS = 2500;
 /** How long SHARE shows its tick once it has worked. */
@@ -237,12 +244,9 @@ function createMatchdayStore(): MatchdayStore {
     const today = resolveToday(new Date(now), gameSearch(search), STADIUMS);
     const fact = factForDay(today.dayNumber);
     const saved = loadDay(today.dayKey);
-    const scores = {
-      home: saved.home?.total ?? null,
-      away: saved.away?.total ?? null,
-      retro: saved.retro?.total ?? null,
-      nextgen: saved.nextgen?.total ?? null,
-    };
+    const scores = Object.fromEntries(
+      MODES.map((mode) => [mode, saved[mode]?.total ?? null]),
+    ) as Record<Mode, number | null>;
     const history = loadHistory(today.dayNumber);
     const days = history.map((game) => game.day);
     const streak = streakFor(days, today.dayNumber).current;
@@ -271,6 +275,8 @@ function createMatchdayStore(): MatchdayStore {
         // Back from a game through the fade (its MENU), the ball arrives as it fades in.
         intro: !entranceShown || arrivingThroughFade(),
         matchSeed: matchSeedFrom(search),
+        // CLOSEST dives into the day's place, FURTHEST pulls back on to it (never named)
+        place: today.stadium,
       });
       entranceShown = true;
       scene.onHover = (mode) => listener?.onHover(mode);
@@ -545,6 +551,8 @@ export default function Home() {
   );
   const scene = matchday?.scene ?? null;
   const moonPhase = sky?.moonPhase;
+  // The ball rests clear of the cards under it (scene-edges.ts).
+  useEffect(() => (scene ? watchFloor(scene) : undefined), [scene]);
 
   /** The mode whose patch on the ball is under the pointer. */
   const [lit, setLit] = useState<Mode | null>(null);
@@ -578,6 +586,9 @@ export default function Home() {
   const remindButton = useRef<HTMLButtonElement | null>(null);
   const [support, setSupport] = useState(false);
   const supportButton = useRef<HTMLButtonElement | null>(null);
+  /** The list of every mode is up ("All modes": the cards are the first four only). */
+  const [allModes, setAllModes] = useState(false);
+  const allModesButton = useRef<HTMLButtonElement | null>(null);
   /**
    * The player's nickname (soccerfan and a number on the first visit: ./nickname.ts), and
    * its pop-up, up from the leaderboard's CHANGE, with where the focus goes back to.
@@ -633,14 +644,16 @@ export default function Home() {
   const [review, setReview] = useState<ReviewContent | null>(null);
   const reviewButton = useRef<HTMLElement | null>(null);
   /** Today's game in `mode` in the review pop-up, if it has been played. */
-  const openReview = (mode: Mode) => {
+  const openReview = (mode: Mode, from?: HTMLElement | null) => {
     const today = store.read()?.today.dayNumber;
     if (today === undefined) return;
     const content = reviewContent(today, mode);
     if (!content) return;
-    reviewButton.current = document.querySelector<HTMLElement>(
-      `.ss-menu__card[data-mode="${mode}"] .ss-menu__review`,
-    );
+    reviewButton.current =
+      from ??
+      document.querySelector<HTMLElement>(
+        `.ss-menu__card[data-mode="${mode}"] .ss-menu__review`,
+      );
     setReview(content);
   };
   /** SHARE for the modes played today: as the full-time card shares them. */
@@ -860,7 +873,7 @@ export default function Home() {
         }
         bottom={
           <MenuCaptions
-            modes={MODES.map((mode) => {
+            modes={CARD_MODES.map((mode) => {
               const score = matchday?.scores[mode] ?? null;
               return {
                 mode,
@@ -918,6 +931,12 @@ export default function Home() {
               open: support,
             }}
             supportRef={supportButton}
+            allModes={{
+              label: text.allModes.open,
+              onClick: () => setAllModes(true),
+              open: allModes,
+            }}
+            allModesRef={allModesButton}
             dayLabel={
               matchday ? text.day(matchday.today.dayNumber) : text.dayPending
             }
@@ -1026,6 +1045,27 @@ export default function Home() {
             returnFocus={reviewButton}
           />
         )}
+        <AllModes
+          labels={text.allModes}
+          modes={MODES.map((mode) => {
+            const score = matchday?.scores[mode] ?? null;
+            return {
+              mode,
+              label: text.modes[mode].label,
+              line: text.modes[mode].line,
+              picture: MODE_PICTURES[mode],
+              score,
+              ...(score !== null && {
+                spoken: text.allModes.spoken(text.modes[mode].label, score),
+              }),
+            };
+          })}
+          open={allModes}
+          onClose={() => setAllModes(false)}
+          onChoose={(mode) => scene?.choose(mode)}
+          onReview={(mode) => openReview(mode, allModesButton.current)}
+          returnFocus={allModesButton}
+        />
         <Support
           labels={strings.support}
           ideas={ideas}

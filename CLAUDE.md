@@ -3,9 +3,11 @@
 A daily football trivia game. Seven typed questions, 100 points each, and the total drives a
 footballer's career from the park to the World Cup. HOME: give the most common answer (the one
 most players give). AWAY: give the most niche answer. The stadium on the home screen changes
-its colours every day and has no name: nothing in the game says which stadium it is. The
-locked modes CLOSEST and FURTHEST (an answer's place against the day's pin on the map),
-NEXT-GEN and RETRO come later. Retro pixel art, drawn in code.
+its colours every day and has no name: nothing on it says which stadium it is. RETRO (the
+oldest answer) and NEXT-GEN (the most recent) are open too, and so are CLOSEST and FURTHEST
+(2026-11-18): the answer whose place is nearest to, or furthest from, the day's place (a
+stadium, a city or a landmark, `app/data/places.ts`), which those two modes name and show on a
+pixel world map. Retro pixel art, drawn in code.
 
 (Changed on 2026-11-11: HOME and AWAY used to be closest to and furthest from today's stadium.
 Some older notes in the docs still describe that; `docs/GAME_DESIGN.md` is being updated.)

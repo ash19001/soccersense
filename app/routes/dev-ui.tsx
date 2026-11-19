@@ -60,6 +60,8 @@ const MODE_LABEL: Record<UiMode, string> = {
   away: "AWAY",
   retro: "RETRO",
   nextgen: "NEXT-GEN",
+  closest: "CLOSEST",
+  furthest: "FURTHEST",
 };
 
 const GRADE_LABEL: Record<UiGrade, string> = {
@@ -801,6 +803,8 @@ const INTRO_LINE: Record<UiMode, readonly [string, string]> = {
   away: ["GIVE THE MOST UNCOMMON ANSWER", "MOST UNCOMMON"],
   retro: ["GIVE THE OLDEST ANSWER", "OLDEST"],
   nextgen: ["GIVE THE MOST RECENT ANSWER", "MOST RECENT"],
+  closest: ["GIVE THE ANSWER NEAREST TO", "NEAREST"],
+  furthest: ["GIVE THE ANSWER FURTHEST FROM", "FURTHEST"],
 };
 
 interface Composition {

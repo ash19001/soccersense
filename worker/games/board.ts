@@ -14,7 +14,7 @@
  * For each mode: the top ten (best first; equal totals share a place, the one who finished
  * first listed first), how many accounts finished on each total (`board_tally`, one more as
  * each game is decided: worker/games/store.ts), and, for a signed-in player on the board,
- * their own place. A whole day's boards are six reads at most, in one round trip, however
+ * their own place. A whole day's boards are a read per mode and two more at most, in one round trip, however
  * many have played: the counts are at most 71 rows a mode, and the top ten come from an
  * index (migration 5).
  */

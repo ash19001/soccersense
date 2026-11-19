@@ -43,6 +43,11 @@ export interface BoardProps {
   instruction: string;
   /** "Measured by where the manager was born." */
   measureLine: string;
+  /**
+   * CLOSEST and FURTHEST: the day's place, on a plate of its own that stays on the board
+   * all game, compact or not ("TODAY'S PLACE", "Wembley, London").
+   */
+  place?: { label: string; name: string };
   secondsLeft: number;
   secondsTotal: number;
   /**
@@ -172,6 +177,7 @@ export function Board({
   question,
   instruction,
   measureLine,
+  place,
   secondsLeft,
   secondsTotal,
   compact = false,
@@ -215,6 +221,12 @@ export function Board({
         />
         <TierBar name={tierName} progress={tierProgress} />
       </div>
+      {place && (
+        <p className="ss-board__place">
+          <span className="ss-board__place-tag">{place.label}</span>{" "}
+          <span className="ss-board__place-name">{place.name}</span>
+        </p>
+      )}
       <div className="ss-board__screen">
         <h2 className="ss-board__question" aria-live="polite">
           {/* A new key is a new element: its words' animations start again. */}

@@ -2,6 +2,10 @@
 
 Checked on 2026-11-10 for `app/data/stadiums.ts`.
 
+**Since 2026-11-18 the daily pin is a place** (a stadium, a city or a landmark: see
+`places.md`), and CLOSEST and FURTHEST give its name. The stadiums among the places keep the
+points checked here.
+
 **Since 2026-11-17 the data holds a pin's id and coordinates only.** The product owner: the
 stadium's name "shouldn't be mentioned anywhere", so `name`, `city` and `country` were taken
 out of the data and nothing in the game says which stadium a day's pin is. The names in this

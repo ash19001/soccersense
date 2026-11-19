@@ -1,19 +1,32 @@
 import type { Mode, Question } from "~/game/types";
 
 import { AWAY_QUESTIONS } from "./questions/away";
+import { CLOSEST_QUESTIONS, FURTHEST_QUESTIONS } from "./questions/distance";
 import { HOME_QUESTIONS } from "./questions/home";
 import { NEXT_GEN_QUESTIONS } from "./questions/next-gen";
 import { RETRO_QUESTIONS } from "./questions/retro";
 
 export { STADIUMS } from "./stadiums";
-export { AWAY_QUESTIONS, HOME_QUESTIONS, NEXT_GEN_QUESTIONS, RETRO_QUESTIONS };
+export {
+  AWAY_QUESTIONS,
+  CLOSEST_QUESTIONS,
+  FURTHEST_QUESTIONS,
+  HOME_QUESTIONS,
+  NEXT_GEN_QUESTIONS,
+  RETRO_QUESTIONS,
+};
 
-/** Each mode's seven questions. RETRO's and NEXT-GEN's carry every answer's years. */
+/**
+ * Each mode's seven questions. RETRO's and NEXT-GEN's carry every answer's years; every
+ * answer has its place, which CLOSEST and FURTHEST are ranked by.
+ */
 const QUESTIONS: Readonly<Record<Mode, Question[]>> = {
   home: HOME_QUESTIONS,
   away: AWAY_QUESTIONS,
   retro: RETRO_QUESTIONS,
   nextgen: NEXT_GEN_QUESTIONS,
+  closest: CLOSEST_QUESTIONS,
+  furthest: FURTHEST_QUESTIONS,
 };
 
 /**

@@ -259,7 +259,7 @@ describe("isGameSnapshot", () => {
     }
     const broken: [string, Record<string, unknown>][] = [
       ["no day", { day: 0 }],
-      ["an unknown mode", { mode: "closest" }],
+      ["an unknown mode", { mode: "guesswho" }],
       ["an index past the end", { index: 3 }],
       ["a phase the server has not got", { phase: "resolving" }],
       ["a total that is not the turns'", { total: 999 }],

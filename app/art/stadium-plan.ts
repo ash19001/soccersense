@@ -53,6 +53,38 @@ export const LOT = 7.4;
 /** The terraces south of Stadium Road repeat every this many units of depth. */
 export const STREET = 34;
 
+/**
+ * The grid of streets beyond the ground (`streets`): blocks `w` by `h` units, offset by
+ * `x` and `v`, a road `road` units wide on their west and south sides; the houses stand
+ * along the blocks' long sides, `houses` units deep, their gardens between.
+ */
+export const BLOCKS = {
+  w: 78,
+  h: 52,
+  x: 3,
+  v: 30,
+  road: 6,
+  houses: 9,
+} as const;
+/** The old town beyond the railway (`far`): blocks of rooftops, from V0 to V1. */
+export const OLD_TOWN = {
+  w: 130,
+  h: 26,
+  x: 40,
+  v: 196,
+  roadW: 5,
+  roadH: 4,
+  v1: 560,
+} as const;
+/** The terraces south of Stadium Road: a pavement, then the houses, rows of a STREET. */
+export const TERRACE = { pavement: 4, houses: 15 } as const;
+/** The school field west of the avenue. */
+export const SCHOOL = { x0: -330, x1: -262, v0: -62, v1: 24 } as const;
+/** The allotments and the north car park between North Road and the railway. */
+export const NORTH_LOT = { x0: -18, x1: 144, v0: 131, v1: 165 } as const;
+/** The mown kickabout lawn in the park. */
+export const KICKABOUT = { x0: 262, x1: 322, v0: -70, v1: -12 } as const;
+
 export const PARK = { x0: 178, x1: 338, v0: -108, v1: 121 } as const;
 export const POND = { x: 226, v: 34, a: 24, b: 15 } as const;
 export const COACHES = { x0: -226, x1: -178, v0: -108, v1: 121 } as const;
@@ -229,8 +261,8 @@ function pick(X: number, V: number, s: number, seed: number): Color | number {
     if (X < -PLAZA_HALF && X > ROAD.aveX1) {
       const row = d % STREET;
       // pavement, the houses, their gardens, the back alley
-      if (row < 4) return P.concreteLight;
-      if (row < 15) return P.concrete;
+      if (row < TERRACE.pavement) return P.concreteLight;
+      if (row < TERRACE.houses) return P.concrete;
       if (row < 29) {
         const lx = (((X - HOUSES_SW.x0) % LOT) + LOT) % LOT;
         const lot =
@@ -304,7 +336,9 @@ function pick(X: number, V: number, s: number, seed: number): Color | number {
   if (X >= -24 && X < 150) {
     // the north car park
     const row = (V - 131) % 13;
-    if (X < -18 || X > 144 || V > 165) return P.grassDark;
+    if (X < NORTH_LOT.x0 || X > NORTH_LOT.x1 || V > NORTH_LOT.v1) {
+      return P.grassDark;
+    }
     const bays = row < 5 || (row >= 8 && row < 13);
     return bays ? P.concrete : P.concreteDark;
   }
@@ -346,8 +380,15 @@ function park(X: number, V: number, s: number): Color | number {
   }
   if (near(X - 252, 3, s) && V < POND.v) return P.chalk;
   // a mown kickabout lawn
-  if (X > 262 && X < 322 && V > -70 && V < -12) {
-    return Math.floor((X - 262) / 7.5) % 2 === 0 ? P.grassLight : P.grass;
+  if (
+    X > KICKABOUT.x0 &&
+    X < KICKABOUT.x1 &&
+    V > KICKABOUT.v0 &&
+    V < KICKABOUT.v1
+  ) {
+    return Math.floor((X - KICKABOUT.x0) / 7.5) % 2 === 0
+      ? P.grassLight
+      : P.grass;
   }
   return P.grass;
 }
@@ -355,7 +396,7 @@ function park(X: number, V: number, s: number): Color | number {
 /** West of the avenue: streets running north-south, the school and its field. */
 function westgate(X: number, V: number, s: number, seed: number): Color {
   // the school field
-  if (X < -262 && X > -330 && V > -62 && V < 24) {
+  if (X < SCHOOL.x1 && X > SCHOOL.x0 && V > SCHOOL.v0 && V < SCHOOL.v1) {
     if (V > 2) return P.concreteLight;
     const inX = X > -322 && X < -270;
     const inV = V > -54 && V < -6;
@@ -380,17 +421,21 @@ function eastside(X: number, V: number, s: number, seed: number): Color {
   return streets(X, V, s, seed);
 }
 
-/** A grid of streets with gardens between the houses (the houses are painted on top). */
-function streets(X: number, V: number, s: number, seed: number): Color {
-  const col = (((X + 3) % 78) + 78) % 78;
-  const row = (((V + 30) % 52) + 52) % 52;
-  if (row < 6) return road(row - 3, X, 3, s);
-  if (col < 6) return road(col - 3, V, 3, s);
-  const block = Math.floor((X + 3) / 78) * 31 + Math.floor((V + 30) / 52);
-  const lx = col - 6;
-  const lv = row - 6;
+/**
+ * A grid of streets with gardens between the houses (the houses are painted on top): what
+ * the town is beyond the ground, and what stadium-top.ts puts past the car park.
+ */
+export function streets(X: number, V: number, s: number, seed: number): Color {
+  const { w, h, x, v, road: rw, houses } = BLOCKS;
+  const col = (((X + x) % w) + w) % w;
+  const row = (((V + v) % h) + h) % h;
+  if (row < rw) return road(row - rw / 2, X, rw / 2, s);
+  if (col < rw) return road(col - rw / 2, V, rw / 2, s);
+  const block = Math.floor((X + x) / w) * 31 + Math.floor((V + v) / h);
+  const lx = col - rw;
+  const lv = row - rw;
   // houses along the two long sides, gardens in the middle
-  if (lv < 9 || lv > 37) return P.concrete;
+  if (lv < houses || lv > h - rw - houses) return P.concrete;
   const lot = Math.floor(lx / LOT) + block * 16 + (lv > 23 ? 8 : 0);
   if (near(lv - 23, 0.6, s)) return P.wood;
   return garden(lx % LOT, Math.abs(lv - 23), lot, seed);
@@ -404,14 +449,15 @@ function far(X: number, V: number, s: number, seed: number): Color | number {
     if (Math.abs(rd) > 8) return P.grassDark;
     return rd < -4 ? WATER_HI : WATER;
   }
-  if (V < 560) {
+  if (V < OLD_TOWN.v1) {
     // streets every so often, the rest is rooftops painted on top
     if (X >= ROAD.aveX0 && X <= ROAD.aveX1) return P.concreteDark;
-    const row = (((V - 196) % 26) + 26) % 26;
-    if (row < 4) return P.concreteDark;
-    const col = (((X + 40) % 130) + 130) % 130;
-    if (col < 5) return P.concreteDark;
-    const block = Math.floor((X + 40) / 130) * 17 + Math.floor((V - 196) / 26);
+    const { w, h, x, v } = OLD_TOWN;
+    const row = (((V - v) % h) + h) % h;
+    if (row < OLD_TOWN.roadH) return P.concreteDark;
+    const col = (((X + x) % w) + w) % w;
+    if (col < OLD_TOWN.roadW) return P.concreteDark;
+    const block = Math.floor((X + x) / w) * 17 + Math.floor((V - v) / h);
     return hash2(block, 5, seed) < 0.16 ? P.grass : P.concrete;
   }
   // fields: a patchwork with hedges

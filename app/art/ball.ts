@@ -320,6 +320,15 @@ const FRONT_SLOTS: readonly BallSlot[] = [
 ];
 const FRONT_FACE = new Uint8Array(FACES);
 for (const slot of FRONT_SLOTS) FRONT_FACE[SLOT_FACE[SLOT_INDEX[slot]]] = 1;
+/**
+ * The back slots' panels (1 for each). An open button there (CLOSEST, FURTHEST, opened on
+ * 2026-11-18) is laid out as the top and bottom ones are, by itself (`drawFront`, measured
+ * in a side place, where they rest), and plays no part in sizing HOME's and AWAY's words.
+ */
+const BACK_FACE = new Uint8Array(FACES);
+for (const slot of ["backLeft", "backRight"] as const) {
+  BACK_FACE[SLOT_FACE[SLOT_INDEX[slot]]] = 1;
+}
 
 /**
  * The white panel a top or bottom button's name tag hangs over in the menu pose (see
@@ -1324,7 +1333,14 @@ function sideShiftFor(patches: BallPatches, room: Int16Array): number {
   let best = SHIFT_MAX;
   for (let i = 0; i < SLOT_COUNT; i++) {
     const patch = patches[SLOTS[i]];
-    if (!patch || !accentOf(patch) || FRONT_FACE[SLOT_FACE[i]] === 1) continue;
+    if (
+      !patch ||
+      !accentOf(patch) ||
+      FRONT_FACE[SLOT_FACE[i]] === 1 ||
+      BACK_FACE[SLOT_FACE[i]] === 1
+    ) {
+      continue;
+    }
     let text = patch.label;
     let opts: TextOptions | null = labelOpts;
     const labelRows = labelOpts === F.BIG ? 14 : 10;
@@ -1406,8 +1422,15 @@ function chooseLayout(patches: BallPatches, room: Int16Array): void {
   for (let i = 0; i < SLOT_COUNT; i++) {
     const patch = patches[SLOTS[i]];
     // the side buttons (a locked patch has its own layout: see `drawLocked`; so do the
-    // buttons on the top and the bottom: see `drawFront`)
-    if (!patch || !accentOf(patch) || FRONT_FACE[SLOT_FACE[i]] === 1) continue;
+    // buttons on the top, the bottom and the back: see `drawFront`)
+    if (
+      !patch ||
+      !accentOf(patch) ||
+      FRONT_FACE[SLOT_FACE[i]] === 1 ||
+      BACK_FACE[SLOT_FACE[i]] === 1
+    ) {
+      continue;
+    }
     const played = hasBadge(patch);
     if (played) {
       score = Math.max(
@@ -1841,8 +1864,9 @@ function drawContent(
     drawLocked(s, i, f, patch, tones, facing);
     return;
   }
-  if (FRONT_FACE[f] === 1) {
-    // a button on the top or the bottom (NEXT-GEN, RETRO): laid out like a locked patch
+  if (FRONT_FACE[f] === 1 || BACK_FACE[f] === 1) {
+    // a button on the top or the bottom (NEXT-GEN, RETRO), or the back (CLOSEST,
+    // FURTHEST): laid out like a locked patch
     drawFront(s, i, f, patch, tones, facing, accent);
     return;
   }
@@ -2115,7 +2139,13 @@ function drawFront(
   const facingUs = facing >= FACING_LABEL;
   const badge = hasBadge(patch) ? (patch.badge as string) : "";
   let pic = rad >= 30 ? pictureFor(patch, !facingUs) : null;
-  if (pic && pic.w > room[facingUs ? ROOM_MARK_FRONT : ROOM_SQUASHED]) {
+  // (the top and bottom are measured straight on; the back ones in a side place)
+  const front = FRONT_FACE[f] === 1;
+  if (
+    pic &&
+    pic.w >
+      room[facingUs ? (front ? ROOM_MARK_FRONT : ROOM_MARK) : ROOM_SQUASHED]
+  ) {
     pic = null;
   }
 
@@ -2151,7 +2181,7 @@ function drawFront(
   const ty = top + ah + LOCKED_GAP * 2;
   const tw = Math.min(stamp.w - 8, measureText(word, opts));
   stamp.erase(0, 0, stamp.w, stamp.h);
-  if (tw <= room[ROOM_WORD_FRONT]) {
+  if (tw <= room[front ? ROOM_WORD_FRONT : ROOM_WORD]) {
     const free = freeRun(f, cx, ty, rowsS, edge);
     const x = free >= tw ? runLo + ((free - tw) >> 1) : cx - (tw >> 1);
     // a word (not a score) on its plate, at rest, as HOME's and AWAY's are

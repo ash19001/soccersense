@@ -9,11 +9,13 @@
  *
  * A draft does not say which shot an answer is: that is worked out here from the answers'
  * shares (HOME, AWAY) or years (RETRO, NEXT-GEN) by `shotsFor`, the rule the game scores
- * by, so a draft cannot disagree with it.
+ * by, so a draft cannot disagree with it. CLOSEST's and FURTHEST's shots depend on the day's
+ * place, so they are worked out as the question is played, never filed; their answers need
+ * no share of players, only a place.
  */
 
 import { judge, normalise } from "./judge";
-import { rankingYear, ruleFor } from "./scoring";
+import { isDistanceRule, rankingYear, ruleFor } from "./scoring";
 import { SHOT_ORDER, isGoal, shotsFor } from "./shots";
 import type { Answer, Measure, Mode, Question } from "./types";
 
@@ -23,6 +25,8 @@ export const MIN_ANSWERS: Readonly<Record<Mode, number>> = {
   away: 6,
   retro: 12,
   nextgen: 12,
+  closest: 6,
+  furthest: 6,
 };
 /** The most answers a question may have, and the most other spellings an answer may. */
 export const MAX_ANSWERS = 250;
@@ -111,6 +115,8 @@ export function checkQuestion(raw: unknown, mode: Mode): Checked {
   }
 
   const era = mode === "retro" || mode === "nextgen";
+  /** CLOSEST and FURTHEST: ranked by distance from the day's place, not by shares. */
+  const distance = isDistanceRule(ruleFor(mode));
   const lastYear = isDate(asOf) ? Number(asOf.slice(0, 4)) : 9999;
   const list = Array.isArray(raw.answers) ? raw.answers : null;
   if (!list) {
@@ -189,7 +195,8 @@ export function checkQuestion(raw: unknown, mode: Mode): Checked {
       share >= 0.1 &&
       share <= 100 &&
       Math.abs(share * 10 - Math.round(share * 10)) < 1e-9;
-    if (!shared) {
+    // A distance mode has no use for a share: one may be left out.
+    if (!shared && !(distance && share === undefined)) {
       problems.push(
         `${at}: popularity ${String(share)} is not 0.1 to 100 with at most one decimal place`,
       );
@@ -249,36 +256,46 @@ export function checkQuestion(raw: unknown, mode: Mode): Checked {
   // to run or misleading to read.
   if (problems.length > 0) return fail();
 
-  const sum = answers.reduce((total, a) => total + a.popularity, 0);
-  if (Math.abs(sum - 100) > 0.5) {
-    problems.push(
-      `${where}: the popularity shares add up to ${Math.round(sum * 10) / 10}, not 100`,
-    );
-  }
-  const tenths = answers
-    .map((a) => Math.round(a.popularity * 10))
-    .sort((a, b) => b - a);
-  if (tenths[0] === tenths[1]) {
-    problems.push(`${where}: two answers tie as the most common`);
-  }
-  if (tenths.at(-1) === tenths.at(-2)) {
-    problems.push(`${where}: two answers tie as the most uncommon`);
-  }
+  if (!distance) {
+    const sum = answers.reduce((total, a) => total + a.popularity, 0);
+    if (Math.abs(sum - 100) > 0.5) {
+      problems.push(
+        `${where}: the popularity shares add up to ${Math.round(sum * 10) / 10}, not 100`,
+      );
+    }
+    const tenths = answers
+      .map((a) => Math.round(a.popularity * 10))
+      .sort((a, b) => b - a);
+    if (tenths[0] === tenths[1]) {
+      problems.push(`${where}: two answers tie as the most common`);
+    }
+    if (tenths.at(-1) === tenths.at(-2)) {
+      problems.push(`${where}: two answers tie as the most uncommon`);
+    }
 
-  // The shots, by the rule the mode is scored by.
-  const rule = ruleFor(mode);
-  const values = answers.map((a) =>
-    era ? (rankingYear(a, rule) ?? 0) : a.popularity,
-  );
-  shotsFor(values, rule).forEach((shot, i) => {
-    answers[i].shot = shot;
-  });
-  const used = new Set(answers.map((a) => a.shot));
-  const empty = SHOT_ORDER.filter((shot) => isGoal(shot) && !used.has(shot));
-  if (empty.length > 0) {
-    problems.push(
-      `${where}: no answer would be a ${empty.join(" or a ")} (the reveal shows one for each of the five shots that score: the ${era ? "years" : "shares"} are too bunched)`,
+    // The shots, by the rule the mode is scored by.
+    const rule = ruleFor(mode);
+    const values = answers.map((a) =>
+      era ? (rankingYear(a, rule) ?? 0) : a.popularity,
     );
+    shotsFor(values, rule).forEach((shot, i) => {
+      answers[i].shot = shot;
+    });
+    const used = new Set(answers.map((a) => a.shot));
+    const empty = SHOT_ORDER.filter((shot) => isGoal(shot) && !used.has(shot));
+    if (empty.length > 0) {
+      problems.push(
+        `${where}: no answer would be a ${empty.join(" or a ")} (the reveal shows one for each of the five shots that score: the ${era ? "years" : "shares"} are too bunched)`,
+      );
+    }
+  } else {
+    // Worked out against the day's place as the question is played (`shotsOf`).
+    const places = new Set(answers.map((a) => `${a.lat},${a.lng}`));
+    if (places.size < 3) {
+      problems.push(
+        `${where}: the answers are in ${places.size === 1 ? "one place" : "two places"}: a distance mode needs them spread out`,
+      );
+    }
   }
 
   const question: Question = {

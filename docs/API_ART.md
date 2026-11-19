@@ -11,12 +11,83 @@ Look at any of it without a browser:
 ./node_modules/.bin/tsx tools/snap.ts stadium/composed --time all --scale 3 --out .snaps/x.png
 ```
 
+## The world map (`~/art/world-map`, 2026-11-18)
+
+CLOSEST's and FURTHEST's land, for `MapScene`: Natural Earth's 1:50m land (public domain),
+rasterised at half a degree by `tools/world-map.ts` into `app/art/world-map-data.ts`
+(generated: run the tool again to change it). `worldLand()` reads it once; `isLand(lat, lng)`,
+`wrapLng`, `alongGreatCircle(a, b, t)` (a point a share `t` of the way along the great
+circle), `destination(from, bearing, km)`, `antipode(p)`, `EARTH_KM`, `type GeoPoint`.
+
+## The globe (`~/art/globe`, 2026-11-18)
+
+CLOSEST's and FURTHEST's kick-offs on the home screen. `drawGlobe(s, cx, cy, r, centre, {
+coverage?, colors? })`: an orthographic Earth of radius `r` with `centre` (lat, lng in
+degrees) in its middle, north up, in `GLOBE_COLORS` (the map's: sea, land, coast, and a rim
+where all of it is in sight); any size, from a ball to many screens across. Its land is
+sampled in blocks of half a cell of the land's grid (fewer samples on a big globe: under 4
+ms a frame at 640 x 310), on the screen's own grid; `coverage` dissolves it in (4 x 4 dither).
+`drawStars(s, seed)`: a seeded starfield. `drawMapPin(s, x, y, k, base, light)`: the map's pin
+on its point (MapScene draws it too), giving its top row.
+
+## The Earth from the street to space (`~/art/earth-zoom`, 2026-11-18)
+
+FURTHEST's pull back on the home screen. `drawEarthZoom(s, cx, cy, r, centre, { place, seed,
+light, near?, town?, block? })`: the ground round the day's place from `EARTH_KM / r` km a pixel, an Earth of
+radius `r` at (`cx`, `cy`) with `centre` in its middle; big, it fills the picture, flat; small,
+it is a globe among stars with its rim. Fills every pixel. The stages, by the size of a
+sample on the ground (what would be smaller than a few samples is drawn as the next stage):
+
+- the town's streets (a side street missing here and there), two buildings a block with a
+  lit north edge to each roof, grey and brick quarters and parks; by night dark streets with
+  lamps, and lit windows;
+- the town's blocks, quarters and main streets (fewer further off; lit by night), then a
+  speck of it (lit by night);
+- the region: fields one by one (pasture, mixed, wheat and earth by the area; dry ones in a
+  desert), then parcels of them, woods, and the main roads out of the home town;
+- the country: lush and green, the world's deserts roughly where they are (`drynessAt(lat,
+lng, seed)`, from a table of them), snow past 66 degrees, forests, and nearer smaller woods;
+- the sea and coasts from the world map, the coast wandering a little so that its
+  half-degree grid does not show close up.
+
+Each stage gives way to the next a piece of ground at a time (a parcel, a cell of the town's
+main streets), not in a dither on the screen, so nothing makes a pattern or swims as the
+ground moves. The town and its fields are made up from the seed. Colours through `light.env`;
+street lights and windows keep theirs. Sampled in blocks (no more than 20,000 a frame, or
+`block` pixels: a mosaic, its squares lined up on the Earth's middle): about 4 ms a frame at
+640 x 310. `near(east, north)` gives ground something else knows better (FURTHEST: the town
+from above); `town(east, north)` draws the towns in its look instead of this module's (their
+parks stay parks).
+
+## The town from above (`~/art/stadium-top`, 2026-11-18)
+
+FURTHEST's bird's-eye view: the same town as the home picture, the plan it is drawn from
+(`~/art/stadium-plan`) seen from straight above. `topAt(X, V, s, seed, swap, club)`: what is
+at a point of the plan, in map units: the stadium (`~/art/stadium-bowl` `bowlTopAt`: the roof
+ring and its bays, the crowd in the club's colours, the boards, the pitch with its stripes,
+lines and goals, the roof's shadow), the ground, and what the picture stands on it as sprites,
+drawn flat: the houses' roofs (ridged; slate, tile or flat; a chimney at each party wall),
+trees and their shadows, cars in the car parks, the away coaches, lamps on the pavements
+(`LAMP`, lit at night; close up only). Past the car park and north of the river (where the
+plan is a picture's far town) it is more streets of houses.
+
+`TopTown`: the picture of it, built a slice at a time (`step`, `finish`; about 230 ms in all):
+a texel a unit round the stadium (`TOP_AREA`) and four units a texel out to `OUTER_AREA`, each
+with smaller copies, every texel of a copy the average of four snapped to the nearest of the
+picture's own colours, so it pixelates cleanly. `at(X, V, level)` (texels of 2^level units;
+ragged edges, so neither layer shows as a box); `suburbAt` repeats its streets of houses past
+its edge. `TopTones` grades its daylight colours (and markers) for a light; `drawTopTilt` draws
+it from a camera rising from the home picture's (`PICTURE_TILT`) to straight above.
+
 ## Palette (`~/art/palette`)
 
 - `P`: every colour as an engine `Color`, by role name (`P.grass`, `P.homeLight`). Painters
   never write hex.
 - `PALETTE_HEX` (the same as `"#rrggbb"`), `PALETTE_NAMES`, `type PaletteName`.
-- `MODE_COLORS[mode]`: `{ dark, base, light }`. HOME is warm red-orange, AWAY is teal.
+- `MODE_COLORS[mode]`: `{ dark, base, light }`. HOME is warm red-orange, AWAY is teal, RETRO
+  old gold, NEXT-GEN magenta, CLOSEST green (`closestDark`, `closest`, `closestLight`) and
+  FURTHEST periwinkle blue (`furthestDark`, `furthest`, `furthestLight`; both 2026-11-18, in
+  `app/ui/tokens.css` as `--c-closest*` and `--c-furthest*`).
 - `GRADE_COLORS[grade]`: worldie, golazo, trivela, toepoke, tapin, miss, timeup, skipped.
 - The values are the art bible's table and match `app/ui/tokens.css` (a test compares them).
   Seven colours exist only here: `nightGlow`, `cloudLight`, `cloud`, `cloudShade`, `sun`,
@@ -145,7 +216,7 @@ ballSlotAt(state, x, y, patches?): BallSlot | null   // hit test: exactly what t
 ballSlotCenter(state, slot): { x, y, facing }   // facing 1 straight on, 0 on the rim, < 0 behind
 // app/art/ball-icons.ts: the open modes' pictures as rows of "w" and ".", trimmed top and
 // bottom, for the interface (the cards under the ball, 2026-11-13)
-MODE_PICTURES: Record<"home" | "away" | "nextgen" | "retro", readonly string[]>
+MODE_PICTURES: Record<Mode, readonly string[]>   // CLOSEST the pin, FURTHEST the globe (2026-11-18)
 ballShowPose(slot): { yaw, pitch, roll }   // the pose that shows a slot
 drawBallShadow(s, state, groundY, light)   // a shadow on a ground line, for a ball that rests on one
 ```
@@ -158,8 +229,8 @@ The slots, and what the menu puts on them:
 | `right`     | level, 31.7 degrees right                   | AWAY, teal        | `away`    | the menu pose                       |
 | `top`       | 58.3 degrees above the middle               | NEXT-GEN, magenta | `nextgen` | pitch -58.3 degrees: straight on    |
 | `bottom`    | 58.3 degrees below                          | RETRO, old gold   | `retro`   | pitch +58.3 degrees: straight on    |
-| `backRight` | on the back, directly behind `right` (AWAY) | CLOSEST, locked   | `pin`     | yaw pi: where `left` (HOME) was     |
-| `backLeft`  | on the back, directly behind `left` (HOME)  | FURTHEST, locked  | `globe`   | yaw pi: where `right` (AWAY) was    |
+| `backRight` | on the back, directly behind `right` (AWAY) | CLOSEST, green    | `pin`     | yaw pi: where `left` (HOME) was     |
+| `backLeft`  | on the back, directly behind `left` (HOME)  | FURTHEST, blue    | `globe`   | yaw pi: where `right` (AWAY) was    |
 | `rimLeft`   | on the rim out past HOME, 31.7 degrees up   | GUESS WHO, locked | `shirt`   | yaw +pi/2, pitch -31.7: straight on |
 | `rimRight`  | on the rim out past AWAY, 31.7 degrees up   | SHOOTOUT, locked  | `goal`    | yaw -pi/2, pitch -31.7: straight on |
 

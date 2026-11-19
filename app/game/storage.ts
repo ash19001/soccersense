@@ -258,10 +258,18 @@ export function loadDay(
 
 /**
  * Every mode that can be played, in the menu's order: HOME and AWAY, then RETRO and
- * NEXT-GEN (the past, then the future). The history and the stats are built over this
- * list, so a mode added here (and to `Mode`) joins them with no other change.
+ * NEXT-GEN (the past, then the future), then CLOSEST and FURTHEST (the day's place on the
+ * map). The history and the stats are built over this list, so a mode added here (and to
+ * `Mode`) joins them with no other change.
  */
-export const MODES: readonly Mode[] = ["home", "away", "retro", "nextgen"];
+export const MODES: readonly Mode[] = [
+  "home",
+  "away",
+  "retro",
+  "nextgen",
+  "closest",
+  "furthest",
+];
 
 /** How many days of finished games the history keeps: a year, today included. */
 export const HISTORY_DAYS = 366;

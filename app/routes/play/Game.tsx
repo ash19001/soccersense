@@ -25,7 +25,9 @@ import {
   type RevealView,
   QUESTION_MS,
   clockView,
+  formatDistanceShort,
   formatShare,
+  isDistanceMode,
   isEraMode,
   isPerfect,
   isShot,
@@ -64,6 +66,7 @@ import {
   titleName,
 } from "./controller";
 import { FirstGameCheck } from "../first-check";
+import { watchCeiling } from "../scene-edges";
 import { gameServer } from "./server";
 
 const text = strings.play;
@@ -168,20 +171,47 @@ function nothing(): null {
 /**
  * What the reveal's third column says about an answer: its share of players ("34%") in
  * HOME and AWAY, its year in RETRO (the first it counted, "1888") and NEXT-GEN (the last,
- * "2026").
+ * "2026"), its distance from the day's place in CLOSEST and FURTHEST ("212 miles", in the
+ * player's own units).
  */
-export function rowFigure(row: RankedAnswer, mode: Mode): string {
+export function rowFigure(
+  row: RankedAnswer,
+  mode: Mode,
+  lang: string = locale(),
+): string {
   if (isEraMode(mode)) return row.year === null ? "" : String(row.year);
+  if (isDistanceMode(mode)) return formatDistanceShort(row.km, lang);
   return formatShare(row.share);
 }
 
 /**
  * The reveal's one plain sentence: how many players gave the answer (in RETRO and NEXT-GEN,
- * the year it first or last counted), and what kind of shot that made it, in the mode's
- * tone.
+ * the year it first or last counted; in CLOSEST and FURTHEST, how far it is from `place`,
+ * the day's), and what kind of shot that made it, in the mode's tone.
  */
-export function revealSentence(reveal: RevealView, mode: Mode): string {
+export function revealSentence(
+  reveal: RevealView,
+  mode: Mode,
+  place = "",
+): string {
   const { answer, row, best, turn } = reveal;
+  if (isDistanceMode(mode)) {
+    const where = place || text.board.place.label;
+    if (answer && row) {
+      return text.sentence[mode][row.shot](
+        answer.name,
+        rowFigure(row, mode),
+        where,
+      );
+    }
+    const missed = turn.grade === "timeup" ? "timeup" : "skipped";
+    if (!best) return text.grades[missed];
+    const said =
+      missed === "timeup"
+        ? text.sentence.timeupDistance
+        : text.sentence.skippedDistance;
+    return said[mode](best.answer.name, rowFigure(best, mode), where);
+  }
   if (answer && row) {
     if (isEraMode(mode)) {
       return text.sentence[mode][row.shot](answer.name, rowFigure(row, mode));
@@ -230,9 +260,10 @@ export function tableRows(
 
 /** The reveal table's headings: the third column says what it holds in the mode. */
 export function tableLabels(mode: Mode): typeof text.table {
-  return isEraMode(mode)
-    ? { ...text.table, distance: text.table.year[mode] }
-    : text.table;
+  if (isEraMode(mode))
+    return { ...text.table, distance: text.table.year[mode] };
+  if (isDistanceMode(mode)) return { ...text.table, distance: text.table.far };
+  return text.table;
 }
 
 /**
@@ -243,6 +274,7 @@ export function tableLabels(mode: Mode): typeof text.table {
 export function yoursLine(
   reveal: RevealView,
   mode: Mode = reveal.question.mode,
+  place = "",
 ): RevealYours | undefined {
   if (reveal.playerInRows) return undefined;
   const { answer, row, turn } = reveal;
@@ -258,7 +290,15 @@ export function yoursLine(
       points: row.points,
       spoken: isEraMode(mode)
         ? text.yours.spokenYear[mode](answer.name, picked, shot, row.points)
-        : text.yours.spoken(answer.name, picked, shot, row.points),
+        : isDistanceMode(mode)
+          ? text.yours.spokenDistance(
+              answer.name,
+              picked,
+              place || text.board.place.label,
+              shot,
+              row.points,
+            )
+          : text.yours.spoken(answer.name, picked, shot, row.points),
     };
   }
   const shot = turn.grade === "timeup" ? text.yours.timeup : text.yours.skipped;
@@ -290,6 +330,10 @@ export function Game({ mode }: { mode: Mode }) {
   );
   const session = view?.session ?? null;
   const phase = session?.phase ?? null;
+
+  // CLOSEST's and FURTHEST's map keeps the day's place clear of the board (scene-edges.ts).
+  const scene = game?.scene ?? null;
+  useEffect(() => (scene ? watchCeiling(scene) : undefined), [scene]);
   const index = session?.index ?? 0;
 
   const value = field.index === index ? field.value : "";
@@ -337,6 +381,7 @@ export function Game({ mode }: { mode: Mode }) {
         name={strings.home.modes[mode].label}
         line={text.intro.line[mode]}
         emphasis={text.intro.key[mode]}
+        {...(game.placeLabel && { place: game.placeLabel.toUpperCase() })}
         leaving={view.intro === "leaving"}
         onSkip={game.skipIntro}
       />
@@ -364,7 +409,17 @@ export function Game({ mode }: { mode: Mode }) {
           tierProgress={career.progress}
           question={question.prompt}
           instruction={text.board.instruction[mode]}
-          measureLine={text.board.measure[mode]}
+          measureLine={
+            isDistanceMode(mode) && question.measureLabel
+              ? text.board.measuredBy(question.measureLabel)
+              : text.board.measure[mode]
+          }
+          {...(game.placeLabel && {
+            place: {
+              label: text.board.place.label,
+              name: game.placeLabel,
+            },
+          })}
           secondsLeft={clock.secondsLeft}
           secondsTotal={QUESTION_MS / 1000}
           compact={session.phase !== "asking"}
@@ -431,10 +486,10 @@ export function Game({ mode }: { mode: Mode }) {
                 ? text.gained(turn.points)
                 : undefined
             }
-            sentence={revealSentence(reveal, mode)}
+            sentence={revealSentence(reveal, mode, game.placeName)}
             rows={tableRows(reveal, mode)}
             tableLabels={tableLabels(mode)}
-            yours={yoursLine(reveal, mode)}
+            yours={yoursLine(reveal, mode, game.placeName)}
             nextLabel={
               view.trouble
                 ? text.server.retrying

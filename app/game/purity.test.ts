@@ -254,7 +254,14 @@ describe("with every impure global booby-trapped", () => {
     expect(out).toEqual({
       saved: false,
       loaded: null,
-      day: { home: null, away: null, retro: null, nextgen: null },
+      day: {
+        home: null,
+        away: null,
+        retro: null,
+        nextgen: null,
+        closest: null,
+        furthest: null,
+      },
       cleared: true,
     });
   });

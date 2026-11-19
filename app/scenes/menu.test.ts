@@ -5,6 +5,7 @@ import {
   ballSlotAt,
   ballSlotCenter,
   type BallSlot,
+  type BallState,
 } from "~/art/ball";
 import { menuLayout } from "~/art/layout";
 import { lightingFor } from "~/art/lighting";
@@ -16,11 +17,13 @@ import { GOLD_SHOW_LAUNCHES, GOLD_SHOW_LEN } from "~/art/gold-show";
 import { PLANE_EVERY, PLANE_FIRST, PLANE_SPEED } from "~/art/stadium-plane";
 import { HOME_PAGE } from "~/audio/mix";
 import {
+  spinHintShown,
   GOLD_SPIN,
   LOCKED_MODES,
   MODE_SLOTS,
   MenuScene,
   type MenuLabels,
+  OPEN_MODES,
 } from "./menu";
 import type { SoundCue } from "./scene";
 
@@ -274,17 +277,33 @@ describe("the menu", () => {
     scene.pointer({ type: "up", x: at.x, y: at.y });
     expect(locked).toEqual(["guesswho"]);
     expect(kicked).toEqual([]);
-    expect(LOCKED_MODES).toEqual([
-      "closest",
-      "furthest",
-      "guesswho",
-      "shootout",
-    ]);
+    expect(LOCKED_MODES).toEqual(["guesswho", "shootout"]);
     // and none of them is on the top or the bottom patch any more
     for (const mode of LOCKED_MODES) {
       expect(["top", "bottom", "left", "right"]).not.toContain(
         MODE_SLOTS[mode],
       );
+    }
+  });
+
+  it("CLOSEST and FURTHEST are open on the back: chosen, they kick off as HOME's and AWAY's do", () => {
+    const [W, H] = SIZES[0];
+    expect(OPEN_MODES).toContain("closest");
+    expect(OPEN_MODES).toContain("furthest");
+    expect(MODE_SLOTS.closest).toBe("backRight");
+    expect(MODE_SLOTS.furthest).toBe("backLeft");
+    for (const mode of ["closest", "furthest"] as const) {
+      const scene = make(W, H);
+      const kicked: Mode[] = [];
+      const chosen: Mode[] = [];
+      scene.onKickoff = (m) => kicked.push(m);
+      scene.onChoose = (m) => chosen.push(m);
+      expect(scene.choose(mode)).toBe(true);
+      for (let i = 0; i < 400 && scene.phase !== "done"; i++) {
+        scene.update(STEP);
+      }
+      expect(kicked).toEqual([mode]);
+      expect(chosen).toEqual([mode]);
     }
   });
 
@@ -326,6 +345,11 @@ describe("the menu", () => {
       const m = menuLayout(w, h);
       const scene = make(w, h);
       scene.choose("nextgen");
+      // first the ball turns to show the mode (2026-11-18), then it is struck
+      expect(scene.phase, `${w}`).toBe("idle");
+      for (let i = 0; i < 60 && scene.phase !== "kickoff"; i++)
+        scene.update(STEP);
+      expect(scene.phase, `${w}`).toBe("kickoff");
       const look = (s: Surface) => {
         let future = 0;
         let seam = 0;
@@ -393,6 +417,11 @@ describe("the menu", () => {
       const m = menuLayout(w, h);
       const scene = make(w, h);
       scene.choose("retro");
+      // first the ball turns to show the mode (2026-11-18), then it is struck
+      expect(scene.phase, `${w}`).toBe("idle");
+      for (let i = 0; i < 60 && scene.phase !== "kickoff"; i++)
+        scene.update(STEP);
+      expect(scene.phase, `${w}`).toBe("kickoff");
       // what is inside the ball's disc, and whether the world is still the flat backdrop
       const look = (s: Surface) => {
         let leather = 0;
@@ -549,6 +578,162 @@ describe("the menu", () => {
       }
     },
   );
+
+  it("turns to show the mode chosen, then is struck showing it (not back to HOME and AWAY)", () => {
+    // the product owner, 2026-11-18: "it spins it to focus on the game mode that was
+    // selected then does its animation"
+    const cases: [Mode, BallSlot][] = [
+      ["closest", "backRight"],
+      ["furthest", "backLeft"],
+      ["nextgen", "top"],
+      ["retro", "bottom"],
+    ];
+    for (const [mode, slot] of cases) {
+      const scene = make(960, 540);
+      scene.update(STEP);
+      expect(scene.choose(mode), mode).toBe(true);
+      // turning first
+      expect(scene.phase, mode).toBe("idle");
+      for (let i = 0; i < 60 && scene.phase !== "kickoff"; i++)
+        scene.update(STEP);
+      expect(scene.phase, mode).toBe("kickoff");
+      draw(scene, 960, 540);
+      const ball = (scene as unknown as { ball: BallState }).ball;
+      const facing = (s: BallSlot) => ballSlotCenter(ball, s).facing;
+      expect(facing(slot), mode).toBeGreaterThan(0.8);
+      expect(facing(slot), mode).toBeGreaterThan(facing("left"));
+    }
+    // HOME and AWAY face the front already: struck at once
+    const scene = make(960, 540);
+    scene.update(STEP);
+    scene.choose("away");
+    expect(scene.phase).toBe("kickoff");
+  });
+
+  it("CLOSEST's ball becomes the Earth, which comes closer and spins, all of it in sight; FURTHEST pulls the picture back to the Earth in space", () => {
+    // the product owner, 2026-11-18: "closest turns it to globe and zooms in. furthest just
+    // zooms out of the home screen entirely making it zoom out for that to be earth"
+    const [w, h] = [480, 270];
+    const globe = new Set<number>([P.ledOff, P.slate, P.steel]);
+    const share = (sf: Surface, keep: (c: number) => boolean): number => {
+      let n = 0;
+      for (const c of sf.data) if (keep(c)) n++;
+      return n / sf.data.length;
+    };
+    const kickoff = (mode: Mode) => {
+      const scene = new MenuScene({
+        seed: 7,
+        fact: "A fact.",
+        labels: LABELS,
+        intro: false,
+        place: { lat: -22.9, lng: -43.2 },
+      });
+      scene.resize(w, h);
+      scene.setLighting(DAY);
+      const chose = vi.fn();
+      scene.onChoose = chose;
+      scene.update(STEP);
+      scene.choose(mode);
+      for (let i = 0; i < 60 && scene.phase !== "kickoff"; i++)
+        scene.update(STEP);
+      expect(scene.phase, mode).toBe("kickoff");
+      let t = 0;
+      const at = (sec: number): Surface => {
+        while (t < sec - 1e-9) {
+          scene.update(STEP);
+          t += STEP;
+        }
+        return draw(scene, w, h);
+      };
+      return { scene, chose, at };
+    };
+
+    // CLOSEST: the whole Earth in the middle of the picture, the town still round it, and
+    // no pin (2026-11-18: "no pin should drop, instead its spinning showing the whole globe")
+    const closest = kickoff("closest");
+    const near = closest.at(1.3);
+    const earth = share(near, (c) => globe.has(c));
+    expect(earth).toBeGreaterThan(0.25);
+    expect(earth).toBeLessThan(0.75);
+    expect(share(near, (c) => c === FLAT)).toBeGreaterThan(0.1);
+    expect(near.get(w / 2, h / 2)).not.toBe(FLAT);
+    expect(share(near, (c) => c === P.closest)).toBe(0);
+    // and it spins: a moment later it is not the same picture
+    const later = closest.at(1.45);
+    let moved = 0;
+    for (let i = 0; i < near.data.length; i++) {
+      if (near.data[i] !== later.data[i]) moved++;
+    }
+    expect(moved).toBeGreaterThan(100);
+    closest.at(2.6);
+    expect(closest.chose).toHaveBeenCalledTimes(1);
+    expect(closest.chose).toHaveBeenCalledWith("closest");
+
+    // FURTHEST: the picture dissolves as the camera rises over the stadium; from straight
+    // above, the pitch in the middle of the screen and the town round it; then it pulls back,
+    // pixelated, to the Earth among stars (2026-11-18: "Maybe the transition should be making
+    // stadium birds eye view first and as it zooms out it can get pixelated too")
+    const furthest = kickoff("furthest");
+    const greens = new Set<number>(
+      [P.grassDeep, P.grassDark, P.grass, P.grassLight].map((c) => DAY.env(c)),
+    );
+    const sea = DAY.env(P.furthestDark);
+    const rising = furthest.at(0.32);
+    expect(share(rising, (c) => c === FLAT)).toBeGreaterThan(0.2);
+    expect(share(rising, (c) => c === FLAT)).toBeLessThan(0.9);
+    const above = furthest.at(0.9);
+    expect(share(above, (c) => c === FLAT)).toBe(0);
+    expect(share(above, (c) => greens.has(c))).toBeGreaterThan(0.2);
+    // the pitch is under the centre spot
+    const m = menuLayout(w, h);
+    expect(greens.has(above.get(m.cx - 9, m.spotY - 9))).toBe(true);
+    // the roof's ring round it, pale
+    const roof = [P.white, P.chalk, P.steelHi, P.mist].map((c) => DAY.lit(c));
+    expect(share(above, (c) => roof.includes(c as never))).toBeGreaterThan(
+      0.05,
+    );
+    const space = furthest.at(2.6);
+    expect(share(space, (c) => c === P.ink)).toBeGreaterThan(0.3);
+    expect(share(space, (c) => c === sea)).toBeGreaterThan(0.1);
+    expect(share(space, (c) => c === FLAT)).toBe(0);
+    expect(furthest.chose).not.toHaveBeenCalled();
+    furthest.at(3.6);
+    expect(furthest.chose).toHaveBeenCalledTimes(1);
+    expect(furthest.chose).toHaveBeenCalledWith("furthest");
+  });
+
+  it("rests clear of the cards under it (setFloor), lifted a third of its radius at most", () => {
+    // a phone at 3: with six modes its cards are three rows (2026-11-18)
+    const [w, h] = [130, 280];
+    const m = menuLayout(w, h);
+    /** The row of the ball's centre at rest (no bob: reduced motion), on its sprite. */
+    const restsAt = (floor: number | null, after?: (s: MenuScene) => void) => {
+      const scene = make(w, h);
+      scene.setReducedMotion(true);
+      scene.setFloating(true);
+      scene.setFloor(floor);
+      after?.(scene);
+      scene.update(STEP);
+      draw(scene, w, h);
+      const f = scene.floating().at(-1);
+      if (!f) throw new Error("not floating");
+      return f.y + ((f.surface.h - 1) >> 1);
+    };
+    const sink = Math.max(2, Math.round(m.ballR * 0.04));
+    // no cards, or cards well under its foot: where the layout puts it
+    expect(restsAt(null)).toBe(m.ballCy);
+    expect(restsAt(h)).toBe(m.ballCy);
+    expect(restsAt(m.ballCy + m.ballR + sink + 1)).toBe(m.ballCy);
+    // cards its foot would come down on: up, a pixel clear of them at the bottom of a breath
+    const floor = m.ballCy + m.ballR - 3;
+    expect(restsAt(floor)).toBe(floor - 1 - sink - m.ballR);
+    // but never more than 0.35 of its radius
+    expect(restsAt(m.ballCy)).toBe(m.ballCy - Math.round(m.ballR * 0.35));
+    // and a resize keeps the floor
+    expect(restsAt(floor, (s) => s.resize(w, h + 1))).toBeLessThan(
+      menuLayout(w, h + 1).ballCy,
+    );
+  });
 
   it("draws the entrance, the spin and its wind without leaving the canvas bare", () => {
     for (const [w, h] of SIZES) {
@@ -1261,5 +1446,30 @@ describe("the plane with the fact", () => {
     expect(banner).toHaveBeenLastCalledWith(
       expect.stringContaining("ANOTHER FACT."),
     );
+  });
+});
+
+describe("SPIN ME round the ball (spinHintShown)", () => {
+  it("comes and goes: in, stays, out, then gone until the next time", () => {
+    // not at first
+    expect(spinHintShown(0)).toBe(0);
+    expect(spinHintShown(1.9)).toBe(0);
+    // dissolving in, then all there
+    expect(spinHintShown(2.25)).toBeGreaterThan(0);
+    expect(spinHintShown(2.25)).toBeLessThan(1);
+    expect(spinHintShown(3)).toBe(1);
+    expect(spinHintShown(4.4)).toBe(1);
+    // dissolving out, then gone for the rest of the seven seconds
+    expect(spinHintShown(4.75)).toBeLessThan(1);
+    expect(spinHintShown(6)).toBe(0);
+    expect(spinHintShown(8.9)).toBe(0);
+    // and round again
+    expect(spinHintShown(10)).toBe(1);
+    // in whole steps of a sixth
+    for (let s = 0; s < 20; s += 0.05) {
+      expect(Math.round(spinHintShown(s) * 6) / 6).toBeCloseTo(
+        spinHintShown(s),
+      );
+    }
   });
 });

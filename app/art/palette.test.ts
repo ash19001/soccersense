@@ -99,6 +99,13 @@ const ADDED = [
   "nextgenDark",
   "nextgen",
   "nextgenLight",
+  // CLOSEST's and FURTHEST's ramps (2026-11-18)
+  "closestDark",
+  "closest",
+  "closestLight",
+  "furthestDark",
+  "furthest",
+  "furthestLight",
 ];
 
 describe("palette", () => {
@@ -197,9 +204,9 @@ describe("MODE_COLORS", () => {
     for (const ramp of Object.values(MODE_COLORS)) {
       expect((luminance(ramp.base) + 0.05) / (ink + 0.05)).toBeGreaterThan(4.5);
     }
-    // Four different colours.
+    // Six different colours.
     const bases = Object.values(MODE_COLORS).map((ramp) => toHex(ramp.base));
-    expect(new Set(bases).size).toBe(4);
+    expect(new Set(bases).size).toBe(6);
   });
 });
 

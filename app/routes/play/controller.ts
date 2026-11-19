@@ -46,7 +46,9 @@ import {
   createSession,
   dayKeyFor,
   dayNumber,
+  formatDistance,
   hasPlayer,
+  isDistanceMode,
   isLastQuestion,
   loadAccount,
   loadGame,
@@ -63,7 +65,10 @@ import {
 } from "~/game";
 import { questionsFor } from "~/data";
 import { strings } from "~/i18n";
+import { placeById, placeLabel } from "~/data/places";
 import { CareerScene } from "~/scenes/career";
+import type { GameScene, ShotLanding } from "~/scenes/game-scene";
+import { MapScene } from "~/scenes/map";
 import {
   type LiveContext,
   clearLive,
@@ -179,8 +184,35 @@ export interface GameOptions {
 // in ./names.ts, away from the scene.
 export { modeName, tierName, titleName } from "./names";
 
+/**
+ * Where the turn's answer comes down on CLOSEST's and FURTHEST's map: its place, from the
+ * question where the page runs the game, or from the reveal where the server does (it sends
+ * the places of a distance mode's answers once they are decided). Null with no answer.
+ */
+export function landingOf(session: Session): ShotLanding | null {
+  const turn = session.turns[session.index];
+  if (!turn || turn.answerId === null) return null;
+  const local = session.questions[session.index]?.answers.find(
+    (answer) => answer.id === turn.answerId,
+  );
+  const shown = session.reveals?.[session.index]?.row?.answer as
+    { lat?: unknown; lng?: unknown } | undefined;
+  const at = local ?? shown;
+  if (!at || typeof at.lat !== "number" || typeof at.lng !== "number") {
+    return null;
+  }
+  return { lat: at.lat, lng: at.lng, km: turn.km };
+}
+
 export class GameController {
-  readonly scene: CareerScene;
+  /** The career (HOME, AWAY, RETRO, NEXT-GEN) or the world map (CLOSEST, FURTHEST). */
+  readonly scene: GameScene;
+  /**
+   * CLOSEST and FURTHEST: the day's place, as the sentences name it ("Wembley") and as the
+   * mode card and the board show it ("Wembley, London"). Empty in the other modes.
+   */
+  readonly placeName: string = "";
+  readonly placeLabel: string = "";
   /** The player's language, for miles or kilometres. */
   readonly locale: string;
   private readonly clock: () => number;
@@ -281,11 +313,27 @@ export class GameController {
       noTimer: today.noTimer || loading,
     });
 
-    this.scene = new CareerScene({
-      seed: today.dayNumber,
-      mode,
-      labels: strings.play.canvas,
-    });
+    if (isDistanceMode(mode)) {
+      const place = placeById(today.stadium.id);
+      this.placeName = place?.name ?? strings.play.board.place.label;
+      this.placeLabel = place ? placeLabel(place) : this.placeName;
+      this.scene = new MapScene({
+        seed: today.dayNumber,
+        mode,
+        place: {
+          lat: today.stadium.lat,
+          lng: today.stadium.lng,
+          name: place?.name ?? strings.play.board.place.label,
+        },
+        distance: (km) => formatDistance(km, this.locale),
+      });
+    } else {
+      this.scene = new CareerScene({
+        seed: today.dayNumber,
+        mode,
+        labels: strings.play.canvas,
+      });
+    }
     if (session.phase === "done") {
       this.scene.showFullTime(session.total);
     } else if (session.phase === "reveal") {
@@ -649,7 +697,13 @@ export class GameController {
     this.set({ session, now: this.clock() });
     const grade = session.turns[session.index].grade;
     this.patience = setTimeout(() => this.resolved(token), SHOT_PATIENCE_MS);
-    this.scene.playShot(grade, () => this.resolved(token));
+    const done = () => this.resolved(token);
+    // the map is told where the answer comes down; the career has no use for it
+    if (isDistanceMode(session.mode)) {
+      this.scene.playShot(grade, done, landingOf(session));
+    } else {
+      this.scene.playShot(grade, done);
+    }
   }
 
   private resolved(token: number): void {
@@ -723,6 +777,8 @@ export class GameController {
   };
 
   private startClock(): void {
+    // a question is being asked: the map comes back round to its pin
+    this.scene.ask?.();
     this.stopClock();
     if (this.disposed || this.view.session.phase !== "asking") return;
     this.ticker = setInterval(this.tick, TICK_MS);

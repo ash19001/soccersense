@@ -19,9 +19,11 @@ import {
   type Turn,
   tableFor,
 } from "./session";
+import { isDistanceMode } from "./modes";
 import { SHOT_ORDER } from "./shots";
 import { isTurn } from "./storage";
 import type {
+  LatLng,
   Measure,
   Mode,
   Question,
@@ -96,17 +98,23 @@ export function blankQuestion(
   };
 }
 
-function shownRow<T extends RankedAnswer>(row: T): T {
+function shownRow<T extends RankedAnswer>(row: T, mapped: boolean): T {
   const { id, name, country } = row.answer;
-  return { ...row, answer: { id, name, country } };
+  if (!mapped) return { ...row, answer: { id, name, country } };
+  const { lat, lng } = row.answer as RankedAnswer["answer"] & Partial<LatLng>;
+  return { ...row, answer: { id, name, country, lat, lng } };
 }
 
-/** A reveal with nothing in it the sheet does not show: no aliases, places or map points. */
-export function shownReveal(reveal: Reveal): Reveal {
+/**
+ * A reveal with nothing in it the sheet does not show: no aliases, places or map points.
+ * `mapped`: CLOSEST and FURTHEST, whose map shows where each decided answer is: its point
+ * on the map stays (the question is decided: nothing is given away).
+ */
+export function shownReveal(reveal: Reveal, mapped = false): Reveal {
   return {
-    rows: reveal.rows.map(shownRow),
-    row: reveal.row ? shownRow(reveal.row) : null,
-    best: reveal.best ? shownRow(reveal.best) : null,
+    rows: reveal.rows.map((row) => shownRow(row, mapped)),
+    row: reveal.row ? shownRow(reveal.row, mapped) : null,
+    best: reveal.best ? shownRow(reveal.best, mapped) : null,
     tableSize: reveal.tableSize,
     oneCountry: reveal.oneCountry,
   };
@@ -137,7 +145,10 @@ export function snapshotOf(
     deadline: phase === "asking" ? session.deadline : null,
     reveal:
       phase === "reveal" && turn
-        ? shownReveal(revealOf(tableFor(session, session.index), turn.answerId))
+        ? shownReveal(
+            revealOf(tableFor(session, session.index), turn.answerId),
+            isDistanceMode(session.mode),
+          )
         : null,
     rejected: phase === "asking" ? rejected : null,
   };
@@ -188,7 +199,14 @@ export function storedQuestions(
 
 // --- checking what arrives -------------------------------------------------------------
 
-const MODES: readonly Mode[] = ["home", "away", "retro", "nextgen"];
+const MODES: readonly Mode[] = [
+  "home",
+  "away",
+  "retro",
+  "nextgen",
+  "closest",
+  "furthest",
+];
 const MEASURES: readonly Measure[] = [
   "birthplace",
   "ground",

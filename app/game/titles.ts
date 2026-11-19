@@ -2,7 +2,9 @@
  * The title a player earns at full time, by their total and the mode they played: a ladder
  * of ten per mode, the last only for a perfect 700. HOME's titles are the crowd's favourite's
  * (going with the room), AWAY's the scout's of the obscure (deep cuts), RETRO's the keeper
- * of football's past (old-school), NEXT-GEN's the one first with the news. The words are in
+ * of football's past (old-school), NEXT-GEN's the one first with the news, CLOSEST's the one
+ * who knows where everything is (from lost on the way in to a bullseye), FURTHEST's the
+ * traveller (from never left town to into orbit). The words are in
  * `strings.play.titles` (app/i18n/en.ts); here are only the ids and where each one starts.
  * See docs/GAME_DESIGN.md section 6.4.
  */
@@ -61,7 +63,39 @@ export type NextgenTitleId =
   | "ahead"
   | "future";
 
-export type TitleId = HomeTitleId | AwayTitleId | RetroTitleId | NextgenTitleId;
+/** CLOSEST's titles, lowest first. */
+export type ClosestTitleId =
+  | "lost"
+  | "wrongstop"
+  | "directions"
+  | "satnav"
+  | "localmap"
+  | "shortcuts"
+  | "localknowledge"
+  | "homingpigeon"
+  | "pinpoint"
+  | "bullseye";
+
+/** FURTHEST's titles, lowest first. */
+export type FurthestTitleId =
+  | "nevertown"
+  | "daytripper"
+  | "awaycoach"
+  | "passport"
+  | "awaydays"
+  | "airmiles"
+  | "jetlagged"
+  | "globetrotter"
+  | "endsofearth"
+  | "orbit";
+
+export type TitleId =
+  | HomeTitleId
+  | AwayTitleId
+  | RetroTitleId
+  | NextgenTitleId
+  | ClosestTitleId
+  | FurthestTitleId;
 
 /** One rung of a ladder: the title, for a total of `from` or more (up to the next rung). */
 export interface TitleRung<Id extends TitleId = TitleId> {
@@ -139,6 +173,32 @@ const NEXTGEN_IDS: readonly NextgenTitleId[] = [
   "future",
 ];
 
+const CLOSEST_IDS: readonly ClosestTitleId[] = [
+  "lost",
+  "wrongstop",
+  "directions",
+  "satnav",
+  "localmap",
+  "shortcuts",
+  "localknowledge",
+  "homingpigeon",
+  "pinpoint",
+  "bullseye",
+];
+
+const FURTHEST_IDS: readonly FurthestTitleId[] = [
+  "nevertown",
+  "daytripper",
+  "awaycoach",
+  "passport",
+  "awaydays",
+  "airmiles",
+  "jetlagged",
+  "globetrotter",
+  "endsofearth",
+  "orbit",
+];
+
 function ladder<Id extends TitleId>(ids: readonly Id[]): TitleRung<Id>[] {
   return ids.map((id, i) => ({ id, from: TITLE_FROM[i] }));
 }
@@ -149,11 +209,15 @@ export const TITLES: {
   readonly away: readonly TitleRung<AwayTitleId>[];
   readonly retro: readonly TitleRung<RetroTitleId>[];
   readonly nextgen: readonly TitleRung<NextgenTitleId>[];
+  readonly closest: readonly TitleRung<ClosestTitleId>[];
+  readonly furthest: readonly TitleRung<FurthestTitleId>[];
 } = {
   home: ladder(HOME_IDS),
   away: ladder(AWAY_IDS),
   retro: ladder(RETRO_IDS),
   nextgen: ladder(NEXTGEN_IDS),
+  closest: ladder(CLOSEST_IDS),
+  furthest: ladder(FURTHEST_IDS),
 };
 
 /** The title for a total in a mode. Totals under 0 (or NaN) count as 0, over 700 as 700. */
@@ -161,6 +225,8 @@ export function titleFor(mode: "home", total: number): HomeTitleId;
 export function titleFor(mode: "away", total: number): AwayTitleId;
 export function titleFor(mode: "retro", total: number): RetroTitleId;
 export function titleFor(mode: "nextgen", total: number): NextgenTitleId;
+export function titleFor(mode: "closest", total: number): ClosestTitleId;
+export function titleFor(mode: "furthest", total: number): FurthestTitleId;
 export function titleFor(mode: Mode, total: number): TitleId;
 export function titleFor(mode: Mode, total: number): TitleId {
   const rungs: readonly TitleRung[] = TITLES[mode];

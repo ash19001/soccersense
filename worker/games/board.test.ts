@@ -10,6 +10,7 @@ import { AWAY_QUESTIONS, HOME_QUESTIONS } from "~/data";
 import { type BoardAnswer, rankFor } from "~/game/board";
 import { EPOCH_UTC, MS_PER_DAY } from "~/game/day";
 import { PASS_AFTER_MS } from "~/game/session";
+import { MODES } from "~/game/storage";
 import type { Mode, Question } from "~/game/types";
 
 import { createAccount, deleteAccount } from "../accounts/store";
@@ -375,7 +376,7 @@ describe("a day's boards", () => {
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
-  test("a whole day's boards are one round trip of six reads at most", async () => {
+  test("a whole day's boards are one round trip of a read per mode and two more at most", async () => {
     const env = world();
     const [a] = await accounts(env, 1);
     await play(env, a.id, 3, NOON);
@@ -384,7 +385,8 @@ describe("a day's boards", () => {
     const reads = env.DB.log
       .slice(before)
       .filter((sql) => /^\s*select/i.test(sql));
-    expect(reads.length).toBeLessThanOrEqual(6);
+    // the counts, each mode's top ten, and the player's own games
+    expect(reads.length).toBeLessThanOrEqual(MODES.length + 2);
   });
 });
 

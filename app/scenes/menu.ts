@@ -132,6 +132,7 @@ import {
   GOLD_SHOW_LEN,
   drawGoldShow,
 } from "~/art/gold-show";
+import { drawGlobe } from "~/art/globe";
 import { drawGoldSparkle } from "~/art/gold-sparkle";
 import { drawLeatherBall, type LeatherBallState } from "~/art/leather-ball";
 import { lightingFor, type Lighting } from "~/art/lighting";
@@ -139,18 +140,37 @@ import { drawLogo, logoSize, type LogoOptions } from "~/art/logo";
 import { drawFilmDamage, sepiaTone } from "~/art/old-film";
 import { MODE_COLORS, P } from "~/art/palette";
 import { drawScanGlitch, neonTone } from "~/art/neon-world";
+import { EARTH_SAMPLES, drawEarthZoom } from "~/art/earth-zoom";
 import { MenuBackdrop, type MenuSign } from "~/art/stadium";
+import { EARTH_KM } from "~/art/world-map";
 import { bannerWords } from "~/art/stadium-plane";
 import { PLANE_FALL } from "~/art/stadium-plane-fall";
-import { schemeForDay } from "~/art/stadium-club";
+import {
+  clubLight,
+  clubRaw,
+  schemeById,
+  schemeForDay,
+} from "~/art/stadium-club";
+import {
+  OUTER_AREA,
+  PICTURE_TILT,
+  TopTones,
+  TopTown,
+  drawTopTilt,
+  levelFor,
+} from "~/art/stadium-top";
 import { BEDS, HOME_PAGE } from "~/audio/mix";
 import type { Mode } from "~/game";
 import {
+  FONT_5x7,
   Surface,
   TRANSPARENT,
+  bayer4,
   clamp,
+  drawText,
   hash2,
   lerp,
+  measureText,
   smoothstep,
   type Color,
 } from "~/pixel";
@@ -170,25 +190,28 @@ import type {
 /**
  * The modes that can be played, each on its own patch of the ball: HOME on the left patch,
  * AWAY on the right, NEXT-GEN on the top patch and RETRO on the bottom one (both opened on
- * 2026-11-13).
+ * 2026-11-13), and CLOSEST and FURTHEST on the back (opened on 2026-11-18), directly behind
+ * AWAY and HOME, so that half a turn of the ball brings CLOSEST round to where HOME was and
+ * FURTHEST to where AWAY was. A ball spun to rest showing them turns to show them, as it
+ * does a locked patch, and waits there to be pressed.
  */
-export const OPEN_MODES: readonly Mode[] = ["home", "away", "nextgen", "retro"];
-
-/**
- * The modes that are not open yet. Each has a patch of its own on the ball: CLOSEST and
- * FURTHEST on the back, directly behind AWAY and HOME, so that half a turn of the ball
- * brings CLOSEST round to where HOME was and FURTHEST to where AWAY was, and GUESS WHO and
- * SHOOTOUT on the rim out past HOME and AWAY, a quarter turn round (a drag to the right
- * brings GUESS WHO to the front, a drag to the left SHOOTOUT).
- */
-export type LockedMode = "closest" | "furthest" | "guesswho" | "shootout";
-
-export const LOCKED_MODES: readonly LockedMode[] = [
+export const OPEN_MODES: readonly Mode[] = [
+  "home",
+  "away",
+  "nextgen",
+  "retro",
   "closest",
   "furthest",
-  "guesswho",
-  "shootout",
 ];
+
+/**
+ * The modes that are not open yet, each on a patch of its own on the rim out past HOME and
+ * AWAY, a quarter turn round (a drag to the right brings GUESS WHO to the front, a drag to
+ * the left SHOOTOUT).
+ */
+export type LockedMode = "guesswho" | "shootout";
+
+export const LOCKED_MODES: readonly LockedMode[] = ["guesswho", "shootout"];
 
 /** Which patch each mode is on. */
 export const MODE_SLOTS: Readonly<Record<Mode | LockedMode, BallSlot>> = {
@@ -208,6 +231,8 @@ const MODE_ICONS: Readonly<Record<Mode, BallIcon>> = {
   away: "away",
   nextgen: "nextgen",
   retro: "retro",
+  closest: "pin",
+  furthest: "globe",
 };
 
 export interface MenuLabels {
@@ -227,6 +252,8 @@ export interface MenuLabels {
   header: string;
   /** Under the logo when there is room, for example "DAILY FOOTBALL TRIVIA". */
   tagline?: string;
+  /** Small round the ball, "SPIN ME", coming and going (SPIN_ANGLE). Leave out for nothing. */
+  spin?: string;
   /**
    * What the airship's sign says as the ball turns to gold (the easter egg), for example
    * "GOLDEN BALL!" over "YOU FOUND IT": short, as every message of the sign. None: the sign
@@ -253,6 +280,11 @@ export interface MenuSceneOptions {
    * the home page gives each visit its own. Default: the day's `seed`.
    */
   matchSeed?: number;
+  /**
+   * The day's place (its point on the map): CLOSEST's globe dives into it and FURTHEST's
+   * pull back leaves the home screen on it. It is never named here. Default: London.
+   */
+  place?: { lat: number; lng: number };
 }
 
 export type MenuPhase = "intro" | "idle" | "kickoff" | "done";
@@ -283,6 +315,53 @@ const MAX_DT = 600;
  */
 const BOB = 0.04;
 const BOB_PERIOD = 4;
+
+/**
+ * The cards under the ball (setFloor). The ball rests where the layout puts it, or higher
+ * where its foot, at the bottom of its breath, would come down over them, FLOOR_GAP pixels
+ * clear; higher by FLOOR_LIFT of its radius at most. With six modes a phone's cards are
+ * three rows, and the third came up over the ball's bottom patch (2026-11-18).
+ */
+const FLOOR_GAP = 1;
+const FLOOR_LIFT = 0.35;
+
+/**
+ * "SPIN ME" round the ball (the product owner, 2026-11-18: "a small barely noticeable text
+ * saying spin me", then "around the ball (like how the wind is). it appears and disappears like
+ * pulsing so its not always there", then, of small grey letters over the pitch, "this is not
+ * readable"): capitals of the 5 x 7 font in chalk, each upright on a dark tile, set along an
+ * arc just outside the rim (SPIN_GAP pixels out), centred SPIN_ANGLE round from the right (up
+ * is negative: over the top, where the arc is gentle and the upright letters read as a line).
+ * The tiles run into each other: one dark band that follows the ball, as the names on the
+ * ball stand on dark plates. Neither colour is dimmed by the light: it is a sign, not a thing
+ * in the picture. It comes and goes: every SPIN_PERIOD seconds it dissolves in over SPIN_FADE,
+ * stays SPIN_HOLD and dissolves out again (a 4 x 4 dither, in SPIN_STEPS steps), the first
+ * time SPIN_FIRST seconds in. While the ball is in the menu (not at the kick-off, nor on the
+ * golden ball), from SPIN_MIN_R pixels across; with reduced motion it stays, half dissolved.
+ */
+const SPIN_ANGLE = -Math.PI / 2;
+const SPIN_GAP = 4;
+/** A letter's tile is the font's height (7) and a pixel over and under; a space is this wide. */
+const SPIN_TILE_H = 7;
+const SPIN_SPACE = 3;
+const SPIN_PERIOD = 7;
+const SPIN_FIRST = 2;
+const SPIN_FADE = 0.5;
+const SPIN_HOLD = 2;
+const SPIN_STEPS = 6;
+const SPIN_MIN_R = 30;
+
+/** How much of "SPIN ME" shows (0 to 1, in SPIN_STEPS steps) `t` seconds into the menu. */
+export function spinHintShown(t: number): number {
+  if (!(t >= SPIN_FIRST)) return 0;
+  const u = (t - SPIN_FIRST) % SPIN_PERIOD;
+  let a = 0;
+  if (u < SPIN_FADE) a = u / SPIN_FADE;
+  else if (u < SPIN_FADE + SPIN_HOLD) a = 1;
+  else if (u < SPIN_FADE * 2 + SPIN_HOLD)
+    a = 1 - (u - SPIN_FADE - SPIN_HOLD) / SPIN_FADE;
+  return Math.round(a * SPIN_STEPS) / SPIN_STEPS;
+}
 const NOD = 0.035;
 const NOD_LAG = 0.25;
 
@@ -818,18 +897,96 @@ const NEXT_BOB_LEN = 0.2;
 const HOME_RING = 0.75;
 const AWAY_RING = 0.22;
 
-/** How long each mode's ball is in the air (NEXT-GEN's and RETRO's spin where they are). */
+/**
+ * How long each mode's ball is in the air (NEXT-GEN's and RETRO's spin where they are;
+ * CLOSEST's flies as HOME's, FURTHEST's as AWAY's).
+ */
 const FLIGHT: Readonly<Record<Mode, number>> = {
   home: HOME_FLIGHT,
   away: AWAY_FLIGHT,
   nextgen: ERA_SPIN,
   retro: ERA_SPIN,
+  // (not struck: see GLOBE_IN)
+  closest: 0,
+  furthest: 0,
 };
+
+/**
+ * The way a chosen mode's ball goes: HOME's down into the stadium, AWAY's off into the sky;
+ * NEXT-GEN's and RETRO's not struck at all, nor CLOSEST's and FURTHEST's (until 2026-11-18
+ * they flew as HOME's and AWAY's did).
+ */
+function flightOf(mode: Mode): Mode {
+  return mode;
+}
 
 /** NEXT-GEN and RETRO change era where they hang: they are not struck and do not fly. */
 function isEra(mode: Mode): boolean {
   return mode === "nextgen" || mode === "retro";
 }
+
+/** CLOSEST and FURTHEST go to the Earth: not struck either, and no flight (GLOBE_IN). */
+function isGlobe(mode: Mode): boolean {
+  return mode === "closest" || mode === "furthest";
+}
+
+/**
+ * CLOSEST's and FURTHEST's kick-offs (the product owner, 2026-11-18: "closest turns it to
+ * globe and zooms in. furthest just zooms out of the home screen entirely making it zoom out
+ * for that to be earth"), in the world map's colours (~/art/globe). Times from K_HIT:
+ *
+ * - CLOSEST: the ball spins up and the Earth dissolves in over it (GLOBE_IN, a sixteenth a
+ *   step), spinning east; then it comes closer (GLOBE_GROW), swelling and moving to the
+ *   middle of the screen until the whole of it is GLOBE_NEAR of the shorter side across, and
+ *   spins on there (GLOBE_TURN_FAST degrees a second, easing to GLOBE_TURN_SLOW), the whole
+ *   globe in sight, until the iris closes round it (the product owner, 2026-11-18: "no pin
+ *   should drop, instead its spinning showing the whole globe then transition happens").
+ * - FURTHEST: the camera rises from the home picture's to straight above the stadium
+ *   (TOP_TILT; ~/art/stadium-top: the same town's plan from above, the stadium in the day's
+ *   colours), the picture dissolving into it (TOP_FADE, its sky first); it holds there a
+ *   moment (TOP_HOLD), then pulls back (PULL) to the Earth in space, PULL_END of the
+ *   picture's shorter side across at the end, through the ground round it (~/art/earth-zoom:
+ *   the town, its fields and roads, the country, the globe), in a mosaic that grows to MOSAIC
+ *   pixels and goes again as the Earth comes whole: the town from above shrinks in averaged
+ *   steps, so it pixelates cleanly. The Earth turns slowly east (GLOBE_SPIN degrees a second)
+ *   and the iris closes on it PULL_HOLD after (the product owner, 2026-11-18: "it should feel
+ *   like a place within that globe"; "Maybe the transition should be making stadium birds
+ *   eye view first and as it zooms out it can get pixelated too").
+ *
+ * Both take GLOBE_LATE longer than HOME's kick-off before the iris closes, and its ring
+ * rests round the Earth.
+ */
+const GLOBE_IN = 0.3;
+const GLOBE_GROW = 0.6;
+const GLOBE_NEAR = 0.42;
+const GLOBE_TURN_FAST = 300;
+const GLOBE_TURN_SLOW = 60;
+/** The Earth leans its north this far towards us as it spins (degrees). */
+const GLOBE_TILT = 15;
+const TOP_TILT = 0.45;
+const TOP_FADE = 0.3;
+const TOP_HOLD = 0.12;
+const PULL = 1.5;
+/** FURTHEST's pull back starts this long after K_HIT. */
+const PULL_FROM = TOP_TILT + TOP_HOLD;
+const MOSAIC = 5;
+/** A unit of the town's plan on the ground (km): its pitch is 136 units long, a real one 105 m. */
+const KM_A_UNIT = 0.105 / 136;
+/** FURTHEST's town from above is built a slice a frame once the menu has hovered this long. */
+const TOP_BUILD_AFTER = 1.5;
+/** By night this share of a pixelated town's squares is lit. */
+const TOP_LIGHTS = 0.1;
+/** FURTHEST's Earth is in sight this long before the iris closes on it. */
+const PULL_HOLD = 0.3;
+const PULL_END = 0.34;
+/** From this far into the pull (eased) the Earth drifts to the middle of the screen. */
+const PULL_DRIFT = 0.55;
+const GLOBE_SPIN = 12;
+const GLOBE_LATE = 0.42;
+/** FURTHEST's iris waits for the whole pull back and a moment of the Earth. */
+const PULL_LATE = K_HIT + PULL_FROM + PULL + PULL_HOLD - K_IRIS;
+/** The day's place when the page gives none. */
+const DEFAULT_PLACE = { lat: 51.5, lng: -0.12 };
 
 /** The streak behind the ball once it is small: samples this many seconds apart. */
 const TRAIL_GAP = 0.035;
@@ -1520,6 +1677,10 @@ export class MenuScene implements Scene {
   /** The ball's radius and its spot: the row its centre hovers about. */
   private R = 0;
   private cy0 = 0;
+  /** Where menuLayout puts the ball's centre, before the cards under it lift it. */
+  private layoutCy = 0;
+  /** The top of the cards under the ball (setFloor), in the scene's pixels, or null. */
+  private floor: number | null = null;
   /** Room to draw the ball apart from the picture, for the frames it is pressed flat. */
   private pad = new Surface(1, 1);
   /**
@@ -1717,11 +1878,35 @@ export class MenuScene implements Scene {
   private fx = 0;
   private fy = 0;
   private fr = 0;
+  /** The day's place (MenuSceneOptions.place): CLOSEST dives into it, FURTHEST leaves on it. */
+  private place: { lat: number; lng: number } = DEFAULT_PLACE;
+  /** FURTHEST's rise: the frame as drawn, before the town from above goes under it. */
+  private pulled = new Surface(1, 1);
+  /** The pitch's middle (the day's place in FURTHEST's pull back) and the horizon's row. */
+  private pitchY = 0;
+  private horizonY = 0;
+  /** Pixels a unit of the town's plan at the centre spot (menuLayout's scale). */
+  private unitK = 1;
+  /** FURTHEST's town from above, and its colours in the light they were last drawn in. */
+  private top: TopTown | null = null;
+  private topTones: TopTones | null = null;
+  /** "SPIN ME" round the ball, in capitals (MenuLabels.spin), or nothing. */
+  private spinWords = "";
+  /** One of its letters, before it is dissolved onto the picture. */
+  private spinGlyph = new Surface(7, 7);
 
   constructor(opts: MenuSceneOptions) {
     this.seed = opts.seed;
     this.fact = opts.fact;
+    if (
+      opts.place &&
+      Number.isFinite(opts.place.lat) &&
+      Number.isFinite(opts.place.lng)
+    ) {
+      this.place = { lat: opts.place.lat, lng: opts.place.lng };
+    }
     this.header = opts.labels.header;
+    this.spinWords = (opts.labels.spin ?? "").toUpperCase();
     this.backdrop = new MenuBackdrop({
       seed: opts.seed,
       sign: { header: this.header, text: this.fact },
@@ -1737,8 +1922,8 @@ export class MenuScene implements Scene {
       right: { label: "", icon: "away", accent: MODE_COLORS.away },
       top: { label: "", icon: "nextgen", accent: MODE_COLORS.nextgen },
       bottom: { label: "", icon: "retro", accent: MODE_COLORS.retro },
-      backRight: { label: "", icon: "pin", locked: true },
-      backLeft: { label: "", icon: "globe", locked: true },
+      backRight: { label: "", icon: "pin", accent: MODE_COLORS.closest },
+      backLeft: { label: "", icon: "globe", accent: MODE_COLORS.furthest },
       rimLeft: { label: "", icon: "shirt", locked: true },
       rimRight: { label: "", icon: "goal", locked: true },
     };
@@ -1764,8 +1949,12 @@ export class MenuScene implements Scene {
     this.sized = true;
     const m = menuLayout(W, H);
     this.cx = m.cx;
+    this.pitchY = m.spotY;
+    this.horizonY = m.horizonY;
+    this.unitK = m.scale;
     this.R = m.ballR;
-    this.cy0 = m.ballCy;
+    this.layoutCy = m.ballCy;
+    this.cy0 = this.restingCy();
     this.logoH = m.logo.h;
     this.open = W >= OPEN_W;
     this.rise = Math.max(
@@ -1792,6 +1981,28 @@ export class MenuScene implements Scene {
     this.press = null;
     this.pressed = null;
     this.dropPointer();
+  }
+
+  /**
+   * The cards under the ball begin at row `y` of the picture (the page measures them as
+   * they are laid out; null: there are none). The ball rests clear of them (FLOOR_GAP), or
+   * as near as FLOOR_LIFT lets it. A ball struck already stays where it was struck: the
+   * new rest is taken up when it is next at rest (idle, or coming in).
+   */
+  setFloor(y: number | null): void {
+    this.floor = y === null || !Number.isFinite(y) ? null : Math.round(y);
+    if (this.state === "idle" || this.state === "intro") {
+      this.cy0 = this.restingCy();
+    }
+  }
+
+  /** The ball's centre at rest: the layout's, lifted clear of the cards under it. */
+  private restingCy(): number {
+    if (this.floor === null) return this.layoutCy;
+    const sink = Math.max(2, Math.round(this.R * BOB));
+    const clear = this.floor - FLOOR_GAP - sink - this.R;
+    const highest = this.layoutCy - Math.round(this.R * FLOOR_LIFT);
+    return Math.max(highest, Math.min(this.layoutCy, clear));
   }
 
   setLighting(light: Lighting): void {
@@ -1869,9 +2080,9 @@ export class MenuScene implements Scene {
     }
     const cx = this.cx;
     const R = this.R;
-    const mode = this.mode;
+    const mode = flightOf(this.mode);
     const home = mode === "home";
-    const accent = MODE_COLORS[mode];
+    const accent = MODE_COLORS[this.mode];
     // when the ball is down, or gone
     const land = K_FLY + FLIGHT[mode];
 
@@ -1889,6 +2100,15 @@ export class MenuScene implements Scene {
     const hovering = this.state === "intro" || this.state === "idle";
     this.backdrop.setFloating(this.floatOn && hovering);
     this.backdrop.draw(s, this.clock);
+    // FURTHEST's town from above, a slice a frame while the ball hovers (or while FURTHEST's
+    // kick-off waits for its strike), so that it is ready when it is wanted
+    if (
+      (hovering && this.clock > TOP_BUILD_AFTER) ||
+      (kick && this.mode === "furthest")
+    ) {
+      // (faster once FURTHEST is chosen: it is wanted at the strike)
+      for (let i = kick ? 4 : 1; i > 0; i--) this.topTown().step();
+    }
     // the backdrop has now built whatever the last change made stale: ask again
     if (this.aimStale) this.aim();
     // the golden ball's fireworks, over the town and behind everything of the ball's
@@ -1903,7 +2123,8 @@ export class MenuScene implements Scene {
     this.compose();
 
     const era = isEra(mode);
-    if (!era && kt >= K_FLY && kt < land && this.ballOn && !crashed) {
+    const globe = isGlobe(mode);
+    if (!era && !globe && kt >= K_FLY && kt < land && this.ballOn && !crashed) {
       if (this.ball.r < TRAIL_BELOW_R) {
         this.drawTrail(s, kt, accent.light, accent.base);
       } else if (this.ball.r >= this.R * RUSH_FROM) {
@@ -1973,6 +2194,7 @@ export class MenuScene implements Scene {
         this.drawBallNow(s);
       }
     }
+    if (this.state === "idle") this.drawSpinHint(s);
     this.drawGoldTurn(s);
     // NEXT-GEN: going digital, in big square pixels
     if (this.rezBlock > 0) {
@@ -1980,8 +2202,8 @@ export class MenuScene implements Scene {
       pixelate(s, b.cx, b.cy, b.r, this.rezBlock, this.rezFrame, this.seed);
     }
 
-    // in front of the ball (NEXT-GEN's and RETRO's are not struck)
-    if (kt >= K_HIT && !era) {
+    // in front of the ball (NEXT-GEN's, RETRO's, CLOSEST's and FURTHEST's are not struck)
+    if (kt >= K_HIT && !era && !globe) {
       // HOME is struck from in front and below, AWAY from below on HOME's side
       const reach = Math.round(R * Math.SQRT1_2);
       const sx = mode === "away" ? cx - reach : cx;
@@ -2034,6 +2256,11 @@ export class MenuScene implements Scene {
     if (this.shakeY !== 0) shiftRows(s, this.shakeY);
     if (this.shakeX !== 0) shiftCols(s, this.shakeX);
 
+    // CLOSEST: the Earth in the ball's place, diving into the day's place; FURTHEST: the
+    // whole picture pulled back into the Earth
+    if (this.mode === "closest" && kt >= K_HIT) this.drawDive(s, kt - K_HIT);
+    if (this.mode === "furthest" && kt >= K_HIT) this.drawPull(s, kt - K_HIT);
+
     // RETRO: the world an old photograph round the old ball, its ring of light, and the
     // scratches and dust of old film over it all; NEXT-GEN: the world neon round the ball
     // of the future, its ring of light, and the screen's scan bar and glitches
@@ -2060,7 +2287,12 @@ export class MenuScene implements Scene {
         ? Math.max(20, Math.round(R * HOME_RING))
         : era
           ? Math.round(R * ERA_RING)
-          : Math.max(14, Math.round(R * AWAY_RING));
+          : globe
+            ? Math.round(
+                Math.min(this.w, this.h) *
+                  (this.mode === "closest" ? GLOBE_NEAR : PULL_END),
+              ) + 3
+            : Math.max(14, Math.round(R * AWAY_RING));
       const far =
         Math.ceil(
           Math.hypot(Math.max(fx, this.w - fx), Math.max(fy, this.h - fy)),
@@ -2071,18 +2303,177 @@ export class MenuScene implements Scene {
     }
   }
 
+  /** CLOSEST's Earth at `u` seconds after K_HIT: its middle and its radius (GLOBE_IN). */
+  private nearGlobe(u: number): { x: number; y: number; r: number } {
+    const grow = clamp((u - GLOBE_IN) / GLOBE_GROW);
+    const e = grow * grow * (3 - 2 * grow);
+    const rEnd = Math.min(this.w, this.h) * GLOBE_NEAR;
+    return {
+      x: Math.round(lerp(this.cx, this.w / 2, e)),
+      y: Math.round(lerp(this.spotY, this.h / 2, e)),
+      r: this.R * Math.pow(rEnd / this.R, e),
+    };
+  }
+
+  /**
+   * CLOSEST, `u` seconds after K_HIT: the Earth dissolves in over the spinning ball, comes
+   * closer to the middle of the screen and spins on there, all of it in sight (GLOBE_IN).
+   */
+  private drawDive(s: Surface, u: number): void {
+    const { x, y, r } = this.nearGlobe(u);
+    // fast as the ball was, easing to a steady turn: the turn so far, in degrees
+    const slow = GLOBE_TURN_SLOW;
+    const fast = GLOBE_TURN_FAST;
+    const tau = GLOBE_IN + GLOBE_GROW / 2;
+    const turned = slow * u + (fast - slow) * tau * (1 - Math.exp(-u / tau));
+    const centre = { lat: GLOBE_TILT, lng: this.place.lng - 90 + turned };
+    const coverage = Math.floor(clamp(u / GLOBE_IN) * 16) / 16;
+    drawGlobe(s, x, y, r, centre, { coverage });
+  }
+
+  /**
+   * FURTHEST, `u` seconds after K_HIT: the frame as drawn shrinks onto the ball's spot,
+   * the day's place, in the map round it, and that onto the Earth among stars (GLOBE_IN).
+   */
+  private drawPull(s: Surface, u: number): void {
+    const w = this.w;
+    const h = this.h;
+    const town = this.topTown();
+    town.finish();
+    if (
+      !this.topTones ||
+      this.topTones.town !== town ||
+      this.topTones.light !== this.light
+    ) {
+      this.topTones = new TopTones(town, this.light);
+    }
+    const tones = this.topTones;
+    if (u < PULL_FROM) {
+      // the frame as drawn, kept before the town from above goes under it
+      if (this.pulled.w !== w || this.pulled.h !== h) {
+        this.pulled = new Surface(w, h);
+      }
+      const pic = this.pulled;
+      pic.data.set(s.data);
+      const t = clamp(u / TOP_TILT);
+      drawTopTilt(s, town, tones, {
+        cx: this.cx,
+        cy: this.pitchY,
+        k: this.unitK,
+        tilt: lerp(PICTURE_TILT, Math.PI / 2, t * t * (3 - 2 * t)),
+      });
+      // the picture dissolving into it, its sky first
+      const sky = 1 - clamp(u / (TOP_FADE * 0.6));
+      const rest = 1 - clamp(u / TOP_FADE);
+      const src = pic.data;
+      const dst = s.data;
+      for (let y = 0; y < h; y++) {
+        const cover = y < this.horizonY ? sky : rest;
+        if (cover <= 0) continue;
+        const row = y * w;
+        for (let x = 0; x < w; x++) {
+          if (bayer4(x, y) < cover) dst[row + x] = src[row + x];
+        }
+      }
+      return;
+    }
+    // the pull back: km a pixel from the town's to the whole Earth's, evenly in scale
+    const p = clamp((u - PULL_FROM) / PULL);
+    const e = p * p * (3 - 2 * p);
+    const rEnd = Math.min(w, h) * PULL_END;
+    const kpp0 = KM_A_UNIT / this.unitK;
+    const kppEnd = EARTH_KM / rEnd;
+    const kpp = Math.exp(lerp(Math.log(kpp0), Math.log(kppEnd), e));
+    const r = EARTH_KM / kpp;
+    // on the centre spot while the town is in sight, then drifting to the middle of the
+    // screen so that the whole Earth is there at the end
+    const drift = smoothstep(PULL_DRIFT, 1, e);
+    const gx = Math.round(lerp(this.cx, w / 2, drift));
+    const gy = Math.round(lerp(this.pitchY, h / 2, drift));
+    // the mosaic: up to MOSAIC pixels at the middle of the pull back, gone as the Earth comes
+    // whole; and never finer than the ground beyond the town from above can be drawn in time
+    const k = KM_A_UNIT / kpp;
+    let block =
+      1 + Math.round((MOSAIC - 1) * Math.pow(Math.sin(Math.PI * e), 0.7));
+    const kx =
+      Math.min(w, gx + OUTER_AREA.x1 * k) - Math.max(0, gx + OUTER_AREA.x0 * k);
+    const ky =
+      Math.min(h, gy - OUTER_AREA.v0 * k) - Math.max(0, gy - OUTER_AREA.v1 * k);
+    const kept = Math.max(0, kx) * Math.max(0, ky);
+    const costly = Math.min(w * h - kept, 4 * r * r);
+    if (costly > 0) {
+      block = Math.max(block, Math.ceil(Math.sqrt(costly / EARTH_SAMPLES)));
+    }
+    // the town from above in texels no smaller than the mosaic's squares
+    const level = levelFor(block / k);
+    // by night the town is lit: a window or a lamp here and there, once its streets are too
+    // small to see their own (TOP_LIGHTS)
+    const lights = this.light.lightsOn && level >= 2;
+    const cell = (1 << level) * 2;
+    const seed = this.seed;
+    const lit = (X: number, V: number, c: Color): Color => {
+      if (!lights) return c;
+      const hl = hash2(Math.floor(X / cell), Math.floor(V / cell), seed + 83);
+      return hl < TOP_LIGHTS / 3 ? P.amber : hl < TOP_LIGHTS ? P.amberDim : c;
+    };
+    const near = (east: number, north: number): Color | undefined => {
+      const X = east / KM_A_UNIT;
+      const V = north / KM_A_UNIT;
+      const idx = town.at(X, V, level);
+      return idx < 0 ? undefined : lit(X, V, tones.color(idx));
+    };
+    // the towns beyond: the same streets' colours, pixelated alike
+    const suburb = (east: number, north: number): Color | undefined => {
+      const X = east / KM_A_UNIT;
+      const V = north / KM_A_UNIT;
+      const idx = town.suburbAt(X, V, level);
+      return idx < 0 ? undefined : lit(X, V, tones.color(idx));
+    };
+    const centre = {
+      lat: this.place.lat,
+      lng: this.place.lng + Math.max(0, u - PULL_FROM - PULL) * GLOBE_SPIN,
+    };
+    drawEarthZoom(s, gx, gy, r, centre, {
+      place: this.place,
+      seed: this.seed,
+      light: this.light,
+      near,
+      town: suburb,
+      block,
+    });
+  }
+
+  /** FURTHEST's town from above (~/art/stadium-top) in the day's colours, made once. */
+  private topTown(): TopTown {
+    const scheme = schemeById(this.backdrop.schemeId());
+    if (!this.top || this.top.club !== scheme) {
+      this.top = new TopTown(
+        this.seed,
+        clubRaw(clubLight(this.light, scheme)),
+        scheme,
+      );
+      this.topTones = null;
+    }
+    return this.top;
+  }
+
   /**
    * Where the iris closes: where the ball came down, or went (NEXT-GEN's and RETRO's, where
    * it is; an AWAY ball that met the plane, where it lies).
    */
   private irisX(): number {
-    const m = this.mode;
+    const m = flightOf(this.mode);
+    if (m === "closest") return this.nearGlobe(Infinity).x;
+    if (m === "furthest") return Math.round(this.w / 2);
     if (m === "away" && this.crashAt >= 0) return this.restX;
     return m === "home" ? this.tx : m === "away" ? this.ax : this.ball.cx;
   }
 
   private irisY(): number {
-    const m = this.mode;
+    const m = flightOf(this.mode);
+    // the Earth's middle
+    if (m === "closest") return this.nearGlobe(Infinity).y;
+    if (m === "furthest") return Math.round(this.h / 2);
     if (m === "away" && this.crashAt >= 0) {
       return Math.round(this.restY - this.downR());
     }
@@ -2363,6 +2754,7 @@ export class MenuScene implements Scene {
   }
 
   setLabels(labels: MenuLabels): void {
+    this.spinWords = (labels.spin ?? "").toUpperCase();
     for (const mode of OPEN_MODES) {
       const patch = this.patches[MODE_SLOTS[mode]];
       patch.label = labels[mode];
@@ -2409,6 +2801,11 @@ export class MenuScene implements Scene {
    * While the ball is still arriving the choice is taken at once (`onKickoff` says so, the
    * patch shows pressed, and nothing else can be chosen) but the ball is struck only when
    * it has settled: a ball that jumped to its size to be kicked would be a cut.
+   *
+   * The ball is struck showing the chosen mode (the product owner, 2026-11-18: "it spins it
+   * to focus on the game mode that was selected then does its animation", not back to HOME
+   * and AWAY first): turned, if it must be, to that mode's pose (`focusPose`), quickly
+   * (SNAP), and struck there, keeping it.
    */
   choose(mode: Mode): boolean {
     if (!isMode(mode)) return false;
@@ -2416,14 +2813,18 @@ export class MenuScene implements Scene {
     if (this.played(mode)) return false;
     if (this.state === "kickoff" || this.state === "done") return false;
     if (this.queued !== null) return false;
-    const turned = this.state === "idle" && this.spin !== "still";
-    if (turned && this.reduced) {
-      // no tween with reduced motion: the ball is simply back in its pose
-      this.settle();
+    const slot = MODE_SLOTS[mode];
+    const turn = this.state === "idle" && !this.atFocus(slot);
+    if (turn && this.reduced) {
+      // no tween with reduced motion: the ball is simply in that pose
+      this.qw = this.pw;
+      this.qx = this.px;
+      this.qy = this.py;
+      this.qz = this.pz;
       this.press = null;
-    } else if (this.state === "intro" || turned) {
-      // the ball is still arriving, or turned by the hand: it is brought round first
-      if (turned) this.startSnap();
+    } else if (this.state === "intro" || turn) {
+      // the ball is still arriving, or must turn to show the mode: that first
+      if (turn) this.startSnap(slot);
       this.queued = mode;
       this.press = null;
       this.pressed = null;
@@ -2529,10 +2930,24 @@ export class MenuScene implements Scene {
     if (this.onHover) this.onHover(null);
   }
 
-  /** The ball has settled: strike it, if a mode was chosen while it was arriving. */
+  /**
+   * The ball has settled: strike it, if a mode was chosen while it was arriving or turning;
+   * a ball not yet showing that mode is turned to it first (`choose`).
+   */
   private strikeQueued(): void {
     const mode = this.queued;
     if (mode === null) return;
+    const slot = MODE_SLOTS[mode];
+    if (!this.atFocus(slot)) {
+      if (!this.reduced) {
+        this.startSnap(slot);
+        return;
+      }
+      this.qw = this.pw;
+      this.qx = this.px;
+      this.qy = this.py;
+      this.qz = this.pz;
+    }
     this.queued = null;
     // `onKickoff` has been told already
     this.kickOff(mode, true);
@@ -2543,7 +2958,8 @@ export class MenuScene implements Scene {
     this.phaseT = 0;
     this.closing = false;
     this.crashAt = -1;
-    this.late = 0;
+    this.late =
+      mode === "furthest" ? PULL_LATE : mode === "closest" ? GLOBE_LATE : 0;
     this.kickClock = this.clock;
     this.mode = mode;
     this.noT = -1;
@@ -2554,9 +2970,11 @@ export class MenuScene implements Scene {
     this.overBall = false;
     this.overShip = false;
     this.overMascot = false;
-    // the ball is struck in its pose (it is there already: this only makes sure)
+    // the ball is struck in the pose it is in (the chosen mode's, `choose`): its turn is
+    // kept, and only stops
     this.spin = "still";
-    this.resetTurn();
+    this.wx = this.wy = this.wz = 0;
+    this.hx = this.hy = this.hz = 0;
     this.aim();
     const hovering = this.pointerHover !== null;
     this.pointerHover = null;
@@ -2640,6 +3058,28 @@ export class MenuScene implements Scene {
       return;
     }
     if (at(K_IRIS + this.late)) this.closeSound();
+    if (isGlobe(mode)) {
+      // the turn to the Earth is a whoosh, and the Earth arrives with a twinkle; the air
+      // rushes as CLOSEST's spins and comes closer, and falls away as FURTHEST's pulls back
+      if (at(K_HIT)) this.sound(TIME_TURN);
+      const u = after - K_HIT;
+      if (mode === "closest") {
+        if (at(K_HIT + GLOBE_IN + GLOBE_GROW)) this.sound(SPARKLE);
+        if (u > 0 && u < GLOBE_IN + GLOBE_GROW) {
+          const k = 1 - u / (GLOBE_IN + GLOBE_GROW);
+          this.sound({ kind: "wind", speed: WIND_STRIKE * k * 0.7 });
+        }
+      } else {
+        if (at(K_HIT + PULL_FROM + PULL)) this.sound(SPARKLE);
+        if (u > 0 && u < PULL_FROM + PULL) {
+          this.sound({
+            kind: "wind",
+            speed: WIND_STRIKE * (1 - u / (PULL_FROM + PULL)) * 0.6,
+          });
+        }
+      }
+      return;
+    }
     if (isEra(mode)) {
       if (at(K_HIT)) this.sound(TIME_TURN);
       if (at(K_HIT + ERA_SPIN)) this.sound(SPARKLE);
@@ -2656,7 +3096,7 @@ export class MenuScene implements Scene {
     if (at(K_HIT)) this.sound(STRIKE);
     const len = FLIGHT[mode];
     const land = K_FLY + len;
-    if (mode === "home") {
+    if (flightOf(mode) === "home") {
       if (at(land)) this.sound(LAND);
       if (at(land + HOME_HOP_AT + HOME_HOP_LEN)) this.sound(LAND_HOP);
     } else if (this.crashAt >= 0) {
@@ -2678,8 +3118,12 @@ export class MenuScene implements Scene {
       const u = (after - K_FLY) / len;
       speed =
         WIND_STRIKE *
-        lerp(1, mode === "home" ? HOME_WIND_END : AWAY_WIND_END, u);
-    } else if (mode === "away" && after >= land && after < land + WIND_TAIL) {
+        lerp(1, flightOf(mode) === "home" ? HOME_WIND_END : AWAY_WIND_END, u);
+    } else if (
+      flightOf(mode) === "away" &&
+      after >= land &&
+      after < land + WIND_TAIL
+    ) {
       speed = WIND_STRIKE * AWAY_WIND_END * (1 - (after - land) / WIND_TAIL);
     }
     if (speed > 0) this.sound({ kind: "wind", speed });
@@ -3174,13 +3618,25 @@ export class MenuScene implements Scene {
         best = slot;
       }
     }
-    if (lockedOf(best) === null) {
+    // A locked patch, or CLOSEST's or FURTHEST's on the back, is turned to and waited on.
+    if (
+      lockedOf(best) === null &&
+      best !== "backLeft" &&
+      best !== "backRight"
+    ) {
       this.poseHome();
       this.spin = "home";
       return;
     }
+    this.showPose(best);
+    this.restT = 0;
+    this.spin = "rest";
+  }
+
+  /** The spring pulls towards the pose that shows `slot` (`ballShowPose`). */
+  private showPose(slot: BallSlot): void {
     // the shown pose as a quaternion: pitch after yaw, like the hover
-    const pose = ballShowPose(best);
+    const pose = ballShowPose(slot);
     const cy = Math.cos(pose.yaw / 2);
     const sy = Math.sin(pose.yaw / 2);
     const cp = Math.cos(pose.pitch / 2);
@@ -3189,13 +3645,28 @@ export class MenuScene implements Scene {
     this.px = sp * cy;
     this.py = cp * sy;
     this.pz = sp * sy;
-    this.restT = 0;
-    this.spin = "rest";
   }
 
-  /** A mode is chosen while the ball is turned: bring it round to its pose, quickly. */
-  private startSnap(): void {
-    this.poseHome();
+  /**
+   * The pose a chosen mode is struck in: HOME's and AWAY's the menu's; the others' the one
+   * that shows their patch as a ball at rest does (NEXT-GEN and RETRO straight on, CLOSEST
+   * and FURTHEST side by side where HOME and AWAY were).
+   */
+  private focusPose(slot: BallSlot): void {
+    if (slot === "left" || slot === "right") this.poseHome();
+    else this.showPose(slot);
+  }
+
+  /** The ball shows `slot` as it is struck showing it: it is in (or at) its focus pose. */
+  private atFocus(slot: BallSlot): boolean {
+    this.focusPose(slot);
+    this.turnAngle();
+    return this.eAngle < SETTLED;
+  }
+
+  /** A mode is chosen: bring the ball round to the pose that shows `slot`, quickly. */
+  private startSnap(slot: BallSlot): void {
+    this.focusPose(slot);
     this.turnAngle();
     this.snapX = this.ex;
     this.snapY = this.ey;
@@ -3251,14 +3722,25 @@ export class MenuScene implements Scene {
       this.snapT += d;
       const u = clamp(this.snapT / SNAP);
       if (u >= 1) {
-        this.settle();
+        if (this.queued === null) {
+          this.settle();
+          return;
+        }
+        // there: exactly in the chosen mode's pose, and struck in it
+        this.qw = this.pw;
+        this.qx = this.px;
+        this.qy = this.py;
+        this.qz = this.pz;
+        this.wx = this.wy = this.wz = 0;
         this.strikeQueued();
         return;
       }
-      // fast at first and easing in: what is left of the way, as a turn
+      // fast at first and easing in: what is left of the way, as a turn from the pose
       const left = (1 - u) * (1 - u) * (1 - u);
-      this.qw = 1;
-      this.qx = this.qy = this.qz = 0;
+      this.qw = this.pw;
+      this.qx = this.px;
+      this.qy = this.py;
+      this.qz = this.pz;
       this.turn(this.snapX * left, this.snapY * left, this.snapZ * left);
       return;
     }
@@ -3535,6 +4017,10 @@ export class MenuScene implements Scene {
     const b = this.ball;
     const cx = this.cx;
     const R = this.R;
+    // a floor that moved while the ball was in flight is taken up once it is back at rest
+    if (this.state === "idle" || this.state === "intro") {
+      this.cy0 = this.restingCy();
+    }
     // a struck ball hangs where the kick-off found it
     this.hoverAt(this.state === "kickoff" ? this.kickClock : this.clock);
     this.spotY = this.cy0 - Math.round(this.lift);
@@ -3611,12 +4097,22 @@ export class MenuScene implements Scene {
         if (u < 0.6 && b.pressed === null) b.pressed = this.noSlot;
       }
     } else if (this.state === "kickoff") {
+      // struck in the chosen mode's pose: the turn is kept under all that follows
+      if (this.qw < 1 - 1e-12) this.applyTurn(b);
       b.hovered = null;
       b.pressed = null;
       b.chosen = slotOf(this.mode);
       b.t = BALL_T_LIT;
       const kt = this.phaseT;
-      if (!this.reduced && isEra(this.mode)) {
+      if (!this.reduced && isGlobe(this.mode)) {
+        // not struck: the patch flashes, then CLOSEST's ball spins up into the Earth
+        if (kt < K_FLY) b.t = kt;
+        if (this.mode === "closest" && kt >= K_HIT) {
+          const u = kt - K_HIT;
+          b.yaw -= 14 * u * u;
+          if (u >= GLOBE_IN) this.ballOn = false;
+        }
+      } else if (!this.reduced && isEra(this.mode)) {
         // not struck: it changes era where it hangs
         if (kt < K_FLY) b.t = kt;
         if (this.mode === "retro") this.composeRetro(kt - K_HIT);
@@ -3628,7 +4124,7 @@ export class MenuScene implements Scene {
           const shake = f < SHAKE.length ? SHAKE[f] : 0;
           // AWAY is hit sideways and the picture jumps from side to side; the others are hit
           // up or down and it jumps up and down
-          if (this.mode === "away") this.shakeX = shake;
+          if (flightOf(this.mode) === "away") this.shakeX = shake;
           else this.shakeY = shake;
         }
         if (kt >= K_HIT && kt < K_FLY) {
@@ -3637,9 +4133,9 @@ export class MenuScene implements Scene {
           this.squash = kt < K_HIT + K_DEEP ? deep : Math.max(2, deep >> 1);
           // and it gives a pixel, away from the boot
           b.cy -= 2;
-          if (this.mode === "away") b.cx += 2;
+          if (flightOf(this.mode) === "away") b.cx += 2;
         } else if (kt >= K_FLY) {
-          const mode = this.mode;
+          const mode = flightOf(this.mode);
           const len = FLIGHT[mode];
           const after = kt - K_FLY - len;
           this.flightAt(clamp((kt - K_FLY) / len));
@@ -3789,7 +4285,7 @@ export class MenuScene implements Scene {
     const R = this.R;
     const y0 = this.spotY;
 
-    if (this.mode === "home") {
+    if (flightOf(this.mode) === "home") {
       const rEnd = this.endR;
       const tx = this.tx;
       const ty = Math.min(this.ty, y0);
@@ -4041,6 +4537,55 @@ export class MenuScene implements Scene {
     s.popClip();
   }
 
+  /** "SPIN ME" round the ball's rim (SPIN_ANGLE), as much of it as the pulse shows. */
+  private drawSpinHint(s: Surface): void {
+    const b = this.ball;
+    const words = this.spinWords;
+    if (!words || !this.ballOn || this.golden || b.r < SPIN_MIN_R) return;
+    const shown = this.reduced ? 0.5 : spinHintShown(this.realT);
+    if (shown <= 0) return;
+    // each letter upright on its own dark tile, its middle on a circle outside the rim; the
+    // tiles run into each other, so the words stand on one dark band that follows the ball
+    const ring = b.r + SPIN_GAP + (SPIN_TILE_H + 1) / 2;
+    const widths = [...words].map((ch) =>
+      ch === " " ? SPIN_SPACE : measureText(ch, { font: FONT_5x7 }),
+    );
+    const total = widths.reduce((sum, w) => sum + w + 1, 0);
+    const places: { x: number; y: number; w: number; ch: string }[] = [];
+    let along = -total / 2;
+    for (let i = 0; i < words.length; i++) {
+      const w = widths[i];
+      const at = SPIN_ANGLE + (along + (w + 1) / 2) / ring;
+      along += w + 1;
+      places.push({
+        x: Math.round(b.cx + ring * Math.cos(at) - w / 2),
+        y: Math.round(b.cy + ring * Math.sin(at) - SPIN_TILE_H / 2),
+        w,
+        ch: words[i],
+      });
+    }
+    // the band first, whole, then the letters on it: no tile covers its neighbour's letter
+    for (const p of places) {
+      for (let y = -1; y <= SPIN_TILE_H; y++) {
+        for (let x = -2; x <= p.w + 1; x++) {
+          if (bayer4(p.x + x, p.y + y) < shown) s.px(p.x + x, p.y + y, P.ink);
+        }
+      }
+    }
+    const glyph = this.spinGlyph;
+    for (const p of places) {
+      if (p.ch === " ") continue;
+      glyph.clear();
+      drawText(glyph, p.ch, 0, 0, P.chalk, { font: FONT_5x7 });
+      for (let y = 0; y < glyph.h; y++) {
+        for (let x = 0; x < glyph.w; x++) {
+          if (glyph.get(x, y) === TRANSPARENT) continue;
+          if (bayer4(p.x + x, p.y + y) < shown) s.px(p.x + x, p.y + y, P.chalk);
+        }
+      }
+    }
+  }
+
   /**
    * The hovering ball on `hover`, centred, and its place: its column a whole pixel (the
    * picture's), its row `floatCy`, not rounded.
@@ -4117,7 +4662,7 @@ export class MenuScene implements Scene {
     b.cy = y;
     // HOME's flat is level, under the ball. AWAY's is a diagonal, below on HOME's side.
     // (NEXT-GEN's and RETRO's are not struck.)
-    const mode = this.mode;
+    const mode = flightOf(this.mode);
     const level = mode === "home";
     const reach = this.R - this.squash;
     const edge = level ? reach : Math.round(reach * Math.SQRT2);

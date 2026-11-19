@@ -4,7 +4,7 @@
  * menu's order is `MODES` (./storage.ts); the rule each is scored by, `MODE_RULES`.
  */
 import { MODES } from "./storage";
-import type { EraMode, Mode } from "./types";
+import type { DistanceMode, EraMode, Mode } from "./types";
 
 /** The two modes ranked by an answer's year: RETRO, then NEXT-GEN. */
 export const ERA_MODES: readonly EraMode[] = ["retro", "nextgen"];
@@ -14,15 +14,26 @@ export function isEraMode(mode: Mode): mode is EraMode {
   return mode === "retro" || mode === "nextgen";
 }
 
+/** The two modes ranked by distance from the day's place: CLOSEST, then FURTHEST. */
+export const DISTANCE_MODES: readonly DistanceMode[] = ["closest", "furthest"];
+
+/** Whether a mode is ranked by distance from the day's place (CLOSEST, FURTHEST). */
+export function isDistanceMode(mode: Mode): mode is DistanceMode {
+  return mode === "closest" || mode === "furthest";
+}
+
 /**
  * The last part of each mode's address: `/play/home`, `/play/away`, `/play/retro`,
- * `/play/next-gen` (written as the mode's name is, with its hyphen).
+ * `/play/next-gen`, `/play/closest`, `/play/furthest` (written as the mode's name is, with
+ * its hyphen).
  */
 export const MODE_SLUGS: Readonly<Record<Mode, string>> = Object.freeze({
   home: "home",
   away: "away",
   retro: "retro",
   nextgen: "next-gen",
+  closest: "closest",
+  furthest: "furthest",
 });
 
 /** The page a mode is played at: "/play/next-gen". */
@@ -45,9 +56,8 @@ export function modeOfPath(pathname: string): Mode {
 /**
  * The mode the full-time card offers next (the product owner, 2026-11-15: "it should always
  * direct to next available game mode"): the first after `mode` in the menu's order, HOME,
- * AWAY, RETRO, NEXT-GEN and round to HOME again, that `played` says has not been played
- * today. Null when all the others have. The locked modes (CLOSEST, FURTHEST) are not modes
- * yet, so they are never offered.
+ * AWAY, RETRO, NEXT-GEN, CLOSEST, FURTHEST and round to HOME again, that `played` says has
+ * not been played today. Null when all the others have.
  */
 export function nextMode(
   mode: Mode,

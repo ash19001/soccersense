@@ -115,6 +115,15 @@ export interface BowlTones {
   raw?: (c: Color) => Color;
 }
 
+/**
+ * The roof's tone at bay angle `a`: lit from the top left, the far left of the ring
+ * brightest and the near right dullest.
+ */
+function roofTone(a: number): Color {
+  const d = -Math.cos(a) * 0.7 + Math.sin(a) * 0.7;
+  return d > 0.35 ? P.white : d > -0.5 ? P.chalk : P.steelHi;
+}
+
 /** The home crowd: mostly the club's main colour, scarves and shirts in its second. */
 function fansHome(club: ClubScheme): readonly Color[] {
   return [
@@ -364,11 +373,6 @@ export function* paintBowlSteps(
   const TWO_PI = Math.PI * 2;
   const bayOf = (a: number): number =>
     Math.floor(((a + Math.PI) / TWO_PI) * BAYS + 0.5) % BAYS;
-  const roofTone = (a: number): Color => {
-    // Lit from the top left: the far left of the ring is brightest, the near right dullest.
-    const d = -Math.cos(a) * 0.7 + Math.sin(a) * 0.7;
-    return d > 0.35 ? P.white : d > -0.5 ? P.chalk : P.steelHi;
-  };
   const crowdAt: number[] = [];
   const crowdColor: number[] = [];
   const crowdUp: number[] = [];
@@ -611,4 +615,152 @@ function paintMarkings(view: View, bowl: Bowl, tones: BowlTones): void {
     s.line(p0[0] + 1, p0[1], t0[0] + 1, t0[1] + 1, post);
     s.line(p1[0] + 1, p1[1], t1[0] + 1, t1[1] + 1, post);
   }
+}
+
+// ---------------------------------------------------------------------------
+// From straight above (stadium-top.ts, 2026-11-18)
+// ---------------------------------------------------------------------------
+
+/** What the stadium is from straight above at a point: its colour, and whether the floodlights reach it. */
+export interface BowlTop {
+  c: Color;
+  lit: boolean;
+}
+const topHit: BowlTop = { c: P.grass, lit: true };
+
+/** Roughly how many units the stand and roof run from the stand's foot to the wall. */
+const SPAN = 48;
+/** Roughly how long a roof bay is round the ring, and a bay of the stand (24 of them). */
+const ROOF_BAY = 14;
+const STAND_BAY = 21;
+/** The penalty area, the goal area and the penalty spot, in from the goal line; their half widths. */
+const BOX = { deep: 21, half: 26, small: 7, smallHalf: 12, spot: 14 } as const;
+/** The goal: its half width and its net's depth behind the line. */
+const GOAL = { half: 5, deep: 3 } as const;
+
+/**
+ * The stadium from straight above at (X, V), for FURTHEST's bird's-eye view
+ * (stadium-top.ts), or null outside its roof: the roof ring with its bays and the lamps on
+ * its inner lip; through the hole in it the stand, its crowd in the club's colours (`swap`
+ * turns HOME's into them, as `clubLight` does), the boards at its foot, the grass round the
+ * pitch, and the pitch with its stripes, lines and goals; the roof's shadow on what is under
+ * it (cast as paintBowl casts it). The same plan as paintBowl's, seen from another camera.
+ * `s` is pixels per unit, so the lines never fall between pixels. The colours are daylight
+ * ones: the light comes after.
+ */
+export function bowlTopAt(
+  X: number,
+  V: number,
+  s: number,
+  seed: number,
+  swap: (c: Color) => Color,
+  club: ClubScheme = DEFAULT_SCHEME,
+): BowlTop | null {
+  const go = gOut(X, V);
+  if (go > ROOF_OUT) return null;
+  // a line is a unit wide, and never narrower than a pixel
+  const line = Math.max(1, 1 / s);
+  // half open, so a line on the boundary between two pixels takes one of them
+  const near = (d: number): boolean => d >= -line / 2 && d < line / 2;
+  const a = Math.atan2(V / OUT_B, X / OUT_A);
+  const gi = gIn(X, V);
+  const r = gi <= 1 ? 0 : go >= 1 ? 1 : (gi - 1) / (gi - 1 + (1 - go));
+  topHit.lit = true;
+  if (go >= 1 || r >= ROOF_IN) {
+    if (go > 1) {
+      // the oversailing rim
+      topHit.c = Math.sin(a) > -0.2 || Math.cos(a) < -0.5 ? P.white : P.mist;
+      return topHit;
+    }
+    // the inner lip, which carries the floodlights; then the bays, a ring round the middle
+    if ((r - ROOF_IN) * SPAN < Math.max(1.6, line)) {
+      topHit.c = P.concreteLight;
+      return topHit;
+    }
+    const turn = ((a + Math.PI) / (Math.PI * 2)) * BAYS + 0.5;
+    const along = (turn - Math.floor(turn)) * ROOF_BAY;
+    topHit.c = along < line || near((r - 0.76) * SPAN) ? P.mist : roofTone(a);
+    return topHit;
+  }
+  // under the roof's hole: the roof's shadow, cast towards the bottom right
+  const standH = gi <= 1 ? 0 : HF + r * (HS - HF);
+  const up = HR - standH;
+  const qx = X - up * 0.62;
+  const qv = V + up * 0.5;
+  const g2 = gOut(qx, qv);
+  let shadow = g2 > ROOF_OUT;
+  if (!shadow) {
+    const i2 = gIn(qx, qv);
+    const r2 = i2 <= 1 ? 0 : g2 >= 1 ? 1 : (i2 - 1) / (i2 - 1 + (1 - g2));
+    shadow = r2 >= ROOF_IN;
+  }
+  if (gi > 1) {
+    if (r < 0.06) {
+      // the boards at the stand's foot
+      const ai = Math.atan2(V / IN_B, X / IN_A);
+      const cell = Math.floor(((ai + Math.PI) / (Math.PI * 2)) * 56);
+      topHit.c = swap(BOARDS[Math.floor(hash2(cell, 1, seed) * BOARDS.length)]);
+      return topHit;
+    }
+    const row = Math.min(ROWS - 1, Math.floor(r * ROWS));
+    const turn = (a + Math.PI) / (Math.PI * 2);
+    const seat = Math.floor(turn * SEATS);
+    const bay = turn * 24;
+    const aisle = (bay - Math.floor(bay)) * STAND_BAY < line;
+    const deg = (a * 180) / Math.PI;
+    const awayEnd = deg > 22 && deg < 50 && r > 0.3;
+    const gap =
+      (deg > 19 && deg <= 22 && r > 0.3) || (deg >= 50 && deg < 53 && r > 0.3);
+    let fan: Color;
+    if (r > 0.4 && r < 0.47) fan = P.concreteLight;
+    else if (aisle) fan = P.concrete;
+    else if (gap) fan = P.homeDark;
+    else {
+      const list = awayEnd ? FANS_AWAY : fansHome(club);
+      fan =
+        list[Math.floor(hash2(seat, row, seed) * list.length) % list.length];
+    }
+    const c = swap(fan);
+    topHit.c = shadow ? shade(c, -0.3) : c;
+    return topHit;
+  }
+  // the pitch and the grass round it
+  const ax = Math.abs(X);
+  const av = Math.abs(V);
+  if (ax <= PITCH_X && av <= PITCH_V) {
+    const bx = PITCH_X - ax;
+    const marked =
+      bx < line ||
+      PITCH_V - av < line ||
+      near(X) ||
+      near(Math.hypot(X, V) - 12) ||
+      (near(bx - BOX.deep) && av <= BOX.half) ||
+      (near(av - BOX.half) && bx <= BOX.deep) ||
+      (near(bx - BOX.small) && av <= BOX.smallHalf) ||
+      (near(av - BOX.smallHalf) && bx <= BOX.small) ||
+      Math.hypot(X, V) < line ||
+      Math.hypot(bx - BOX.spot, V) < line;
+    if (marked) {
+      topHit.c = P.white;
+      return topHit;
+    }
+    const stripe = Math.floor((X + PITCH_X) / ((PITCH_X * 2) / 12));
+    const even = stripe % 2 === 0;
+    topHit.c = shadow
+      ? even
+        ? P.grassDark
+        : P.grass
+      : even
+        ? P.grass
+        : P.grassLight;
+    return topHit;
+  }
+  if (ax > PITCH_X && ax <= PITCH_X + GOAL.deep && av <= GOAL.half) {
+    // a goal: its bar along the line, its net behind
+    topHit.c =
+      ax - PITCH_X < line || GOAL.half - av < line ? P.white : P.steelHi;
+    return topHit;
+  }
+  topHit.c = shadow ? P.grassDeep : P.grassDark;
+  return topHit;
 }

@@ -48,6 +48,8 @@ describe("what the server sends", () => {
       away: emptyBoard(),
       retro: emptyBoard(),
       nextgen: emptyBoard(),
+      closest: emptyBoard(),
+      furthest: emptyBoard(),
     },
   };
 

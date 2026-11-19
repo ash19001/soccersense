@@ -25,6 +25,8 @@ export const QUESTION_MODES: readonly Mode[] = [
   "away",
   "retro",
   "nextgen",
+  "closest",
+  "furthest",
 ];
 
 export type SlotStatus = "draft" | "approved" | "rejected";

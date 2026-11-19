@@ -86,6 +86,8 @@ describe("statsFor", () => {
       "away",
       "retro",
       "nextgen",
+      "closest",
+      "furthest",
     ]);
     for (const mode of stats.modes) {
       expect(mode).toMatchObject({

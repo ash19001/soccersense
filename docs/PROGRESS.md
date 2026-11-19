@@ -1019,6 +1019,62 @@ with no mail app, the address is shown under the buttons, to copy. "Buy us a cof
 the game's Ko-fi page (https://ko-fi.com/soccersense) in a new tab: tips go through Ko-fi
 (no fee on one-off tips), membership will go through Paddle, which takes no donations.
 
+## CLOSEST and FURTHEST (2026-11-18)
+
+The product owner: "can you build closest and furthest. this should work very similar to home
+and away except in the transition title screen it should also say what the location/stadium
+etc is. this should also be clearly and obviously visible within the game so they can always
+see it". Asked, they chose a pixel world map for the look, stadiums, cities and landmarks for
+the places, and free for now ("when game is popular i might but it behind the membership").
+GAME_DESIGN.md section 1 has the rules.
+
+- **Built.** The two modes in every list (`Mode`, `MODES`, the routes `/play/closest` and
+  `/play/furthest`, storage, stats, the leaderboards' tabs, the server's games and question
+  desk), their colours (green, periwinkle), titles, words, sample questions (seven each, from
+  the other modes' samples) and 30 daily places (`app/data/places.ts`, `docs/data-notes/places.md`).
+  Their shots are worked out from the day's place as a game is played; a distance question is
+  checked for places, not shares.
+- **The place, always in view**: on the mode's title card, on a plate on the board for the
+  whole game, on the map's pin, in the reveal's sentence and the table ("1,266 mi"); the board
+  says what is measured ("Measured by where the player was born.").
+- **The map** (`MapScene`): the ground at any scale (`~/art/earth-zoom`, the home town from
+  above, coasts from Natural Earth's land), the pin and its rings (the antipode's in FURTHEST),
+  each answer flown along the great circle and landed with its distance, the camera pulling
+  out to hold it and coming home on the next question. Shots `map/*`.
+- **The career on the map** (2026-11-18, from image demos: "sure do it"; GAME_DESIGN.md
+  section 5.3): CLOSEST closes in on the place a step a tier, its ground in a badge
+  (`~/art/ground-badge`) until the map shows the stadium; FURTHEST travels from stop to stop
+  (`app/scenes/map-journey.ts`, `app/data/cities.ts`) to the final on the far side of the
+  world. Tiers 6 and 7 at night.
+- **The ball**: CLOSEST and FURTHEST are open buttons on its back (the pin, the globe), with
+  their words. Chosen (2026-11-18), CLOSEST's ball spins into the Earth, which comes closer
+  and spins on, the whole globe in sight, as the screen closes (`~/art/globe`); FURTHEST's
+  camera rises over the stadium to a bird's-eye view of the same town (`~/art/stadium-top`),
+  then pulls back from it, pixelating, through the town, its fields and the country to the
+  Earth in space (`~/art/earth-zoom`; the same day: "Maybe the transition should be making
+  stadium birds eye view first and as it zooms out it can get pixelated too").
+  API_SCENES.md, "Kick-offs to the Earth".
+- **The home screen**: the cards are the first four modes, as before (the product owner, the
+  same day: "the home screen cards at the bottom should only have the original 4. there should
+  be an option to show all game modes"). "All modes" opens all six as a grid of tiles, two to a row (`AllModes`; the same day: "remove
+  intro from that pop up, make it grids not rows"):
+  on a phone a square under the heart, on a monitor a tall button off the left end of the
+  bell and speaker, its icon alone where its name would not fit (1366 x 768). Picking a mode
+  there kicks the ball off for it; a played one opens its review. The leaderboard has six
+  tabs. The ball rests clear of the cards (`MenuScene.setFloor`).
+- **"SPIN ME"** (the same day: "the ball should have a small barely noticeable text saying spin
+  me"): white letters on a dark band, arched over the top of the ball, just outside its rim like its wind ("around the
+  ball (like how the wind is). it appears and disappears like pulsing"): every 7 seconds they
+  dissolve in, stay 2 and dissolve out; not at the kick-off.
+- **The map's place clear of the board** (the same day, a screenshot: the name "collides with
+  the question card"): the game page measures where the board ends (`watchCeiling`,
+  `app/routes/scene-edges.ts`) and the map brings the pin down until its name plate is under
+  it; a long name wraps onto two lines on a phone. Checked at 1920 x 930, 1366 x 768,
+  960 x 457 at 2 and 390 x 844.
+- **Not yet**: the weekly drafter does not draft CLOSEST and FURTHEST questions (until a day
+  has seven approved ones of a mode, the server plays that mode's sample, so these two always
+  do for now); their scenery has no sounds of its own (it borrows the career's).
+
 ## Known follow-ups
 
 - Judge: a few real-but-wrong names are one typo from a listed answer ("Bayer" next to

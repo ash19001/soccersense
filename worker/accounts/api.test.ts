@@ -1469,7 +1469,7 @@ describe("an account's games, swapped with its devices", () => {
         game(TODAY - 400, "home"),
         { ...game(TODAY, "home"), total: 700 },
         { ...game(TODAY, "away"), turns: turns(80).slice(1) },
-        { ...game(TODAY, "retro"), mode: "closest" },
+        { ...game(TODAY, "retro"), mode: "guesswho" },
         "a game",
         game(TODAY, "nextgen"),
       ],

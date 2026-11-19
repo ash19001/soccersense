@@ -14,6 +14,11 @@ export interface ModeIntroProps {
    * mode's light colour. Left out, or not in the line, the line is all one colour.
    */
   emphasis?: string;
+  /**
+   * CLOSEST and FURTHEST: the day's place, under the line (which ends "NEAREST TO",
+   * "FURTHEST FROM"), large, in the mode's light colour: "WEMBLEY, LONDON".
+   */
+  place?: string;
   /** It is on its way out: the card shuts (ui.css, section 30). */
   leaving?: boolean;
   /**
@@ -42,6 +47,7 @@ export function ModeIntro({
   name,
   line,
   emphasis,
+  place,
   leaving = false,
   onSkip,
   className,
@@ -96,6 +102,7 @@ export function ModeIntro({
               line
             )}
           </p>
+          {place && <p className="ss-intro__place">{place}</p>}
         </div>
         <span className="ss-intro__rule" />
       </div>

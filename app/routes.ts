@@ -33,6 +33,9 @@ export default [
   route("play/away", "routes/play.tsx", { id: "play-away" }),
   route("play/retro", "routes/play.tsx", { id: "play-retro" }),
   route("play/next-gen", "routes/play.tsx", { id: "play-nextgen" }),
+  // CLOSEST and FURTHEST (2026-11-18): the day's place on the map.
+  route("play/closest", "routes/play.tsx", { id: "play-closest" }),
+  route("play/furthest", "routes/play.tsx", { id: "play-furthest" }),
   // NEXT-GEN's id as an address too, so `/play/${mode}` reaches it as it does the others.
   route("play/nextgen", "routes/play.tsx", { id: "play-nextgen-id" }),
   route("how-to-play", "routes/how-to-play.tsx"),

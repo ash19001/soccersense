@@ -6,7 +6,14 @@ import { describe, expect, it } from "vitest";
 import { NEXT_GEN_QUESTIONS, RETRO_QUESTIONS, STADIUMS } from "~/data";
 import { questionsFor } from "~/data";
 
-import { ERA_MODES, isEraMode, modeOfPath, nextMode, playPath } from "./modes";
+import {
+  ERA_MODES,
+  isDistanceMode,
+  isEraMode,
+  modeOfPath,
+  nextMode,
+  playPath,
+} from "./modes";
 import { SCORING_SHOTS, revealRows } from "./reveal";
 import {
   MODE_RULES,
@@ -61,8 +68,15 @@ function era(
 }
 
 describe("the modes", () => {
-  it("are HOME, AWAY, RETRO and NEXT-GEN, in the menu's order", () => {
-    expect(MODES).toEqual(["home", "away", "retro", "nextgen"]);
+  it("are HOME, AWAY, RETRO, NEXT-GEN, CLOSEST and FURTHEST, in the menu's order", () => {
+    expect(MODES).toEqual([
+      "home",
+      "away",
+      "retro",
+      "nextgen",
+      "closest",
+      "furthest",
+    ]);
     expect(ERA_MODES).toEqual(["retro", "nextgen"]);
     expect(MODES.filter(isEraMode)).toEqual(["retro", "nextgen"]);
   });
@@ -73,6 +87,8 @@ describe("the modes", () => {
       away: "niche",
       retro: "oldest",
       nextgen: "newest",
+      closest: "closest",
+      furthest: "furthest",
     });
     for (const mode of MODES) expect(ruleFor(mode)).toBe(MODE_RULES[mode]);
     expect(RULES.filter(isYearRule)).toEqual(["oldest", "newest"]);
@@ -87,6 +103,8 @@ describe("the modes", () => {
     }
     expect(questionsFor("retro")).toBe(RETRO_QUESTIONS);
     expect(questionsFor("nextgen")).toBe(NEXT_GEN_QUESTIONS);
+    // CLOSEST and FURTHEST are ranked by distance: no question of theirs needs years
+    expect(MODES.filter(isDistanceMode)).toEqual(["closest", "furthest"]);
     for (const q of ERA) {
       for (const a of q.answers) expect(a.years.length).toBeGreaterThan(0);
     }
@@ -98,6 +116,8 @@ describe("the modes", () => {
       "/play/away",
       "/play/retro",
       "/play/next-gen",
+      "/play/closest",
+      "/play/furthest",
     ]);
     for (const mode of MODES) {
       expect(modeOfPath(playPath(mode))).toBe(mode);
@@ -113,7 +133,9 @@ describe("the modes", () => {
     expect(nextMode("home", none)).toBe("away");
     expect(nextMode("away", none)).toBe("retro");
     expect(nextMode("retro", none)).toBe("nextgen");
-    expect(nextMode("nextgen", none)).toBe("home");
+    expect(nextMode("nextgen", none)).toBe("closest");
+    expect(nextMode("closest", none)).toBe("furthest");
+    expect(nextMode("furthest", none)).toBe("home");
     // the ones already played are passed over
     const done =
       (...modes: string[]) =>
@@ -121,13 +143,19 @@ describe("the modes", () => {
         modes.includes(m);
     expect(nextMode("home", done("home", "away"))).toBe("retro");
     expect(nextMode("away", done("away", "retro"))).toBe("nextgen");
-    expect(nextMode("nextgen", done("nextgen", "home"))).toBe("away");
-    expect(nextMode("retro", done("retro", "nextgen", "home"))).toBe("away");
-    // never the mode itself, and none once every other has been played
-    expect(nextMode("away", done("home", "retro", "nextgen"))).toBeNull();
     expect(
-      nextMode("away", done("away", "home", "retro", "nextgen")),
-    ).toBeNull();
+      nextMode("nextgen", done("nextgen", "closest", "furthest", "home")),
+    ).toBe("away");
+    expect(
+      nextMode(
+        "retro",
+        done("retro", "nextgen", "closest", "furthest", "home"),
+      ),
+    ).toBe("away");
+    // never the mode itself, and none once every other has been played
+    const others = ["home", "retro", "nextgen", "closest", "furthest"];
+    expect(nextMode("away", done(...others))).toBeNull();
+    expect(nextMode("away", done("away", ...others))).toBeNull();
   });
 });
 

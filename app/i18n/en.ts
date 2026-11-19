@@ -7,6 +7,8 @@
 import type {
   AccountProblem,
   AwayTitleId,
+  ClosestTitleId,
+  FurthestTitleId,
   Grade,
   HomeTitleId,
   NextgenTitleId,
@@ -67,7 +69,7 @@ export const en = {
      * play. Under 160 characters, or a search result cuts it short.
      */
     description:
-      "Free daily football trivia: seven questions a match and four ways to win. Give the most common answer, the most uncommon, the oldest or the most recent.",
+      "Free daily football trivia: seven questions a match, won by the most common answer, the most uncommon, the oldest, the most recent, the nearest or the furthest.",
     /** Read out in place of the airship's sign, which is only pixels. */
     fact: (fact: string) => `Fact of the day: ${fact}`,
     /** The words painted on the canvas. The pixel fonts are capitals. */
@@ -85,6 +87,8 @@ export const en = {
       /** On the plane's banner, before the fact of the day. */
       header: "DID YOU KNOW?",
       tagline: "DAILY FOOTBALL TRIVIA",
+      /** Printed small on the ball, a hint that it turns (and turns to gold). */
+      spin: "SPIN ME",
       /**
        * The airship's sign as the ball turns to gold (the easter egg: the ball kept spinning
        * by hand). Short, as every message of the sign: 12 small letters a line at most. It
@@ -136,9 +140,30 @@ export const en = {
       away: { label: "AWAY", line: "The most uncommon answer wins" },
       retro: { label: "RETRO", line: "The oldest answer wins" },
       nextgen: { label: "NEXT-GEN", line: "The most recent answer wins" },
+      closest: {
+        label: "CLOSEST",
+        line: "The answer nearest today's place wins",
+      },
+      furthest: {
+        label: "FURTHEST",
+        line: "The answer furthest from today's place wins",
+      },
     },
     /** Read out for the score on a mode that has been played today. */
     played: (points: number) => `Played today: ${points} points`,
+    /**
+     * "All modes" (2026-11-18): the cards under the ball are the first four modes; this
+     * opens the list of every one. `open` is the button's name (and its words on a monitor).
+     */
+    allModes: {
+      open: "All modes",
+      heading: "ALL MODES",
+      close: "Close",
+      review: "REVIEW",
+      /** A mode played today, read out: "Review your CLOSEST game. Played today: 347 points". */
+      spoken: (mode: string, points: number) =>
+        `Review your ${mode} game. Played today: ${points} points`,
+    },
     /**
      * A mode played today: each mode is played once a day, so its card has a button that
      * opens the day's game again in a pop-up (as does its patch on the ball).
@@ -172,8 +197,6 @@ export const en = {
     soon: {
       nextgen: "NEXT-GEN kicks off soon.",
       retro: "RETRO kicks off soon.",
-      closest: "CLOSEST kicks off soon.",
-      furthest: "FURTHEST kicks off soon.",
       guesswho:
         "GUESS WHO: read the back of the shirt and fill in the gaps. Coming soon.",
       shootout:
@@ -269,6 +292,8 @@ export const en = {
       away: "Most uncommon wins",
       retro: "Oldest wins",
       nextgen: "Newest wins",
+      closest: "Nearest wins",
+      furthest: "Furthest wins",
     },
     /** Shorter still, for a phone's cards: two lines at most beside the badge. */
     tiny: {
@@ -276,6 +301,8 @@ export const en = {
       away: "Most uncommon",
       retro: "Oldest",
       nextgen: "Newest",
+      closest: "Nearest",
+      furthest: "Furthest",
     },
   },
 
@@ -285,6 +312,8 @@ export const en = {
       away: "AWAY: the most uncommon answer wins · soccersense",
       retro: "RETRO: the oldest answer wins · soccersense",
       nextgen: "NEXT-GEN: the most recent answer wins · soccersense",
+      closest: "CLOSEST: the nearest answer wins · soccersense",
+      furthest: "FURTHEST: the furthest answer wins · soccersense",
     },
     description: {
       home: "Seven football questions, and the answer most players give scores 100. Go with the crowd.",
@@ -293,6 +322,10 @@ export const en = {
         "Seven football questions, and the oldest answer, the one furthest back in the game's history, scores 100. Dust off the record books.",
       nextgen:
         "Seven football questions, and the most recent answer, the one that happened last, scores 100. Keep up with the latest.",
+      closest:
+        "Seven football questions and one place on the map: the answer nearest to it scores 100. Know your football geography.",
+      furthest:
+        "Seven football questions and one place on the map: the answer furthest from it scores 100. Go to the ends of the earth.",
     },
     /** The page's heading: only read out (the scoreboard says the rest). */
     heading: {
@@ -300,6 +333,8 @@ export const en = {
       away: "The AWAY match",
       retro: "The RETRO match",
       nextgen: "The NEXT-GEN match",
+      closest: "The CLOSEST match",
+      furthest: "The FURTHEST match",
     },
     /**
      * The mode card: on the ink the page arrives on, before a new game, the mode's name
@@ -313,19 +348,30 @@ export const en = {
         away: "GIVE THE MOST UNCOMMON ANSWER",
         retro: "GIVE THE OLDEST ANSWER",
         nextgen: "GIVE THE MOST RECENT ANSWER",
+        closest: "GIVE THE ANSWER NEAREST TO",
+        furthest: "GIVE THE ANSWER FURTHEST FROM",
       },
       key: {
         home: "MOST COMMON",
         away: "MOST UNCOMMON",
         retro: "OLDEST",
         nextgen: "MOST RECENT",
+        closest: "NEAREST",
+        furthest: "FURTHEST",
       },
       spoken: {
         home: "HOME. Give the most common answer.",
         away: "AWAY. Give the most uncommon answer.",
         retro: "RETRO. Give the oldest answer.",
         nextgen: "NEXT-GEN. Give the most recent answer.",
+        closest: "CLOSEST. Give the answer nearest today's place.",
+        furthest: "FURTHEST. Give the answer furthest from today's place.",
       },
+      /**
+       * CLOSEST and FURTHEST: the day's place, on the card under the line (the line ends
+       * "NEAREST TO", "FURTHEST FROM"), and read out after it.
+       */
+      placeSpoken: (place: string) => `Today's place is ${place}.`,
     },
     /** The game waits for the site's server to say what day it is (`gameClock`). */
     clock: {
@@ -353,6 +399,8 @@ export const en = {
         away: "The most uncommon answer wins.",
         retro: "The oldest answer wins.",
         nextgen: "The most recent answer wins.",
+        closest: "The answer nearest today's place wins.",
+        furthest: "The answer furthest from today's place wins.",
       },
       /** How it is scored, in a few words, under the instruction. */
       measure: {
@@ -360,6 +408,21 @@ export const en = {
         away: "Scored by how few players give the same answer.",
         retro: "Scored by how far back it first happened.",
         nextgen: "Scored by how recently it last happened.",
+        closest: "Scored by how near its place is to today's.",
+        furthest: "Scored by how far its place is from today's.",
+      },
+      /**
+       * CLOSEST and FURTHEST: what an answer's place is, in place of `measure` (the
+       * question's own words: "where the player was born").
+       */
+      measuredBy: (label: string) => `Measured by ${label}.`,
+      /**
+       * CLOSEST and FURTHEST: today's place, always on the board. `label` is the tag before
+       * its name; `spoken` is read out for the whole plate.
+       */
+      place: {
+        label: "TODAY'S PLACE",
+        spoken: (place: string) => `Today's place: ${place}`,
       },
     },
 
@@ -494,6 +557,61 @@ export const en = {
         nextgen: (best: string, year: string) =>
           `Passed. The most recent answer was ${best}, as recently as ${year}.`,
       },
+      /**
+       * CLOSEST and FURTHEST, with no answer given: the top of the table, its distance from
+       * the day's place (`distance`: "212 miles"), and the place.
+       */
+      skippedDistance: {
+        closest: (best: string, distance: string, place: string) =>
+          `Passed. The nearest answer was ${best}, ${distance} from ${place}.`,
+        furthest: (best: string, distance: string, place: string) =>
+          `Passed. The furthest answer was ${best}, ${distance} from ${place}.`,
+      },
+      timeupDistance: {
+        closest: (best: string, distance: string, place: string) =>
+          `The whistle went. The nearest answer was ${best}, ${distance} from ${place}.`,
+        furthest: (best: string, distance: string, place: string) =>
+          `The whistle went. The furthest answer was ${best}, ${distance} from ${place}.`,
+      },
+      /**
+       * CLOSEST: the nearest answers are the worldies. `distance` is how far the answer's
+       * place is from the day's ("212 miles"), `place` the day's place ("Wembley").
+       */
+      closest: {
+        worldie: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. Right on the doorstep. Worldie!`,
+        golazo: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. Just round the corner.`,
+        trivela: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. A short trip away.`,
+        toepoke: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. You'd need a packed lunch.`,
+        tapin: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. That's a long way round.`,
+        miss: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. Right answer, but miles off!`,
+      } satisfies Record<
+        Shot,
+        (name: string, distance: string, place: string) => string
+      >,
+      /** FURTHEST: the furthest answers are the worldies. */
+      furthest: {
+        worldie: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. The other side of the world. Worldie!`,
+        golazo: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. Bring your passport.`,
+        trivela: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. A proper away day.`,
+        toepoke: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. Further than most.`,
+        tapin: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. Not that far, really.`,
+        miss: (name: string, distance: string, place: string) =>
+          `${name}: ${distance} from ${place}. Right answer, but practically next door!`,
+      } satisfies Record<
+        Shot,
+        (name: string, distance: string, place: string) => string
+      >,
       timeup: {
         home: (best: string, share: string) =>
           `The whistle went. The crowd's favourite was ${best}: about ${share} of players said it.`,
@@ -504,26 +622,6 @@ export const en = {
         nextgen: (best: string, year: string) =>
           `The whistle went. The most recent answer was ${best}, as recently as ${year}.`,
       },
-    },
-
-    /**
-     * Kept for the locked modes CLOSEST and FURTHEST, which score by distance. The stadium is
-     * never named: it is "today's stadium" and no more.
-     */
-    distanceSentence: {
-      birthplace: (name: string, place: string, distance: string) =>
-        `${name} was born in ${place}: ${distance} from today's stadium.`,
-      ground: (name: string, place: string, distance: string) =>
-        `${name} play at ${place}: ${distance} from today's stadium.`,
-      location: (name: string, place: string, distance: string) =>
-        `${name} is in ${place}: ${distance} from today's stadium.`,
-      capital: (name: string, place: string, distance: string) =>
-        `${name} is measured at its capital, ${place}: ${distance} from today's stadium.`,
-      /** No answer was given: the sentence names the top of the table instead. */
-      skipped: (best: string, distance: string) =>
-        `Passed. Top of the table was ${best}, ${distance} from today's stadium.`,
-      timeup: (best: string, distance: string) =>
-        `The whistle went. Top of the table was ${best}, ${distance} from today's stadium.`,
     },
 
     /**
@@ -544,6 +642,8 @@ export const en = {
        * the share: the first year each answer counted, or the last.
        */
       year: { retro: "FIRST", nextgen: "LATEST" },
+      /** The third column's heading in CLOSEST and FURTHEST: each answer's distance. */
+      far: "DISTANCE",
     },
     /**
      * The player's answer above the reveal's table when it did not score (it is not a row):
@@ -568,6 +668,18 @@ export const en = {
         nextgen: (answer: string, year: string, shot: string, points: number) =>
           `Your answer: ${answer}, last did it in ${year}. ${shot}, ${points} points.`,
       },
+      /**
+       * The same in CLOSEST and FURTHEST: "Your answer: Arsenal, 4 miles from Wembley. GOLAZO,
+       * 80 points."
+       */
+      spokenDistance: (
+        answer: string,
+        distance: string,
+        place: string,
+        shot: string,
+        points: number,
+      ) =>
+        `Your answer: ${answer}, ${distance} from ${place}. ${shot}, ${points} points.`,
       /** Read out after a pass or a time-up: "No answer: TIME'S UP, 0 points." */
       spokenNone: (shot: string, points: number) =>
         `No answer: ${shot}, ${points} points.`,
@@ -645,6 +757,32 @@ export const en = {
         ahead: "AHEAD OF THE WHISTLE",
         future: "FROM THE FUTURE",
       } satisfies Record<NextgenTitleId, string>,
+      /** CLOSEST: knows where everything is, from lost on the way in to a bullseye. */
+      closest: {
+        lost: "LOST ON THE WAY IN",
+        wrongstop: "WRONG BUS STOP",
+        directions: "ASKS FOR DIRECTIONS",
+        satnav: "TRUSTS THE SAT NAV",
+        localmap: "READS THE LOCAL MAP",
+        shortcuts: "KNOWS THE SHORTCUTS",
+        localknowledge: "LOCAL KNOWLEDGE",
+        homingpigeon: "HOMING PIGEON",
+        pinpoint: "PINPOINT ACCURATE",
+        bullseye: "BULLSEYE",
+      } satisfies Record<ClosestTitleId, string>,
+      /** FURTHEST: the traveller, from never left town to into orbit. */
+      furthest: {
+        nevertown: "NEVER LEFT TOWN",
+        daytripper: "DAY-TRIPPER",
+        awaycoach: "ON THE AWAY COACH",
+        passport: "PASSPORT AT THE READY",
+        awaydays: "AWAY DAYS REGULAR",
+        airmiles: "AIR MILES COLLECTOR",
+        jetlagged: "ALWAYS JET-LAGGED",
+        globetrotter: "GLOBETROTTER",
+        endsofearth: "ENDS OF THE EARTH",
+        orbit: "INTO ORBIT",
+      } satisfies Record<FurthestTitleId, string>,
     },
 
     fullTime: {
@@ -723,7 +861,7 @@ export const en = {
       },
       /**
        * The button on to the next mode not played today, in the menu's order (HOME, AWAY,
-       * RETRO, NEXT-GEN, round to HOME; none once all four are played). Keyed by the mode
+       * RETRO, NEXT-GEN, CLOSEST, FURTHEST, round to HOME; none once all are played). Keyed by the mode
        * it starts. Ten letters at most: "PLAY NEXT-GEN" wraps the card's row of three
        * buttons at 1920 x 1080 and on a 390 x 844 phone, so every mode's button is its name
        * alone, the same for all four (in the mode's colour, it reads as the way there);
@@ -734,6 +872,8 @@ export const en = {
         away: "AWAY",
         retro: "RETRO",
         nextgen: "NEXT-GEN",
+        closest: "CLOSEST",
+        furthest: "FURTHEST",
       },
       otherSpoken: (mode: string) => `Play ${mode}`,
       menu: "MENU",

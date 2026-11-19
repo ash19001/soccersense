@@ -168,16 +168,18 @@ interface Ambience {
 The home screen's picture: the aerial stadium (`MenuBackdrop`), the wordmark, and the football
 that floats in front of them and is the menu. HOME (the most common answer wins) is its left
 patch, AWAY (the most uncommon answer wins) its right, NEXT-GEN (the most recent answer wins)
-its top patch and RETRO (the oldest answer wins) its bottom one: the four open modes (RETRO
-and NEXT-GEN since 2026-11-13), each framed in its mode's colour. Four more patches are
-locked modes: CLOSEST and FURTHEST on the back, directly behind AWAY and HOME, so that half a turn brings CLOSEST round to where HOME was and FURTHEST
-to where AWAY was, and GUESS WHO and SHOOTOUT on the rim out past HOME and AWAY, a quarter turn
-round (a drag to the right brings GUESS WHO to the front, a drag to the left SHOOTOUT). Which
-pentagon each one is: `docs/API_ART.md`, the menu ball.
+its top patch and RETRO (the oldest answer wins) its bottom one, and CLOSEST and FURTHEST on
+the back, directly behind AWAY and HOME, so that half a turn brings CLOSEST round to where
+HOME was and FURTHEST to where AWAY was: the six open modes (RETRO and NEXT-GEN since
+2026-11-13, CLOSEST and FURTHEST since 2026-11-18), each framed in its mode's colour. Two more
+patches are locked modes: GUESS WHO and SHOOTOUT on the rim out past HOME and AWAY, a quarter
+turn round (a drag to the right brings GUESS WHO to the front, a drag to the left SHOOTOUT).
+Which pentagon each one is: `docs/API_ART.md`, the menu ball. CLOSEST and FURTHEST are not
+struck (2026-11-18, "Kick-offs to the Earth" below).
 
 ```ts
-const OPEN_MODES: readonly Mode[]; // ["home", "away", "nextgen", "retro"]: Mode is all four
-type LockedMode = "closest" | "furthest" | "guesswho" | "shootout"; // (was six: 2026-11-13)
+const OPEN_MODES: readonly Mode[]; // ["home", "away", "nextgen", "retro", "closest", "furthest"]: Mode is all six
+type LockedMode = "guesswho" | "shootout"; // (was six: 2026-11-13; four until 2026-11-18)
 const LOCKED_MODES: readonly LockedMode[];
 const MODE_SLOTS: Record<Mode | LockedMode, BallSlot>; // home left, away right, nextgen top,
 // retro bottom, closest backRight, furthest backLeft, guesswho rimLeft, shootout rimRight
@@ -192,6 +194,7 @@ interface MenuLabels {
   shootout: string; // "SHOOTOUT"
   header: string; // "DID YOU KNOW?": the plane's banner, before the fact (and the sign's, with no messages)
   tagline?: string;
+  spin?: string; // (2026-11-18) "SPIN ME": capitals of the 5 x 7 font in chalk, each upright on a dark tile, on an arc just outside the rim over the top of the ball (like its wind), the tiles one dark band (neither colour dimmed by the light); it comes and goes (spinHintShown: every 7 s, 2 s in, dissolving in over 0.5 s, 2 s there, 0.5 s out, a 4 x 4 dither in sixths); while the ball is in the menu (not at the kick-off, nor on the golden ball), from a radius of 30; reduced motion: there, half dissolved; leave out for none (the link preview's picture does)
   golden?: MenuSign; // the sign as the ball turns to gold: { header: "GOLDEN BALL!", text: "YOU FOUND IT" }
 }
 interface MenuSceneOptions {
@@ -229,7 +232,8 @@ class MenuScene implements Scene {
   setScores(scores: Partial<Record<Mode, number | null>>): void; // a badge on the patch; null takes it off
   setMoonPhase(phase: number): void; // 0 new, 0.5 full
   setHovered(mode: Mode | null): void; // hover or keyboard focus on a DOM caption: lights the patch
-  choose(mode: Mode): boolean; // start the kick-off from the DOM; false if it cannot start now
+  setFloor(y: number | null): void; // (2026-11-18) the top of the DOM cards under the ball, in the scene's rows: the ball rests a pixel clear of them at the bottom of its breath, lifted 0.35 of its radius at most; taken up only while it is idle or coming in (watchFloor in app/routes/scene-edges.ts measures it)
+  choose(mode: Mode): boolean; // start the kick-off from the DOM (turning the ball to show the mode first); false if it cannot start now
   reset(): void; // back to "idle" with no entrance, from any phase
 }
 ```
@@ -238,6 +242,45 @@ It takes nothing from `~/art` but the backdrop contract (`MenuBackdrop`: `resize
 `setSign`, `setMessages`, `setBanner`, `setMoonPhase`, `target`, `setRoar`, `draw`, `planeBox`, `crashPlane`, `mendPlane`, `airshipAt`, `pokeAirship`, `mascotAt`,
 `pokeMascot`, `cuesBetween`), `menuLayout`'s `cx`,
 `ballR`, `ballCy` and `logo`, the ball, the logo and the palette. A test holds it to that.
+
+### Kick-offs to the Earth (CLOSEST, FURTHEST; 2026-11-18)
+
+The product owner: "closest turns it to globe and zooms in. furthest just zooms out of the
+home screen entirely making it zoom out for that to be earth" (until then they flew as HOME's
+and AWAY's balls do, "just copying home and away doesnt look good"). Neither is struck; both
+use the day's place (`MenuSceneOptions.place`, the page's `today.stadium`, never named):
+CLOSEST `~/art/globe` in the world map's colours, FURTHEST `~/art/earth-zoom` (the ground
+from the street to space). Times from `K_HIT` (the patch flashes until then):
+
+- **CLOSEST, the Earth up close**: the ball spins up and the Earth dissolves in over it in
+  0.3 s (16 steps), spinning east; then for 0.6 s it comes closer, swelling and moving to the
+  middle of the screen until all of it is 0.42 of the shorter side across, the town still
+  round it; it spins on there (300 degrees a second at first, easing to 60), the whole globe
+  in sight, and the iris closes onto a ring round it. No pin (the product owner, the same
+  day: "no pin should drop, instead its spinning showing the whole globe then transition
+  happens"). Sounds: the time-turn sweep, wind falling as it settles, a twinkle as it is there.
+- **FURTHEST, from above and back** (the product owner, the same day: "it should feel like a
+  place within that globe", then "Maybe the transition should be making stadium birds eye
+  view first and as it zooms out it can get pixelated too"):
+  - **The rise** (0.45 s): the camera rises from the home picture's (`PICTURE_TILT`, its
+    elevation) to straight above the centre spot, which stays where it is on the screen,
+    looking down on the same town from above (`~/art/stadium-top`: the plan the picture is
+    drawn from, the stadium in the day's colours); the picture dissolves into it in its first
+    0.3 s, its sky first. It holds there 0.12 s.
+  - **The pull back** (1.5 s, evenly in scale): to the Earth among stars, 0.34 of the shorter
+    side across, in a mosaic that grows to 5 pixels at the middle and goes again as the Earth
+    comes whole. The town from above shrinks in averaged steps, so it pixelates cleanly; its
+    streets of houses go on past it (the same streets, repeated), with parks, then the town
+    among its fields and roads, the country, the globe (`~/art/earth-zoom`). By night the
+    stadium is floodlit, and the pixelated town has lights. From 0.55 of the way (eased) the
+    Earth drifts to the middle of the screen; once whole it turns east 12 degrees a second
+    and the iris closes on it 0.3 s after.
+  - Sounds: the sweep, wind falling away over the rise and the pull, a twinkle as the Earth
+    arrives.
+  - The town from above is built a slice a frame (about 2 ms) while the ball hovers, from
+    1.5 s after the menu opens, and faster once FURTHEST is chosen.
+- CLOSEST's iris closes 0.42 s later than HOME's, FURTHEST's when its pull back is done and
+  0.3 s more (`late`); `onChoose` comes then.
 
 ### Phases and timings
 
@@ -328,8 +371,8 @@ the kick-off is a cut: the patch lights for 0.15 s, then ink and `onChoose`.
   and `choose(mode)` returns false for it (2026-11-13). The four open modes choose from any pose in which
   they are in view (their pentagon is under the pointer, or in the menu pose NEXT-GEN's or
   RETRO's name tag: the scene hit-tests with its patches, `ballSlotAt(ball, x, y, patches)`,
-  so the word is hovered, pressed and chosen exactly as its patch is, 2026-11-16); from a pose other than the menu pose
-  the ball is first brought round, as for `choose` mid-spin (below). (A spun ball that comes
+  so the word is hovered, pressed and chosen exactly as its patch is, 2026-11-16); a mode is struck showing its
+  patch, the ball turned to it first if it must be, as for `choose` (below). (A spun ball that comes
   to rest with NEXT-GEN or RETRO facing the viewer goes home, as for HOME and AWAY.)
 - A locked patch under the mouse lifts a step (it never takes a colour); `onHover` is only
   about the open modes, so it stays `null` there.
@@ -376,13 +419,22 @@ of the hover's pose; the bob, nod and rock go on under it.
 - **Catch.** A press on a turning ball holds it (it is a drag at once) and never chooses.
 - While dragged or turning (not at rest), no patch hovers or chooses from the pointer
   (`onHover(null)` when a drag starts); a hover set from the DOM still shows.
-- **`choose(mode)` mid-spin** (or mid-drag) is taken at once: `onKickoff` fires, the patch shows
-  pressed, the hand lets go, and the ball is brought round to its pose in 0.24 s (fast, easing
-  in), then struck as usual. `onChoose` comes 0.24 + 1.81 s after `onKickoff`. With reduced
-  motion it is put in its pose at once and struck.
+- **A mode is struck showing it** (2026-11-18; the product owner: "it spins it to focus on the
+  game mode that was selected then does its animation", not back to HOME and AWAY first).
+  Each mode has a focus pose (`focusPose`): HOME's and AWAY's the menu pose, the others' the
+  pose that shows their patch at rest (`ballShowPose`: NEXT-GEN and RETRO straight on,
+  CLOSEST and FURTHEST side by side where HOME and AWAY were). `choose(mode)` (from the DOM,
+  or a press on its patch) on a ball not in that pose, or mid-spin or mid-drag, is taken at
+  once: `onKickoff` fires, the patch shows pressed, the hand lets go, and the ball is turned to
+  the focus pose in 0.24 s (fast, easing in), then struck there; the kick-off keeps the turn
+  (its flight's spin and the eras' spins go on from it). A ball in the menu pose choosing
+  HOME or AWAY is struck at once, as before. `onChoose` comes 0.24 + 1.81 s after `onKickoff`
+  when it turned. A mode chosen while the ball is still arriving is turned to once it has
+  arrived. With reduced motion it is put in the pose at once and struck.
 - **Reduced motion.** A drag still turns it, but there is no momentum: let go, it comes to rest
   at once, critically damped (no overshoot): home in under a second, or showing a locked patch.
-- A stalled step (over 10 s), `reset()` and a kick-off put it straight home.
+- A stalled step (over 10 s) and `reset()` put it straight home; a kick-off keeps the pose it
+  was struck in.
 - The page passes `className="touch-none"` to its `PixelStage`, so a finger dragging on the canvas
   never scrolls or zooms the page.
 
@@ -804,6 +856,81 @@ smoke, the flame jets and the confetti cannons; `docs/CAREER_SCENE.md` section 4
 it: `tsx tools/snap.ts career/pyro-worldie-t4 --size 960x540 --t 2`, also
 `career/pyro-<worldie|golazo|tapin>-t<0|1|2|3|4|6>` and the same after `pyro-retro-` and
 `pyro-nextgen-`).
+
+## The world map (`~/scenes/map`, 2026-11-18)
+
+CLOSEST's and FURTHEST's scenery, in place of the career. The game page's controller drives
+either through `GameScene` (`~/scenes/game-scene`): `setTotal`, `holdOpening`,
+`beginOpening`, `waiting`, `playShot(shot, onDone?, landing?)`, `promote`, `showFullTime`,
+and `ask?()` (a new question's clock has started).
+
+```ts
+interface ShotLanding {
+  lat: number;
+  lng: number;
+  km: number | null;
+} // where the answer came down, and how far from the day's place
+class MapScene implements GameScene {
+  constructor(opts: {
+    seed: number;
+    mode: Mode; // "closest" or "furthest"
+    place: { lat: number; lng: number; name: string }; // the day's place: the pin, and its plate
+    distance: (km: number) => string; // the counter's words (formatDistance in the player's unit)
+  });
+}
+```
+
+- **The ground** is `~/art/earth-zoom`'s at any scale (2026-11-18), round the day's place: the
+  home picture's town from above (`~/art/stadium-top`, the stadium in the day's colours, built a
+  slice a frame from the start), its streets repeated, then the town, its fields and roads, the
+  country, the globe among stars; coasts from Natural Earth's land (`app/art/world-map.ts`).
+  Tiers 6 and 7 are at night whatever the sky (`ambience().night`), as the career's are.
+- **The camera**: a middle, km a pixel and the row of the picture its middle is on. It eases
+  between views (the scale even in proportion, the pan following the view's width, so that
+  going out it waits until both ends fit and going in it is over while the view is wide).
+  Moving, the ground is drawn in a mosaic of a few pixels; still, it is drawn sharp a band of
+  rows a frame (about 40,000 samples) and shown when done. Only a move blurs it (the product
+  owner, 2026-11-19: "it should only be blurry on transition but after it should always be
+  focus"): a move to where the camera already is is none, and while a new light, the pin
+  easing under the board or the town from above being built is drawn, what was shown stays
+  (moved to the camera's row); after a move, the mosaic until it is sharp.
+- **The career's view** (`homeView`; the product owner, 2026-11-18, from image demos: "sure do
+  it"): CLOSEST closes in on the place a step a tier (`CLOSEST_ACROSS`, km across: the globe,
+  4,500, 1,000, 150, 20, 2.6, 0.7, 0.34), the ground beside the pin in a badge
+  (`~/art/ground-badge`) to tier 4; from tier 5 the map shows it, with flags in the streets
+  (5), flashes in the crowd (6), the cup on the centre spot and fireworks (7). FURTHEST is a
+  journey (`./map-journey.ts`, `journeyFor`): tier 0 the place close up, then home and each
+  tier's stop framed together, the route dotted stop to stop, the stop's pin, its badge and
+  its name; from tier 6 the whole globe turned most of the way to the final on the far side,
+  home round the back (an arrow at the edge points to it).
+- **The pin** stands on the day's place with its name on a plate over it, clear of the board;
+  rings at 500, 1,500, 3,000 and 6,000 km round it in CLOSEST, round its antipode (an X) in
+  FURTHEST.
+- **A shot**: if the landing is not in sight already (on the picture, above where the sheet
+  comes up, the view no more than 2.5 times as wide as it needs), the camera goes to a view
+  holding the pin and the landing (`frameView`: the
+  biggest that keeps the landing above the reveal's sheet, the pin clear of the board, or
+  under it when that makes the view much bigger), in 0.85 of the flight; the ball rises from
+  the pin along the great circle (a trail of dots), lands with a ring, its distance counting up
+  beside it; a marker in the shot's colour stays. The next question (`ask`) brings the camera
+  home in 1 s. A landing off the picture has an arrow at its edge. No answer: the pin shakes.
+- **A promotion**: CLOSEST's camera goes in to the next tier's view (1.3 s), the pin gold, then
+  the new ground arrives in its badge (0.8 s); FURTHEST's footballer travels (coach, ferry,
+  train or plane, 1.6 s from 0.3 s) with "NEXT STOP" under him while the camera reframes, and
+  arrives (0.8 s). `onDone` then; at once with reduced motion. `showFullTime` goes to the tier
+  reached. Sounds: the sweep, the wind on the way, a cheer on arrival, fireworks at tier 7, and
+  the career's kick, landing, score and whistle cues.
+- **The opening**: an iris opens on the pin, by itself from the first frame as the career's
+  arrival does, unless the page holds it first (`holdOpening`, behind the mode card); a game
+  the page carries on with is not held (2026-11-18: it was left on ink until then).
+- **The board over it** (`setCeiling(y)`, 2026-11-18): the game page tells it where the board
+  ends (`watchCeiling`, `app/routes/scene-edges.ts`, the board at a question's height); the
+  pin comes down from `PIN_Y` (0.42 of the height) until its name plate is 6 pixels (at the
+  pin's scale) under that, to 0.56 at most, easing there. The name wraps to the picture's
+  width (`plateLines`).
+- **Shots** for the snap tool (`app/scenes/map.shots.ts`): `map/closest`, `map/furthest`,
+  `map/flight`, `map/opening`, and the career's view at each tier: `map/closest-0` to
+  `map/closest-7`, `map/furthest-0` to `map/furthest-7`.
 
 ## The career scene and the game page (`~/scenes/career`, `app/routes/play/`)
 

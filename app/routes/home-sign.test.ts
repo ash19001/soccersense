@@ -10,13 +10,15 @@ import { signMessages } from "./home-sign";
 
 const DAY = 12;
 
-type Mode = "home" | "away" | "retro" | "nextgen";
+type Mode = "home" | "away" | "retro" | "nextgen" | "closest" | "furthest";
 /** Today's totals: every mode unplayed unless given. */
 const day = (scores: Partial<Record<Mode, number>> = {}) => ({
   home: scores.home ?? null,
   away: scores.away ?? null,
   retro: scores.retro ?? null,
   nextgen: scores.nextgen ?? null,
+  closest: scores.closest ?? null,
+  furthest: scores.furthest ?? null,
 });
 
 const BOARDS = mockBoards(DAY);
@@ -45,6 +47,8 @@ describe("the airship's messages", () => {
       { header: "AWAY", text: "IS WAITING" },
       { header: "RETRO", text: "IS WAITING" },
       { header: "NEXT-GEN", text: "IS WAITING" },
+      { header: "CLOSEST", text: "IS WAITING" },
+      { header: "FURTHEST", text: "IS WAITING" },
       {
         header: "ON THE BOARD",
         text: BOARDS.modes.home.count.toLocaleString("en-GB"),
@@ -58,6 +62,8 @@ describe("the airship's messages", () => {
       "AWAY",
       "RETRO",
       "NEXT-GEN",
+      "CLOSEST",
+      "FURTHEST",
     ]);
     // nor another day's
     expect(
@@ -85,6 +91,8 @@ describe("the airship's messages", () => {
       "AWAY",
       "RETRO",
       "NEXT-GEN",
+      "CLOSEST",
+      "FURTHEST",
       "ON THE BOARD",
     ]);
     expect(out[0].text).toBe("360 PTS");

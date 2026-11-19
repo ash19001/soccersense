@@ -511,7 +511,7 @@ describe.each(PLAYERS)("%s", (name, account, settings) => {
     test("addresses, methods and bodies that are not the API's", async () => {
       const env = world();
       const me = player(env);
-      expect((await me.call("start", NOON, {}, "closest")).status).toBe(404);
+      expect((await me.call("start", NOON, {}, "guesswho")).status).toBe(404);
       expect((await me.call("shoot", NOON)).status).toBe(404);
       expect((await me.call("start/again", NOON)).status).toBe(404);
       expect((await me.call("start", NOON, {}, "home", "GET")).status).toBe(

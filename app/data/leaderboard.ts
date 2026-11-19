@@ -226,6 +226,8 @@ const MODE_SALT: Readonly<Record<Mode, number>> = {
   away: 2,
   retro: 3,
   nextgen: 4,
+  closest: 5,
+  furthest: 6,
 };
 
 function saltOf(mode: Mode): number {

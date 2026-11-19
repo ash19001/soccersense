@@ -66,3 +66,16 @@ export function formatDistance(km: number, locale: string): string {
   if (!miles) return `${group(whole)} km`;
   return whole === 1 ? "1 mile" : `${group(whole)} miles`;
 }
+
+/**
+ * The same, short, for a column of figures (the reveal's table in CLOSEST and FURTHEST,
+ * where "1,266 miles" took two lines): "1,266 mi", "5 km", "<1 mi".
+ */
+export function formatDistanceShort(km: number, locale: string): string {
+  const miles = usesMiles(locale);
+  const unit = miles ? "mi" : "km";
+  const safeKm = Number.isFinite(km) ? Math.max(0, km) : 0;
+  const value = miles ? safeKm / KM_PER_MILE : safeKm;
+  if (value < 0.5) return `<1 ${unit}`;
+  return `${group(Math.round(value))} ${unit}`;
+}

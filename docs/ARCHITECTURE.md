@@ -239,6 +239,17 @@ Cache what does not change: static layers are rendered once per resize or lighti
 their own `Surface` and copied each frame. The per-frame budget is 4 ms at 960 x 540 (see "The
 canvas's scale").
 
+A game page drives a `GameScene` (`app/scenes/game-scene.ts`): what the page asks of the
+scenery behind a game (`setTotal`, the opening, `playShot`, `promote`, `showFullTime`).
+HOME, AWAY, RETRO and NEXT-GEN play the career (`CareerScene`); CLOSEST and FURTHEST play the
+world map (`MapScene`, `app/scenes/map.ts`, 2026-11-18), which is given the day's place and,
+with each shot, where the answer came down and how far that is (`ShotLanding`). The map's land
+is Natural Earth's (public domain) rasterised at half a degree by `tools/world-map.ts` into
+`app/art/world-map-data.ts`; `app/art/world-map.ts` reads it and works out great circles. The
+map draws the ground at any scale with `app/art/earth-zoom.ts` and the home town from above
+with `app/art/stadium-top.ts`; its career is a camera closing in (CLOSEST) or a journey through
+`app/data/cities.ts` (FURTHEST, `app/scenes/map-journey.ts`).
+
 ## 5. Game rules (`app/game`)
 
 The rules are built. **`docs/API_GAME.md` is the reference** (every export, and how an interface
@@ -708,8 +719,8 @@ Known, and not in this step:
 
 - **Past days' boards** can be asked for, but nothing on the page shows them yet (the
   archive, with membership).
-- **Members' modes** (CLOSEST, FURTHEST, and the rest) will have boards of their own when
-  they are built; the API already answers per mode.
+- **The modes still to come** (GUESS WHO, SHOOTOUT) will have boards of their own when
+  they are built; the API answers per mode, and CLOSEST and FURTHEST (2026-11-18) have theirs.
 
 ### Every player kept by the server (2026-11-18)
 
@@ -909,10 +920,12 @@ Nothing of this is built yet ("Don't build it yet, just tell me").
   board. Only an account's first game of a day and mode counts.
 - **Membership** (Paddle, which sells as merchant of record and handles VAT; about £2.99 a month
   or £19.99 a year):
-  - Free, no account needed: HOME, AWAY, RETRO and NEXT-GEN, once a day each.
-  - Members: the locked modes (CLOSEST, FURTHEST, and GUESS WHO, SHOOTOUT and any later ones),
-    once a day each with their own daily leaderboards; and unlimited play: any past day from
-    the archive, in any mode they have. Replays never count on a leaderboard.
+  - Free, no account needed: HOME, AWAY, RETRO and NEXT-GEN, once a day each; and CLOSEST and
+    FURTHEST for now (the product owner, 2026-11-18: "for now it will always be free but when
+    game is popular i might but it behind the membership").
+  - Members: the locked modes (GUESS WHO, SHOOTOUT and any later ones, and perhaps CLOSEST and
+    FURTHEST later), once a day each with their own daily leaderboards; and unlimited play: any
+    past day from the archive, in any mode they have. Replays never count on a leaderboard.
   - The server decides what a player may open; the page only shows it.
 - **For the product owner to set up first:** a Cloudflare account, the domain, a Paddle
   application (its checks take days and it reviews the site), Resend, a Google OAuth client;

@@ -26,14 +26,15 @@ export const RULES: readonly Rule[] = [
 /**
  * The rule each mode is scored by: HOME is `common` (the most popular answer wins), AWAY
  * `niche` (the least popular), RETRO `oldest` (the earliest year), NEXT-GEN `newest` (the
- * latest). The distance rules, `closest` and `furthest`, belong to the locked modes CLOSEST
- * and FURTHEST: they are switched on by adding the mode and mapping it to them here.
+ * latest), CLOSEST `closest` (the place nearest the day's place) and FURTHEST `furthest`.
  */
 export const MODE_RULES: Readonly<Record<Mode, Rule>> = Object.freeze({
   home: "common",
   away: "niche",
   retro: "oldest",
   nextgen: "newest",
+  closest: "closest",
+  furthest: "furthest",
 });
 
 /** The rule a mode is scored by (`MODE_RULES`); HOME's for anything unknown. */
@@ -109,7 +110,8 @@ export function shotsOf(
   stadium: LatLng,
   rule: Rule,
 ): Shot[] {
-  if (rule === ruleFor(question.mode)) {
+  // The distance rules' shots depend on the day's place: never filed, always worked out.
+  if (rule === ruleFor(question.mode) && !isDistanceRule(rule)) {
     return question.answers.map((answer) => answer.shot);
   }
   if (isYearRule(rule)) {

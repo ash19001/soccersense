@@ -351,6 +351,8 @@ describe("home page: in the browser", () => {
       away: null,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
     expect(screen.getByText("478")).toHaveClass("ss-menu__score");
     expect(screen.getByText(strings.home.played(478))).toHaveClass("ss-sr");
@@ -370,6 +372,8 @@ describe("home page: in the browser", () => {
       away: 70,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
     expect(screen.getByText("70")).toHaveClass("ss-menu__score");
   });
@@ -504,7 +508,7 @@ describe("home page: today's leaderboard", () => {
     expect(within(sheet).queryByText("Top Bins")).toBeNull();
   });
 
-  test("has a tab for each of the four modes, and each has its own table", () => {
+  test("has a tab for each of the six modes, and each has its own table", () => {
     mount();
     fireEvent.click(screen.getByRole("button", { name: text.open }));
     const sheet = screen.getByRole("dialog");
@@ -514,8 +518,10 @@ describe("home page: today's leaderboard", () => {
       "AWAY",
       "RETRO",
       "NEXT-GEN",
+      "CLOSEST",
+      "FURTHEST",
     ]);
-    for (const mode of ["retro", "nextgen"] as const) {
+    for (const mode of ["retro", "nextgen", "closest", "furthest"] as const) {
       const label = strings.home.modes[mode].label;
       fireEvent.click(within(sheet).getByRole("tab", { name: label }));
       const table = within(sheet).getByRole("table", {
@@ -636,20 +642,20 @@ describe("home page: the captions and the ball", () => {
     expect(status).toHaveAttribute("aria-live", "polite");
     expect(status).toHaveTextContent("");
 
-    act(() => scene.onLocked?.("closest"));
+    act(() => scene.onLocked?.("guesswho"));
     // the words on screen are the words read out
-    expect(status.textContent).toBe(strings.home.soon.closest);
-    expect(status.textContent).toContain(strings.home.canvas.closest);
+    expect(status.textContent).toBe(strings.home.soon.guesswho);
+    expect(status.textContent).toContain(strings.home.canvas.guesswho);
     act(() => {
       vi.advanceTimersByTime(2000);
     });
     // A second press, on another patch, names that one and starts the wait again.
-    act(() => scene.onLocked?.("furthest"));
-    expect(status.textContent).toBe(strings.home.soon.furthest);
+    act(() => scene.onLocked?.("shootout"));
+    expect(status.textContent).toBe(strings.home.soon.shootout);
     act(() => {
       vi.advanceTimersByTime(2000);
     });
-    expect(status.textContent).toBe(strings.home.soon.furthest);
+    expect(status.textContent).toBe(strings.home.soon.shootout);
     act(() => {
       vi.advanceTimersByTime(600);
     });
@@ -700,6 +706,35 @@ describe("home page: the captions and the ball", () => {
     const { header, text } = strings.home.canvas.golden;
     expect(header.length).toBeLessThanOrEqual(12);
     expect(text.length).toBeLessThanOrEqual(12);
+  });
+});
+
+describe("home page: all modes", () => {
+  test("the cards are the first four modes; All modes lists all six and starts the one picked", () => {
+    const choose = vi.spyOn(MenuScene.prototype, "choose");
+    mount();
+    // the product owner, 2026-11-18: "the home screen cards at the bottom should only have
+    // the original 4"
+    const cards = [...document.querySelectorAll(".ss-menu__card")].map((c) =>
+      c.getAttribute("data-mode"),
+    );
+    expect(cards).toEqual(["home", "away", "retro", "nextgen"]);
+
+    const words = strings.home.allModes;
+    fireEvent.click(screen.getByRole("button", { name: words.open }));
+    const list = screen.getByRole("dialog", { name: words.heading });
+    const rows = [...list.querySelectorAll(".ss-modes__mode")];
+    expect(rows.map((r) => r.getAttribute("data-mode"))).toEqual([
+      "home",
+      "away",
+      "retro",
+      "nextgen",
+      "closest",
+      "furthest",
+    ]);
+    fireEvent.click(within(list).getByRole("button", { name: /CLOSEST/ }));
+    expect(choose).toHaveBeenLastCalledWith("closest");
+    expect(screen.queryByRole("dialog", { name: words.heading })).toBeNull();
   });
 });
 
@@ -784,7 +819,8 @@ describe("home page: choosing a mode", () => {
         expect(scene.choose(mode)).toBe(true);
       });
       expect(document.querySelector(".ss-menu")).toHaveClass("is-stowed");
-      run(scene, 2);
+      // the ball turns to show the mode first (2026-11-18), then plays it out
+      run(scene, 2.5);
       expect(go).toHaveBeenCalledTimes(1);
       expect(go).toHaveBeenCalledWith({ pathname: path, search: "?day=1" });
       unmount();

@@ -4,6 +4,7 @@ import {
   distanceKm,
   EARTH_RADIUS_KM,
   formatDistance,
+  formatDistanceShort,
   KM_PER_MILE,
   usesMiles,
 } from "./geo";
@@ -102,6 +103,17 @@ describe("usesMiles", () => {
     ["", false],
   ])("%s -> %s", (locale, expected) => {
     expect(usesMiles(locale)).toBe(expected);
+  });
+});
+
+describe("formatDistanceShort", () => {
+  it("is the figure and mi or km, for a column of them", () => {
+    expect(formatDistanceShort(18_163, "en-GB")).toBe("11,286 mi");
+    expect(formatDistanceShort(KM_PER_MILE, "en-GB")).toBe("1 mi");
+    expect(formatDistanceShort(18_163, "fr-FR")).toBe("18,163 km");
+    expect(formatDistanceShort(0.2, "en-GB")).toBe("<1 mi");
+    expect(formatDistanceShort(0.2, "de-DE")).toBe("<1 km");
+    expect(formatDistanceShort(Number.NaN, "de-DE")).toBe("<1 km");
   });
 });
 

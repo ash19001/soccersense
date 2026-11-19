@@ -2,12 +2,18 @@
 
 /**
  * The modes on the ball that can be played: HOME and AWAY (ranked by how many players give
- * an answer), RETRO and NEXT-GEN (ranked by an answer's year). The menu's order is `MODES`.
+ * an answer), RETRO and NEXT-GEN (ranked by an answer's year), CLOSEST and FURTHEST (ranked
+ * by how far an answer's place is from the day's place, since 2026-11-18). The menu's order
+ * is `MODES`.
  */
-export type Mode = "home" | "away" | "retro" | "nextgen";
+export type Mode =
+  "home" | "away" | "retro" | "nextgen" | "closest" | "furthest";
 
 /** The two modes ranked by an answer's year: RETRO (the oldest wins), NEXT-GEN (the newest). */
 export type EraMode = "retro" | "nextgen";
+
+/** The two modes ranked by distance from the day's place: CLOSEST and FURTHEST. */
+export type DistanceMode = "closest" | "furthest";
 
 /**
  * How a question's answers are ranked, best first.
@@ -15,8 +21,8 @@ export type EraMode = "retro" | "nextgen";
  * - `niche`: the least popular answer wins (AWAY).
  * - `oldest`: the answer with the earliest year wins (RETRO): its first year, `years[0]`.
  * - `newest`: the answer with the latest year wins (NEXT-GEN): its last year.
- * - `closest`: the answer whose place is nearest today's stadium wins (locked mode CLOSEST).
- * - `furthest`: the furthest from today's stadium wins (locked mode FURTHEST).
+ * - `closest`: the answer whose place is nearest the day's place wins (CLOSEST).
+ * - `furthest`: the furthest from the day's place wins (FURTHEST).
  */
 export type Rule =
   "common" | "niche" | "oldest" | "newest" | "closest" | "furthest";

@@ -16,8 +16,9 @@ think of. Each answer is one of six shots, from a miss (0) to a worldie (100), a
 lifting the World Cup. At full time the total also earns the player a title (section 6).
 
 (Changed on 2026-11-11. HOME and AWAY used to be "closest to today's stadium" and "furthest from
-it". Those two rules are kept, as the locked modes **CLOSEST** and **FURTHEST** on the back of
-the ball; **NEXT-GEN** and **RETRO** were locked too, on its top and bottom patches.)
+it". Those two rules were kept, as the modes **CLOSEST** and **FURTHEST** on the back of the
+ball, locked until 2026-11-18; **NEXT-GEN** and **RETRO** were locked too, on its top and bottom
+patches, until 2026-11-13.)
 
 **RETRO and NEXT-GEN** (2026-11-13; the product owner: "It's the same as home and away in the
 sense that it's general questions and you slowly progress from park to World Cup. However,
@@ -34,7 +35,42 @@ they use HOME's scenery. Their questions and years: `app/data/questions/retro.ts
 `next-gen.ts`, sources in `docs/data-notes/retro-next-gen.md`. Their pages are `/play/retro`
 and `/play/next-gen`. Each mode has its colour, on its badge, the board, the reveal, the
 full-time card, the share picture and the stats: HOME warm red-orange, AWAY teal, RETRO old
-gold (a sepia-warmed brass), NEXT-GEN electric magenta.
+gold (a sepia-warmed brass), NEXT-GEN electric magenta, CLOSEST green, FURTHEST periwinkle.
+
+**CLOSEST and FURTHEST** (open since 2026-11-18; the product owner: "this should work very
+similar to home and away except in the transition title screen it should also say what the
+location/stadium etc is. this should also be clearly and obviously visible within the game so
+they can always see it"). Each day has a **place** on the map: a stadium, a city or a landmark
+(the product owner's choice: "Stadiums, cities and landmarks"), 30 of them in turn, never two
+days running of one kind (`app/data/places.ts`; sources in `docs/data-notes/places.md`).
+Every valid answer has a place of its own, and the question says which ("Measured by where the
+player was born": a player's or a manager's birthplace, a club's ground, a stadium, a country's
+capital). In **CLOSEST** the answer whose place is nearest the day's place wins; in
+**FURTHEST** the one furthest from it, by great-circle distance. The shots come from the same
+standing and bands as the other modes', the gap measured in kilometres from the best place,
+worked out from the day's place as the game is played. Everything else plays as HOME does:
+seven questions, the clock, the six shots, the career, titles of their own.
+
+- **The day's place is named in these two modes**, unlike the home screen's stadium (section
+  2): on the mode's title card ("CLOSEST / GIVE THE ANSWER NEAREST TO / WEMBLEY, LONDON"), on a
+  plate on the board for the whole game ("TODAY'S PLACE Wembley, London"), on the map's pin, in
+  the reveal ("Lionel Messi: 1,266 miles from Maracanã") and on the full-time card.
+- **The scenery is a pixel world map** (the product owner's choice of the ideas offered, "Pixel
+  world map"): the land in the day's light, the pin on the day's place, its name on a plate
+  over it, always below the board (2026-11-18: it had run into it), with rings round it (in
+  FURTHEST round the far side of the world, the place's antipode, marked with an X). Each
+  answer is a ball kicked from the pin along the great circle; it lands on the answer's place,
+  its distance counted up beside it, and a marker in its shot's colour stays where it came
+  down. The camera pulls back (or goes in) to hold the pin and the landing, and comes home on
+  the next question (`MapScene`, `app/scenes/map.ts`). The map is the ground at any scale,
+  from the town round the place to the globe, and the career plays on it (section 5.3).
+- In the table the distance is short ("1,266 mi"); in the sentence it is whole ("1,266 miles").
+- Their pages are `/play/closest` and `/play/furthest`. They are free, like the other four
+  (the product owner, 2026-11-18: "for now it will always be free but when game is popular i
+  might but it behind the membership").
+- Their sample questions (testing only, until the weekly drafts have their own) are seven of
+  the other modes' sample questions each whose answers are spread over the world
+  (`app/data/questions/distance.ts`).
 
 ## 2. Daily structure
 
@@ -44,16 +80,16 @@ gold (a sepia-warmed brass), NEXT-GEN electric magenta.
   back does not open another day's game. The page reads the time from the `Date` header of a
   request to its own address, and a game does not start until it has (`gameClock`, docs/API_UI.md).
 - **The stadium has no name** (the product owner, 2026-11-17: "the stadium can still change
-  colour daily but the name isn't mentioned anywhere and shouldn't be mentioned anywhere").
+  colour daily but the name isn't mentioned anywhere and shouldn't be mentioned anywhere";
+  CLOSEST and FURTHEST name the day's place, section 1, and only they do).
   The stadium in the home screen's picture is the art's own, in club colours picked by the
   day's number. No screen, share, picture or read-out says which stadium a day's is, and
   nothing in the data or the interface text holds a stadium's name, city or country.
-- One pin per day, shared by every mode: a place on the map and an id, nothing more. In the
-  demo it rotates through `app/data/stadiums.ts`: index `(dayNumber - 1) mod count`. It does
-  not score HOME or AWAY; it will be the scoring pin of CLOSEST and FURTHEST when they are
-  switched on (every answer keeps a place on the map for them: where a player was born, a
-  club's ground, a stadium, a country's capital), and their words call it "today's stadium"
-  and no more.
+- One pin per day, shared by every mode: the day's place (`app/data/places.ts`, which
+  `app/data/stadiums.ts` hands on as `STADIUMS`), index `(dayNumber - 1) mod count`. It
+  does not score HOME, AWAY, RETRO or NEXT-GEN; it is the scoring pin of CLOSEST and FURTHEST
+  (every answer keeps a place on the map for them: where a player was born, a club's ground, a
+  stadium, a country's capital), which call it "today's place" and give its name.
 - Each mode has its **own** 7 questions, so the reveal in one mode never gives away the other.
   The demo ships one fixed set per mode.
 - Popularity is a share of players in percent, at most one decimal place, and the shares of a
@@ -192,14 +228,14 @@ reverse in AWAY).
 
 Each mode is scored by a **rule** that ranks the question's answers, best first:
 
-| rule       | used by           | best answer                       |
-| ---------- | ----------------- | --------------------------------- |
-| `common`   | HOME              | the highest share of players      |
-| `niche`    | AWAY              | the lowest share of players       |
-| `oldest`   | RETRO             | the earliest first year           |
-| `newest`   | NEXT-GEN          | the latest last year              |
-| `closest`  | CLOSEST (locked)  | the place nearest today's stadium |
-| `furthest` | FURTHEST (locked) | the place furthest from it        |
+| rule       | used by  | best answer                     |
+| ---------- | -------- | ------------------------------- |
+| `common`   | HOME     | the highest share of players    |
+| `niche`    | AWAY     | the lowest share of players     |
+| `oldest`   | RETRO    | the earliest first year         |
+| `newest`   | NEXT-GEN | the latest last year            |
+| `closest`  | CLOSEST  | the place nearest today's place |
+| `furthest` | FURTHEST | the place furthest from it      |
 
 RETRO and NEXT-GEN file their shots by the same standing and bands, with the gap measured in
 years from the best year (`shotsFor` on each answer's first or last year); answers from the
@@ -216,8 +252,9 @@ In AWAY every valid answer is in the table, so the most uncommon answer is still
 nobody scores for an answer that is not on the list.
 
 The distance rules have no shots in the data: their shots come from the same standing and
-bands, with the gap measured in kilometres from the best place. They are tested and ready for
-when CLOSEST and FURTHEST are switched on.
+bands, with the gap measured in kilometres from the best place, worked out from the day's place
+as the game is played (`shotsOf`). A distance question needs no shares, only places: at least
+three different ones (`checkQuestion`).
 
 Shares are shown as `34%`, `2.5%`, `0.4%`. For the distance rules, distances are shown in miles
 for `en-GB` and `en-US` locales and in kilometres otherwise.
@@ -293,6 +330,38 @@ pocket of travelling fans in teal.
 The stand and pitch build-out per tier is shared by both modes. Only the backdrop, weather,
 crowd colours and kit differ.
 
+### 5.3 CLOSEST and FURTHEST: the career on the map
+
+The same ladder, on the map (the product owner, 2026-11-18, from image demos of the stages:
+"sure do it"). Between answers the map rests on the career's view; an answer's flight pulls
+the camera out to hold the pin and the landing, and the next question brings it home.
+Tiers 6 and 7 are played at night, whatever the sky.
+
+**CLOSEST: the local hero.** Everything happens at the day's place, and the map closes in on
+it a step a tier; the ground he plays at grows beside the pin (a small panel, the ground from
+above) until the map is close enough to show it itself.
+
+| tier | the map                            | the ground                                      |
+| ---- | ---------------------------------- | ----------------------------------------------- |
+| 0    | the whole globe, the place a speck | a park: jumpers for goalposts                   |
+| 1    | its continent                      | a pitch, little goals, a changing hut           |
+| 2    | its country                        | one covered stand, floodlight poles             |
+| 3    | its region: towns, fields, roads   | stands on three sides, a terrace, a scoreboard  |
+| 4    | its city                           | a full stadium                                  |
+| 5    | the neighbourhood, from above      | the stadium itself; flags in the streets        |
+| 6    | the ground from above, at night    | the final: flashes in the crowd                 |
+| 7    | the pitch from above, at night     | the cup on the centre spot, fireworks, confetti |
+
+**FURTHEST: the globetrotter.** Every promotion is a move to a bigger ground further from the
+day's place: a stop a tier from a list of football cities (`app/data/cities.ts`), each
+further from home than the last, the first up the road (about 70 km), then across a border
+or the sea (600), across the continent (2,200), another continent (6,000), further round the
+world (11,000), and the final and the trophy in the city furthest from home of all, on the
+far side of the world. He travels by coach, then ferry or train, then plane; "NEXT STOP" and
+the city's name go with him. The map holds home and the newest stop, the route dotted from
+stop to stop, the stop's ground in its panel and its name under it; from tier 6 it shows the
+whole globe turned to the far side.
+
 ## 6. Screens
 
 ### 6.1 Home screen
@@ -335,23 +404,52 @@ crowd colours and kit differ.
   the modes. HOME's and AWAY's words stand on the same dark plate, inside their patches
   (the same day: "can home and away also have that black background as the name tag since
   all other game modes have it"), so every name on the ball is written the same way.
-- Six more patches are **locked modes**, each with its own picture and a small padlock, in
-  quiet greys so that HOME and AWAY lead: **NEXT-GEN** on the patch above (a fast-forward:
-  the future), **RETRO** on the patch below (a rewind: the past; football boots for a day, then
-  back to the arrows: the product owner, 2026-11-14, "that was better"), on the back of the ball, directly
-  behind AWAY and HOME, **CLOSEST** (a map pin) and **FURTHEST** (a globe): the old distance
-  rules, closest to today's stadium and furthest from it; and on the rim, a quarter turn round
-  out past HOME and past AWAY, **GUESS WHO** (the back of a shirt with its number) and
-  **SHOOTOUT** (a goal with a ball on the spot). Half a turn of the ball brings CLOSEST round to
-  where HOME was and FURTHEST to where AWAY was; a quarter turn to the right brings GUESS WHO
-  to the front, a quarter turn to the left SHOOTOUT.
+- **CLOSEST** (a map pin, green) and **FURTHEST** (a globe, periwinkle) on the back of the
+  ball, directly behind AWAY and HOME, are open too (2026-11-18). Half a turn of the ball
+  brings CLOSEST round to where HOME was and FURTHEST to where AWAY was, side by side, their
+  names on their patches as HOME's and AWAY's are. Chosen, CLOSEST's
+  ball spins into the Earth, which comes closer and spins on in the middle of the screen, the
+  whole globe in sight, as the screen closes; FURTHEST's
+  camera rises over the stadium to a bird's-eye view of it and its town, then pulls back,
+  pixelating, through the town, its fields and the country until it is a speck on the Earth in
+  space (2026-11-18:
+  "closest turns it to globe and zooms in. furthest just zooms out of the home screen
+  entirely"; "no pin should drop, instead its spinning showing the whole globe then
+  transition happens"; "it should feel like a place within that globe so maybe there should
+  be stages and cities/fields around as it zooms out until its far enough where it looks like
+  a globe"; "Maybe the transition should be making stadium birds eye view first and as it
+  zooms out it can get pixelated too").
+- **Choosing a mode** (a card, All modes, or its patch) turns the ball to show that mode first,
+  quickly (NEXT-GEN and RETRO straight on, CLOSEST and FURTHEST round the back side by side),
+  and it is struck there; HOME and AWAY face the front already (the product owner,
+  2026-11-18: "it spins it to focus on the game mode that was selected then does its
+  animation").
+- **The cards under the ball** are the first four modes, HOME, AWAY, RETRO and NEXT-GEN (the
+  product owner, 2026-11-18: "the home screen cards at the bottom should only have the
+  original 4. there should be an option to show all game modes which also shows these 2,
+  otherwise they can click on it from the ball"). **All modes**, beside the bell (a square
+  with four squares on a phone, a tall button with its name on a monitor), shows all six
+  as a grid of tiles, two to a row, each with its picture, badge and line; picking one kicks the ball off for it, and a mode played today opens its
+  review.
+- **"SPIN ME"** comes and goes round the ball (the product owner, 2026-11-18: "the ball should
+  have a small barely noticeable text saying spin me", then "around the ball (like how the wind
+  is). it appears and disappears like pulsing so its not always there"): white letters on a dark
+  band, arched just over the top of the ball, outside its rim where the wind blows when it
+  spins (small grey ones were "not readable" over the pitch). Every
+  seven seconds they dissolve in, stay two seconds and dissolve out again. Not at the kick-off.
+- Two more patches are **locked modes**, each with its own picture and a small padlock, in
+  quiet greys: on the rim, a quarter turn round out past HOME and past AWAY, **GUESS WHO** (the
+  back of a shirt with its number) and **SHOOTOUT** (a goal with a ball on the spot). A quarter
+  turn to the right brings GUESS WHO to the front, a quarter turn to the left SHOOTOUT. (NEXT-GEN
+  and RETRO on the top and bottom patches were locked here until 2026-11-13, CLOSEST and
+  FURTHEST until 2026-11-18.)
 - The two newest are future modes (the product owner, 2026-11-11), locked until they are built:
   - **GUESS WHO**: the player sees the back of a shirt, a name and a number, and fills in the
     missing details about the player who wore it.
   - **SHOOTOUT**: a penalty shootout of questions, played on lives instead of against the clock.
-- The ball can be spun by hand. Let go, it comes to rest: if a locked patch faces the player most
-  it turns to show it (NEXT-GEN, RETRO, GUESS WHO or SHOOTOUT straight on, CLOSEST and FURTHEST
-  side by side) and stays about four seconds, long enough to read it and press it, then goes
+- The ball can be spun by hand. Let go, it comes to rest: if a patch other than HOME and AWAY
+  faces the player most it turns to show it (NEXT-GEN, RETRO, GUESS WHO or SHOOTOUT straight
+  on, CLOSEST and FURTHEST side by side) and stays about four seconds, long enough to read it and press it, then goes
   back to HOME and AWAY. Each locked patch shows its word when it faces the player. Pressing one shakes the ball
   ("no") and puts up a notice naming the mode ("RETRO kicks off soon.", or for the two future
   modes a line on what they will be) for 2.5 seconds, which screen readers hear too. HOME and
@@ -621,12 +719,12 @@ The final tableau for the tier reached, `FULL TIME`, the career tier reached, th
 700 and, big under it in the mode's colour, the **title** the total earned; the seven pips with
 each answer and its shot, and three buttons: SHARE, on to the next mode, back to the menu.
 The next mode (the product owner, 2026-11-15: "it should always direct to next available game
-mode") is the first after this one in the menu's order, HOME, AWAY, RETRO, NEXT-GEN and round
-to HOME again, that has not been played today: finishing HOME offers AWAY, or RETRO if AWAY is
-done. The locked modes are never offered. Its button is the mode's name alone, in its colour,
-`HOME`, `AWAY`, `RETRO` or `NEXT-GEN`, read out "Play AWAY" and so on, since "PLAY
-NEXT-GEN" wraps the row of buttons. Once all four have been played there is nothing to go on
-to and the card has SHARE and MENU only.
+mode") is the first after this one in the menu's order, HOME, AWAY, RETRO, NEXT-GEN, CLOSEST,
+FURTHEST and round to HOME again, that has not been played today: finishing HOME offers AWAY,
+or RETRO if AWAY is done. The locked modes are never offered. Its button is the mode's name
+alone, in its colour, `HOME`, `AWAY`, `RETRO` and so on, read out "Play AWAY" and so on,
+since "PLAY NEXT-GEN" wraps the row of buttons. Once all six have been played there is nothing
+to go on to and the card has SHARE and MENU only.
 
 **SHARE** (the product owner, 2026-11-12: "pressing share should produce an image you can
 share which shows what you answered for each question and your points and final result")
@@ -740,8 +838,8 @@ a pop-up built like the rules' (the same card, the same ways in and out; a sheet
 - **STREAK**: how many days in a row the player has finished at least one game, in any mode,
   and their best run. Today counts once a game is finished; until then the run up to
   yesterday is still alive.
-- Per mode (every mode the game has, in the menu's order: HOME, AWAY, RETRO, NEXT-GEN; two by
-  two on a monitor): **TODAY**, the total, the title it earned and the seven shots as small tags in
+- Per mode (every mode the game has, in the menu's order: HOME, AWAY, RETRO, NEXT-GEN,
+  CLOSEST, FURTHEST; two by two on a monitor): **TODAY**, the total, the title it earned and the seven shots as small tags in
   their colours, or `Not played yet`; then over every day played on this device, **PLAYED**
   (games finished), **AVERAGE** (the mean total, to the whole point), **BEST** (the highest
   total and the day it was first made), and how the answers went: a bar of the shots' colours

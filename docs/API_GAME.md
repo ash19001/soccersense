@@ -8,8 +8,10 @@ uncommon (`ruleFor(mode)` gives `"common"` or `"niche"`: the rule keeps its id i
 every word a player sees says "uncommon"), from each answer's `popularity`: an
 estimated share of players in percent (`docs/data-notes/popularity.md`). The day's pin (`Stadium`:
 an id and a place, with no name since 2026-11-17) no longer scores them. Distance scoring is kept as the rules
-`"closest"` and `"furthest"` for the locked modes CLOSEST and FURTHEST: to switch one on, add
-the mode and map it in `ruleFor`; nothing else in the rules changes. `rankAnswers` takes a
+`"closest"` and `"furthest"`, played since 2026-11-18 by the modes CLOSEST and FURTHEST
+(`ruleFor("closest")` is `"closest"`; `isDistanceMode`; their shots are worked out from the
+day's place by `shotsOf`, never filed; the day's place has a name in `~/data/places`, which
+the rules never read). `rankAnswers` takes a
 `Rule` instead of a `Mode`; `Answer.popularity`, `RankedAnswer.share`, `Turn.share` and
 `QuestionView.rule` are new.
 
@@ -92,8 +94,9 @@ Notes:
 
 ```
 types.ts
-- type Mode = "home" | "away" | "retro" | "nextgen". The four playable modes (RETRO and NEXT-GEN new 2026-11-13).
+- type Mode = "home" | "away" | "retro" | "nextgen" | "closest" | "furthest". The six playable modes (RETRO and NEXT-GEN new 2026-11-13, CLOSEST and FURTHEST 2026-11-18).
 - type EraMode = "retro" | "nextgen". New. The two ranked by an answer's year.
+- type DistanceMode = "closest" | "furthest". New 2026-11-18. The two ranked by how far an answer's place is from the day's.
 - type Rule = "common" | "niche" | "oldest" | "newest" | "closest" | "furthest". How a question's answers are ranked; oldest and newest new 2026-11-13.
 - interface LatLng { lat: number; lng: number }
 - interface Stadium extends LatLng { id }. The day's pin for the distance rules. No name, city or country (2026-11-17): the stadium is never named, anywhere. The id is for code and storage.
@@ -111,16 +114,17 @@ geo.ts
 - distanceKm(a: LatLng, b: LatLng): number. Haversine, unrounded.
 - usesMiles(locale: string): boolean. Region US, GB, LR, MM, or a bare "en"; false for anything else, including a missing locale.
 - formatDistance(km: number, locale: string): string. "3 miles", "1 mile", "11,589 miles", "5 km", "under 1 mile", "under 1 km".
+- formatDistanceShort(km: number, locale: string): string. New 2026-11-18. The same for a column of figures (the reveal's table): "11,286 mi", "5 km", "<1 mi".
 
 scoring.ts
 - RULES: readonly Rule[]. ["common", "niche", "oldest", "newest", "closest", "furthest"].
-- MODE_RULES: Readonly<Record<Mode, Rule>>. New 2026-11-13. home common, away niche, retro oldest, nextgen newest.
+- MODE_RULES: Readonly<Record<Mode, Rule>>. New 2026-11-13. home common, away niche, retro oldest, nextgen newest, closest closest, furthest furthest (2026-11-18).
 - ruleFor(mode: Mode): Rule. MODE_RULES[mode] (common for anything unknown).
 - isDistanceRule(rule: Rule): boolean. True for "closest" and "furthest".
 - isYearRule(rule: Rule): boolean. New 2026-11-13. True for "oldest" and "newest".
 - rankingYear(answer: Answer, rule: Rule): number | null. New 2026-11-13. years[0] under oldest, the last year under newest; null under the other rules or with no years.
 - rankAnswers(question: Question, stadium: LatLng, rule: Rule): RankedAnswer[]. Changed: takes a Rule (was a Mode). Full table, best first, ties in name order. common: highest share first; niche: lowest share first (shares tie when equal to a tenth of a percent); oldest: earliest ranking year first; newest: latest first (equal years tie; an answer with no year last); closest / furthest: by whole kilometres from the stadium. Changed: ranked by shot first (worldies first), then by the rule, then by name; a row's points are its shot's; ties (same shot and same key) share a rank. The stadium only matters to the distance rules.
-- shotsOf(question: Question, stadium: LatLng, rule: Rule): Shot[]. New. Each answer's shot, in answer order: the data's Answer.shot under ruleFor(question.mode), else shotsFor of the shares (common, niche), of the ranking years (oldest, newest; no year counts one past the worst) or of the whole kilometres (closest, furthest).
+- shotsOf(question: Question, stadium: LatLng, rule: Rule): Shot[]. New. Each answer's shot, in answer order: the data's Answer.shot under ruleFor(question.mode) for a rule that is not a distance rule (a distance question's shots are never filed: they depend on the day's place), else shotsFor of the shares (common, niche), of the ranking years (oldest, newest; no year counts one past the worst) or of the whole kilometres (closest, furthest).
 - formatShare(share: number): string. New. "34%", "2.5%", "0.4%"; "under 0.1%" below 0.05 or for a non-number; capped at "100%".
 - rankedFor(table: readonly RankedAnswer[], answerId: string | null): RankedAnswer | null
 - interface TableRow extends RankedAnswer { grade: Grade; isPlayer: boolean; index: number; gapBefore: boolean }. grade is the row's shot (the same as shot); gapBefore means draw an ellipsis row above.
@@ -142,7 +146,7 @@ served.ts (new 2026-11-17): a game the server runs. Used by the Worker (to make 
 - snapshotOf(session: Session, rejected?: Rejection | null): GameSnapshot. From a game held with its whole questions (the server's side). The reveal is trimmed to what is shown (shownReveal).
 - sessionFrom(snapshot: GameSnapshot, stadium: Stadium): Session. The page's session: the questions asked with no answers (blankQuestion), blanks for the ones to come, and the reveal in session.reveals, where revealFor looks. The page sets phase "resolving" itself while the shot plays.
 - isGameSnapshot(value: unknown): value is GameSnapshot. Every part of the right kind, and agreeing with each other. The page reads nothing that fails it.
-- askedQuestion(question), blankQuestion(mode, asked?), shownReveal(reveal), storedQuestions(mode, turns, prompts?): the questions of a finished game kept on the device, as far as it says.
+- askedQuestion(question), blankQuestion(mode, asked?), shownReveal(reveal, mapped?), storedQuestions(mode, turns, prompts?): the questions of a finished game kept on the device, as far as it says. shownReveal keeps each row's place (lat, lng) when `mapped` (CLOSEST and FURTHEST, whose map puts the answers on it; 2026-11-18) and leaves it out otherwise.
 
 judge.ts
 - type JudgeResult = { kind: "empty" } | { kind: "unknown" } | { kind: "ambiguous"; candidates: Answer[] } | { kind: "match"; answer: Answer; via: "exact" | "surname" | "fuzzy" }
@@ -210,9 +214,10 @@ view.ts (new: selectors, pure, cheap to call on every render)
 
 modes.ts (new 2026-11-13)
 - ERA_MODES: readonly EraMode[]. ["retro", "nextgen"]. isEraMode(mode): mode is EraMode.
-- MODE_SLUGS: Record<Mode, string>. The last part of each mode's address: home, away, retro, next-gen.
+- DISTANCE_MODES: readonly DistanceMode[]. ["closest", "furthest"]. isDistanceMode(mode): mode is DistanceMode. New 2026-11-18.
+- MODE_SLUGS: Record<Mode, string>. The last part of each mode's address: home, away, retro, next-gen, closest, furthest.
 - playPath(mode): string. "/play/next-gen". modeOfPath(pathname): Mode. The other way round; also takes a mode's id ("/play/nextgen"); HOME for anything else.
-- nextMode(mode, played: (mode) => boolean): Mode | null (2026-11-15, in place of `pairedMode`). The full-time card's next mode: the first after `mode` in `MODES` order (HOME, AWAY, RETRO, NEXT-GEN, round to HOME) that `played` says is not played today; never `mode` itself; null when all the others are. The play page's controller gives it as `GameView.next` at full time, from the games kept for that day.
+- nextMode(mode, played: (mode) => boolean): Mode | null (2026-11-15, in place of `pairedMode`). The full-time card's next mode: the first after `mode` in `MODES` order (HOME, AWAY, RETRO, NEXT-GEN, CLOSEST, FURTHEST, round to HOME) that `played` says is not played today; never `mode` itself; null when all the others are. The play page's controller gives it as `GameView.next` at full time, from the games kept for that day.
 
 shots.ts (new)
 - SHOT_ORDER: readonly Shot[]. ["worldie", "golazo", "trivela", "toepoke", "tapin", "miss"], best first.
@@ -228,9 +233,11 @@ titles.ts (new)
 - type AwayTitleId = "herd" | "backpages" | "highlights" | "retroshirt" | "thirdkit" | "fanzine" | "lowerleague" | "beforecool" | "deepcuts" | "hipster". Lowest first.
 - type RetroTitleId = "yesterday" | "almanac" | "blackwhite" | "leather" | "programmes" | "longshorts" | "historian" | "ledger" | "archive" | "kickoff". New 2026-11-13. Lowest first.
 - type NextgenTitleId = "dialup" | "teletext" | "replays" | "groupchat" | "alerts" | "liveblog" | "rumours" | "firstnews" | "ahead" | "future". New 2026-11-13. Lowest first.
-- type TitleId = HomeTitleId | AwayTitleId | RetroTitleId | NextgenTitleId. interface TitleRung<Id> { id: Id; from: number }
+- type ClosestTitleId = "lost" | "wrongstop" | "directions" | "satnav" | "localmap" | "shortcuts" | "localknowledge" | "homingpigeon" | "pinpoint" | "bullseye". New 2026-11-18. Lowest first.
+- type FurthestTitleId = "nevertown" | "daytripper" | "awaycoach" | "passport" | "awaydays" | "airmiles" | "jetlagged" | "globetrotter" | "endsofearth" | "orbit". New 2026-11-18. Lowest first.
+- type TitleId = HomeTitleId | AwayTitleId | RetroTitleId | NextgenTitleId | ClosestTitleId | FurthestTitleId. interface TitleRung<Id> { id: Id; from: number }
 - TITLE_FROM: readonly number[]. [0, 10, 120, 220, 300, 380, 460, 540, 620, 700]: where each rung starts, the same in both modes (0 exactly; 700, a perfect game, alone).
-- TITLES: { home; away; retro; nextgen }, each TitleRung<its ids>[]. Each ladder, lowest first, on the same TITLE_FROM.
+- TITLES: { home; away; retro; nextgen; closest; furthest }, each TitleRung<its ids>[]. Each ladder, lowest first, on the same TITLE_FROM.
 - titleFor(mode, total): the title id for a total (typed by mode). Under 0 or NaN counts as 0, over 700 as 700. The words: strings.play.titles[mode][id].
 
 storage.ts (key "soccersense:v1:<dayKey>:<mode>", value { total, turns }; none of these throw. A game saved before Turn.share existed still loads, with share null; one saved with the sliding grades, before the six shots, reads as nothing; one saved under the shots' first names (bicycle, finesse, power, chip) loads with today's names.)

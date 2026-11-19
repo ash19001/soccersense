@@ -322,7 +322,12 @@ like that any more: the rules page and the error page are each a `PixelRoot` (se
 `total`, `tierName`, `tierProgress` (0 to 1), `question`, `instruction`, `measureLine`,
 `secondsLeft`, `secondsTotal`, `compact?`, `labels: { mode, questionOf, points, totalSpoken?,
 timeLeft?, board? }`, `sound?` (the sound switch after the mode badge: labels, default
-`strings.sound`, or `false`; see `SoundToggle`). (`stadiumName` is gone, 2026-11-11: the board no longer names the day's
+`strings.sound`, or `false`; see `SoundToggle`), `place?: { label, name }` (new 2026-11-18:
+CLOSEST's and FURTHEST's day's place, a plate in the mode's colour under the board's top row
+on a phone and under the question on a monitor, "TODAY'S PLACE Wembley, London", read out
+whole; it stays in compact too, so the place is on screen for the whole game). In those two
+modes the page gives `measureLine` as `strings.play.board.measuredBy(question.measureLabel)`
+("Measured by where the player was born."). (`stadiumName` is gone, 2026-11-11: the board no longer names the day's
 stadium, and on a monitor its right-hand column is only as wide as the career bar needs, the
 rest going to the question.)
 
@@ -494,8 +499,10 @@ The mode card: what the mode is, on the ink a game page arrives on, before a new
 
 `mode`, `name` (set large in the mode's colour, with a hard shadow in its dark one), `line`
 (under it, chalk), `emphasis?` (the words of `line` that tell the mode from the others, in the
-mode's light colour; left out or not in the line, the line is one colour), `leaving?`,
-`onSkip?`, `className?`.
+mode's light colour; left out or not in the line, the line is one colour), `place?` (new
+2026-11-18: CLOSEST's and FURTHEST's day's place, "WEMBLEY, LONDON", a third line in the mode's
+light colour, in the heading face under `line`, which then ends "NEAREST TO" or "FURTHEST
+FROM"), `leaving?`, `onSkip?`, `className?`.
 
 - It goes in `GameLayout`'s children with nothing in `top` or `bottom`: it fills the free
   space and stands in the middle of the screen, a rule in the mode's colour above the words
@@ -595,7 +602,7 @@ SHARE shares a picture of the game with two lines of text (docs/GAME_DESIGN.md 6
 ### `MenuCaptions`
 
 `modes: { mode, label, line, short?, tiny?, picture?, score?, scoreSpoken? }[]` (in pairs: HOME,
-AWAY, RETRO, NEXT-GEN), `onSelect?(mode)`, `review?: { spoken(modeLabel), onClick(mode), open? }`
+AWAY, RETRO, NEXT-GEN; the home page gives these four, the rest are in `AllModes`), `onSelect?(mode)`, `review?: { spoken(modeLabel), onClick(mode), open? }`
 and `share?: { spoken(modeLabel), onClick(mode), busy?, done? }` (new 2026-11-13: the REVIEW and SHARE
 icon buttons on a played card; see "Played today" below),
 `onHover?(mode | null)`, `lit?`, `notice?`, `noticeKey?`, `stowed?`,
@@ -651,6 +658,44 @@ it is what screen readers hear (the short one is `aria-hidden`). Leave `short` o
   badges stand alone in one row, so that the cards stay clear of the ball's bottom patch; the day plate over the left end of the cards, and the "?", speaker and stats buttons
   stacked up the right edge beside the ball, over the leaderboard's trophy (bottom to top:
   trophy, stats, speaker, "?"), where the ball never reaches.
+
+**All modes (2026-11-18).** The cards are the first four modes only (the product owner: "the
+home screen cards at the bottom should only have the original 4. there should be an option to
+show all game modes"). `allModes?: { label, onClick, open? }` and `allModesRef?` add the button
+that opens the list of every mode (`AllModes`, below), inside `.ss-menu__more` with the bell:
+
+- **A phone**: a square (`PopupButton`, `GRID`: four squares) under the heart, at the foot
+  of the column up the left edge.
+- **A monitor**: a tall button (`.ss-menu__all`, `ss-btn--secondary`) with its name in
+  two lines, `GRID` before the first word ("[icon] All" over "modes", `allLines`), as tall as both rows, off the left end of the bell
+  and the speaker: the mirror of Support off the other end (ui.css section 31). Where its name
+  would take it off the screen (a 1366 x 768 or 1280 x 800 window, whose cards are wide; it has
+  two logical pixels of padding over and under its words and four either side),
+  `MenuCaptions` marks the row `data-all="icon"` before it is painted and the button is its
+  icon alone (its name still read out); measured again when the screen, the row or the fonts
+  change.
+
+The ball rests clear of the cards (`MenuScene.setFloor`, fed by `watchFloor` in
+`app/routes/scene-edges.ts`, which measures the highest card as laid out).
+
+### `AllModes` (new 2026-11-18)
+
+`labels: { open, heading, close, review }` (`strings.home.allModes`), `modes: { mode, label,
+line, picture?, score?, spoken? }[]` (every mode, in the menu's order), `open`, `onClose()`,
+`onChoose(mode)`, `onReview(mode)`, `returnFocus?`.
+
+A `Popup` (class `ss-modes`, its heading and no line under it) with every mode as a tile in a
+grid, two to a row in the menu's pairs (the product owner, 2026-11-18: "remove intro from that
+pop up, make it grids not rows"). Each tile is a button in the cards' look
+(`.ss-modes__mode`, its stripe in the mode's colour, the tiles of a row as tall as each other):
+the picture (`ModePicture`, shared with the cards), the badge and the mode's full line, under
+one another and centred. Played today, the score box in place of the picture and REVIEW under
+the line in the mode's light colour, and the tile is read out `spoken` ("Review your CLOSEST
+game. Played today: 560 points"). A press closes the card first, then calls `onChoose` (the
+home page kicks the ball off for that mode, `MenuScene.choose`) or `onReview`. On a monitor,
+where the card is in caption pixels bigger than the font pixel (`ss-modes--caption`), the
+tiles are in caption pixels throughout, the type's units worked out again for them, so the
+pictures and badges are as big beside the words as on the cards.
 
 ### `Review` (new 2026-11-13)
 

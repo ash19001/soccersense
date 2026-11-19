@@ -4,6 +4,7 @@ import {
   type Ref,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
 } from "react";
 
@@ -58,6 +59,32 @@ export interface MenuModeCaption {
   scoreSpoken?: string;
 }
 
+/** Four squares: the "All modes" button's icon (AllModes), 9 x 9 like the kit's others. */
+export const GRID: Bitmap = [
+  "####.####",
+  "####.####",
+  "####.####",
+  "####.####",
+  ".........",
+  "####.####",
+  "####.####",
+  "####.####",
+  "####.####",
+];
+
+/**
+ * "All modes" in two lines, its first word and the rest ("All", "modes"): the icon goes
+ * before the first (2026-11-18: "it should precede the word all since there is room for it").
+ */
+export function allLines(label: string): string[] {
+  const words = label.trim().split(/\s+/);
+  if (words.length < 2) return [label.trim()];
+  return [words[0], words.slice(1).join(" ")];
+}
+
+/** The least room "All modes" keeps from the screen's left edge with its name on it (CSS px). */
+const ALL_MARGIN = 4;
+
 /** The picture's ink: the "w" cells of the ball's art, in the current colour. */
 const PICTURE_LAYERS: readonly GlyphLayer[] = [{ char: "w" }];
 
@@ -67,8 +94,11 @@ const PICTURE_LAYERS: readonly GlyphLayer[] = [{ char: "w" }];
  */
 export const PICTURE_BOX = 18;
 
-/** A picture in its box: the whole font pixels left above it and before it. */
-function picture(bitmap: Bitmap) {
+/**
+ * A mode's picture in its box: the whole font pixels left above it and before it. In the
+ * mode's colour (`data-mode` on something round it). The cards' and AllModes' rows.
+ */
+export function ModePicture({ bitmap }: { bitmap: Bitmap }) {
   const { w, h } = bitmapSize(bitmap);
   const top = Math.max(0, Math.floor((PICTURE_BOX - h) / 2));
   const left = Math.max(0, Math.floor((PICTURE_BOX - w) / 2));
@@ -180,6 +210,15 @@ export interface MenuCaptionsProps {
   remindRef?: Ref<HTMLButtonElement>;
   /** The heart that opens Support (`Support`), the same way. Leave it out for none. */
   support?: { label: string; onClick: () => void; open?: boolean };
+  /**
+   * "All modes" (2026-11-18): opens the list of every mode (`AllModes`), the cards being the
+   * first four only. Its name and what a press does, and `open` while the list is up. On a
+   * phone a square with four squares on it, under the heart; on a monitor a tall button with
+   * its name, off the left end of the bell and the speaker. Leave it out for none.
+   */
+  allModes?: { label: string; onClick: () => void; open?: boolean };
+  /** The "All modes" button, for the list to give the focus back to. */
+  allModesRef?: Ref<HTMLButtonElement>;
   /** The heart, for the dialog to give the focus back to. */
   supportRef?: Ref<HTMLButtonElement>;
   className?: string;
@@ -250,6 +289,8 @@ export function MenuCaptions({
   remindRef,
   support,
   supportRef,
+  allModes,
+  allModesRef,
   className,
 }: MenuCaptionsProps) {
   // Which card the mouse is over, which one has the keyboard's focus, and what the page
@@ -275,6 +316,37 @@ export function MenuCaptions({
   // At the kick-off they slide down off the screen (with the phone's trophy button).
   const rootRef = useRef<HTMLDivElement | null>(null);
   useStowSlide(rootRef, stowed);
+
+  // A monitor's "All modes" is a tall button with its name, off the left end of the row,
+  // or its icon alone where the name would take it off the screen (a 1366 x 768 laptop,
+  // whose cards are wide): the row is `data-all="icon"` then. Worked out before the row
+  // is painted, and again when the screen or the row changes size, or the fonts arrive.
+  const hasAll = allModes !== undefined;
+  useLayoutEffect(() => {
+    const row = rootRef.current;
+    if (!row || !wide || !hasAll) return;
+    const fit = () => {
+      delete row.dataset.all;
+      const button = row.querySelector(".ss-menu__all");
+      if (button && button.getBoundingClientRect().left < ALL_MARGIN) {
+        row.dataset.all = "icon";
+      }
+    };
+    fit();
+    let cancelled = false;
+    void document.fonts?.ready.then(() => {
+      if (!cancelled) fit();
+    });
+    const watch =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
+    watch?.observe(document.documentElement);
+    watch?.observe(row);
+    return () => {
+      cancelled = true;
+      watch?.disconnect();
+      delete row.dataset.all;
+    };
+  }, [wide, hasAll]);
 
   // Stowed captions are neither hovered nor focused, whatever the browser last reported.
   useEffect(() => {
@@ -410,7 +482,7 @@ export function MenuCaptions({
           }
           const inner = (
             <>
-              {item.picture && picture(item.picture)}
+              {item.picture && <ModePicture bitmap={item.picture} />}
               {badge}
               <span className="ss-menu__line">{item.line}</span>
               {item.short !== undefined && (
@@ -457,8 +529,30 @@ export function MenuCaptions({
         <span className="ss-menu__day">
           {dayLabel}
           {streak && <Streak {...streak} />}
-          {(remind || (wide ? sound : support)) && (
+          {(remind || allModes || (wide ? sound : support)) && (
             <span className="ss-menu__more">
+              {/* A monitor: a tall button with its name, before the column of squares. */}
+              {allModes && wide && (
+                <button
+                  ref={allModesRef}
+                  type="button"
+                  className="ss-btn ss-btn--secondary ss-menu__all"
+                  title={allModes.label}
+                  aria-label={allModes.label}
+                  aria-haspopup="dialog"
+                  aria-expanded={allModes.open}
+                  onClick={allModes.onClick}
+                >
+                  <span className="ss-btn__label">
+                    {allLines(allModes.label).map((line, i) => (
+                      <span key={i} className="ss-menu__all-line">
+                        {i === 0 && <PixelGlyph bitmap={GRID} unit="fp" />}
+                        <span className="ss-menu__all-words">{line}</span>
+                      </span>
+                    ))}
+                  </span>
+                </button>
+              )}
               {remind && (
                 <PopupButton
                   ref={remindRef}
@@ -482,6 +576,17 @@ export function MenuCaptions({
                       className="ss-support-btn"
                     />
                   )}
+              {/* A phone: a square under the heart. */}
+              {allModes && !wide && (
+                <PopupButton
+                  ref={allModesRef}
+                  icon={GRID}
+                  label={allModes.label}
+                  onClick={allModes.onClick}
+                  open={allModes.open}
+                  className="ss-allmodes-btn"
+                />
+              )}
             </span>
           )}
         </span>

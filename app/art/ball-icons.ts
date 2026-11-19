@@ -387,17 +387,23 @@ function rows(art: string): readonly string[] {
 }
 
 /**
- * The four open modes' pictures as rows of "w" and ".", for the interface to draw beside
- * the modes' names (the cards under the ball): the same art as the ball's, at the size it
- * has when it faces the viewer (HOME's and AWAY's 18 x 18, NEXT-GEN's and RETRO's 16 x 14).
+ * The open modes' pictures as rows of "w" and ".", for the interface to draw beside the
+ * modes' names (the cards under the ball): the same art as the ball's, at the size it has
+ * when it faces the viewer (HOME's and AWAY's 18 x 18, NEXT-GEN's and RETRO's 16 x 14;
+ * CLOSEST's pin and FURTHEST's globe as the back of the ball has them).
  */
 export const MODE_PICTURES: Readonly<
-  Record<"home" | "away" | "nextgen" | "retro", readonly string[]>
+  Record<
+    "home" | "away" | "nextgen" | "retro" | "closest" | "furthest",
+    readonly string[]
+  >
 > = {
   home: rows(HOME),
   away: rows(AWAY),
   nextgen: rows(NEXTGEN),
   retro: rows(RETRO),
+  closest: rows(PIN),
+  furthest: rows(GLOBE),
 };
 
 let made: BallIcons | undefined;

@@ -274,6 +274,8 @@ describe("with a storage", () => {
       away: null,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
     saveGame(DAY, "away", GAME, storage);
     expect(loadDay(DAY, storage)).toEqual({
@@ -281,6 +283,8 @@ describe("with a storage", () => {
       away: GAME,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
   });
 
@@ -294,6 +298,8 @@ describe("with a storage", () => {
       away: GAME,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
     clearGame(DAY, "home", storage);
     expect(storage.items.size).toBe(1);
@@ -336,6 +342,8 @@ describe("with a storage", () => {
       away: null,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
     expect(() => clearGame(DAY, "home", BROKEN)).not.toThrow();
   });
@@ -359,6 +367,8 @@ describe("with no storage", () => {
       away: null,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
     expect(() => clearGame(DAY, "home", null)).not.toThrow();
   });
@@ -372,6 +382,8 @@ describe("with no storage", () => {
       away: null,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
     expect(() => clearGame(DAY, "home")).not.toThrow();
   });
@@ -395,6 +407,8 @@ describe("with no storage", () => {
         away: null,
         retro: null,
         nextgen: null,
+        closest: null,
+        furthest: null,
       });
       expect(() => clearGame(DAY, "home")).not.toThrow();
     } finally {
@@ -422,6 +436,8 @@ describe("with the default localStorage", () => {
       away: GAME,
       retro: null,
       nextgen: null,
+      closest: null,
+      furthest: null,
     });
     clearGame(DAY, "away");
     expect(loadGame(DAY, "away")).toBeNull();
@@ -595,6 +611,13 @@ describe("the history", () => {
   });
 
   it("lists the modes in the menu's order", () => {
-    expect(MODES).toEqual(["home", "away", "retro", "nextgen"]);
+    expect(MODES).toEqual([
+      "home",
+      "away",
+      "retro",
+      "nextgen",
+      "closest",
+      "furthest",
+    ]);
   });
 });

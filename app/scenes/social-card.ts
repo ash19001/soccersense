@@ -42,7 +42,8 @@ export function drawSocialCard(words: SocialCardWords): Surface {
     seed: DAY,
     fact: "",
     messages: [words.sign],
-    labels: words.labels,
+    // a picture cannot be spun: no "SPIN ME" on its ball
+    labels: { ...words.labels, spin: undefined },
     intro: false,
   });
   scene.resize(SOCIAL_CARD.w, SOCIAL_CARD.h);

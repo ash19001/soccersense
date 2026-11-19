@@ -89,6 +89,16 @@
   --c-nextgen: #f03cc8;
   --c-nextgen-light: #ff9cee;
 
+  /* CLOSEST (radar green) */
+  --c-closest-dark: #1d6b38;
+  --c-closest: #3cc464;
+  --c-closest-light: #a8f58c;
+
+  /* FURTHEST (far-horizon blue) */
+  --c-furthest-dark: #2b3990;
+  --c-furthest: #6a86ff;
+  --c-furthest-light: #b8c8ff;
+
   /* gold */
   --c-gold-dark: #b9770e;
   --c-gold: #ffc928;

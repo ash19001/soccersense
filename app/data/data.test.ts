@@ -8,6 +8,7 @@ import { SHOT_ORDER, isGoal, shotIndex, shotsFor } from "~/game/shots";
 import type { Answer, Mode, Question, Stadium } from "~/game/types";
 
 import { AWAY_QUESTIONS, HOME_QUESTIONS, STADIUMS, questionsFor } from ".";
+import { PLACES, placeLabel } from "./places";
 
 /**
  * Structural checks on the demo content. They cannot tell whether a fact is right (that is
@@ -351,12 +352,23 @@ describe.each(ALL_QUESTIONS.map((q) => [q.id, q] as const))(
   },
 );
 
-describe("stadiums", () => {
-  const label = (s: Stadium) => `stadium ${s.id}`;
+describe("the day's places (the daily pins)", () => {
+  const label = (s: Stadium) => `place ${s.id}`;
 
-  it("there are 21, and day 1's comes first", () => {
-    expect(STADIUMS).toHaveLength(21);
-    expect(STADIUMS[0]?.id).toBe("anfield");
+  it("there are 30, and day 1's comes first", () => {
+    expect(STADIUMS).toHaveLength(30);
+    expect(STADIUMS).toBe(PLACES);
+    expect(STADIUMS[0]?.id).toBe("wembley");
+  });
+
+  it("are stadiums, cities and landmarks, no two days running of one kind", () => {
+    // the product owner, 2026-11-18: "Stadiums, cities and landmarks"
+    const kinds = new Set(PLACES.map((p) => p.kind));
+    expect([...kinds].sort()).toEqual(["city", "landmark", "stadium"]);
+    const runs = PLACES.filter(
+      (p, i) => p.kind === PLACES[(i + 1) % PLACES.length].kind,
+    ).map((p) => p.id);
+    expect(runs).toEqual([]);
   });
 
   it("ids are unique and kebab-case ASCII", () => {
@@ -365,15 +377,16 @@ describe("stadiums", () => {
     expect(ids.filter((id) => !KEBAB.test(id))).toEqual([]);
   });
 
-  it("each is an id and a place and nothing more: no name, no city, no country", () => {
-    // the product owner, 2026-11-17: the stadium's name "shouldn't be mentioned anywhere"
-    expect(
-      STADIUMS.flatMap((s) =>
-        Object.keys(s)
-          .filter((key) => !["id", "lat", "lng"].includes(key))
-          .map((key) => `${label(s)}: ${key}`),
-      ),
-    ).toEqual([]);
+  it("each has its name and where it is, for CLOSEST and FURTHEST to show", () => {
+    // the product owner, 2026-11-18: the place "clearly and obviously visible" in those two
+    // modes (the home screen's stadium is still never named)
+    for (const place of PLACES) {
+      expect(place.name.trim(), place.id).not.toBe("");
+      expect(place.area.trim(), place.id).not.toBe("");
+      expect(placeLabel(place), place.id).toMatch(/^.+, .+$/);
+    }
+    expect(placeLabel(PLACES[0])).toBe("Wembley, London");
+    expect(placeLabel(PLACES[1])).toBe("Montevideo, Uruguay");
   });
 
   it("coordinates are in range and never exactly 0", () => {
@@ -382,10 +395,10 @@ describe("stadiums", () => {
     ).toEqual([]);
   });
 
-  it("one day's is far from the next: 3,000 km or more, including the wrap", () => {
+  it("one day's is far from the next: 2,000 km or more, including the wrap", () => {
     const near = STADIUMS.filter((s, i) => {
       const next = STADIUMS[(i + 1) % STADIUMS.length];
-      return distanceKm(s, next) < 3000;
+      return distanceKm(s, next) < 2000;
     }).map(label);
     expect(near).toEqual([]);
   });

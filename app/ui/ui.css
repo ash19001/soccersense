@@ -105,6 +105,7 @@
 :root,
 .ss-root,
 .ss-menu,
+.ss-modes--caption .ss-modes__list,
 .ss-game[data-wide] :is(.ss-board, .ss-answer, .ss-sheet, .ss-full) {
   /*
    * Type. The Jersey faces are drawn on 56/3, 27, 34 and 41 pixels per em (their capitals
@@ -144,6 +145,7 @@
   :root,
   .ss-root,
   .ss-menu,
+  .ss-modes--caption .ss-modes__list,
   .ss-game[data-wide] :is(.ss-board, .ss-answer, .ss-sheet, .ss-full) {
     --plate: max(
       calc(var(--px) * 5),
@@ -178,6 +180,18 @@
   --mode: var(--c-nextgen);
   --mode-dark: var(--c-nextgen-dark);
   --mode-light: var(--c-nextgen-light);
+}
+
+[data-mode="closest"] {
+  --mode: var(--c-closest);
+  --mode-dark: var(--c-closest-dark);
+  --mode-light: var(--c-closest-light);
+}
+
+[data-mode="furthest"] {
+  --mode: var(--c-furthest);
+  --mode-dark: var(--c-furthest-dark);
+  --mode-light: var(--c-furthest-light);
 }
 
 /* Grade colours, one per shot. Set data-grade on any element. */
@@ -1159,6 +1173,31 @@
 .ss-board__instruction {
   margin-top: var(--u);
   color: var(--mode-light, var(--c-amber));
+}
+
+/*
+ * CLOSEST and FURTHEST: the day's place, on a plate of its own between the lamps and the
+ * question, there all game (compact or not): its tag in the mode's colour, its name large.
+ */
+.ss-board__place {
+  margin: var(--u) 0 0;
+  padding: var(--u) var(--u2);
+  background: var(--c-ink);
+  box-shadow: inset 0 0 0 var(--px) var(--mode, var(--c-amber));
+  color: var(--c-chalk);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.ss-board__place-tag {
+  color: var(--mode-light, var(--c-amber));
+  white-space: nowrap;
+}
+
+.ss-board__place-name {
+  font-family: var(--font-15);
+  font-size: calc(var(--fp) * 15);
+  line-height: 1;
 }
 
 .ss-board__measure {
@@ -5124,9 +5163,10 @@ html:has(.ss-help-dialog[open]) {
 
 /*
  * The panel's top, again (section 20 has it for two modes): level with the airship's sign,
- * or higher where that would bring it down onto the two rows of captions (section 26). At
- * its tallest (four tabs, the player's row under the gap, the strip) it is about 262 font
- * pixels and 50 logical pixels tall.
+ * or higher where that would bring it down onto the two rows of captions (sections 26 and
+ * 31). At its tallest (six tabs in three rows, the player's row under the gap, the strip)
+ * it is about 275 font pixels and 56 logical pixels tall (262 and 50 with four tabs; a row
+ * of tabs is 13 and 4, and 2 between rows).
  */
 .ss-game[data-wide] .ss-lb--docked {
   --ss-lb-top: max(
@@ -5134,7 +5174,7 @@ html:has(.ss-help-dialog[open]) {
     min(
       calc(var(--ss-h, 100dvh) * 0.18),
       calc(
-        var(--ss-h, 100dvh) - var(--fp) * 262 - var(--px) * 58 -
+        var(--ss-h, 100dvh) - var(--fp) * 275 - var(--px) * 64 -
           max(var(--tap), calc(var(--fp) * 13 + var(--px) * 4)) * 2
       )
     )
@@ -6125,6 +6165,18 @@ html:has(.ss-help-dialog[open]) {
   white-space: nowrap;
 }
 
+/* CLOSEST and FURTHEST: the day's place, under the line that ends "NEAREST TO". */
+.ss-intro__place {
+  margin: calc(var(--ifp) * 6) 0 0;
+  color: var(--mode-light, var(--c-gold));
+  font-family: var(--font-20);
+  font-size: calc(var(--ifp) * 40);
+  line-height: calc(var(--ifp) * 36);
+  text-wrap: balance;
+  text-shadow: calc(var(--ifp) * 2) calc(var(--ifp) * 2) 0
+    var(--mode-dark, var(--c-slate));
+}
+
 /*
  * In the middle on whole pixels. The card and its two lines are as wide as their words, so
  * no sum can say where their middles fall: each is put half way across and then moved back
@@ -6153,7 +6205,8 @@ html:has(.ss-help-dialog[open]) {
   }
 
   .ss-intro__name,
-  .ss-intro__line {
+  .ss-intro__line,
+  .ss-intro__place {
     position: relative;
     left: var(--ss-mid);
     translate: var(--ss-back) 0;
@@ -6573,4 +6626,184 @@ html:has(.ss-help-dialog[open]) {
   padding: var(--u2) var(--u);
   color: var(--c-mist);
   white-space: normal;
+}
+
+/* ---------- 31. All modes (AllModes, MenuCaptions; 2026-11-18) ---------------------------------- */
+
+/*
+ * The cards under the ball are the first four modes; "All modes" opens the list of every
+ * one (the product owner, 2026-11-18). On a phone it is a square under the heart, in the
+ * column up the left edge (section 27). On a monitor it is a tall button with its name
+ * under four squares, off the left end of the bell and the speaker, as tall as both rows:
+ * the mirror of Support off the other end (section 29). Its name always takes two lines
+ * ("ALL" over "MODES"), so it is no wider than its longer word.
+ */
+.ss-game[data-wide] .ss-menu__more:has(> .ss-menu__all) {
+  display: grid;
+  grid-template-columns: auto var(--ss-row);
+  grid-auto-rows: var(--ss-row);
+  column-gap: var(--u2);
+  row-gap: var(--u);
+}
+
+.ss-game[data-wide] .ss-menu__more > .ss-menu__all {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+  align-items: center;
+  justify-content: center;
+  /* (its column of the plate's squares has no room of its own: it is shrunk to fit) */
+  width: max-content;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  /* room round its icon and name (2026-11-18: "add padding to the all modes button") */
+  padding: var(--u2) var(--u4);
+  /* The cards' own type (it is inside the day plate, whose type is bigger). */
+  font-family: var(--font-10);
+  font-size: var(--fs-10);
+  line-height: var(--lh-tight);
+  text-align: center;
+  white-space: normal;
+}
+
+.ss-game[data-wide] .ss-menu__more:has(> .ss-menu__all) > :not(.ss-menu__all) {
+  grid-column: 2;
+}
+
+/* Where its name would take it off the screen (MenuCaptions measures): its icon alone. */
+.ss-game[data-wide] .ss-menu[data-all="icon"] .ss-menu__more > .ss-menu__all {
+  width: var(--ss-row);
+  padding: 0;
+}
+
+.ss-menu[data-all="icon"] .ss-menu__all-words {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/*
+ * Its name in two lines, the icon before the first word ("[icon] All" over "modes", the
+ * product owner, 2026-11-18: "it should precede the word all since there is room for it"),
+ * each line centred; with its padding, nothing touches its edges.
+ */
+.ss-menu__all .ss-btn__label {
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.ss-menu__all-line {
+  display: flex;
+  align-items: center;
+  gap: var(--u2);
+  white-space: nowrap;
+}
+
+.ss-menu__all-words {
+  display: block;
+  line-height: var(--lh-tight);
+}
+
+/*
+ * The list: a grid of tiles, two to a row in the menu's pairs (2026-11-18: "make it grids not
+ * rows"), each a button in the cards' look, its stripe in its colour: the picture (or, played,
+ * the score), the badge and the line under one another, centred. The tiles of a row are as
+ * tall as each other.
+ */
+.ss-modes__list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--u3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ss-modes__list > li {
+  display: flex;
+  min-width: 0;
+}
+
+.ss-modes__mode {
+  --halo: var(--halo-off);
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--u2);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--tap);
+  margin: 0;
+  padding: var(--u4) var(--u3) var(--u4) var(--u4);
+  border: 0;
+  background: var(--c-night);
+  color: var(--c-chalk);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  appearance: none;
+  touch-action: manipulation;
+  box-shadow:
+    inset var(--u) 0 0 0 var(--mode, var(--c-steel)),
+    inset 0 var(--u) 0 0 var(--c-slate),
+    0 0 0 var(--u) var(--c-ink),
+    var(--u) var(--u) 0 var(--u) var(--c-ink),
+    var(--halo);
+}
+
+@media (hover: hover) {
+  .ss-modes__mode:hover {
+    box-shadow:
+      inset 0 0 0 var(--u) var(--mode-light, var(--c-mist)),
+      0 0 0 var(--u) var(--mode-light, var(--c-mist)),
+      var(--u) var(--u) 0 var(--u) var(--c-ink),
+      var(--halo);
+  }
+}
+
+.ss-modes__mode:active {
+  background: var(--c-slate);
+  transform: translate(var(--u), var(--u));
+}
+
+.ss-modes__mode:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Every badge as wide as the widest (NEXT-GEN: 62 font pixels), so the words line up. */
+.ss-modes__mode > .ss-badge {
+  flex: none;
+  justify-content: center;
+  min-width: calc(var(--fp) * 62 + var(--px) * 6);
+}
+
+.ss-modes__line {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/*
+ * A monitor, where the card is in caption pixels bigger than the interface's own font pixel:
+ * the tiles in caption pixels throughout, as the captions under the ball are (section 15b:
+ * the units that follow the font pixel are worked out again here, section 1), so the
+ * pictures and badges are as big beside the words as on the cards.
+ */
+.ss-modes--caption .ss-modes__list {
+  --fp: var(--cp);
+
+  font-family: var(--font-10);
+  font-size: var(--fs-10);
+  line-height: var(--lh-10);
+}
+
+/* Played today: REVIEW at the row's end, in the mode's light colour. */
+.ss-modes__review {
+  flex: none;
+  color: var(--mode-light, var(--c-mist));
 }

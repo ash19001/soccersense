@@ -114,6 +114,16 @@ const SOURCE = {
   nextgen: "#f03cc8",
   nextgenLight: "#ff9cee",
 
+  /** added: CLOSEST is radar green (the target round the day's place). */
+  closestDark: "#1d6b38",
+  closest: "#3cc464",
+  closestLight: "#a8f58c",
+
+  /** added: FURTHEST is far-horizon blue (the other side of the world). */
+  furthestDark: "#2b3990",
+  furthest: "#6a86ff",
+  furthestLight: "#b8c8ff",
+
   // gold
   goldDark: "#b9770e",
   gold: "#ffc928",
@@ -167,8 +177,8 @@ export interface ModeRamp {
 }
 
 /**
- * HOME is warm red-orange, AWAY teal, RETRO old gold, NEXT-GEN electric magenta.
- * Everywhere.
+ * HOME is warm red-orange, AWAY teal, RETRO old gold, NEXT-GEN electric magenta, CLOSEST
+ * radar green, FURTHEST far-horizon blue. Everywhere.
  */
 export const MODE_COLORS: Readonly<Record<Mode, ModeRamp>> = Object.freeze({
   home: Object.freeze({ dark: P.homeDark, base: P.home, light: P.homeLight }),
@@ -182,6 +192,16 @@ export const MODE_COLORS: Readonly<Record<Mode, ModeRamp>> = Object.freeze({
     dark: P.nextgenDark,
     base: P.nextgen,
     light: P.nextgenLight,
+  }),
+  closest: Object.freeze({
+    dark: P.closestDark,
+    base: P.closest,
+    light: P.closestLight,
+  }),
+  furthest: Object.freeze({
+    dark: P.furthestDark,
+    base: P.furthest,
+    light: P.furthestLight,
   }),
 });
 

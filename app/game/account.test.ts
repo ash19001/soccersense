@@ -254,7 +254,7 @@ describe("a finished game, as a device and the server swap them", () => {
       null,
       { ...whole, day: 0 },
       { ...whole, day: 1.5 },
-      { ...whole, mode: "closest" },
+      { ...whole, mode: "guesswho" },
       { ...whole, total: 690 },
       { ...whole, turns: whole.turns.slice(1), total: 600 },
       { ...whole, turns: [...whole.turns, turn(0)] },
@@ -280,7 +280,7 @@ describe("a finished game, as a device and the server swap them", () => {
     for (const value of [
       null,
       { games: [{}], want: [], saved: 0 },
-      { games: [], want: [[7, "closest"]], saved: 0 },
+      { games: [], want: [[7, "guesswho"]], saved: 0 },
       { games: [], want: [] },
     ]) {
       expect(isHistoryAnswer(value)).toBe(false);

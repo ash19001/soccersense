@@ -26,12 +26,12 @@ describe("leaderboardFor (mock)", () => {
     );
   });
 
-  test("has its own field for each of the four modes, HOME's and AWAY's as they were", () => {
+  test("has its own field for each mode, HOME's and AWAY's as they were", () => {
     const tops = MODES.map((mode) =>
       JSON.stringify(leaderboardFor(7, mode).rows.slice(0, 20)),
     );
-    expect(new Set(tops).size).toBe(4);
-    for (const mode of ["retro", "nextgen"] as const) {
+    expect(new Set(tops).size).toBe(MODES.length);
+    for (const mode of ["retro", "nextgen", "closest", "furthest"] as const) {
       expect(leaderboardFor(7, mode)).toEqual(leaderboardFor(7, mode));
       const mine = leaderboardFor(7, mode, 560);
       expect(mine.yourRank).not.toBeNull();
